@@ -54,6 +54,8 @@ import TaskRecommendations from '../../components/TaskRecommendations/TaskRecomm
 import api from '../../api';
 import axios from 'axios';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
+import TaskCharts from '../../components/TaskCharts/TaskCharts';
+import { BarChart2 } from 'lucide-react';
 
 // --- Helpers ------------------------------------------------------------------
 
@@ -952,6 +954,18 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* ── My Analytics ─────────────────────────────────────────── */}
+            <div className="card">
+                <div className="analytics-section-header">
+                    <BarChart2 size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                    <div>
+                        <h3 className="analytics-section-title">My Analytics</h3>
+                        <p className="analytics-section-sub">Visual overview of your task data</p>
+                    </div>
+                </div>
+                <TaskCharts tasks={tasks} />
             </div>
         </div>
     );

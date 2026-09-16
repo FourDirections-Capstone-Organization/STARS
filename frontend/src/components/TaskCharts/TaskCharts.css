@@ -1,0 +1,143 @@
+/* ─── TaskCharts ─────────────────────────────────────────────────────────── */
+
+.tc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+}
+
+.tc-card {
+    background: var(--bg-card);
+    border-radius: var(--r-md, 12px);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* A card that spans both columns */
+.tc-card-wide {
+    grid-column: 1 / -1;
+}
+
+.tc-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.tc-card-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.tc-card-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ─── Custom Tooltip ─────────────────────────────────────────────────────── */
+
+.tc-tooltip {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    font-family: inherit;
+}
+
+.tc-tooltip-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tc-tooltip-val {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+/* ─── Custom Legend ──────────────────────────────────────────────────────── */
+
+.tc-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 16px;
+}
+
+.tc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tc-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.tc-legend-text {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+/* ─── Empty state ────────────────────────────────────────────────────────── */
+
+.tc-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+    font-size: 0.83rem;
+}
+
+/* ─── Section header (used in Dashboard) ────────────────────────────────── */
+
+.analytics-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2px;
+}
+
+.analytics-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.analytics-section-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .tc-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tc-card-wide {
+        grid-column: 1;
+    }
+}
