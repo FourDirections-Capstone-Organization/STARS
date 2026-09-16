@@ -133,6 +133,8 @@ const EMPTY_FORM: FormState = {
 
 interface ActivityLog {
     activityLogId: string;
+    /** Raw UUID of the actor — displayed as User ID */
+    userId: string;
     accountId: string;
     firstName: string;
     middleName?: string;
@@ -142,7 +144,11 @@ interface ActivityLog {
     description: string;
     createdAt: string;
     actorRole?: string;
+    /** Affected record: entity name + optional entity ID */
     targetEntity?: string;
+    targetEntityId?: string;
+    /** IP address of the request */
+    ipAddress?: string;
     oldValue?: string | null;
     newValue?: string | null;
 }
@@ -2932,6 +2938,25 @@ export default function Dashboard() {
     const [activityLogEmployee, setActivityLogEmployee] = useState('');
     const [activityLogType, setActivityLogType] = useState('');
     const [activityLogDateFrom, setActivityLogDateFrom] = useState('');
+
+    // ── Report tab: employee list for dropdowns ────────────────────────────────
+    const [reportTeamMembers, setReportTeamMembers] = useState<{ accountId: string; employeeName: string }[]>([]);
+
+    useEffect(() => {
+        api.get('/api/reports/filter-options')
+            .then(res => {
+                const data = res.data;
+                if (data?.isSuccess && data?.data?.employees) {
+                    setReportTeamMembers(
+                        (data.data.employees as { id: string; name: string }[]).map(e => ({
+                            accountId: e.id,
+                            employeeName: e.name,
+                        }))
+                    );
+                }
+            })
+            .catch(() => { /* non-fatal */ });
+    }, []);
     const [activityLogDateTo, setActivityLogDateTo] = useState('');
 
     const fetchActivityLogs = async (page: number, silent: boolean = false) => {
@@ -2954,6 +2979,7 @@ export default function Dashboard() {
             if (json?.isSuccess && d?.items) {
                 setActivityLogs(d.items.map((log: any) => ({
                     activityLogId: log.id ?? log.activityLogId,
+                    userId: log.userId ?? log.accountId ?? '',
                     accountId: log.userId ?? log.accountId ?? '',
                     firstName: log.actorName?.split(' ')[0] ?? log.firstName ?? '',
                     middleName: log.middleName ?? '',
@@ -2963,6 +2989,8 @@ export default function Dashboard() {
                     createdAt: log.timestamp ?? log.createdAt ?? '',
                     actorRole: log.actorRole ?? '',
                     targetEntity: log.targetEntity ?? '',
+                    targetEntityId: log.targetEntityId ?? '',
+                    ipAddress: log.ipAddress ?? '',
                     oldValue: log.oldValue ?? null,
                     newValue: log.newValue ?? null,
                 })));
@@ -3329,7 +3357,7 @@ export default function Dashboard() {
                             <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Reports</h3>
                             <p style={{ fontSize: 13, color: "var(--ts)", margin: "4px 0 0" }}>View task completion, performance, and operational reports.</p>
                         </div>
-                        <ReportsTab teamMembers={[]} />
+                        <ReportsTab teamMembers={reportTeamMembers} />
                     </div>
                 </div>
             )}
@@ -3341,76 +3369,181 @@ export default function Dashboard() {
                     <div className="dashboard-content" style={{ padding: 0 }}>
                         <DataTable
                             title=""
-                            headers={['Date & Time', 'Action', 'Affected Employee / Entity', 'Description', 'Changes (Old → New)']}
+                            headers={['User ID', 'Action', 'Timestamp', 'Affected Record', 'IP Address']}
                             searchQuery={activityLogSearch}
                             onSearchChange={val => setActivityLogSearch(val)}
-                            searchPlaceholder="Search description, employee…"
+                            searchPlaceholder="Search by user, action, or record…"
                             filterElements={
                                 <>
-                                    <select value={activityLogEmployee} onChange={e => setActivityLogEmployee(e.target.value)}
-                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 150, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}>
-                                        <option value="">All Employees</option>
+                                    {/* Filter: User */}
+                                    <select
+                                        value={activityLogEmployee}
+                                        onChange={e => setActivityLogEmployee(e.target.value)}
+                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 160, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}
+                                        aria-label="Filter by user"
+                                    >
+                                        <option value="">All Users</option>
                                         {recentEmployees.slice(0, 100).map(emp => (
-                                            <option key={emp.employeeNumber} value={emp.employeeNumber}>{getEmployeeDisplayName(emp)}</option>
+                                            <option key={emp.employeeNumber} value={emp.employeeNumber}>
+                                                {getEmployeeDisplayName(emp)}
+                                            </option>
                                         ))}
                                     </select>
-                                    <select value={activityLogType} onChange={e => setActivityLogType(e.target.value)}
-                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 130, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}>
-                                        <option value="">All Types</option>
+
+                                    {/* Filter: Action Type */}
+                                    <select
+                                        value={activityLogType}
+                                        onChange={e => setActivityLogType(e.target.value)}
+                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 150, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}
+                                        aria-label="Filter by action type"
+                                    >
+                                        <option value="">All Action Types</option>
                                         {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
                                             <option key={value} value={value}>{label}</option>
                                         ))}
                                     </select>
-                                    <input type="date" value={activityLogDateFrom} onChange={e => setActivityLogDateFrom(e.target.value)}
-                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 130, boxSizing: 'border-box', outline: 'none' }} />
-                                    <input type="date" value={activityLogDateTo} onChange={e => setActivityLogDateTo(e.target.value)}
-                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 130, boxSizing: 'border-box', outline: 'none' }} />
+
+                                    {/* Filter: Date Range — From */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <label style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>From</label>
+                                        <input
+                                            type="date"
+                                            value={activityLogDateFrom}
+                                            onChange={e => setActivityLogDateFrom(e.target.value)}
+                                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 140, boxSizing: 'border-box', outline: 'none' }}
+                                            aria-label="Date from"
+                                        />
+                                    </div>
+
+                                    {/* Filter: Date Range — To */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <label style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To</label>
+                                        <input
+                                            type="date"
+                                            value={activityLogDateTo}
+                                            onChange={e => setActivityLogDateTo(e.target.value)}
+                                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 140, boxSizing: 'border-box', outline: 'none' }}
+                                            aria-label="Date to"
+                                        />
+                                    </div>
+
+                                    {/* Clear all filters */}
                                     {(activityLogSearch || activityLogEmployee || activityLogType || activityLogDateFrom || activityLogDateTo) && (
-                                        <button className="btn btn-sm" onClick={() => { setActivityLogSearch(''); setActivityLogEmployee(''); setActivityLogType(''); setActivityLogDateFrom(''); setActivityLogDateTo(''); }}
-                                            style={{ height: 36, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            <X size={13} /> Clear
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => {
+                                                setActivityLogSearch('');
+                                                setActivityLogEmployee('');
+                                                setActivityLogType('');
+                                                setActivityLogDateFrom('');
+                                                setActivityLogDateTo('');
+                                            }}
+                                            style={{ height: 36, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}
+                                        >
+                                            <X size={13} /> Clear Filters
                                         </button>
                                     )}
                                 </>
                             }
                             loading={activityLogLoading}
-                            emptyMessage="No activity logs found in the system."
+                            emptyMessage="No audit logs found."
                             emptyIcon={<Activity size={24} />}
                             totalRecords={activityLogTotalCount}
                             currentPage={activityLogPage}
                             totalPages={activityLogTotalPages}
                             onPageChange={p => fetchActivityLogs(p)}
                         >
+                            {/* Rows are already sorted newest-first by allActivityLogs (server + client re-sort) */}
                             {allActivityLogs.map(log => {
-                                const empName = [log.firstName, log.middleName, log.lastName, log.suffix].filter(Boolean).join(' ');
                                 const isBiomarker = log.activityLogId.startsWith('bio-');
                                 const badge = getAuditBadgeStyle(log.activityType, isBiomarker);
+
+                                // ── User ID cell ─────────────────────────────────────────
+                                // Show the actor's name as primary text, with the UUID truncated
+                                // below it so auditors can quickly cross-reference by ID.
+                                const empName = [log.firstName, log.middleName, log.lastName, log.suffix]
+                                    .filter(Boolean).join(' ');
+                                const displayName = isBiomarker ? 'System (Biomarker)' : (empName || 'System');
+                                const shortId = log.userId
+                                    ? log.userId.slice(0, 8) + '…'
+                                    : '—';
+
+                                // ── Affected Record cell ─────────────────────────────────
+                                // Combine entity type + entity ID when available
+                                const affectedRecord = (() => {
+                                    const parts: string[] = [];
+                                    if (log.targetEntity) parts.push(log.targetEntity);
+                                    if (log.targetEntityId) parts.push(log.targetEntityId.slice(0, 8) + '…');
+                                    return parts.length ? parts : null;
+                                })();
+
                                 return (
                                     <tr key={log.activityLogId}>
-                                        <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                            {log.createdAt ? new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+
+                                        {/* ── User ID ── */}
+                                        <td style={{ fontSize: 13 }}>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                {displayName}
+                                                {log.actorRole && (
+                                                    <span style={{ fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 4 }}>
+                                                        · {log.actorRole}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                                                {shortId}
+                                            </div>
                                         </td>
+
+                                        {/* ── Action ── */}
                                         <td>
                                             <span style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600,
+                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                padding: '3px 10px', borderRadius: 999,
+                                                fontSize: '0.72rem', fontWeight: 700,
                                                 background: badge.background, color: badge.color,
                                             }}>
                                                 {formatActionType(log.activityType)}
                                             </span>
                                         </td>
+
+                                        {/* ── Timestamp ── */}
+                                        <td style={{ whiteSpace: 'nowrap' }}>
+                                            {log.createdAt ? (
+                                                <>
+                                                    <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>
+                                                        {new Date(log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                        {new Date(log.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </div>
+                                                </>
+                                            ) : '—'}
+                                        </td>
+
+                                        {/* ── Affected Record ── */}
                                         <td style={{ fontSize: 13 }}>
-                                            <div style={{ color: 'var(--text-primary)' }}>
-                                                {isBiomarker ? 'Biomarker Scan' : (empName || 'System')}
-                                                {log.actorRole ? <span style={{ color: 'var(--text-secondary)' }}>, {log.actorRole}</span> : null}
-                                            </div>
-                                            {log.targetEntity && (
-                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                                    Entity: {log.targetEntity}
-                                                </div>
+                                            {affectedRecord ? (
+                                                <>
+                                                    <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                                                        {affectedRecord[0]}
+                                                    </div>
+                                                    {affectedRecord[1] && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                                                            ID: {affectedRecord[1]}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ fontSize: 13, color: 'var(--text-primary)' }}>{log.description}</td>
-                                        <td style={{ color: 'var(--text-primary)' }}>{renderChanges(log.oldValue, log.newValue)}</td>
+
+                                        {/* ── IP Address ── */}
+                                        <td style={{ fontSize: 12, fontFamily: 'monospace', color: log.ipAddress ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                            {log.ipAddress || '—'}
+                                        </td>
+
                                     </tr>
                                 );
                             })}

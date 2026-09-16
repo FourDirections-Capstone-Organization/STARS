@@ -3567,7 +3567,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                 dateRangeEnd: prFilter.dateRangeEnd || undefined,
                 departmentId: prFilter.departmentId || undefined,
                 employeeId: prFilter.employeeId || undefined,
-                exportFormat: format === 'Excel' ? 0 : 1,
+                exportFormat: format,   // string enum: "Excel" | "Pdf" (backend uses JsonStringEnumConverter)
             };
             const res = await axios.post('/api/reports/export', body, { responseType: 'blob' });
             const contentDisposition = res.headers['content-disposition'];
@@ -4033,8 +4033,8 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                             <div className="stats-row" style={{ marginTop: 16 }}>
                                 {[
                                     { label: 'Total Completed', value: prData.totalCompletedTasks, icon: <CheckCircle2 size={18} />, variant: 'teal' as const, subtext: 'Completed tasks' },
-                                    { label: 'On-Time', value: prData.totalCompletedTasks - prData.totalLateTasks, icon: <CheckCircle2 size={18} />, variant: 'success' as const, subtext: `${prData.overallOnTimeRate}% rate` },
-                                    { label: 'Late', value: prData.totalLateTasks, icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: `${prData.overallLateRate}% rate` },
+                                    { label: 'On-Time', value: Math.round((prData.totalCompletedTasks ?? 0) * ((prData.overallOnTimeRate ?? 0) / 100)), icon: <CheckCircle2 size={18} />, variant: 'success' as const, subtext: `${prData.overallOnTimeRate ?? 0}% rate` },
+                                    { label: 'Late', value: Math.round((prData.totalCompletedTasks ?? 0) * ((prData.overallLateRate ?? 0) / 100)), icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: `${prData.overallLateRate ?? 0}% rate` },
                                 ].map(s => (
                                     <StatusCard key={s.label} icon={s.icon} variant={s.variant} label={s.label} value={s.value} subtext={s.subtext} />
                                 ))}
@@ -5387,8 +5387,8 @@ const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
         size="lg"
         footer={
             <div className="modal-actions" style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <button className="btn" onClick={onCancel}><X size={13} /> Cancel</button>
-                <button className="btn btn-primary" onClick={onContinue}><CheckCircle2 size={13} /> Continue Anyway</button>
+                <button className="btn btn-secondary" onClick={onCancel}><X size={13} /> Cancel</button>
+                <button className="btn btn-warning" onClick={onContinue}><CheckCircle2 size={13} /> Continue Anyway</button>
             </div>
         }
     >

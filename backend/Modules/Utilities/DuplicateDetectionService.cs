@@ -63,7 +63,8 @@ public class DuplicateDetectionService : IDuplicateDetectionService
                     TaskId = task.Id,
                     Title = task.Title,
                     Status = MapStatusDisplay(task.Status),
-                    SimilarityPercentage = Math.Round(combinedSimilarity * 100, 1)
+                    SimilarityPercentage = Math.Round(combinedSimilarity * 100, 1),
+                    CreatedAt = task.CreatedAt
                 });
             }
         }
