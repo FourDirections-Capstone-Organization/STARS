@@ -5,7 +5,7 @@ import './global.css'
 import '@tabler/icons-webfont/dist/tabler-icons.min.css'
 import axios from 'axios'
 
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || '';
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net';
 
 axios.interceptors.request.use((config) => {
     const token = localStorage.getItem('authToken');
