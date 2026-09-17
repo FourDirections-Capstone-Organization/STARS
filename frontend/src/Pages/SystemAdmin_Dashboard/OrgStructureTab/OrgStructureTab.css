@@ -14,8 +14,75 @@
 
 .org-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
+}
+
+/* ── Hierarchy Overview Banner ── */
+.hierarchy-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f8faff 0%, #edf2f7 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.hierarchy-flow-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.hierarchy-flow-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hierarchy-step-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: white;
+  border: 1.5px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.hierarchy-step-badge.lvl-1 {
+  border-color: #4318FF;
+  color: #4318FF;
+  background: #f0eeff;
+}
+
+.hierarchy-step-badge.lvl-2 {
+  border-color: #00A99D;
+  color: #00A99D;
+  background: #e6faf8;
+}
+
+.hierarchy-step-badge.lvl-3 {
+  border-color: #FFB547;
+  color: #d97706;
+  background: #fff8eb;
+}
+
+.hierarchy-arrow-divider {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
 }
 
 /* ── Org Chart ── */
@@ -25,12 +92,16 @@
 .org-spin {
   animation: org-spin 1s linear infinite;
 }
+
 .org-chart-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
-  padding: 40px 24px;
+  gap: 28px;
+  padding: 32px 20px;
+  background: #fafbfc;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
 }
 
 .org-chart-node {
@@ -45,22 +116,23 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 14px 28px;
+  padding: 14px 24px;
   background: white;
   border: 1.5px solid var(--border);
   border-radius: 12px;
-  min-width: 180px;
+  min-width: 190px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .org-chart-node-card:hover {
-  border-color: var(--primary);
-  box-shadow: 0 4px 16px rgba(0, 169, 157, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
 .org-chart-node-card .node-role {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-primary);
   text-transform: uppercase;
@@ -105,28 +177,48 @@
   width: 100%;
 }
 
+.org-chart-level-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .org-chart-level-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
   text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 3px 14px;
-  background: var(--bg-input);
+  letter-spacing: 0.8px;
+  padding: 4px 14px;
+  background: white;
+  border: 1px solid var(--border);
   border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .org-chart-level-row {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 20px;
   flex-wrap: wrap;
 }
 
 .org-chart-connector {
   width: 2px;
-  height: 24px;
-  background: var(--border);
+  height: 28px;
+  background: #cbd5e1;
+  position: relative;
+}
+
+.org-chart-connector::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
 }
 
 .org-chart-department-group {
@@ -134,39 +226,152 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 20px;
+  padding: 16px 20px;
   background: white;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 12px;
-  min-width: 200px;
+  min-width: 220px;
+  max-width: 320px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
 
 .org-chart-department-group .dept-header {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--primary);
   text-align: center;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .org-chart-department-group .dept-members {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 
 .org-chart-department-group .dept-member {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.org-chart-department-group .dept-member:hover {
+  background: #eef2f6;
+}
+
+/* ── Hierarchy Mapping Tab & Form ── */
+.hierarchy-mapping-layout {
+  display: grid;
+  grid-template-columns: 1fr 1px 1.2fr;
+  gap: 0;
+  min-height: 480px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.hierarchy-mapping-panel {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hierarchy-mapping-panel:first-child {
+  padding-right: 28px;
+}
+
+.hierarchy-mapping-panel:last-child {
+  padding-left: 28px;
+  background: #fdfdfd;
+}
+
+.hierarchy-mapping-divider {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+}
+
+.hierarchy-mapping-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.hierarchy-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.h-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.h-label {
+  font-size: 0.78rem;
+  font-weight: 600;
   color: var(--text-secondary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--bg-input);
+}
+
+.h-display-box {
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.h-display-box.computed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.h-validation-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  margin-top: 6px;
+}
+
+.h-validation-banner.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
 }
 
 /* ── Transfer Tab ── */
@@ -274,7 +479,7 @@
 
 /* ── Employee Select ── */
 .employee-select-list {
-  max-height: 300px;
+  max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -323,13 +528,17 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+  .hierarchy-mapping-layout,
   .transfer-layout {
     grid-template-columns: 1fr;
   }
+  .hierarchy-mapping-divider,
   .transfer-divider {
     width: 100%;
     height: 1px;
   }
+  .hierarchy-mapping-panel:first-child,
+  .hierarchy-mapping-panel:last-child,
   .transfer-panel:first-child,
   .transfer-panel:last-child {
     padding: 16px;

@@ -140,6 +140,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IJobPositionService, JobPositionService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
+builder.Services.AddScoped<IHierarchyService, HierarchyService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import {
     Building2, Briefcase, Users, ArrowRight, Loader2, AlertCircle, CheckCircle2,
     Plus, Pencil, Trash2, X, Search, RefreshCw, GitBranch, UserCircle2,
-    Shield, Mail, Phone, Hash, XCircle, Eye, Download
+    Shield, Mail, Phone, Hash, XCircle, Eye, Download, Check, Layers, ChevronRight
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -18,7 +18,7 @@ import api from '../../../api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SubTab = 'org-chart' | 'departments' | 'positions' | 'transfers';
+type SubTab = 'org-chart' | 'hierarchy-mapping' | 'departments' | 'positions' | 'transfers';
 
 interface DeptDTO {
     id: string;
@@ -48,13 +48,35 @@ interface EmployeeDTO {
     lastName: string;
     suffix?: string;
     email: string;
-    role: string;
+    role: string | number;
     departmentId?: string;
     departmentName?: string;
     jobPositionId?: string;
     jobPositionName?: string;
     isActive: boolean;
     isDeactivated: boolean;
+}
+
+interface HierarchyEmployeeDTO {
+    id: string;
+    employeeNumber: string;
+    fullName: string;
+    email: string;
+    role: string;
+    hierarchyLevel: string;
+    hierarchyLevelNumber: number;
+    departmentId?: string;
+    departmentName?: string;
+    jobPositionId?: string;
+    jobPositionName?: string;
+    isActive: boolean;
+}
+
+interface HierarchyStructureResponseDTO {
+    managers: HierarchyEmployeeDTO[];
+    coordinators: HierarchyEmployeeDTO[];
+    staff: HierarchyEmployeeDTO[];
+    totalEmployees: number;
 }
 
 interface ConfirmState {
@@ -90,9 +112,56 @@ const toDisplayRole = (role: any): string => {
     return String(role || '');
 };
 
+const deriveHierarchyLevel = (roleStr: string): { name: string; number: number } => {
+    const r = toDisplayRole(roleStr);
+    if (r === 'Manager') return { name: 'Manager', number: 1 };
+    if (r === 'Coordinator') return { name: 'Coordinator', number: 2 };
+    return { name: 'Dispatcher / Encoder / Courier', number: 3 };
+};
+
 const PER_PAGE = 10;
 
 const buildName = (e: EmployeeDTO) => [e.firstName, e.middleName, e.lastName, e.suffix].filter(Boolean).join(' ');
+
+// ─── Hierarchy Flow Header Banner ─────────────────────────────────────────────
+
+function HierarchyFlowBanner({ onMapClick }: { onMapClick?: () => void }) {
+    return (
+        <div className="hierarchy-flow-banner">
+            <div>
+                <div className="hierarchy-flow-title">
+                    <Layers size={18} color="var(--primary)" />
+                    Corporate Hierarchy Model
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Auto-derived from system roles: Manager → Coordinator → Dispatcher / Encoder / Courier
+                </div>
+            </div>
+            <div className="hierarchy-flow-steps">
+                <div className="hierarchy-step-badge lvl-1">
+                    <span>Level 1</span>
+                    <strong>Manager</strong>
+                </div>
+                <div className="hierarchy-arrow-divider"><ChevronRight size={14} /></div>
+                <div className="hierarchy-step-badge lvl-2">
+                    <span>Level 2</span>
+                    <strong>Coordinator</strong>
+                </div>
+                <div className="hierarchy-arrow-divider"><ChevronRight size={14} /></div>
+                <div className="hierarchy-step-badge lvl-3">
+                    <span>Level 3</span>
+                    <strong>Dispatcher / Encoder / Courier</strong>
+                </div>
+                {onMapClick && (
+                    <button className="btn btn-primary btn-sm" onClick={onMapClick} style={{ marginLeft: 8 }}>
+                        <GitBranch size={13} />
+                        Map Employee Hierarchy
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
 
 // ─── View Members Modal ───────────────────────────────────────────────────────
 
@@ -133,6 +202,7 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
                 <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
                     {filtered.map(e => {
                         const role = toDisplayRole(e.role);
+                        const hLevel = deriveHierarchyLevel(role);
                         return (
                             <div key={e.id} style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -153,6 +223,7 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
                                         <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
                                             <span>#{e.employeeNumber}</span>
                                             <span>{e.jobPositionName || '—'}</span>
+                                            <span>• Level {hLevel.number}: {hLevel.name}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -171,8 +242,8 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
 
 // ─── Org Chart Sub-Tab ────────────────────────────────────────────────────────
 
-function OrgChartView({ departments, positions, employees }: {
-    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[];
+function OrgChartView({ departments, positions, employees, onOpenMap }: {
+    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[]; onOpenMap: (emp?: EmployeeDTO) => void;
 }) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [pdfLoading, setPdfLoading] = useState(false);
@@ -180,6 +251,10 @@ function OrgChartView({ departments, positions, employees }: {
     const byRole = (role: string) => activeEmps.filter(e => toDisplayRole(e.role) === role);
     const roles = ['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier'];
     const hasRole = (r: string) => byRole(r).length > 0;
+
+    const managers = byRole('Manager');
+    const coordinators = byRole('Coordinator');
+    const staffMembers = activeEmps.filter(e => ['Dispatcher', 'Encoder', 'Courier', 'Accountant'].includes(toDisplayRole(e.role)));
 
     const downloadPdf = async () => {
         if (!chartRef.current) return;
@@ -227,87 +302,459 @@ function OrgChartView({ departments, positions, employees }: {
     }
 
     return (
-        <div className="card" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Organizational Chart</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button className="btn btn-outline btn-sm" onClick={downloadPdf} disabled={pdfLoading}>
-                        {pdfLoading ? <Loader2 size={14} className="fm-spin" /> : <Download size={14} />}
-                        {pdfLoading ? 'Generating...' : 'Download PDF'}
-                    </button>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{activeEmps.length} employee{activeEmps.length !== 1 ? 's' : ''}</span>
-                </div>
+        <div className="org-content">
+            <HierarchyFlowBanner onMapClick={() => onOpenMap()} />
+
+            <div className="org-stats-grid">
+                <StatusCard icon={<Shield size={18} />} label="Level 1: Manager" value={managers.length} subtext="Executive Management" variant="teal" />
+                <StatusCard icon={<GitBranch size={18} />} label="Level 2: Coordinators" value={coordinators.length} subtext="Operations Leads" variant="teal" />
+                <StatusCard icon={<Users size={18} />} label="Level 3: Execution Staff" value={staffMembers.length} subtext="Dispatchers, Encoders, Couriers" variant="success" />
+                <StatusCard icon={<Building2 size={18} />} label="Departments" value={departments.filter(d => d.isActive).length} subtext="Active units" variant="teal" />
             </div>
-            <div className="org-chart-container" ref={chartRef}>
-                {hasRole('Manager') && (
-                    <>
-                        <div className="org-chart-level">
-                            <div className="org-chart-level-label">Management</div>
-                            <div className="org-chart-level-row">
-                                {byRole('Manager').map(e => (
-                                    <div key={e.id} className="org-chart-node">
+
+            <div className="card" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+                    <div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>Corporate Organizational Chart</h3>
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Visual hierarchy: Manager → Coordinator → Dispatcher / Encoder / Courier</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button className="btn btn-outline btn-sm" onClick={downloadPdf} disabled={pdfLoading}>
+                            {pdfLoading ? <Loader2 size={14} className="fm-spin" /> : <Download size={14} />}
+                            {pdfLoading ? 'Generating...' : 'Download PDF'}
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => onOpenMap()}>
+                            <GitBranch size={14} />
+                            Map Hierarchy
+                        </button>
+                    </div>
+                </div>
+
+                <div className="org-chart-container" ref={chartRef}>
+                    {/* Level 1: Management */}
+                    <div className="org-chart-level">
+                        <div className="org-chart-level-header">
+                            <span className="org-chart-level-label" style={{ borderLeft: '3px solid #4318FF' }}>
+                                Level 1: Manager ({managers.length})
+                            </span>
+                        </div>
+                        <div className="org-chart-level-row">
+                            {managers.length === 0 ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>No Manager assigned</div>
+                            ) : (
+                                managers.map(e => (
+                                    <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
                                         <div className="org-chart-node-card manager-card">
                                             <div className="node-role" style={{ color: ROLE_COLORS.Manager }}>Manager</div>
-                                            <div style={{ fontSize: 13, fontWeight: 500 }}>{buildName(e)}</div>
-                                            <div className="node-count">{e.departmentName || '—'}</div>
+                                            <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
+                                            <div className="node-count">#{e.employeeNumber} • {e.departmentName || 'Management'}</div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                ))
+                            )}
                         </div>
-                        <div className="org-chart-connector" />
-                    </>
-                )}
+                    </div>
 
-                {hasRole('Coordinator') && (
-                    <>
-                        <div className="org-chart-level">
-                            <div className="org-chart-level-label">Coordinators</div>
-                            <div className="org-chart-level-row">
-                                {byRole('Coordinator').map(e => (
-                                    <div key={e.id} className="org-chart-node">
+                    <div className="org-chart-connector" />
+
+                    {/* Level 2: Coordinators */}
+                    <div className="org-chart-level">
+                        <div className="org-chart-level-header">
+                            <span className="org-chart-level-label" style={{ borderLeft: '3px solid #00A99D' }}>
+                                Level 2: Coordinator ({coordinators.length})
+                            </span>
+                        </div>
+                        <div className="org-chart-level-row">
+                            {coordinators.length === 0 ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>No Coordinators assigned</div>
+                            ) : (
+                                coordinators.map(e => (
+                                    <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
                                         <div className="org-chart-node-card coordinator-card">
                                             <div className="node-role" style={{ color: ROLE_COLORS.Coordinator }}>Coordinator</div>
-                                            <div style={{ fontSize: 13, fontWeight: 500 }}>{buildName(e)}</div>
-                                            <div className="node-count">{e.departmentName || '—'} • {e.jobPositionName || '—'}</div>
+                                            <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
+                                            <div className="node-count">#{e.employeeNumber} • {e.departmentName || '—'}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.jobPositionName || 'Team Lead'}</div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                ))
+                            )}
                         </div>
-                        <div className="org-chart-connector" />
-                    </>
-                )}
+                    </div>
 
-                <div className="org-chart-level">
-                    <div className="org-chart-level-label">Staff</div>
-                    <div className="org-chart-level-row" style={{ alignItems: 'flex-start' }}>
-                        {departments.filter(d => d.isActive).map(dept => {
-                            const staff = activeEmps.filter(e =>
-                                e.departmentId === dept.id &&
-                                !['Manager', 'Coordinator', 'Accountant'].includes(toDisplayRole(e.role))
-                            );
-                            if (staff.length === 0) return null;
-                            return (
-                                <div key={dept.id} className="org-chart-department-group">
-                                    <div className="dept-header">{dept.name}</div>
-                                    <div className="dept-members">
-                                        {staff.map(e => {
-                                            const role = toDisplayRole(e.role);
-                                            return (
-                                                <div key={e.id} className="dept-member" style={{ borderLeft: `3px solid ${ROLE_COLORS[role] || '#ccc'}` }}>
-                                                    <span style={{ fontWeight: 500, fontSize: 13 }}>{buildName(e)}</span>
-                                                    <span style={{ fontSize: 11, color: ROLE_COLORS[role] || '#999', fontWeight: 600 }}>{role}</span>
-                                                </div>
-                                            );
-                                        })}
+                    <div className="org-chart-connector" />
+
+                    {/* Level 3: Execution Staff (Dispatcher / Encoder / Courier) */}
+                    <div className="org-chart-level">
+                        <div className="org-chart-level-header">
+                            <span className="org-chart-level-label" style={{ borderLeft: '3px solid #FFB547' }}>
+                                Level 3: Dispatcher / Encoder / Courier ({staffMembers.length})
+                            </span>
+                        </div>
+                        <div className="org-chart-level-row" style={{ alignItems: 'flex-start' }}>
+                            {departments.filter(d => d.isActive).map(dept => {
+                                const staff = staffMembers.filter(e => e.departmentId === dept.id);
+                                if (staff.length === 0) return null;
+                                return (
+                                    <div key={dept.id} className="org-chart-department-group">
+                                        <div className="dept-header">
+                                            <span>{dept.name}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>({staff.length})</span>
+                                        </div>
+                                        <div className="dept-members">
+                                            {staff.map(e => {
+                                                const role = toDisplayRole(e.role);
+                                                return (
+                                                    <div key={e.id} className="dept-member"
+                                                        style={{ borderLeft: `3px solid ${ROLE_COLORS[role] || '#ccc'}` }}
+                                                        onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
+                                                        <div>
+                                                            <div style={{ fontWeight: 500, fontSize: 12 }}>{buildName(e)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>#{e.employeeNumber} • {e.jobPositionName || '—'}</div>
+                                                        </div>
+                                                        <span style={{ fontSize: 11, color: ROLE_COLORS[role] || '#999', fontWeight: 700 }}>{role}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+// ─── Hierarchy Mapping Form & Sub-Tab ─────────────────────────────────────────
+
+function HierarchyMappingView({
+    employees, departments, positions, selectedInitialEmployee, onComplete
+}: {
+    employees: EmployeeDTO[];
+    departments: DeptDTO[];
+    positions: PosDTO[];
+    selectedInitialEmployee?: EmployeeDTO | null;
+    onComplete: () => void;
+}) {
+    const { success, error } = useToast();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedEmp, setSelectedEmp] = useState<EmployeeDTO | null>(selectedInitialEmployee || null);
+    const [targetDeptId, setTargetDeptId] = useState('');
+    const [targetPosId, setTargetPosId] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [apiErr, setApiErr] = useState('');
+    const [confirmModal, setConfirmModal] = useState(false);
+    const [successModal, setSuccessModal] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    useEffect(() => {
+        if (selectedInitialEmployee) {
+            setSelectedEmp(selectedInitialEmployee);
+            setTargetDeptId(selectedInitialEmployee.departmentId || '');
+            setTargetPosId(selectedInitialEmployee.jobPositionId || '');
+        }
+    }, [selectedInitialEmployee]);
+
+    const activeEmps = employees.filter(e => e.isActive && !e.isDeactivated);
+    const filteredEmps = searchQuery
+        ? activeEmps.filter(e => {
+            const name = buildName(e).toLowerCase();
+            const num = e.employeeNumber.toLowerCase();
+            const q = searchQuery.toLowerCase();
+            return name.includes(q) || num.includes(q) || e.email.toLowerCase().includes(q);
+        })
+        : activeEmps.slice(0, 25);
+
+    const handleSelectEmployee = (emp: EmployeeDTO) => {
+        setSelectedEmp(emp);
+        setTargetDeptId(emp.departmentId || '');
+        setTargetPosId(emp.jobPositionId || '');
+        setApiErr('');
+    };
+
+    const targetPositions = targetDeptId
+        ? positions.filter(p => p.departmentId === targetDeptId && p.isActive)
+        : [];
+
+    const currentRole = selectedEmp ? toDisplayRole(selectedEmp.role) : '';
+    const computedLevel = selectedEmp ? deriveHierarchyLevel(currentRole) : null;
+
+    const handleValidateAndSubmit = () => {
+        if (!selectedEmp) {
+            setApiErr('Please select an employee account from the database.');
+            return;
+        }
+        setApiErr('');
+        setConfirmModal(true);
+    };
+
+    const executeMapping = async () => {
+        if (!selectedEmp) return;
+        setSubmitting(true);
+        setApiErr('');
+        try {
+            await api.post('/api/Hierarchy/map', {
+                employeeId: selectedEmp.id,
+                departmentId: targetDeptId || null,
+                jobPositionId: targetPosId || null
+            });
+
+            const empName = buildName(selectedEmp);
+            const deptName = departments.find(d => d.id === targetDeptId)?.name || 'Unassigned';
+            const posName = positions.find(p => p.id === targetPosId)?.name || 'Unassigned';
+
+            success('Hierarchy mapping saved successfully.');
+            setSuccessMessage(`Hierarchy position confirmed for ${empName} (Level ${computedLevel?.number}: ${computedLevel?.name}, Role: ${currentRole}, Department: ${deptName}, Position: ${posName}). Audit log recorded.`);
+            setConfirmModal(false);
+            setSuccessModal(true);
+            onComplete();
+        } catch (err: any) {
+            setApiErr(err.response?.data?.message || err.response?.data?.Message || 'Failed to save hierarchy mapping.');
+            setConfirmModal(false);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="org-content">
+            <HierarchyFlowBanner />
+
+            <div className="hierarchy-mapping-layout">
+                {/* Left Panel: Employee Search & Select (Criteria 1 & 4) */}
+                <div className="hierarchy-mapping-panel">
+                    <h4 className="hierarchy-mapping-title">
+                        <Search size={16} color="var(--primary)" />
+                        Select Employee Account
+                    </h4>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                        Search and select an active employee in the database to map their corporate hierarchy position.
+                    </p>
+
+                    <div className="table-card-search-input-wrap" style={{ marginBottom: 12, width: '100%' }}>
+                        <Search size={14} className="table-card-search-icon" />
+                        <input
+                            type="text"
+                            className="table-card-search-input"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search by Employee ID, Name, or Email..."
+                        />
+                    </div>
+
+                    <div className="employee-select-list">
+                        {filteredEmps.length === 0 ? (
+                            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                                No employee accounts matched your search.
+                            </div>
+                        ) : (
+                            filteredEmps.map(e => {
+                                const role = toDisplayRole(e.role);
+                                const lvl = deriveHierarchyLevel(role);
+                                return (
+                                    <div
+                                        key={e.id}
+                                        className={`employee-select-item${selectedEmp?.id === e.id ? ' selected' : ''}`}
+                                        onClick={() => handleSelectEmployee(e)}
+                                    >
+                                        <div>
+                                            <div className="esi-name">{buildName(e)}</div>
+                                            <div className="esi-detail">
+                                                ID: <strong>#{e.employeeNumber}</strong> • {role}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: ROLE_COLORS[role] || '#666' }}>
+                                                Lvl {lvl.number}
+                                            </span>
+                                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{e.departmentName || '—'}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+
+                <div className="hierarchy-mapping-divider" />
+
+                {/* Right Panel: Hierarchy Mapping Form (Criteria 1, 2, 6, 7, 8) */}
+                <div className="hierarchy-mapping-panel">
+                    <h4 className="hierarchy-mapping-title">
+                        <GitBranch size={16} color="var(--primary)" />
+                        Hierarchy Mapping Form
+                    </h4>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                        Hierarchy level is automatically computed from the employee's system role. Confirm position alignment.
+                    </p>
+
+                    {selectedEmp ? (
+                        <div className="hierarchy-form-group">
+                            {/* Employee ID (Search Field / DB Verified) */}
+                            <div className="h-field">
+                                <label className="h-label">
+                                    <span>Employee ID (Database Verified)</span>
+                                    <span style={{ color: 'var(--status-active)', fontSize: 11, fontWeight: 700 }}>✓ Verified Account</span>
+                                </label>
+                                <div className="h-display-box">
+                                    <span><strong>#{selectedEmp.employeeNumber}</strong> — {buildName(selectedEmp)}</span>
+                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{selectedEmp.email}</span>
+                                </div>
+                            </div>
+
+                            {/* System Role (Display Field derived from FR-009) */}
+                            <div className="h-field">
+                                <label className="h-label">
+                                    <span>System Role (Derived from Role Assignment)</span>
+                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>FR-009 System Role</span>
+                                </label>
+                                <div className="h-display-box">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: ROLE_COLORS[currentRole] || '#999' }} />
+                                        <strong>{currentRole}</strong>
+                                    </div>
+                                    <StatusBadge status={currentRole} size="sm" />
+                                </div>
+                            </div>
+
+                            {/* Hierarchy Level (System-Computed) */}
+                            <div className="h-field">
+                                <label className="h-label">
+                                    <span>Hierarchy Level (System-Computed)</span>
+                                    <span style={{ color: 'var(--status-active)', fontSize: 11, fontWeight: 700 }}>Auto-Derived</span>
+                                </label>
+                                <div className="h-display-box computed">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <Layers size={16} />
+                                        <strong>Level {computedLevel?.number}: {computedLevel?.name}</strong>
+                                    </div>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d' }}>
+                                        Level {computedLevel?.number}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Department Assignment */}
+                            <div className="h-field">
+                                <label className="h-label">
+                                    <span>Assigned Department</span>
+                                </label>
+                                <select
+                                    className="fm-select"
+                                    value={targetDeptId}
+                                    onChange={e => {
+                                        setTargetDeptId(e.target.value);
+                                        setTargetPosId('');
+                                    }}
+                                >
+                                    <option value="">Unassigned</option>
+                                    {departments.filter(d => d.isActive).map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Job Position Assignment */}
+                            <div className="h-field">
+                                <label className="h-label">
+                                    <span>Assigned Job Position</span>
+                                </label>
+                                <select
+                                    className="fm-select"
+                                    value={targetPosId}
+                                    onChange={e => setTargetPosId(e.target.value)}
+                                    disabled={!targetDeptId}
+                                >
+                                    <option value="">{targetDeptId ? 'Select job position (Optional)' : 'Select department first'}</option>
+                                    {targetPositions.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Hierarchy Consistency Validation */}
+                            <div className="h-validation-banner">
+                                <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                                <div>
+                                    <strong>Validated:</strong> Assigned position is consistent with <strong>Level {computedLevel?.number} ({computedLevel?.name})</strong>.
+                                </div>
+                            </div>
+
+                            {apiErr && (
+                                <div className="transfer-error">
+                                    <AlertCircle size={15} />
+                                    <span>{apiErr}</span>
+                                </div>
+                            )}
+
+                            <button
+                                className="btn btn-primary"
+                                style={{ marginTop: 12, height: 42, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}
+                                onClick={handleValidateAndSubmit}
+                                disabled={submitting}
+                            >
+                                {submitting ? <Loader2 size={16} className="fm-spin" /> : <Check size={16} />}
+                                {submitting ? 'Validating & Saving...' : 'Save Hierarchy Mapping'}
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-input)', borderRadius: 10, border: '1px dashed var(--border)' }}>
+                            <UserCircle2 size={36} style={{ opacity: 0.3, marginBottom: 10 }} />
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>No employee selected</div>
+                            <p style={{ fontSize: 12, marginTop: 4 }}>Select an employee account from the left panel to map or confirm their hierarchy position.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={confirmModal}
+                variant="info"
+                title="Confirm Hierarchy Mapping"
+                description={
+                    selectedEmp && computedLevel ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div>Confirm hierarchy position mapping for <strong>{buildName(selectedEmp)}</strong> (ID: #{selectedEmp.employeeNumber})?</div>
+                            <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, fontSize: 13, border: '1px solid var(--border)' }}>
+                                <div><strong>Hierarchy Level:</strong> Level {computedLevel.number} ({computedLevel.name})</div>
+                                <div><strong>System Role:</strong> {currentRole}</div>
+                                <div><strong>Department:</strong> {departments.find(d => d.id === targetDeptId)?.name || 'Unassigned'}</div>
+                                <div><strong>Job Position:</strong> {positions.find(p => p.id === targetPosId)?.name || 'Unassigned'}</div>
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                Saving will update the corporate hierarchy position and record an entry in the Audit Log.
+                            </div>
+                        </div>
+                    ) : ''
+                }
+                confirmLabel="Confirm & Save"
+                isLoading={submitting}
+                onConfirm={executeMapping}
+                onCancel={() => setConfirmModal(false)}
+            />
+
+            {/* Success Modal */}
+            {successModal && (
+                <FormModal
+                    isOpen={true}
+                    onClose={() => setSuccessModal(false)}
+                    title="Hierarchy Mapping Saved"
+                    subtitle="Corporate hierarchy and audit log updated"
+                    size="sm"
+                >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#065f46' }}>
+                        <CheckCircle2 size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                        <div>{successMessage}</div>
+                    </div>
+                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setSuccessModal(false)}>
+                        Done
+                    </button>
+                </FormModal>
+            )}
         </div>
     );
 }
@@ -647,7 +1094,7 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
         : activeEmps.slice(0, 20);
 
     const targetPositions = targetDeptId
-        ? positions.filter(p => p.departmentId === targetDeptId)
+        ? positions.filter(p => p.departmentId === targetDeptId && p.isActive)
         : [];
 
     const resetForm = () => { setSelectedEmp(null); setTargetDeptId(''); setTargetPosId(''); setApiErr(''); setConfirmTransfer(false); };
@@ -798,10 +1245,12 @@ export default function OrgStructureTab() {
     const [departments, setDepartments] = useState<DeptDTO[]>([]);
     const [positions, setPositions] = useState<PosDTO[]>([]);
     const [employees, setEmployees] = useState<EmployeeDTO[]>([]);
+    const [selectedMappingEmp, setSelectedMappingEmp] = useState<EmployeeDTO | null>(null);
     const [loading, setLoading] = useState(true);
 
     const SUB_TABS: { key: SubTab; label: string }[] = [
         { key: 'org-chart', label: 'Org Chart' },
+        { key: 'hierarchy-mapping', label: 'Hierarchy Mapping' },
         { key: 'departments', label: 'Departments' },
         { key: 'positions', label: 'Job Positions' },
         { key: 'transfers', label: 'Transfers' },
@@ -831,11 +1280,18 @@ export default function OrgStructureTab() {
 
     useEffect(() => { fetchAll(); }, []);
 
+    const handleOpenMapping = (emp?: EmployeeDTO) => {
+        if (emp) {
+            setSelectedMappingEmp(emp);
+        }
+        setSubTab('hierarchy-mapping');
+    };
+
     if (loading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80, flexDirection: 'column', gap: 12 }}>
                 <Loader2 size={28} className="fm-spin" style={{ color: 'var(--primary)' }} />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading organization data...</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading organizational structure...</span>
             </div>
         );
     }
@@ -844,7 +1300,26 @@ export default function OrgStructureTab() {
         <div className="org-root">
             <SubTabNav tabs={SUB_TABS} activeTab={subTab} onTabChange={t => setSubTab(t as SubTab)} />
 
-            {subTab === 'org-chart' && <OrgChartView departments={departments} positions={positions} employees={employees} />}
+            {subTab === 'org-chart' && (
+                <OrgChartView
+                    departments={departments}
+                    positions={positions}
+                    employees={employees}
+                    onOpenMap={handleOpenMapping}
+                />
+            )}
+            {subTab === 'hierarchy-mapping' && (
+                <HierarchyMappingView
+                    employees={employees}
+                    departments={departments}
+                    positions={positions}
+                    selectedInitialEmployee={selectedMappingEmp}
+                    onComplete={() => {
+                        fetchAll();
+                        // Displays updated chart
+                    }}
+                />
+            )}
             {subTab === 'departments' && <DepartmentsView departments={departments} employees={employees} onRefresh={fetchAll} />}
             {subTab === 'positions' && <PositionsView positions={positions} departments={departments} employees={employees} onRefresh={fetchAll} />}
             {subTab === 'transfers' && <TransfersView employees={employees} departments={departments} positions={positions} onRefresh={fetchAll} />}

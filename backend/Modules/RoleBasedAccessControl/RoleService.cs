@@ -1,19 +1,23 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
+using Backend.Modules.TaskManagement;
 
 namespace Backend.Modules.RoleBasedAccessControl;
 
 public class RoleService : IRoleService
 {
     private readonly AppDbContext _db;
+    private readonly IAuditLogService _auditLogService;
 
-    public RoleService(AppDbContext db)
+    public RoleService(AppDbContext db, IAuditLogService auditLogService)
     {
         _db = db;
+        _auditLogService = auditLogService;
     }
+
 
     public ApiResponseDTO<List<RoleResponseDTO>> GetAllRoles()
     {
@@ -118,11 +122,19 @@ public class RoleService : IRoleService
 
         await _db.SaveChangesAsync();
 
-        // TODO: Record audit log entry with oldRole, newRole, and dto.Reason
-        // when Audit Log module is implemented (Module 5)
+        var empName = $"{user.FirstName} {user.LastName}".Trim();
+        await _auditLogService.LogAsync(
+            requestUserId,
+            AuditActionType.Update,
+            "UserRole",
+            user.Id,
+            null,
+            $"User role updated from {oldRole} to {user.Role} for {empName} (#{user.EmployeeNumber}). Hierarchy level automatically updated to {dto.NewRole}. Reason: {dto.Reason ?? "Not specified"}",
+            "Role Management");
 
         return ApiResponseDTO<bool>.Success(true, "User role updated successfully");
     }
+
 
     private List<string> GetPermissionsForRole(UserRole role)
     {
