@@ -38,7 +38,7 @@ public class FomsExportService : IFomsExportService
                 ? DateTime.SpecifyKind(dateRangeStart.Value, DateTimeKind.Utc)
                 : DateTime.UtcNow.AddMonths(-1);
             var dateEnd = dateRangeEnd.HasValue
-                ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc)
+                ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1)
                 : DateTime.UtcNow;
 
             var query = _db.Tasks

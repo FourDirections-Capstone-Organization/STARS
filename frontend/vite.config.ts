@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import basicSsl from "@vitejs/plugin-basic-ssl";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -9,13 +10,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
     root: ".",
     base: "/",
-    plugins: [react()],
+    plugins: [react(), basicSsl()],
     build: {
         outDir: "dist",
         emptyOutDir: true,
         sourcemap: true
     },
     server: {
+        https: true,
         proxy: {
             '/api': {
                 target: 'http://localhost:5100',
@@ -29,6 +31,9 @@ export default defineConfig({
                 ws: true,
             }
         }
+    },
+    preview: {
+        https: true,
     },
     test: {
         globals: true,

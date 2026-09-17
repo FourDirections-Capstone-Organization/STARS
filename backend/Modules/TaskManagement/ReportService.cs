@@ -28,7 +28,7 @@ public class ReportService : IReportService
         KpiFilterDTO? filters = null)
     {
         var dateStart = filters?.DateRangeStart is DateTime ds ? DateTime.SpecifyKind(ds, DateTimeKind.Utc) : DateTime.UtcNow.AddMonths(-1);
-        var dateEnd = filters?.DateRangeEnd is DateTime de ? DateTime.SpecifyKind(de, DateTimeKind.Utc) : DateTime.UtcNow;
+        var dateEnd = filters?.DateRangeEnd is DateTime de ? DateTime.SpecifyKind(de, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         var query = _db.Tasks
             .Include(t => t.Assignments)
@@ -273,7 +273,7 @@ public class ReportService : IReportService
             return ApiResponseDTO<EmployeePerformanceSummaryDTO>.Failure("Employee not found.");
 
         var dateStart = filters?.DateRangeStart is DateTime ds3 ? DateTime.SpecifyKind(ds3, DateTimeKind.Utc) : DateTime.UtcNow.AddMonths(-1);
-        var dateEnd = filters?.DateRangeEnd is DateTime de3 ? DateTime.SpecifyKind(de3, DateTimeKind.Utc) : DateTime.UtcNow;
+        var dateEnd = filters?.DateRangeEnd is DateTime de3 ? DateTime.SpecifyKind(de3, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         var completedTasks = await _db.Tasks
             .Include(t => t.Assignments)
@@ -334,7 +334,7 @@ public class ReportService : IReportService
     {
         if (explicitStart.HasValue && explicitEnd.HasValue)
             return (DateTime.SpecifyKind(explicitStart.Value, DateTimeKind.Utc),
-                    DateTime.SpecifyKind(explicitEnd.Value, DateTimeKind.Utc));
+                    DateTime.SpecifyKind(explicitEnd.Value, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1));
 
         var now = DateTime.UtcNow;
 
@@ -505,7 +505,7 @@ public class ReportService : IReportService
             return ApiResponseDTO<DepartmentKpiDTO>.Failure("Department not found");
 
         var dateStart = from ?? DateTime.UtcNow.AddMonths(-1);
-        var dateEnd = to ?? DateTime.UtcNow;
+        var dateEnd = to.HasValue ? DateTime.SpecifyKind(to.Value, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
         var now = DateTime.UtcNow;
 
         var employees = await _db.Users
@@ -643,7 +643,7 @@ public class ReportService : IReportService
             ? DateTime.SpecifyKind(dateRangeStart.Value, DateTimeKind.Utc)
             : DateTime.UtcNow.AddMonths(-1);
         var dateEnd = dateRangeEnd.HasValue
-            ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc)
+            ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1)
             : DateTime.UtcNow;
 
         var query = _db.Tasks
@@ -775,7 +775,7 @@ public class ReportService : IReportService
             ? DateTime.SpecifyKind(dateRangeStart.Value, DateTimeKind.Utc)
             : DateTime.UtcNow.AddMonths(-1);
         var dateEnd = dateRangeEnd.HasValue
-            ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc)
+            ? DateTime.SpecifyKind(dateRangeEnd.Value, DateTimeKind.Utc).Date.AddDays(1).AddTicks(-1)
             : DateTime.UtcNow;
 
         var query = _db.Tasks

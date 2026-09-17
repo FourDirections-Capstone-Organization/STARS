@@ -70,6 +70,7 @@ import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import api from '../../api';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
+import { AI_ANALYTICS_ENABLED } from '../../config/features';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2252,7 +2253,7 @@ export default function Dashboard() {
         { label: 'Role Management', onClick: () => handleNavChange('roles'), active: activeTab === 'roles' },
         { label: 'Org Structure', onClick: () => handleNavChange('org-structure'), active: activeTab === 'org-structure' },
         { label: 'Activity Logs', onClick: () => handleNavChange('activity_logs'), active: activeTab === 'activity_logs' },
-        { label: 'Biomarker Scan', onClick: () => handleNavChange('biomarker'), active: activeTab === 'biomarker' },
+        ...(AI_ANALYTICS_ENABLED ? [{ label: 'Biomarker Scan', onClick: () => handleNavChange('biomarker'), active: activeTab === 'biomarker' }] : []),
         ],
         },
         {
@@ -2931,7 +2932,10 @@ export default function Dashboard() {
             .then(res => {
                 const json = res.data;
                 const raw = json?.data ?? json;
-                if (raw) setTmDetailTask(mapManagerTaskToView(raw));
+                if (raw) {
+                    setActiveTab('tasks');
+                    setTmDetailTask(mapManagerTaskToView(raw));
+                }
             })
             .catch(() => {});
     };
@@ -3249,7 +3253,7 @@ export default function Dashboard() {
                 {activeTab === 'roles' && <RoleManagementTab />}
 
                 {activeTab === 'org-structure' && <OrgStructureTab />}
-                {activeTab === 'biomarker' && <BiomarkerDashboard />}
+                {activeTab === 'biomarker' && AI_ANALYTICS_ENABLED && <BiomarkerDashboard />}
 
                 {activeTab === 'announcements' && <AnnouncementsTab canCreate={true} />}
 
@@ -3313,54 +3317,86 @@ export default function Dashboard() {
 
                 {activeTab === 'tasks' && (
                     <>
-                        <div className="dashboard-content" style={{ paddingBottom: 0 }}>
-                            <SubTabNav
-                                tabs={[
-                                    { key: 'list', label: 'Task List' },
-                                    { key: 'create', label: 'Create Task' },
-                                ]}
-                                activeTab={taskSubTab}
-                                onTabChange={key => setTaskSubTab(key as 'list' | 'create')}
-                            />
-                        </div>
-                        {taskSubTab === 'list' && (
+                        {tmDetailTask ? (
                             <div className="dashboard-content">
-                                <TaskManager
-                                    tasks={tmTasks}
-                                    teamMembers={[]}
-                                    onNewTask={() => setTaskSubTab('create')}
-                                    onEdit={id => {
-                                        const found = tmTasks.find(t => t.id === id);
-                                        if (found) {
-                                            setTmEditingTask(mapManagerTaskToView(found));
+                                <TaskView
+                                    task={tmDetailTask}
+                                    onEdit={() => { setTmEditingTask(tmDetailTask); setTmDetailTask(null); }}
+                                    onReopen={async () => {
+                                        error('Reopen is not supported by the backend FSM. Use Cancel to reset the task lifecycle.');
+                                    }}
+                                    onClose={() => setTmDetailTask(null)}
+                                    onApprove={async (id) => {
+                                        try {
+                                            await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
+                                            success('Task approved.');
+                                            setTmDetailTask(null);
+                                            fetchManagerTasks();
+                                        } catch {
+                                            error('Failed to approve task.');
                                         }
                                     }}
-                                    onView={handleManagerTaskView}
-                                    onArchive={ids => handleManagerTaskArchive(ids)}
-                                    onRestore={ids => handleManagerTaskRestore(ids)}
-                                    onDelete={ids => handleManagerTaskDelete(ids)}
-                                    onMarkDone={ids => handleManagerTaskMarkDone(ids)}
+                                    onReject={async (id, reason) => {
+                                        try {
+                                            await api.patch(`/api/Task/${id}/review`, { isApproved: false, remarks: reason });
+                                            success('Task returned for rework.');
+                                            setTmDetailTask(null);
+                                            fetchManagerTasks();
+                                        } catch {
+                                            error('Failed to reject task.');
+                                        }
+                                    }}
+                                    onDeleteAttachment={handleManagerDeleteAttachment}
+                                    onUpdate={(updated) => {
+                                        setTmDetailTask(updated);
+                                        fetchManagerTasks();
+                                    }}
                                 />
                             </div>
-                        )}
-                        {taskSubTab === 'create' && (
-                            <div className="dashboard-content">
-                                <AIAssignmentView />
-                            </div>
+                        ) : (
+                            <>
+                                <div className="dashboard-content" style={{ paddingBottom: 0 }}>
+                                    <SubTabNav
+                                        tabs={[
+                                            { key: 'list', label: 'Task List' },
+                                            { key: 'create', label: 'Create Task' },
+                                        ]}
+                                        activeTab={taskSubTab}
+                                        onTabChange={key => setTaskSubTab(key as 'list' | 'create')}
+                                    />
+                                </div>
+                                {taskSubTab === 'list' && (
+                                    <div className="dashboard-content">
+                                        <TaskManager
+                                            tasks={tmTasks}
+                                            teamMembers={[]}
+                                            onNewTask={() => setTaskSubTab('create')}
+                                            onEdit={id => {
+                                                const found = tmTasks.find(t => t.id === id);
+                                                if (found) {
+                                                    setTmEditingTask(mapManagerTaskToView(found));
+                                                }
+                                            }}
+                                            onView={handleManagerTaskView}
+                                            onArchive={ids => handleManagerTaskArchive(ids)}
+                                            onRestore={ids => handleManagerTaskRestore(ids)}
+                                            onDelete={ids => handleManagerTaskDelete(ids)}
+                                            onMarkDone={ids => handleManagerTaskMarkDone(ids)}
+                                        />
+                                    </div>
+                                )}
+                                {taskSubTab === 'create' && (
+                                    <div className="dashboard-content">
+                                        <AIAssignmentView />
+                                    </div>
+                                )}
+                            </>
                         )}
                     </>
                 )}
                 {activeTab === 'reports' && (
-                <div className="dashboard-content">
-                    <div className="card" style={{ padding: 24, minHeight: 300 }}>
-                        <div style={{ marginBottom: 16 }}>
-                            <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Reports</h3>
-                            <p style={{ fontSize: 13, color: "var(--ts)", margin: "4px 0 0" }}>View task completion, performance, and operational reports.</p>
-                        </div>
-                        <ReportsTab teamMembers={reportTeamMembers} />
-                    </div>
-                </div>
-            )}
+                    <ReportsTab teamMembers={reportTeamMembers} />
+                )}
 
                 {activeTab === 'delivery' && <div className="dashboard-content"><div className="card"><EmptyState icon={<Truck size={32} />} message="Delivery module coming soon." /></div></div>}
                 {activeTab === 'finance' && <div className="dashboard-content"><div className="card"><EmptyState icon={<BarChart3 size={32} />} message="Finance module coming soon." /></div></div>}
@@ -3622,42 +3658,7 @@ export default function Dashboard() {
                 onCancel={() => setLogoutConfirm(false)}
             />
 
-            {/* ── Task Detail Modal ── */}
-            {tmDetailTask && (
-                <TaskView
-                    task={tmDetailTask}
-                    onEdit={() => { setTmEditingTask(tmDetailTask); setTmDetailTask(null); }}
-                    onReopen={async () => {
-                        error('Reopen is not supported by the backend FSM. Use Cancel to reset the task lifecycle.');
-                    }}
-                    onClose={() => setTmDetailTask(null)}
-                    onApprove={async (id) => {
-                        try {
-                            await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
-                            success('Task approved.');
-                            setTmDetailTask(null);
-                            fetchManagerTasks();
-                        } catch {
-                            error('Failed to approve task.');
-                        }
-                    }}
-                    onReject={async (id, reason) => {
-                        try {
-                            await api.patch(`/api/Task/${id}/review`, { isApproved: false, remarks: reason });
-                            success('Task returned for rework.');
-                            setTmDetailTask(null);
-                            fetchManagerTasks();
-                        } catch {
-                            error('Failed to reject task.');
-                        }
-                    }}
-                    onDeleteAttachment={handleManagerDeleteAttachment}
-                    onUpdate={(updated) => {
-                        setTmDetailTask(updated);
-                        fetchManagerTasks();
-                    }}
-                />
-            )}
+
 
             {/* ── New Task Modal ── */}
             {showNewTask && (

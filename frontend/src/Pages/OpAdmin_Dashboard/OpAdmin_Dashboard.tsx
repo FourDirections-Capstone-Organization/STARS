@@ -3454,9 +3454,22 @@ const NotificationSettingsTab: React.FC = () => {
 
 // --- Reports Tab --------------------------------------------------------------
 
-export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) => {
+/** Reads a blob error response and returns the message string (falls back to fallback). */
+async function readBlobError(err: any, fallback: string): Promise<string> {
+    try {
+        const blob: Blob = err?.response?.data;
+        if (blob instanceof Blob) {
+            const text = await blob.text();
+            const json = JSON.parse(text);
+            return json?.message || json?.title || fallback;
+        }
+    } catch { /* ignore parse errors */ }
+    return err?.response?.data?.message || err?.message || fallback;
+}
+
+export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; employeeName: string; role?: string }> }> = ({ teamMembers }) => {
     const { success, error } = useToast();
-    const [reportSubTab, setReportSubTab] = useState<'task-completion' | 'operational-summary' | 'kpi-tracking' | 'performance-report' | 'foms-export'>('task-completion');
+    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary'>('kpi-tracking');
 
     const DATE_PRESETS = [
         { label: '1 Month', months: 1 },
@@ -3465,22 +3478,63 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         { label: '12 Months', months: 12 },
     ] as const;
 
-    // --- Task Completion State ---
-    const [tcFilter, setTcFilter] = useState<ReportFilter>({
-        dateRangeStart: '', dateRangeEnd: '', employeeId: '',
-        taskPriorityLevel: '', taskStatus: '', taskCategory: '',
-    });
-    const [tcReport, setTcReport] = useState<TaskCompletionReport | null>(null);
-    const [tcLoading, setTcLoading] = useState(false);
-    const [tcError, setTcError] = useState('');
-    const [tcNoRecords, setTcNoRecords] = useState(false);
-    const [tcGeneratedAt, setTcGeneratedAt] = useState('');
+    const getDateRangeMonths = (months: number) => {
+        const end = new Date();
+        const start = new Date();
+        start.setMonth(start.getMonth() - months);
+        return {
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+        };
+    };
+
+    const getDateRangeDays = (days: number) => {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - days);
+        return {
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+        };
+    };
+
+    // Shared filter options
+    const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
+    const [employees, setEmployees] = useState<ReportFilterOption[]>([]);
+
+    useEffect(() => {
+        const fetchOptions = async () => {
+            try {
+                const res = await api.get('/api/reports/filter-options');
+                const data = res.data;
+                if (data.isSuccess && data.data) {
+                    setDepartments(data.data.departments || []);
+                    setEmployees(data.data.employees || []);
+                }
+            } catch { }
+        };
+        fetchOptions();
+    }, []);
+
+    // Combine loaded employees with teamMembers fallback
+    const allEmployeeOptions = useMemo(() => {
+        if (employees.length > 0) {
+            return employees.map(e => ({ accountId: e.id, employeeName: e.name }));
+        }
+        return teamMembers;
+    }, [employees, teamMembers]);
 
     // --- KPI Tracking State ---
-    const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({ dateRangeStart: '', dateRangeEnd: '', employeeId: '' });
+    const initialKpiDates = useMemo(() => getDateRangeMonths(1), []);
+    const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
+        dateRangeStart: initialKpiDates.start,
+        dateRangeEnd: initialKpiDates.end,
+        employeeId: '',
+    });
     const [kpiData, setKpiData] = useState<any>(null);
     const [kpiLoading, setKpiLoading] = useState(false);
     const [kpiError, setKpiError] = useState('');
+    const [kpiNoRecords, setKpiNoRecords] = useState(false);
 
     const handleKpiGenerate = async () => {
         if (!kpiFilter.dateRangeStart || !kpiFilter.dateRangeEnd) {
@@ -3489,6 +3543,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         }
         setKpiLoading(true);
         setKpiError('');
+        setKpiNoRecords(false);
         setKpiData(null);
         try {
             const params = new URLSearchParams();
@@ -3500,9 +3555,13 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             if (json?.isSuccess && json?.data) {
                 setKpiData(json.data);
             } else {
-                setKpiError(json?.message || 'Failed to load KPI data.');
+                setKpiNoRecords(true);
             }
         } catch (err: any) {
+            if (err.response?.status === 404) {
+                setKpiNoRecords(true);
+                return;
+            }
             setKpiError(err?.response?.data?.message || err.message || 'Failed to load KPI data.');
         } finally {
             setKpiLoading(false);
@@ -3510,17 +3569,25 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
     };
 
     // --- Performance Report State ---
+    const initialPrDates = useMemo(() => getDateRangeDays(30), []);
     const [prFilter, setPrFilter] = useState<{
         period: 'Weekly' | 'Monthly';
         dateRangeStart: string;
         dateRangeEnd: string;
         employeeId: string;
         departmentId: string;
-    }>({ period: 'Weekly', dateRangeStart: '', dateRangeEnd: '', employeeId: '', departmentId: '' });
+    }>({
+        period: 'Weekly',
+        dateRangeStart: initialPrDates.start,
+        dateRangeEnd: initialPrDates.end,
+        employeeId: '',
+        departmentId: '',
+    });
     const [prData, setPrData] = useState<any>(null);
     const [prLoading, setPrLoading] = useState(false);
     const [prExporting, setPrExporting] = useState(false);
     const [prError, setPrError] = useState('');
+    const [prNoRecords, setPrNoRecords] = useState(false);
 
     const handlePrGenerate = async () => {
         if (!prFilter.dateRangeStart || !prFilter.dateRangeEnd) {
@@ -3535,6 +3602,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         }
         setPrLoading(true);
         setPrError('');
+        setPrNoRecords(false);
         setPrData(null);
         try {
             const params = new URLSearchParams();
@@ -3548,9 +3616,13 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             if (json?.isSuccess && json?.data) {
                 setPrData(json.data);
             } else {
-                setPrError(json?.message || 'No records found for the selected criteria.');
+                setPrNoRecords(true);
             }
         } catch (err: any) {
+            if (err.response?.status === 404) {
+                setPrNoRecords(true);
+                return;
+            }
             setPrError(err?.response?.data?.message || err.message || 'Failed to generate report.');
         } finally {
             setPrLoading(false);
@@ -3558,7 +3630,10 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
     };
 
     const handlePrExport = async (format: 'Excel' | 'Pdf') => {
-        if (!prData) return;
+        if (!prFilter.dateRangeStart || !prFilter.dateRangeEnd) {
+            setPrError('Please generate a report first before exporting.');
+            return;
+        }
         setPrExporting(true);
         try {
             const body = {
@@ -3567,13 +3642,23 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                 dateRangeEnd: prFilter.dateRangeEnd || undefined,
                 departmentId: prFilter.departmentId || undefined,
                 employeeId: prFilter.employeeId || undefined,
-                exportFormat: format,   // string enum: "Excel" | "Pdf" (backend uses JsonStringEnumConverter)
+                exportFormat: format,
             };
             const res = await axios.post('/api/reports/export', body, { responseType: 'blob' });
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                error(json?.message || 'Export failed.');
+                return;
+            }
             const contentDisposition = res.headers['content-disposition'];
-            const match = contentDisposition?.match(/filename="?(.+?)"?$/);
-            const fileName = match?.[1] || `Performance_Report.${format === 'Excel' ? 'xlsx' : 'pdf'}`;
-            const url = URL.createObjectURL(new Blob([res.data]));
+            const match = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            const fileName = match?.[1]?.replace(/['"]/g, '') || `Performance_Report_${prFilter.dateRangeStart}_${prFilter.dateRangeEnd}.${format === 'Excel' ? 'xlsx' : 'pdf'}`;
+            const mimeType = format === 'Excel'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'application/pdf';
+            const url = URL.createObjectURL(new Blob([res.data], { type: mimeType }));
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
@@ -3583,14 +3668,20 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             URL.revokeObjectURL(url);
             success(`${format} report downloaded successfully.`);
         } catch (err: any) {
-            error(err?.response?.data?.message || err.message || 'Export failed.');
+            const msg = await readBlobError(err, 'Export failed. Please try again.');
+            error(msg);
         } finally {
             setPrExporting(false);
         }
     };
 
     // --- FOMS Export State ---
-    const [fomsFilter, setFomsFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({ dateRangeStart: '', dateRangeEnd: '', employeeId: '' });
+    const initialFomsDates = useMemo(() => getDateRangeDays(30), []);
+    const [fomsFilter, setFomsFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
+        dateRangeStart: initialFomsDates.start,
+        dateRangeEnd: initialFomsDates.end,
+        employeeId: '',
+    });
     const [fomsExporting, setFomsExporting] = useState(false);
     const [fomsError, setFomsError] = useState('');
 
@@ -3614,10 +3705,19 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             };
             if (fomsFilter.employeeId) body.employeeId = fomsFilter.employeeId;
             const res = await axios.post('/api/foms/export', body, { responseType: 'blob' });
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                const msg = json?.message || 'FOMS export failed.';
+                setFomsError(msg);
+                error(msg);
+                return;
+            }
             const contentDisposition = res.headers['content-disposition'];
-            const match = contentDisposition?.match(/filename="?(.+?)"?$/);
-            const fileName = match?.[1] || `foms_export_${fomsFilter.dateRangeStart}_${fomsFilter.dateRangeEnd}.csv`;
-            const url = URL.createObjectURL(new Blob([res.data]));
+            const match = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            const fileName = match?.[1]?.replace(/['"]/g, '') || `foms_export_${fomsFilter.dateRangeStart}_to_${fomsFilter.dateRangeEnd}.csv`;
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
@@ -3627,7 +3727,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             URL.revokeObjectURL(url);
             success('FOMS export completed successfully.');
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'FOMS export failed.';
+            const msg = await readBlobError(err, 'FOMS export failed. Please try again.');
             setFomsError(msg);
             error(msg);
         } finally {
@@ -3635,14 +3735,28 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         }
     };
 
+    // --- Task Completion State ---
+    const initialTcDates = useMemo(() => getDateRangeMonths(1), []);
+    const [tcFilter, setTcFilter] = useState<ReportFilter>({
+        dateRangeStart: initialTcDates.start,
+        dateRangeEnd: initialTcDates.end,
+        employeeId: '',
+        taskPriorityLevel: '',
+        taskStatus: '',
+        taskCategory: '',
+    });
+    const [tcReport, setTcReport] = useState<TaskCompletionReport | null>(null);
+    const [tcLoading, setTcLoading] = useState(false);
+    const [tcError, setTcError] = useState('');
+    const [tcNoRecords, setTcNoRecords] = useState(false);
+    const [tcGeneratedAt, setTcGeneratedAt] = useState('');
+
     const applyTcPreset = (months: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setMonth(start.getMonth() - months);
+        const { start, end } = getDateRangeMonths(months);
         setTcFilter(p => ({
             ...p,
-            dateRangeStart: start.toISOString().split('T')[0],
-            dateRangeEnd: end.toISOString().split('T')[0],
+            dateRangeStart: start,
+            dateRangeEnd: end,
         }));
     };
 
@@ -3666,17 +3780,18 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                 const res = await api.get(`/api/reports/task-completion?${params}`);
                 data = res.data;
             } catch (err: any) {
-                if (err.response?.status === 400) { setTcError('Invalid date range selected.'); setTcLoading(false); return; }
-                setTcError('Failed to generate report. Please try again.'); setTcLoading(false); return;
+                if (err.response?.status === 400) { setTcError('Invalid date range selected.'); return; }
+                if (err.response?.status === 404) { setTcNoRecords(true); return; }
+                setTcError(err?.response?.data?.message || 'Failed to generate report. Please try again.'); return;
             }
-            if (data.isSuccess && data.data) { setTcReport(data.data); setTcGeneratedAt(new Date().toLocaleString()); }
+            if (data?.isSuccess && data?.data) { setTcReport(data.data); setTcGeneratedAt(new Date().toLocaleString()); }
             else { setTcNoRecords(true); }
         } catch { setTcError('Failed to generate report. Please try again.'); }
         finally { setTcLoading(false); }
     };
 
     const handleTcReset = () => {
-        setTcFilter({ dateRangeStart: '', dateRangeEnd: '', employeeId: '', taskPriorityLevel: '', taskStatus: '', taskCategory: '' });
+        setTcFilter({ dateRangeStart: initialTcDates.start, dateRangeEnd: initialTcDates.end, employeeId: '', taskPriorityLevel: '', taskStatus: '', taskCategory: '' });
         setTcReport(null); setTcError(''); setTcNoRecords(false); setTcGeneratedAt('');
     };
 
@@ -3692,18 +3807,21 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         rows.push(`Total Tasks Pending Review,${tcReport.totalTasksPendingReview}`);
         rows.push(`Total Overdue Tasks,${tcReport.totalOverdueTasks}`);
         rows.push(`Task Completion Rate,${tcReport.taskCompletionRate}%`);
-        rows.push(`Avg Completion Time (Hours),${tcReport.averageTaskCompletionTimeHours.toFixed(1)}`);
+        rows.push(`Avg Completion Time (Hours),${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}`);
         rows.push(''); rows.push('Employee Performance');
         rows.push('Employee,Assigned,Completed,Completion Rate,Avg Time (Hours)');
-        for (const ep of tcReport.employeePerformanceSummary) {
-            rows.push(`${ep.employeeName},${ep.totalAssigned},${ep.totalCompleted},${ep.completionRate}%,${ep.averageCompletionTimeHours.toFixed(1)}`);
+        for (const ep of (tcReport.employeePerformanceSummary || [])) {
+            rows.push(`${ep.employeeName},${ep.totalAssigned},${ep.totalCompleted},${ep.completionRate}%,${(ep.averageCompletionTimeHours ?? 0).toFixed(1)}`);
         }
         const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `task-completion-report-${tcFilter.dateRangeStart}-to-${tcFilter.dateRangeEnd}.csv`;
-        a.click(); URL.revokeObjectURL(url);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
         success('CSV exported successfully.');
     };
 
@@ -3716,41 +3834,23 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
         ].filter(d => d.value > 0) : [];
 
     // --- Operational Summary State ---
+    const initialOpDates = useMemo(() => getDateRangeMonths(1), []);
     const [opFilter, setOpFilter] = useState<OperationalFilter>({
-        dateRangeStart: '', dateRangeEnd: '', departmentId: '', employeeId: '', reportFormat: 'PDF',
+        dateRangeStart: initialOpDates.start, dateRangeEnd: initialOpDates.end, departmentId: '', employeeId: '', reportFormat: 'PDF',
     });
     const [opReport, setOpReport] = useState<OperationalSummaryReport | null>(null);
     const [opLoading, setOpLoading] = useState(false);
+    const [opDownloading, setOpDownloading] = useState(false);
     const [opError, setOpError] = useState('');
     const [opNoRecords, setOpNoRecords] = useState(false);
     const [opGeneratedAt, setOpGeneratedAt] = useState('');
-    const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
-    const [employees, setEmployees] = useState<ReportFilterOption[]>([]);
-
-    useEffect(() => {
-        const fetchOptions = async () => {
-            try {
-                try {
-                    const res = await api.get('/api/reports/filter-options');
-                    const data = res.data;
-                    if (data.isSuccess && data.data) {
-                        setDepartments(data.data.departments || []);
-                        setEmployees(data.data.employees || []);
-                    }
-                } catch { }
-            } catch { }
-        };
-        fetchOptions();
-    }, []);
 
     const applyOpPreset = (months: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setMonth(start.getMonth() - months);
+        const { start, end } = getDateRangeMonths(months);
         setOpFilter(p => ({
             ...p,
-            dateRangeStart: start.toISOString().split('T')[0],
-            dateRangeEnd: end.toISOString().split('T')[0],
+            dateRangeStart: start,
+            dateRangeEnd: end,
         }));
     };
 
@@ -3776,20 +3876,20 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                 if (err.response?.status === 404) { setOpNoRecords(true); setOpLoading(false); return; }
                 setOpError('Failed to generate report. Please try again.'); setOpLoading(false); return;
             }
-            if (data.isSuccess && data.data) { setOpReport(data.data); setOpGeneratedAt(new Date().toLocaleString()); }
+            if (data?.isSuccess && data?.data) { setOpReport(data.data); setOpGeneratedAt(new Date().toLocaleString()); }
             else { setOpNoRecords(true); }
         } catch { setOpError('Failed to generate report. Please try again.'); }
         finally { setOpLoading(false); }
     };
 
     const handleOpReset = () => {
-        setOpFilter({ dateRangeStart: '', dateRangeEnd: '', departmentId: '', employeeId: '', reportFormat: 'PDF' });
+        setOpFilter({ dateRangeStart: initialOpDates.start, dateRangeEnd: initialOpDates.end, departmentId: '', employeeId: '', reportFormat: 'PDF' });
         setOpReport(null); setOpError(''); setOpNoRecords(false); setOpGeneratedAt('');
     };
 
     const handleOpDownload = async () => {
         if (!opReport) return;
-        setOpLoading(true);
+        setOpDownloading(true);
         try {
             const params = new URLSearchParams();
             params.set('DateRangeStart', opFilter.dateRangeStart);
@@ -3798,28 +3898,38 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
             if (opFilter.employeeId) params.set('EmployeeId', opFilter.employeeId);
             params.set('ReportFormat', opFilter.reportFormat);
 
-            let blob;
-            try {
-                const res = await axios.get(`/api/reports/operational-summary/download?${params}`, { responseType: 'blob' });
-                blob = res.data;
-            } catch (err: any) {
-                error('Failed to download report.');
-                setOpLoading(false);
+            const res = await axios.get(`/api/reports/operational-summary/download?${params}`, { responseType: 'blob' });
+
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                error(json?.message || 'Failed to download report.');
                 return;
             }
-            const url = URL.createObjectURL(blob);
+            const mimeType = opFilter.reportFormat === 'EXCEL'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'application/pdf';
+            const url = URL.createObjectURL(new Blob([res.data], { type: mimeType }));
             const a = document.createElement('a');
             const ext = opFilter.reportFormat === 'EXCEL' ? 'xlsx' : 'pdf';
             a.href = url;
             a.download = `OperationalSummaryReport_${new Date().toISOString().slice(0, 10)}.${ext}`;
-            a.click(); URL.revokeObjectURL(url);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
             success('Report downloaded successfully.');
-        } catch { error('Failed to download report.'); }
-        finally { setOpLoading(false); }
+        } catch (err: any) {
+            const msg = await readBlobError(err, 'Failed to download report. Please try again.');
+            error(msg);
+        } finally {
+            setOpDownloading(false);
+        }
     };
 
     return (
-        <div className="dashboard-content">
+        <div className="dashboard-content" style={{ padding: 0 }}>
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
@@ -3829,7 +3939,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                     { key: 'operational-summary', label: 'Operational Summary Report', icon: <BarChart3 size={14} /> },
                 ]}
                 activeTab={reportSubTab}
-                onTabChange={key => setReportSubTab(key as 'task-completion' | 'operational-summary' | 'kpi-tracking' | 'performance-report' | 'foms-export')}
+                onTabChange={key => setReportSubTab(key as 'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary')}
             />
 
             {reportSubTab === 'kpi-tracking' && (
@@ -3842,37 +3952,41 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                             <div className="field">
                                 <label>Date Range</label>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {[
-                                        { label: '1 Month', months: 1 },
-                                        { label: '3 Months', months: 3 },
-                                        { label: '6 Months', months: 6 },
-                                        { label: '12 Months', months: 12 },
-                                    ].map(p => (
-                                        <button key={p.label}
-                                            className="btn btn-sm"
-                                            onClick={() => {
-                                                const end = new Date();
-                                                const start = new Date();
-                                                start.setMonth(start.getMonth() - p.months);
-                                                setKpiFilter((prev: any) => ({
-                                                    ...prev,
-                                                    dateRangeStart: start.toISOString().split('T')[0],
-                                                    dateRangeEnd: end.toISOString().split('T')[0],
-                                                }));
-                                            }}
-                                        >
-                                            {p.label}
-                                        </button>
-                                    ))}
+                                    {DATE_PRESETS.map(p => {
+                                        const { start } = getDateRangeMonths(p.months);
+                                        const isActive = kpiFilter.dateRangeStart === start;
+                                        return (
+                                            <button key={p.label}
+                                                type="button"
+                                                className={`filter-pill${isActive ? ' active' : ''}`}
+                                                style={{ fontSize: 12, padding: '6px 14px' }}
+                                                onClick={() => {
+                                                    const { start: s, end: e } = getDateRangeMonths(p.months);
+                                                    setKpiFilter(prev => ({
+                                                        ...prev,
+                                                        dateRangeStart: s,
+                                                        dateRangeEnd: e,
+                                                    }));
+                                                }}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                {kpiFilter.dateRangeStart && kpiFilter.dateRangeEnd && (
+                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                                        {kpiFilter.dateRangeStart} → {kpiFilter.dateRangeEnd}
+                                    </span>
+                                )}
                             </div>
                             <div className="field">
                                 <label>Employee</label>
                                 <select value={kpiFilter.employeeId}
-                                    onChange={e => setKpiFilter((prev: any) => ({ ...prev, employeeId: e.target.value }))}
+                                    onChange={e => setKpiFilter(prev => ({ ...prev, employeeId: e.target.value }))}
                                 >
                                     <option value="">All Employees</option>
-                                    {teamMembers.map(m => (
+                                    {allEmployeeOptions.map(m => (
                                         <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
                                     ))}
                                 </select>
@@ -3894,7 +4008,16 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                         </div>
                     )}
 
-                    {kpiData && !kpiError && (
+                    {kpiNoRecords && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="report-empty-state">
+                                <FileText size={22} />
+                                <p>No completed tasks found for the selected criteria.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {kpiData && !kpiError && !kpiNoRecords && (
                         <>
                             <div className="stats-row" style={{ marginTop: 16 }}>
                                 {[
@@ -3975,16 +4098,32 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                 <label>Date Range *</label>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                     {[
-                                        { label: 'Last 7 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return { s, e }; } },
-                                        { label: 'Last 30 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 30); return { s, e }; } },
-                                        { label: 'Last 90 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 90); return { s, e }; } },
-                                    ].map(p => (
-                                        <button key={p.label} className="btn btn-sm" onClick={() => {
-                                            const { s, e } = p.fn();
-                                            setPrFilter(prev => ({ ...prev, dateRangeStart: s.toISOString().split('T')[0], dateRangeEnd: e.toISOString().split('T')[0] }));
-                                        }}>{p.label}</button>
-                                    ))}
+                                        { label: 'Last 7 Days', days: 7 },
+                                        { label: 'Last 30 Days', days: 30 },
+                                        { label: 'Last 90 Days', days: 90 },
+                                    ].map(p => {
+                                        const { start } = getDateRangeDays(p.days);
+                                        const isActive = prFilter.dateRangeStart === start;
+                                        return (
+                                            <button key={p.label}
+                                                type="button"
+                                                className={`filter-pill${isActive ? ' active' : ''}`}
+                                                style={{ fontSize: 12, padding: '6px 14px' }}
+                                                onClick={() => {
+                                                    const { start: s, end: e } = getDateRangeDays(p.days);
+                                                    setPrFilter(prev => ({ ...prev, dateRangeStart: s, dateRangeEnd: e }));
+                                                }}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                {prFilter.dateRangeStart && prFilter.dateRangeEnd && (
+                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                                        {prFilter.dateRangeStart} → {prFilter.dateRangeEnd}
+                                    </span>
+                                )}
                             </div>
                             <div className="field">
                                 <label>Period *</label>
@@ -3997,7 +4136,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                 <label>Employee</label>
                                 <select value={prFilter.employeeId} onChange={e => setPrFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
                                     <option value="">All Employees</option>
-                                    {teamMembers.map(m => (
+                                    {allEmployeeOptions.map(m => (
                                         <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
                                     ))}
                                 </select>
@@ -4028,7 +4167,16 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                         </div>
                     )}
 
-                    {prData && !prError && (
+                    {prNoRecords && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="report-empty-state">
+                                <FileText size={22} />
+                                <p>No completed tasks found for the selected criteria.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {prData && !prError && !prNoRecords && (
                         <>
                             <div className="stats-row" style={{ marginTop: 16 }}>
                                 {[
@@ -4075,7 +4223,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                                                 fontSize: 12, fontWeight: 700,
                                                                 background: rate >= 80 ? 'rgba(5,205,153,0.12)' : rate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
                                                                 color: rate >= 80 ? 'var(--status-active)' : rate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                            }}>{rate}%</span>
+                                                             }}>{rate}%</span>
                                                         </td>
                                                     </tr>
                                                 );
@@ -4123,22 +4271,38 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                 <label>Date Range *</label>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                     {[
-                                        { label: 'Last 7 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return { s, e }; } },
-                                        { label: 'Last 30 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 30); return { s, e }; } },
-                                        { label: 'Last 90 Days', fn: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 90); return { s, e }; } },
-                                    ].map(p => (
-                                        <button key={p.label} className="btn btn-sm" onClick={() => {
-                                            const { s, e } = p.fn();
-                                            setFomsFilter(prev => ({ ...prev, dateRangeStart: s.toISOString().split('T')[0], dateRangeEnd: e.toISOString().split('T')[0] }));
-                                        }}>{p.label}</button>
-                                    ))}
+                                        { label: 'Last 7 Days', days: 7 },
+                                        { label: 'Last 30 Days', days: 30 },
+                                        { label: 'Last 90 Days', days: 90 },
+                                    ].map(p => {
+                                        const { start } = getDateRangeDays(p.days);
+                                        const isActive = fomsFilter.dateRangeStart === start;
+                                        return (
+                                            <button key={p.label}
+                                                type="button"
+                                                className={`filter-pill${isActive ? ' active' : ''}`}
+                                                style={{ fontSize: 12, padding: '6px 14px' }}
+                                                onClick={() => {
+                                                    const { start: s, end: e } = getDateRangeDays(p.days);
+                                                    setFomsFilter(prev => ({ ...prev, dateRangeStart: s, dateRangeEnd: e }));
+                                                }}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                {fomsFilter.dateRangeStart && fomsFilter.dateRangeEnd && (
+                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                                        {fomsFilter.dateRangeStart} → {fomsFilter.dateRangeEnd}
+                                    </span>
+                                )}
                             </div>
                             <div className="field">
                                 <label>Employee</label>
                                 <select value={fomsFilter.employeeId} onChange={e => setFomsFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
                                     <option value="">All Employees</option>
-                                    {teamMembers.map(m => (
+                                    {allEmployeeOptions.map(m => (
                                         <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
                                     ))}
                                 </select>
@@ -4216,17 +4380,18 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                             <div className="field">
                                 <label>Date Range *</label>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {DATE_PRESETS.map(p => (
-                                        <button key={p.label} type="button"
-                                            className={`filter-pill${tcFilter.dateRangeStart && tcFilter.dateRangeEnd && (() => {
-                                                const start = new Date(); start.setMonth(start.getMonth() - p.months);
-                                                return tcFilter.dateRangeStart === start.toISOString().split('T')[0];
-                                            })() ? ' active' : ''}`}
-                                            onClick={() => applyTcPreset(p.months)}
-                                            style={{ fontSize: 12, padding: '6px 14px' }}>
-                                            {p.label}
-                                        </button>
-                                    ))}
+                                    {DATE_PRESETS.map(p => {
+                                        const { start } = getDateRangeMonths(p.months);
+                                        const isActive = tcFilter.dateRangeStart === start;
+                                        return (
+                                            <button key={p.label} type="button"
+                                                className={`filter-pill${isActive ? ' active' : ''}`}
+                                                onClick={() => applyTcPreset(p.months)}
+                                                style={{ fontSize: 12, padding: '6px 14px' }}>
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 {tcFilter.dateRangeStart && tcFilter.dateRangeEnd && (
                                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
@@ -4240,7 +4405,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                     value={tcFilter.employeeId}
                                     onChange={e => setTcFilter(p => ({ ...p, employeeId: e.target.value }))}>
                                     <option value="">All Employees</option>
-                                    {teamMembers.map(m => (
+                                    {allEmployeeOptions.map(m => (
                                         <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
                                     ))}
                                 </select>
@@ -4300,7 +4465,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                 <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant='teal' label="PENDING REVIEW" value={String(tcReport.totalTasksPendingReview)} subtext="Awaiting review" />
                                 <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={String(tcReport.totalOverdueTasks)} subtext="Past deadline" />
                                 <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${tcReport.taskCompletionRate}%`} subtext="Overall rate" />
-                                <StatusCard icon={<Calendar size={20} strokeWidth={2.3} />} variant="warning" label="AVG TIME" value={`${tcReport.averageTaskCompletionTimeHours.toFixed(1)}h`} subtext="Per task" />
+                                <StatusCard icon={<Calendar size={20} strokeWidth={2.3} />} variant="warning" label="AVG TIME" value={`${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}h`} subtext="Per task" />
                             </div>
                             <div className="card">
                                 <DataTable title="Employee Performance Summary"
@@ -4313,7 +4478,7 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                             <td>{ep.totalAssigned}</td>
                                             <td>{ep.totalCompleted}</td>
                                             <td>{ep.completionRate}%</td>
-                                            <td>{ep.averageCompletionTimeHours.toFixed(1)}</td>
+                                            <td>{(ep.averageCompletionTimeHours ?? 0).toFixed(1)}</td>
                                         </tr>
                                     ))}
                                 </DataTable>
@@ -4328,7 +4493,11 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e9edf7" />
                                             <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
                                             <Tooltip />
-                                            <Bar dataKey="value" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                {tcChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Bar>
                                         </BarChart>
                                     </ResponsiveContainer>
                                 )}
@@ -4354,17 +4523,18 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                             <div className="field">
                                 <label>Date Range *</label>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {DATE_PRESETS.map(p => (
-                                        <button key={p.label} type="button"
-                                            className={`filter-pill${opFilter.dateRangeStart && opFilter.dateRangeEnd && (() => {
-                                                const start = new Date(); start.setMonth(start.getMonth() - p.months);
-                                                return opFilter.dateRangeStart === start.toISOString().split('T')[0];
-                                            })() ? ' active' : ''}`}
-                                            onClick={() => applyOpPreset(p.months)}
-                                            style={{ fontSize: 12, padding: '6px 14px' }}>
-                                            {p.label}
-                                        </button>
-                                    ))}
+                                    {DATE_PRESETS.map(p => {
+                                        const { start } = getDateRangeMonths(p.months);
+                                        const isActive = opFilter.dateRangeStart === start;
+                                        return (
+                                            <button key={p.label} type="button"
+                                                className={`filter-pill${isActive ? ' active' : ''}`}
+                                                onClick={() => applyOpPreset(p.months)}
+                                                style={{ fontSize: 12, padding: '6px 14px' }}>
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 {opFilter.dateRangeStart && opFilter.dateRangeEnd && (
                                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
@@ -4389,8 +4559,8 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
                                     value={opFilter.employeeId}
                                     onChange={e => setOpFilter(p => ({ ...p, employeeId: e.target.value }))}>
                                     <option value="">All Employees</option>
-                                    {employees.map(e => (
-                                        <option key={e.id} value={e.id}>{e.name}</option>
+                                    {allEmployeeOptions.map(e => (
+                                        <option key={e.accountId} value={e.accountId}>{e.employeeName}</option>
                                     ))}
                                 </select>
                             </div>
@@ -4496,9 +4666,9 @@ export const ReportsTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMember
 
                             <div className="report-export-row">
                                 <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {opGeneratedAt}</span>
-                                <button className="btn btn-primary" onClick={handleOpDownload} disabled={opLoading}>
-                                    {opLoading ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                                    {' '}{opLoading ? 'Preparing...' : `Download ${opFilter.reportFormat === 'EXCEL' ? 'Excel' : 'PDF'}`}
+                                <button className="btn btn-primary" onClick={handleOpDownload} disabled={opDownloading}>
+                                    {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                    {' '}{opDownloading ? 'Preparing...' : `Download ${opFilter.reportFormat === 'EXCEL' ? 'Excel' : 'PDF'}`}
                                 </button>
                             </div>
                         </>
@@ -6295,7 +6465,15 @@ export default function OpsAdminDashboard() {
         try {
             const res = await api.get(`/api/Task/${taskId}`);
             const dto = res?.data?.data ?? res?.data;
-            setViewingDuplicateTask(mapTaskDetailToTaskView(dto));
+            if (dto) {
+                setActiveTab('tasks');
+                setDetailTask(mapTaskDetailToTaskView(dto));
+                setViewingDuplicateTask(null);
+                setShowNew(false);
+                setDuplicateWarnings([]);
+                setDuplicateDetails([]);
+                setPendingTaskData(null);
+            }
         } catch {
             error('Failed to load task details.');
         }
@@ -6640,63 +6818,83 @@ export default function OpsAdminDashboard() {
                         onClearFilters={handleDashboardClearFilters}
                         onNewTask={() => { handleNavChange('tasks'); setTaskSubTab('create'); }}
                         tasks={tasks}
-                        onViewTask={task => setDetailTask(task)}
+                        onViewTask={task => { setActiveTab('tasks'); setDetailTask(task); }}
                     />
                 )}
                 {activeTab === 'tasks' && (
                     <>
-                        <div className="dashboard-content" style={{ paddingBottom: 0 }}>
-                            <SubTabNav
-                                className="tasks-subtab-nav"
-                                tabs={[
-                                    { key: 'list', label: 'Task List' },
-                                    { key: 'create', label: 'Create Task' },
-                                ]}
-                                activeTab={taskSubTab}
-                                onTabChange={key => setTaskSubTab(key as 'list' | 'create')}
-                            />
-                        </div>
-                        {taskSubTab === 'list' && (
+                        {detailTask ? (
                             <div className="dashboard-content">
-                                <TaskManager
-                                    tasks={tmTasks}
-                                    summary={taskSummary}
-                                    activeTab={taskTab}
-                                    onTabChange={tab => { setTaskTab(tab); setTaskPage(1); }}
-                                    filterPrio={taskFilterPrio}
-                                    onFilterPrioChange={val => { setTaskFilterPrio(val); setTaskPage(1); }}
-                                    filterClassification={taskFilterClassification}
-                                    onFilterClassificationChange={val => { setTaskFilterClassification(val); setTaskPage(1); }}
-                                    filterAssignee={taskFilterAssignee}
-                                    onFilterAssigneeChange={val => { setTaskFilterAssignee(val); setTaskPage(1); }}
-                                    teamMembers={teamMembers.map(m => ({ accountId: m.accountId, employeeName: m.employeeName }))}
-                                    onNewTask={() => { setTaskSubTab('create'); setShowNew(false); }}
-                                    onEdit={id => setEditingTask(tasks.find(t => t.taskId === id) ?? null)}
-                                    onView={id => setDetailTask(tasks.find(t => t.taskId === id) ?? null)}
-                                    onArchive={ids => { ids.forEach(id => handleDeleteTask(id)); }}
-                                    onRestore={ids => { ids.forEach(id => handleRestoreTask(id)); }}
-                                    onDelete={ids => { ids.forEach(id => handleDeleteTask(id)); }}
-                                    onMarkDone={ids => { ids.forEach(id => handleStatusTransition(id, 'Completed')); }}
-                                    serverPagination={{
-                                        currentPage: taskPage,
-                                        totalPages: taskTotalPages,
-                                        totalRecords: taskTotalRecords,
-                                        pageSize: taskPageSize,
-                                        onPageChange: (page) => { setTaskPage(page); },
-                                        onPageSizeChange: (size) => { setTaskPageSize(size); setTaskPage(1); },
+                                <TaskView
+                                    task={detailTask}
+                                    onEdit={() => { setEditingTask(detailTask); setDetailTask(null); }}
+                                    onReopen={() => handleReopenTask(detailTask.taskId)}
+                                    onClose={() => setDetailTask(null)}
+                                    onApprove={(id) => handleReviewTask(id, 'Approve & Close', 'Approved via TaskView.')}
+                                    onReject={(id, reason) => handleReviewTask(id, 'Return for Rework', reason)}
+                                    onDeleteAttachment={handleDeleteAttachment}
+                                    onUpdate={(updated) => {
+                                        setDetailTask(updated);
+                                        fetchTasks();
                                     }}
                                 />
                             </div>
-                        )}
-                        {taskSubTab === 'create' && (
-                            <div className="dashboard-content">
-                                <AIAssignmentView
-                                    onTaskCreated={() => {
-                                        fetchTasks().catch(() => { });
-                                        doFetchDashboard().catch(() => { });
-                                    }}
-                                />
-                            </div>
+                        ) : (
+                            <>
+                                <div className="dashboard-content" style={{ paddingBottom: 0 }}>
+                                    <SubTabNav
+                                        className="tasks-subtab-nav"
+                                        tabs={[
+                                            { key: 'list', label: 'Task List' },
+                                            { key: 'create', label: 'Create Task' },
+                                        ]}
+                                        activeTab={taskSubTab}
+                                        onTabChange={key => setTaskSubTab(key as 'list' | 'create')}
+                                    />
+                                </div>
+                                {taskSubTab === 'list' && (
+                                    <div className="dashboard-content">
+                                        <TaskManager
+                                            tasks={tmTasks}
+                                            summary={taskSummary}
+                                            activeTab={taskTab}
+                                            onTabChange={tab => { setTaskTab(tab); setTaskPage(1); }}
+                                            filterPrio={taskFilterPrio}
+                                            onFilterPrioChange={val => { setTaskFilterPrio(val); setTaskPage(1); }}
+                                            filterClassification={taskFilterClassification}
+                                            onFilterClassificationChange={val => { setTaskFilterClassification(val); setTaskPage(1); }}
+                                            filterAssignee={taskFilterAssignee}
+                                            onFilterAssigneeChange={val => { setTaskFilterAssignee(val); setTaskPage(1); }}
+                                            teamMembers={teamMembers.map(m => ({ accountId: m.accountId, employeeName: m.employeeName }))}
+                                            onNewTask={() => { setTaskSubTab('create'); setShowNew(false); }}
+                                            onEdit={id => setEditingTask(tasks.find(t => t.taskId === id) ?? null)}
+                                            onView={id => setDetailTask(tasks.find(t => t.taskId === id) ?? null)}
+                                            onArchive={ids => { ids.forEach(id => handleDeleteTask(id)); }}
+                                            onRestore={ids => { ids.forEach(id => handleRestoreTask(id)); }}
+                                            onDelete={ids => { ids.forEach(id => handleDeleteTask(id)); }}
+                                            onMarkDone={ids => { ids.forEach(id => handleStatusTransition(id, 'Completed')); }}
+                                            serverPagination={{
+                                                currentPage: taskPage,
+                                                totalPages: taskTotalPages,
+                                                totalRecords: taskTotalRecords,
+                                                pageSize: taskPageSize,
+                                                onPageChange: (page) => { setTaskPage(page); },
+                                                onPageSizeChange: (size) => { setTaskPageSize(size); setTaskPage(1); },
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                                {taskSubTab === 'create' && (
+                                    <div className="dashboard-content">
+                                        <AIAssignmentView
+                                            onTaskCreated={() => {
+                                                fetchTasks().catch(() => { });
+                                                doFetchDashboard().catch(() => { });
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </>
                         )}
                     </>
                 )}
@@ -6806,7 +7004,10 @@ export default function OpsAdminDashboard() {
                                             <tr key={n.notificationId} onClick={() => {
                                                 if (n.taskId) {
                                                     const found = allTasks.find(t => t.taskId === n.taskId);
-                                                    if (found) setViewingTask(found);
+                                                    if (found) {
+                                                        setActiveTab('tasks');
+                                                        setDetailTask(found);
+                                                    }
                                                 }
                                             }} style={{ cursor: n.taskId ? 'pointer' : 'default' }}>
                                                 <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
@@ -6860,25 +7061,11 @@ export default function OpsAdminDashboard() {
                     onStatusChange={(id, status) => handleStatusTransition(id, status)}
                     onAdminOverride={(id) => setOverrideTask(tasks.find(t => t.taskId === id) ?? null)}
                     onClose={() => setViewingTask(null)}
-                    onViewMore={() => { setDetailTask(viewingTask); setViewingTask(null); }}
+                    onViewMore={() => { setActiveTab('tasks'); setDetailTask(viewingTask); setViewingTask(null); }}
                     onReview={() => { setReviewTask(viewingTask); setViewingTask(null); }}
                 />
             )}
-            {detailTask && (
-                <TaskView
-                    task={detailTask}
-                    onEdit={() => { setEditingTask(detailTask); setDetailTask(null); }}
-                    onReopen={() => handleReopenTask(detailTask.taskId)}
-                    onClose={() => setDetailTask(null)}
-                    onApprove={(id) => handleReviewTask(id, 'Approve & Close', 'Approved via TaskView.')}
-                    onReject={(id, reason) => handleReviewTask(id, 'Return for Rework', reason)}
-                    onDeleteAttachment={handleDeleteAttachment}
-                    onUpdate={(updated) => {
-                        setDetailTask(updated);
-                        fetchTasks();
-                    }}
-                />
-            )}
+
             {overrideTask && (
                 <AdminOverrideModal
                     task={overrideTask}
@@ -6927,21 +7114,7 @@ export default function OpsAdminDashboard() {
                     }}
                 />
             )}
-            {viewingDuplicateTask && (
-                <TaskView
-                    task={viewingDuplicateTask}
-                    onEdit={() => { setEditingTask(viewingDuplicateTask as unknown as Task); setViewingDuplicateTask(null); }}
-                    onReopen={() => handleReopenTask(viewingDuplicateTask.taskId)}
-                    onClose={() => setViewingDuplicateTask(null)}
-                    onApprove={(id) => handleReviewTask(id, 'Approve & Close', 'Approved via duplicate review.')}
-                    onReject={(id, reason) => handleReviewTask(id, 'Return for Rework', reason)}
-                    onDeleteAttachment={handleDeleteAttachment}
-                    onUpdate={(updated) => {
-                        setViewingDuplicateTask(updated);
-                        fetchTasks();
-                    }}
-                />
-            )}
+
 
             <ConfirmationModal
                 isOpen={confirmModal.isOpen}

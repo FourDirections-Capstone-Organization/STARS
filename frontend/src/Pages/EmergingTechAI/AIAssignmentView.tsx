@@ -10,6 +10,7 @@ import api from '../../api';
 import { useToast } from '../../components/Toast/Toast';
 import FormModal from '../../components/FormModal/FormModal';
 import { aiService, SlaRiskResponseDTO } from '../../services/aiService';
+import { AI_ANALYTICS_ENABLED } from '../../config/features';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -145,6 +146,11 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateMatchDTO[]>([]);
     const [pendingPayload, setPendingPayload] = useState<any>(null);
     const [aiEnabled, setAiEnabled] = useState(false);
+
+    // AI & Analytics is disabled for the meantime — force the AI assistance off.
+    useEffect(() => {
+        if (!AI_ANALYTICS_ENABLED) setAiEnabled(false);
+    }, []);
 
     // ── Validation & Summary State ──
     const [validationResult, setValidationResult] = useState<{
@@ -1048,24 +1054,28 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                 {scope && (
                     <div className="ai-neo4j-badge">
                         <Activity size={12} />
-                        {aiEnabled ? 'AI recommendations active. Scores from Neo4j graph + ML.' : 'Standard assignment — no AI recommendations.'}
-                        <button
-                            type="button"
-                            onClick={() => setAiEnabled(!aiEnabled)}
-                            style={{
-                                marginLeft: 'auto',
-                                padding: '2px 10px',
-                                borderRadius: 12,
-                                border: '1px solid var(--teal, #00A99D)',
-                                background: aiEnabled ? 'var(--teal, #00A99D)' : 'transparent',
-                                color: aiEnabled ? '#fff' : 'var(--teal, #00A99D)',
-                                fontSize: 10,
-                                fontWeight: 600,
-                                cursor: 'pointer'
-                            }}
-                        >
-                            {aiEnabled ? 'AI On' : 'AI Off'}
-                        </button>
+                        {AI_ANALYTICS_ENABLED
+                            ? (aiEnabled ? 'AI recommendations active. Scores from Neo4j graph + ML.' : 'Standard assignment — no AI recommendations.')
+                            : 'Standard assignment — no AI recommendations.'}
+                        {AI_ANALYTICS_ENABLED && (
+                            <button
+                                type="button"
+                                onClick={() => setAiEnabled(!aiEnabled)}
+                                style={{
+                                    marginLeft: 'auto',
+                                    padding: '2px 10px',
+                                    borderRadius: 12,
+                                    border: '1px solid var(--teal, #00A99D)',
+                                    background: aiEnabled ? 'var(--teal, #00A99D)' : 'transparent',
+                                    color: aiEnabled ? '#fff' : 'var(--teal, #00A99D)',
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {aiEnabled ? 'AI On' : 'AI Off'}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -1080,9 +1090,11 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     </div>
                     <p className="ai-card-desc">
                         {scope === 'SingleEmployee'
-                            ? (aiEnabled
-                                ? 'Employees ranked by AI suitability score. Toggle AI Off to see basic active task counts instead.'
-                                : 'Select an employee to assign. Toggle AI On for AI-powered suitability recommendations.')
+                            ? (AI_ANALYTICS_ENABLED
+                                ? (aiEnabled
+                                    ? 'Employees ranked by AI suitability score. Toggle AI Off to see basic active task counts instead.'
+                                    : 'Select an employee to assign. Toggle AI On for AI-powered suitability recommendations.')
+                                : 'Select an employee to assign.')
                             : scope === 'Team'
                                 ? 'Select from active teams available for assignment.'
                                 : 'Select from the defined departments.'}

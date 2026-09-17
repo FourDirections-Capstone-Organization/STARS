@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Pencil, X, Package, CheckCircle2,
-    XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock,
+    XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock, ArrowLeft,
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
@@ -449,9 +449,21 @@ const TaskView: React.FC<TaskViewProps> = ({
 
     return (
         <>
-            <div className="tv-backdrop" onClick={onClose} />
+            <div className="tv-panel" role="region" aria-label={task.taskTitle}>
 
-            <div className="tv-panel" role="dialog" aria-modal="true" aria-label={task.taskTitle}>
+                {/* ── Navigation Top Bar ── */}
+                <div className="tv-nav-header">
+                    <button className="tv-back-btn" onClick={onClose} aria-label="Back to Task List">
+                        <ArrowLeft size={15} />
+                        <span>Back to Task List</span>
+                    </button>
+                    <div className="tv-breadcrumbs">
+                        <span className="tv-breadcrumb-muted">Task Management</span>
+                        <span className="tv-breadcrumb-sep">/</span>
+                        <span className="tv-breadcrumb-active">Task Details</span>
+                        {task.taskId && <span className="tv-breadcrumb-id">#{task.taskId.slice(0, 8)}</span>}
+                    </div>
+                </div>
 
                 {/* ── Header ── */}
                 <div className="tv-header">
@@ -511,9 +523,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 <RotateCcw size={13} /> Resume
                             </button>
                         )}
-                        <button className="tv-icon-btn" onClick={onClose} aria-label="Close">
-                            <X size={16} />
-                        </button>
                     </div>
                 </div>
 
