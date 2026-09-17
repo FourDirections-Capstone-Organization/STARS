@@ -186,57 +186,91 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var app = builder.Build();
 
-// Auto-create database and tables on startup
+// Auto-create database and tables on startup (Safe / Non-crashing)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     try
     {
-        Console.WriteLine("[STARTUP] Applying database migrations...");
+        Console.WriteLine("[STARTUP] Testing database connection and applying migrations...");
         db.Database.Migrate();
         Console.WriteLine("[STARTUP] Database migrations applied successfully.");
+
+        // Seed default departments and positions
+        var departmentService = scope.ServiceProvider.GetRequiredService<IDepartmentService>();
+        await departmentService.SeedDefaultDepartmentsAsync();
+        await departmentService.SeedDefaultPositionsAsync();
+
+        // Seed default manager
+        var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+        await userService.SeedDefaultManagerAsync();
+
+        // Seeds test accounts: 2x Coordinator, 2x Dispatcher, 2x Encoder, 2x Courier
+        await userService.SeedTestAccountsAsync();
+
+        // Seed default notification settings
+        var notificationSettingsService = scope.ServiceProvider.GetRequiredService<INotificationSettingsService>();
+        await notificationSettingsService.SeedDefaultSettingsAsync();
+
+        // Seed demo tasks for presentation
+        var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
+        await taskService.SeedDemoTasksAsync();
+
+        // Reactivate any deactivated Manager accounts (safety net)
+        var deactivatedManagers = await db.Users
+            .Where(u => u.Role == UserRole.Manager && (u.IsDeactivated || !u.IsActive))
+            .ToListAsync();
+        foreach (var mgr in deactivatedManagers)
+        {
+            mgr.IsDeactivated = false;
+            mgr.IsActive = true;
+            mgr.UpdatedAt = DateTime.UtcNow;
+        }
+        if (deactivatedManagers.Count > 0)
+            await db.SaveChangesAsync();
+        
+        Console.WriteLine("[STARTUP] All initial seeds completed successfully.");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[STARTUP ERROR] Database migration failed: {ex.Message}");
-        throw;
+        Console.WriteLine($"[STARTUP ERROR] Initial database connection / migration failed: {ex.Message}");
+        Console.WriteLine("[STARTUP WARNING] The application will continue running so diagnostic endpoints are accessible.");
     }
-
-    // Seed default departments and positions
-    var departmentService = scope.ServiceProvider.GetRequiredService<IDepartmentService>();
-    await departmentService.SeedDefaultDepartmentsAsync();
-    await departmentService.SeedDefaultPositionsAsync();
-
-    // Seed default manager
-    var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-    await userService.SeedDefaultManagerAsync();
-
-    // FOR TESTING ONLY - REMOVE FOR PRODUCTION
-    // Seeds test accounts: 2x Coordinator, 2x Dispatcher, 2x Encoder, 2x Courier
-    await userService.SeedTestAccountsAsync();
-
-    // Seed default notification settings
-    var notificationSettingsService = scope.ServiceProvider.GetRequiredService<INotificationSettingsService>();
-    await notificationSettingsService.SeedDefaultSettingsAsync();
-
-    // Seed demo tasks for presentation
-    var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
-    await taskService.SeedDemoTasksAsync();
-
-    // Reactivate any deactivated Manager accounts (safety net)
-    var deactivatedManagers = await db.Users
-        .Where(u => u.Role == UserRole.Manager && (u.IsDeactivated || !u.IsActive))
-        .ToListAsync();
-    foreach (var mgr in deactivatedManagers)
-    {
-        mgr.IsDeactivated = false;
-        mgr.IsActive = true;
-        mgr.UpdatedAt = DateTime.UtcNow;
-    }
-    if (deactivatedManagers.Count > 0)
-        await db.SaveChangesAsync();
 }
+
+// Health check and root diagnostic endpoints
+app.MapGet("/", () => Results.Json(new
+{
+    service = "STARS Backend API",
+    status = "running",
+    environment = app.Environment.EnvironmentName,
+    timestamp = DateTime.UtcNow
+}));
+
+app.MapGet("/api/health", async (AppDbContext db) =>
+{
+    try
+    {
+        var canConnect = await db.Database.CanConnectAsync();
+        return Results.Json(new
+        {
+            status = canConnect ? "healthy" : "database_unreachable",
+            database = canConnect ? "connected" : "cannot_connect",
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new
+        {
+            status = "unhealthy",
+            database = "error",
+            error = ex.Message,
+            timestamp = DateTime.UtcNow
+        }, statusCode: 500);
+    }
+});
 
 if (app.Environment.IsDevelopment())
 {
