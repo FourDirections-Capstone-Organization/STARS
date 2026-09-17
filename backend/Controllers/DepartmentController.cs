@@ -1,4 +1,6 @@
-﻿using Backend.Models.DTOs;
+using System.Security.Claims;
+using Backend.Models;
+using Backend.Models.DTOs;
 using Backend.Modules.OrganizationalStructure;
 using Backend.Modules.RoleBasedAccessControl;
 using Microsoft.AspNetCore.Authorization;
@@ -31,9 +33,26 @@ public class DepartmentController : ControllerBase
     public async Task<IActionResult> GetById(Guid id)
     {
         var result = await _departmentService.GetByIdAsync(id);
-        if(!result.IsSuccess)
+        if (!result.IsSuccess)
             return NotFound(result);
-        
+
+        return Ok(result);
+    }
+
+    [HttpGet("rosters")]
+    public async Task<IActionResult> GetAllRosters()
+    {
+        var result = await _departmentService.GetAllDepartmentRostersAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("roster/{id:guid}")]
+    public async Task<IActionResult> GetRoster(Guid id)
+    {
+        var result = await _departmentService.GetDepartmentRosterAsync(id);
+        if (!result.IsSuccess)
+            return NotFound(result);
+
         return Ok(result);
     }
 
@@ -41,10 +60,14 @@ public class DepartmentController : ControllerBase
     [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> Create(CreateDepartmentDTO dto)
     {
-        var result = await _departmentService.CreateAsync(dto);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _departmentService.CreateAsync(dto, requestUserId);
         if (!result.IsSuccess)
             return BadRequest(result);
-        
+
         return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
     }
 
@@ -52,12 +75,16 @@ public class DepartmentController : ControllerBase
     [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> Update(Guid id, UpdateDepartmentDTO dto)
     {
-        var result = await _departmentService.UpdateAsync(id, dto);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _departmentService.UpdateAsync(id, dto, requestUserId);
         if (!result.IsSuccess)
         {
             if (result.Message.Contains("not found"))
                 return NotFound(result);
-            
+
             return BadRequest(result);
         }
 
@@ -68,7 +95,11 @@ public class DepartmentController : ControllerBase
     [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var result = await _departmentService.DeleteAsync(id);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _departmentService.DeleteAsync(id, requestUserId);
         if (!result.IsSuccess)
         {
             if (result.Message.Contains("not found"))
@@ -76,6 +107,21 @@ public class DepartmentController : ControllerBase
 
             return BadRequest(result);
         }
+
+        return Ok(result);
+    }
+
+    [HttpPost("assign")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> AssignEmployee([FromBody] AssignDepartmentDTO dto)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _departmentService.AssignEmployeeDepartmentAsync(dto, requestUserId);
+        if (!result.IsSuccess)
+            return BadRequest(result);
 
         return Ok(result);
     }

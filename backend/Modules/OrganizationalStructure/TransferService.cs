@@ -18,57 +18,83 @@ public class TransferService : ITransferService
         _auditLogService = auditLogService;
     }
 
-    public async Task<ApiResponseDTO<bool>> TransferUserAsync(Guid userId, TransferUserDTO dto)
+    public async Task<ApiResponseDTO<bool>> TransferUserAsync(Guid userId, TransferUserDTO dto, Guid managerUserId)
     {
-        // Check if the user exists and is active
+        // 1. Only Manager (Admin) is allowed to transfer employees
+        var manager = await _db.Users.FindAsync(managerUserId);
+        if (manager is null || manager.Role != UserRole.Manager)
+            return ApiResponseDTO<bool>.Failure("Only Managers are allowed to transfer employees between departments and teams");
+
+        // 2. Require confirmation
+        if (!dto.Confirmed)
+            return ApiResponseDTO<bool>.Failure("Transfer confirmation is required before finalizing the transfer");
+
+        // 3. Find employee account in database
         var user = await _db.Users
             .Include(u => u.Department)
             .Include(u => u.JobPosition)
             .FirstOrDefaultAsync(u => u.Id == userId);
 
         if (user is null)
-            return ApiResponseDTO<bool>.Failure("User not found");
+            return ApiResponseDTO<bool>.Failure("Employee account not found in database");
         
         if (user.IsDeactivated || !user.IsActive)
-            return ApiResponseDTO<bool>.Failure("Cannot transfer a deactivated or inactive user");
+            return ApiResponseDTO<bool>.Failure("Cannot transfer a deactivated or inactive employee");
 
         var oldDeptName = user.Department?.Name ?? "Unassigned";
         var oldPosName = user.JobPosition?.Name ?? "Unassigned";
 
-        // Check if the new department exists and is active
+        // 4. Validate destination department (Must be one of the 3 client departments)
         var department = await _db.Departments
             .FirstOrDefaultAsync(d => d.Id == dto.NewDepartmentId && d.IsActive);
+
         if (department is null)
-            return ApiResponseDTO<bool>.Failure("Target department not found or is inactive");
+            return ApiResponseDTO<bool>.Failure("Target department not found or is inactive. Must select Coordinator & Customer Service Team, Dispatch Team, or Forwarding Team.");
 
-        // Check if the new job position exists and is active
-        var jobPosition = await _db.JobPositions
-            .FirstOrDefaultAsync(jp => jp.Id == dto.NewJobPositionId && jp.IsActive);
-        if (jobPosition is null)
-            return ApiResponseDTO<bool>.Failure("Target job position not found or is inactive");
+        if (user.DepartmentId == dto.NewDepartmentId)
+            return ApiResponseDTO<bool>.Failure($"Employee is already assigned to {department.Name}");
 
-        // Verify the job position belongs to the target department
-        if (jobPosition.DepartmentId != dto.NewDepartmentId)
-            return ApiResponseDTO<bool>.Failure("Job position does not belong to the target department");
+        // 5. Check/Assign job position
+        JobPosition? jobPosition = null;
+        if (dto.NewJobPositionId.HasValue)
+        {
+            jobPosition = await _db.JobPositions
+                .FirstOrDefaultAsync(jp => jp.Id == dto.NewJobPositionId.Value && jp.IsActive && jp.DepartmentId == dto.NewDepartmentId);
 
-        // Update the user's department and job position
+            if (jobPosition is null)
+                return ApiResponseDTO<bool>.Failure("Target job position not found or does not belong to the destination department");
+
+            user.JobPositionId = jobPosition.Id;
+        }
+        else
+        {
+            // Pick default first position in department if available, or reset
+            var defaultPos = await _db.JobPositions
+                .FirstOrDefaultAsync(jp => jp.DepartmentId == dto.NewDepartmentId && jp.IsActive);
+            user.JobPositionId = defaultPos?.Id;
+            jobPosition = defaultPos;
+        }
+
+        // 6. Update employee's department record and task visibility scope
         user.DepartmentId = dto.NewDepartmentId;
-        user.JobPositionId = dto.NewJobPositionId;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
 
         var empName = $"{user.FirstName} {user.LastName}".Trim();
+        var posDisplay = jobPosition?.Name ?? "Unassigned Position";
+        var effectiveStr = dto.EffectiveDate.ToString("yyyy-MM-dd");
+
+        // 7. Record transaction in Audit Log
         await _auditLogService.LogAsync(
-            userId,
+            managerUserId,
             AuditActionType.Update,
             "UserTransfer",
             user.Id,
             null,
-            $"Employee transfer completed for {empName} (#{user.EmployeeNumber}): From [{oldDeptName} / {oldPosName}] to [{department.Name} / {jobPosition.Name}]. Hierarchy position updated.",
-            "Organizational Structure");
+            $"Employee transfer confirmed by Manager for {empName} (#{user.EmployeeNumber}): Transferred from [{oldDeptName} / {oldPosName}] to [{department.Name} / {posDisplay}]. Effective Date: {effectiveStr}. Task visibility and assignment scope updated.",
+            "Employee Management");
 
-        return ApiResponseDTO<bool>.Success(true, "User transferred successfully");
+        return ApiResponseDTO<bool>.Success(true, $"Employee {empName} successfully transferred to {department.Name}");
     }
 }
-

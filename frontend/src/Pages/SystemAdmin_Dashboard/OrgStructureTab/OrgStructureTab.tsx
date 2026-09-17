@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import {
     Building2, Briefcase, Users, ArrowRight, Loader2, AlertCircle, CheckCircle2,
     Plus, Pencil, Trash2, X, Search, RefreshCw, GitBranch, UserCircle2,
-    Shield, Mail, Phone, Hash, XCircle, Eye, Download, Check, Layers, ChevronRight
+    Shield, Mail, Phone, Hash, XCircle, Eye, Download, Check, Layers, ChevronRight, UserPlus
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -72,13 +72,6 @@ interface HierarchyEmployeeDTO {
     isActive: boolean;
 }
 
-interface HierarchyStructureResponseDTO {
-    managers: HierarchyEmployeeDTO[];
-    coordinators: HierarchyEmployeeDTO[];
-    staff: HierarchyEmployeeDTO[];
-    totalEmployees: number;
-}
-
 interface ConfirmState {
     isOpen: boolean;
     variant: 'danger' | 'warning' | 'info' | 'success' | 'neutral';
@@ -90,14 +83,15 @@ interface ConfirmState {
 
 const CONFIRM_CLOSED: ConfirmState = { isOpen: false, variant: 'neutral', title: '', description: '', onConfirm: () => { } };
 
+const CLIENT_DEPARTMENTS = [
+    'Coordinator & Customer Service Team',
+    'Dispatch Team',
+    'Forwarding Team'
+];
+
 const ROLE_COLORS: Record<string, string> = {
     Manager: '#4318FF', Coordinator: '#00A99D', Dispatcher: '#FFB547',
     Encoder: '#01B574', Courier: '#E31A1A', Accountant: '#7551FF'
-};
-
-const ROLE_CLASSES: Record<string, string> = {
-    Manager: 'manager-card', Coordinator: 'coordinator-card', Dispatcher: 'dispatcher-card',
-    Encoder: 'encoder-card', Courier: 'courier-card'
 };
 
 const ROLE_MAP: Record<number, string> = { 0: 'Manager', 1: 'Coordinator', 2: 'Dispatcher', 3: 'Encoder', 4: 'Courier', 5: 'Accountant' };
@@ -163,7 +157,45 @@ function HierarchyFlowBanner({ onMapClick }: { onMapClick?: () => void }) {
     );
 }
 
-// ─── View Members Modal ───────────────────────────────────────────────────────
+// ─── Defined Departments Banner ────────────────────────────────────────────────
+
+function DefinedDepartmentsBanner({ onAssignClick }: { onAssignClick?: () => void }) {
+    return (
+        <div className="dept-flow-banner">
+            <div>
+                <div className="dept-flow-title">
+                    <Building2 size={18} />
+                    Client Department Structure
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Every employee account belongs to exactly one of the three defined departments.
+                </div>
+            </div>
+            <div className="dept-pills-row">
+                <div className="dept-pill pill-coord">
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#00A99D' }} />
+                    Coordinator & Customer Service Team
+                </div>
+                <div className="dept-pill pill-dispatch">
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFB547' }} />
+                    Dispatch Team
+                </div>
+                <div className="dept-pill pill-forwarding">
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4318FF' }} />
+                    Forwarding Team
+                </div>
+                {onAssignClick && (
+                    <button className="btn btn-primary btn-sm" onClick={onAssignClick} style={{ marginLeft: 8 }}>
+                        <UserPlus size={13} />
+                        Assign Employee
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── View Members / Roster Modal ──────────────────────────────────────────────
 
 function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
     isOpen: boolean; onClose: () => void; title: string;
@@ -181,7 +213,7 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
 
     return (
         <FormModal isOpen={isOpen} onClose={() => { setSearch(''); onClose(); }} title={title}
-            subtitle={`${members.length} member${members.length !== 1 ? 's' : ''}`}
+            subtitle={`${members.length} active member${members.length !== 1 ? 's' : ''}`}
             size="lg"
             footer={
                 <button className="fm-btn fm-btn-primary" onClick={() => { setSearch(''); onClose(); }}>Close</button>
@@ -191,12 +223,12 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
                 <Search size={14} className="table-card-search-icon" />
                 <input type="text" className="table-card-search-input" value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Search members by name, ID, or email..." />
+                    placeholder="Search roster by name, ID, or email..." />
             </div>
             {filtered.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-secondary)' }}>
                     {icon}
-                    <p style={{ marginTop: 8, fontSize: 13 }}>No members match your search.</p>
+                    <p style={{ marginTop: 8, fontSize: 13 }}>No members match your search in this roster.</p>
                 </div>
             ) : (
                 <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
@@ -309,7 +341,7 @@ function OrgChartView({ departments, positions, employees, onOpenMap }: {
                 <StatusCard icon={<Shield size={18} />} label="Level 1: Manager" value={managers.length} subtext="Executive Management" variant="teal" />
                 <StatusCard icon={<GitBranch size={18} />} label="Level 2: Coordinators" value={coordinators.length} subtext="Operations Leads" variant="teal" />
                 <StatusCard icon={<Users size={18} />} label="Level 3: Execution Staff" value={staffMembers.length} subtext="Dispatchers, Encoders, Couriers" variant="success" />
-                <StatusCard icon={<Building2 size={18} />} label="Departments" value={departments.filter(d => d.isActive).length} subtext="Active units" variant="teal" />
+                <StatusCard icon={<Building2 size={18} />} label="Client Departments" value={departments.filter(d => d.isActive).length} subtext="Active units" variant="teal" />
             </div>
 
             <div className="card" style={{ padding: 20 }}>
@@ -347,7 +379,7 @@ function OrgChartView({ departments, positions, employees, onOpenMap }: {
                                         <div className="org-chart-node-card manager-card">
                                             <div className="node-role" style={{ color: ROLE_COLORS.Manager }}>Manager</div>
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
-                                            <div className="node-count">#{e.employeeNumber} • {e.departmentName || 'Management'}</div>
+                                            <div className="node-count">#{e.employeeNumber} • {e.departmentName || 'Coordinator & Customer Service Team'}</div>
                                         </div>
                                     </div>
                                 ))
@@ -374,7 +406,7 @@ function OrgChartView({ departments, positions, employees, onOpenMap }: {
                                             <div className="node-role" style={{ color: ROLE_COLORS.Coordinator }}>Coordinator</div>
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
                                             <div className="node-count">#{e.employeeNumber} • {e.departmentName || '—'}</div>
-                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.jobPositionName || 'Team Lead'}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.jobPositionName || 'Operations Lead'}</div>
                                         </div>
                                     </div>
                                 ))
@@ -759,10 +791,269 @@ function HierarchyMappingView({
     );
 }
 
-// ─── Departments Table ────────────────────────────────────────────────────────
+// ─── Department Assignment Modal (Department Assignment Form) ──────────────────
 
-function DepartmentsView({ departments, employees, onRefresh }: {
-    departments: DeptDTO[]; employees: EmployeeDTO[]; onRefresh: () => void;
+function DepartmentAssignmentModal({
+    isOpen, onClose, employees, departments, positions, onAssigned
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    employees: EmployeeDTO[];
+    departments: DeptDTO[];
+    positions: PosDTO[];
+    onAssigned: () => void;
+}) {
+    const { success, error } = useToast();
+    const [search, setSearch] = useState('');
+    const [selectedEmp, setSelectedEmp] = useState<EmployeeDTO | null>(null);
+    const [selectedDeptId, setSelectedDeptId] = useState('');
+    const [selectedPosId, setSelectedPosId] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [apiErr, setApiErr] = useState('');
+    const [confirmModal, setConfirmModal] = useState(false);
+    const [successModal, setSuccessModal] = useState(false);
+    const [successMsg, setSuccessMsg] = useState('');
+
+    const activeEmps = employees.filter(e => e.isActive && !e.isDeactivated);
+    const filteredEmps = search
+        ? activeEmps.filter(e => {
+            const q = search.toLowerCase();
+            return buildName(e).toLowerCase().includes(q)
+                || e.employeeNumber.toLowerCase().includes(q)
+                || e.email.toLowerCase().includes(q);
+        })
+        : activeEmps.slice(0, 15);
+
+    const targetPositions = selectedDeptId
+        ? positions.filter(p => p.departmentId === selectedDeptId && p.isActive)
+        : [];
+
+    const handleSelect = (emp: EmployeeDTO) => {
+        setSelectedEmp(emp);
+        setSelectedDeptId(emp.departmentId || '');
+        setSelectedPosId(emp.jobPositionId || '');
+        setApiErr('');
+    };
+
+    const handleValidate = () => {
+        if (!selectedEmp) {
+            setApiErr('Please select an employee account (must exist in database).');
+            return;
+        }
+        if (!selectedDeptId) {
+            setApiErr('Department is required. Select one of the three defined departments.');
+            return;
+        }
+        setApiErr('');
+        setConfirmModal(true);
+    };
+
+    const doAssign = async () => {
+        if (!selectedEmp || !selectedDeptId) return;
+        setSubmitting(true);
+        setApiErr('');
+        try {
+            await api.post('/api/Department/assign', {
+                employeeId: selectedEmp.id,
+                departmentId: selectedDeptId,
+                jobPositionId: selectedPosId || null
+            });
+
+            const deptName = departments.find(d => d.id === selectedDeptId)?.name || '';
+            const msg = `Employee ${buildName(selectedEmp)} (#${selectedEmp.employeeNumber}) assigned to ${deptName}. Audit log recorded.`;
+            success('Department assignment updated successfully.');
+            setSuccessMsg(msg);
+            setConfirmModal(false);
+            setSuccessModal(true);
+            onAssigned();
+        } catch (err: any) {
+            setApiErr(err.response?.data?.message || err.response?.data?.Message || 'Failed to assign employee to department.');
+            setConfirmModal(false);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <>
+            <FormModal
+                isOpen={isOpen && !successModal}
+                onClose={onClose}
+                title="Department Assignment Form"
+                subtitle="Assign an employee account to exactly one of the three client departments."
+                size="lg"
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 20 }}>
+                    {/* Employee Search / Select Field */}
+                    <div>
+                        <label className="h-label" style={{ marginBottom: 6 }}>
+                            <span>Employee ID (Search Field - Must exist in database)</span>
+                        </label>
+                        <div className="table-card-search-input-wrap" style={{ marginBottom: 10, width: '100%' }}>
+                            <Search size={14} className="table-card-search-icon" />
+                            <input
+                                type="text"
+                                className="table-card-search-input"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search by Employee ID, Name, or Email..."
+                            />
+                        </div>
+                        <div className="employee-select-list" style={{ maxHeight: 260 }}>
+                            {filteredEmps.length === 0 ? (
+                                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+                                    No employee accounts found.
+                                </div>
+                            ) : (
+                                filteredEmps.map(e => (
+                                    <div
+                                        key={e.id}
+                                        className={`employee-select-item${selectedEmp?.id === e.id ? ' selected' : ''}`}
+                                        onClick={() => handleSelect(e)}
+                                    >
+                                        <div>
+                                            <div className="esi-name">{buildName(e)}</div>
+                                            <div className="esi-detail">ID: #{e.employeeNumber} • {toDisplayRole(e.role)}</div>
+                                        </div>
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.departmentName || 'Unassigned'}</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Department Dropdown & Position Fields */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {selectedEmp ? (
+                            <>
+                                <div className="h-field">
+                                    <label className="h-label">Selected Employee</label>
+                                    <div className="h-display-box">
+                                        <span><strong>#{selectedEmp.employeeNumber}</strong> — {buildName(selectedEmp)}</span>
+                                        <StatusBadge status={toDisplayRole(selectedEmp.role)} size="sm" />
+                                    </div>
+                                </div>
+
+                                <div className="h-field">
+                                    <label className="h-label">
+                                        <span>Department <span style={{ color: 'var(--status-failed)' }}>*</span></span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Required: 3 Client Departments</span>
+                                    </label>
+                                    <select
+                                        className="fm-select"
+                                        value={selectedDeptId}
+                                        onChange={e => {
+                                            setSelectedDeptId(e.target.value);
+                                            setSelectedPosId('');
+                                        }}
+                                    >
+                                        <option value="">Select one of 3 client departments</option>
+                                        {departments.filter(d => d.isActive).map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="h-field">
+                                    <label className="h-label">Job Position (Optional)</label>
+                                    <select
+                                        className="fm-select"
+                                        value={selectedPosId}
+                                        onChange={e => setSelectedPosId(e.target.value)}
+                                        disabled={!selectedDeptId}
+                                    >
+                                        <option value="">{selectedDeptId ? 'Select job position' : 'Select department first'}</option>
+                                        {targetPositions.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {selectedDeptId && (
+                                    <div className="h-validation-banner">
+                                        <CheckCircle2 size={15} />
+                                        <span>Validated: Department selection is valid and ready to save.</span>
+                                    </div>
+                                )}
+
+                                {apiErr && (
+                                    <div className="transfer-error">
+                                        <AlertCircle size={14} />
+                                        <span>{apiErr}</span>
+                                    </div>
+                                )}
+
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ marginTop: 6 }}
+                                    onClick={handleValidate}
+                                    disabled={!selectedDeptId || submitting}
+                                >
+                                    {submitting ? <Loader2 size={15} className="fm-spin" /> : <Check size={15} />}
+                                    {submitting ? 'Updating...' : 'Assign to Department'}
+                                </button>
+                            </>
+                        ) : (
+                            <div style={{ padding: 36, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-input)', borderRadius: 8 }}>
+                                <UserCircle2 size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>Select employee account</div>
+                                <div style={{ fontSize: 11, marginTop: 2 }}>Choose an employee from the left panel to assign department.</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </FormModal>
+
+            {/* Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={confirmModal}
+                variant="info"
+                title="Confirm Department Assignment"
+                description={
+                    selectedEmp && selectedDeptId ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div>Assign <strong>{buildName(selectedEmp)}</strong> (#{selectedEmp.employeeNumber})?</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                Target Department: <strong>{departments.find(d => d.id === selectedDeptId)?.name}</strong>
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                The employee's record and department roster will update immediately. An Audit Log entry will be recorded.
+                            </div>
+                        </div>
+                    ) : ''
+                }
+                confirmLabel="Confirm Assignment"
+                isLoading={submitting}
+                onConfirm={doAssign}
+                onCancel={() => setConfirmModal(false)}
+            />
+
+            {/* Success Modal */}
+            {successModal && (
+                <FormModal
+                    isOpen={true}
+                    onClose={() => { setSuccessModal(false); onClose(); }}
+                    title="Department Assignment Updated"
+                    subtitle="Department roster and Audit Log recorded"
+                    size="sm"
+                >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#065f46' }}>
+                        <CheckCircle2 size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                        <div>{successMsg}</div>
+                    </div>
+                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => { setSuccessModal(false); onClose(); }}>
+                        Done
+                    </button>
+                </FormModal>
+            )}
+        </>
+    );
+}
+
+// ─── Departments Table & Management View ──────────────────────────────────────
+
+function DepartmentsView({ departments, employees, positions, onRefresh }: {
+    departments: DeptDTO[]; employees: EmployeeDTO[]; positions: PosDTO[]; onRefresh: () => void;
 }) {
     const { success, error } = useToast();
     const [search, setSearch] = useState('');
@@ -775,6 +1066,7 @@ function DepartmentsView({ departments, employees, onRefresh }: {
     const [apiErr, setApiErr] = useState('');
     const [confirm, setConfirm] = useState<ConfirmState>(CONFIRM_CLOSED);
     const [viewDept, setViewDept] = useState<DeptDTO | null>(null);
+    const [showAssignModal, setShowAssignModal] = useState(false);
 
     const filtered = departments.filter(d => {
         if (!search) return true;
@@ -798,7 +1090,7 @@ function DepartmentsView({ departments, employees, onRefresh }: {
             } else {
                 await api.post('/api/Department', { name, description: formDesc.trim() || null });
             }
-            success(editing ? 'Department updated.' : 'Department created.');
+            success(editing ? 'Department grouping updated.' : 'Department grouping created.');
             setShowForm(false);
             onRefresh();
         } catch (err: any) {
@@ -811,8 +1103,8 @@ function DepartmentsView({ departments, employees, onRefresh }: {
     const handleDelete = (d: DeptDTO) => {
         if (d.userCount > 0) {
             setConfirm({
-                isOpen: true, variant: 'warning', title: 'Cannot Delete',
-                description: <>Transfer users out of <strong>{d.name}</strong> first before deactivating.</>,
+                isOpen: true, variant: 'warning', title: 'Cannot Deactivate',
+                description: <>Transfer or reassign users out of <strong>{d.name}</strong> first before deactivating.</>,
                 confirmLabel: 'Okay', onConfirm: () => setConfirm(CONFIRM_CLOSED),
             });
             return;
@@ -839,20 +1131,73 @@ function DepartmentsView({ departments, employees, onRefresh }: {
 
     return (
         <div className="org-content">
-            <div className="org-stats-grid">
-                <StatusCard icon={<Building2 size={18} />} label="Total Departments" value={departments.length} subtext="In the organization" variant='teal' />
-                <StatusCard icon={<CheckCircle2 size={18} />} label="Active" value={activeDepts} subtext="Currently operational" variant="success" />
-                <StatusCard icon={<XCircle size={18} />} label="Inactive" value={departments.length - activeDepts} subtext="Deactivated" variant="warning" />
-                <StatusCard icon={<Briefcase size={18} />} label="Positions" value={departments.reduce((s, d) => s + d.positionCount, 0)} subtext="Across all depts" variant='teal' />
+            <DefinedDepartmentsBanner onAssignClick={() => setShowAssignModal(true)} />
+
+            {/* Department Roster Cards for the 3 Defined Departments */}
+            <div className="dept-rosters-grid">
+                {departments.filter(d => d.isActive).map(dept => {
+                    const members = deptMembers(dept.id);
+                    return (
+                        <div key={dept.id} className="dept-roster-card">
+                            <div className="dept-roster-header">
+                                <div>
+                                    <div className="dept-roster-name">{dept.name}</div>
+                                    <div className="dept-roster-desc">{dept.description || 'Department grouping'}</div>
+                                </div>
+                                <span className="dept-roster-count">{members.length} Member{members.length !== 1 ? 's' : ''}</span>
+                            </div>
+
+                            <div className="dept-roster-list">
+                                {members.length === 0 ? (
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '10px 0', textAlign: 'center', fontStyle: 'italic' }}>
+                                        No employees assigned to this department.
+                                    </div>
+                                ) : (
+                                    members.slice(0, 5).map(m => (
+                                        <div key={m.id} className="dept-roster-item">
+                                            <div>
+                                                <div style={{ fontWeight: 600 }}>{buildName(m)}</div>
+                                                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>#{m.employeeNumber} • {m.jobPositionName || '—'}</div>
+                                            </div>
+                                            <StatusBadge status={toDisplayRole(m.role)} size="sm" />
+                                        </div>
+                                    ))
+                                )}
+                                {members.length > 5 && (
+                                    <div style={{ fontSize: 11, color: 'var(--primary)', textAlign: 'center', cursor: 'pointer', fontWeight: 600, paddingTop: 4 }}
+                                        onClick={() => setViewDept(dept)}>
+                                        + {members.length - 5} more members (View Full Roster)
+                                    </div>
+                                )}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 8 }}>
+                                <button className="btn btn-outline btn-sm" style={{ flex: 1 }} onClick={() => setViewDept(dept)}>
+                                    <Eye size={13} /> View Roster
+                                </button>
+                                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setShowAssignModal(true)}>
+                                    <UserPlus size={13} /> Assign
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="org-stats-grid" style={{ marginTop: 8 }}>
+                <StatusCard icon={<Building2 size={18} />} label="Client Departments" value={departments.length} subtext="Corporate units" variant="teal" />
+                <StatusCard icon={<CheckCircle2 size={18} />} label="Active Departments" value={activeDepts} subtext="Operational" variant="success" />
+                <StatusCard icon={<Users size={18} />} label="Total Employees Assigned" value={employees.filter(e => e.isActive && !e.isDeactivated).length} subtext="100% mapped" variant="teal" />
+                <StatusCard icon={<Briefcase size={18} />} label="Total Positions" value={departments.reduce((s, d) => s + d.positionCount, 0)} subtext="Across departments" variant="teal" />
             </div>
 
             <DataTable
-                title="Departments" totalResults={filtered.length}
+                title="Department Management" totalResults={filtered.length}
                 searchQuery={search} setSearchQuery={v => { setSearch(v); setPage(1); }}
-                searchPlaceholder="Search by name or description…"
-                headers={['Department', 'Description', 'Status', 'Users', 'Positions', 'Actions']}
+                searchPlaceholder="Search departments…"
+                headers={['Department', 'Description', 'Status', 'Roster Count', 'Positions', 'Actions']}
                 loading={false} emptyMessage="No departments found." emptyIcon={<Building2 size={20} />}
-                actionButton={{ label: 'Add Department', icon: <Plus size={14} />, onClick: openCreate }}
+                actionButton={{ label: 'Assign Employee', icon: <UserPlus size={14} />, onClick: () => setShowAssignModal(true) }}
                 currentPage={page} totalPages={totalPages} onPageChange={setPage}
             >
                 {paged.map(d => (
@@ -869,11 +1214,12 @@ function DepartmentsView({ departments, employees, onRefresh }: {
                         </td>
                         <td style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 250 }}>{d.description || '—'}</td>
                         <td><StatusBadge status={d.isActive ? 'Active' : 'Inactive'} /></td>
-                        <td><span style={{ fontWeight: 500, fontSize: 13 }}>{d.userCount}</span></td>
+                        <td><span style={{ fontWeight: 600, fontSize: 13 }}>{d.userCount}</span></td>
                         <td><span style={{ fontWeight: 500, fontSize: 13 }}>{d.positionCount}</span></td>
                         <td>
                             <ActionsDropdown actions={[
-                                { label: 'View Members', icon: <Eye size={13} />, onClick: () => setViewDept(d) },
+                                { label: 'View Roster', icon: <Eye size={13} />, onClick: () => setViewDept(d) },
+                                { label: 'Assign Employee', icon: <UserPlus size={13} />, onClick: () => setShowAssignModal(true) },
                                 { label: 'Edit', icon: <Pencil size={13} />, onClick: () => openEdit(d) },
                                 { label: 'Deactivate', icon: <Trash2 size={13} />, onClick: () => handleDelete(d), variant: 'danger' },
                             ]} />
@@ -884,17 +1230,28 @@ function DepartmentsView({ departments, employees, onRefresh }: {
 
             {viewDept && (
                 <ViewMembersModal isOpen={true} onClose={() => setViewDept(null)}
-                    title={`${viewDept.name} Members`} icon={<Building2 size={24} />}
+                    title={`${viewDept.name} — Department Roster`} icon={<Building2 size={24} />}
                     members={deptMembers(viewDept.id)} />
             )}
 
+            {showAssignModal && (
+                <DepartmentAssignmentModal
+                    isOpen={true}
+                    onClose={() => setShowAssignModal(false)}
+                    employees={employees}
+                    departments={departments}
+                    positions={positions}
+                    onAssigned={onRefresh}
+                />
+            )}
+
             {showForm && (
-                <FormModal isOpen={true} onClose={() => setShowForm(false)} title={editing ? 'Edit Department' : 'New Department'}
-                    subtitle={editing ? 'Update department details.' : 'Create a new department.'}
+                <FormModal isOpen={true} onClose={() => setShowForm(false)} title={editing ? 'Edit Department Grouping' : 'New Department Grouping'}
+                    subtitle={editing ? 'Update department grouping details.' : 'Create a department grouping.'}
                     apiError={apiErr} onSubmit={handleSubmit} isSubmitting={submitting} submitLabel={editing ? 'Save Changes' : 'Create Department'} size="sm">
                     <div className="fm-field">
                         <label className="fm-label">Department Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                        <input className="fm-input" value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Dispatch Team" maxLength={100} />
+                        <input className="fm-input" value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Forwarding Team" maxLength={100} />
                     </div>
                     <div className="fm-field">
                         <label className="fm-label">Description</label>
@@ -1077,6 +1434,8 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
     const [selectedEmp, setSelectedEmp] = useState<EmployeeDTO | null>(null);
     const [targetDeptId, setTargetDeptId] = useState('');
     const [targetPosId, setTargetPosId] = useState('');
+    const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [isConfirmed, setIsConfirmed] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [apiErr, setApiErr] = useState('');
     const [confirmTransfer, setConfirmTransfer] = useState(false);
@@ -1097,24 +1456,54 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
         ? positions.filter(p => p.departmentId === targetDeptId && p.isActive)
         : [];
 
-    const resetForm = () => { setSelectedEmp(null); setTargetDeptId(''); setTargetPosId(''); setApiErr(''); setConfirmTransfer(false); };
+    const resetForm = () => {
+        setSelectedEmp(null);
+        setTargetDeptId('');
+        setTargetPosId('');
+        setEffectiveDate(new Date().toISOString().split('T')[0]);
+        setIsConfirmed(false);
+        setApiErr('');
+        setConfirmTransfer(false);
+    };
 
     const handleTransfer = () => {
-        if (!selectedEmp || !targetDeptId || !targetPosId) { setApiErr('Please complete all fields.'); return; }
+        if (!selectedEmp) {
+            setApiErr('Please search for and select an employee account from the database.');
+            return;
+        }
+        if (!targetDeptId) {
+            setApiErr('Please select a destination department/team.');
+            return;
+        }
+        if (!effectiveDate) {
+            setApiErr('Effective Date of Transfer is required.');
+            return;
+        }
+        if (!isConfirmed) {
+            setApiErr('Please check the confirmation checkbox to authorize the transfer.');
+            return;
+        }
+        setApiErr('');
         setConfirmTransfer(true);
     };
 
     const doTransfer = async () => {
-        setSubmitting(true); setApiErr('');
+        setSubmitting(true);
+        setApiErr('');
         try {
             await api.post(`/api/Transfer/${selectedEmp!.id}`, {
                 newDepartmentId: targetDeptId,
-                newJobPositionId: targetPosId,
+                newJobPositionId: targetPosId || null,
+                effectiveDate: effectiveDate,
+                confirmed: true
             });
-            success('Employee transferred successfully.');
+
             const deptName = departments.find(d => d.id === targetDeptId)?.name || '';
-            const posName = positions.find(p => p.id === targetPosId)?.name || '';
-            setSuccessMsg(`${buildName(selectedEmp!)} transferred to ${deptName} (${posName})`);
+            const posName = positions.find(p => p.id === targetPosId)?.name || 'Default Position';
+            const empName = buildName(selectedEmp!);
+
+            success('Employee transferred successfully.');
+            setSuccessMsg(`Employee ${empName} (#${selectedEmp!.employeeNumber}) successfully transferred to ${deptName} (${posName}). Effective date: ${effectiveDate}. Task visibility and assignment scope updated. Transaction recorded in Audit Log.`);
             setShowSuccess(true);
             resetForm();
             onRefresh();
@@ -1128,30 +1517,57 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
 
     const targetDept = departments.find(d => d.id === targetDeptId);
     const targetPos = positions.find(p => p.id === targetPosId);
+    const currentDeptName = selectedEmp?.departmentName || 'Unassigned';
 
     return (
         <div className="org-content">
+            <DefinedDepartmentsBanner />
+
             <div className="card">
                 <div className="transfer-layout">
+                    {/* Panel 1: Search and Select Employee (Step 3 & 4) */}
                     <div className="transfer-panel">
-                        <h4 className="transfer-panel-title"><UserCircle2 size={16} /> Select Employee</h4>
-                        <div className="table-card-search-input-wrap" style={{ marginBottom: 10, width: '100%' }}>
+                        <h4 className="transfer-panel-title">
+                            <Search size={16} color="var(--primary)" />
+                            Search Employee (Must exist in database)
+                        </h4>
+                        <div className="table-card-search-input-wrap" style={{ marginBottom: 12, width: '100%' }}>
                             <Search size={14} className="table-card-search-icon" />
-                            <input type="text" className="table-card-search-input" value={search}
+                            <input
+                                type="text"
+                                className="table-card-search-input"
+                                value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder="Search by name, ID, or email..." />
+                                placeholder="Search by Employee ID, Name, or Email..."
+                            />
                         </div>
-                        <div className="employee-select-list" style={{ maxHeight: 320 }}>
+                        <div className="employee-select-list" style={{ maxHeight: 340 }}>
                             {filteredEmps.length === 0 ? (
-                                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>No employees found.</div>
+                                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                                    No active employees found in database.
+                                </div>
                             ) : filteredEmps.map(e => (
-                                <div key={e.id} className={`employee-select-item${selectedEmp?.id === e.id ? ' selected' : ''}`}
-                                    onClick={() => { setSelectedEmp(e); setTargetDeptId(''); setTargetPosId(''); setApiErr(''); }}>
+                                <div
+                                    key={e.id}
+                                    className={`employee-select-item${selectedEmp?.id === e.id ? ' selected' : ''}`}
+                                    onClick={() => {
+                                        setSelectedEmp(e);
+                                        setTargetDeptId('');
+                                        setTargetPosId('');
+                                        setIsConfirmed(false);
+                                        setApiErr('');
+                                    }}
+                                >
                                     <div>
                                         <div className="esi-name">{buildName(e)}</div>
-                                        <div className="esi-detail">#{e.employeeNumber} • {toDisplayRole(e.role)} • {e.departmentName || '—'}</div>
+                                        <div className="esi-detail">ID: #{e.employeeNumber} • {toDisplayRole(e.role)}</div>
                                     </div>
-                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.jobPositionName || '—'}</div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            {e.departmentName || 'Unassigned'}
+                                        </div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{e.jobPositionName || '—'}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1159,79 +1575,202 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
 
                     <div className="transfer-divider" />
 
+                    {/* Panel 2: Department Transfer Form (Fields 1-5 + User Flow) */}
                     <div className="transfer-panel">
-                        <h4 className="transfer-panel-title"><ArrowRight size={16} /> Transfer Destination</h4>
-                        <div className="transfer-fields">
-                            <div className="tf-field">
-                                <label className="tf-label">Target Department <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <select className="fm-select" value={targetDeptId}
-                                    onChange={e => { setTargetDeptId(e.target.value); setTargetPosId(''); }}
-                                    disabled={!selectedEmp}
-                                    style={{ opacity: !selectedEmp ? 0.6 : 1, cursor: !selectedEmp ? 'not-allowed' : 'pointer' }}>
-                                    <option value="">{selectedEmp ? 'Select department' : 'Select employee first'}</option>
-                                    {departments.filter(d => d.isActive && d.id !== selectedEmp?.departmentId).map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="tf-field">
-                                <label className="tf-label">Target Position <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <select className="fm-select" value={targetPosId} onChange={e => setTargetPosId(e.target.value)}
-                                    disabled={!targetDeptId}
-                                    style={{ opacity: !targetDeptId ? 0.6 : 1, cursor: !targetDeptId ? 'not-allowed' : 'pointer' }}>
-                                    <option value="">{targetDeptId ? 'Select position' : 'Select department first'}</option>
-                                    {targetPositions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
+                        <h4 className="transfer-panel-title">
+                            <GitBranch size={16} color="var(--primary)" />
+                            Department Transfer Form
+                        </h4>
 
-                        {selectedEmp && targetDept && targetPos && (
-                            <div className="transfer-preview" style={{ marginTop: 16 }}>
-                                <div className="tp-row"><span className="tp-label">Employee</span><span className="tp-value">{buildName(selectedEmp)}</span></div>
-                                <div className="tp-row"><span className="tp-label">From</span><span className="tp-value">{selectedEmp.departmentName || '—'} → {selectedEmp.jobPositionName || '—'}</span></div>
-                                <div className="tp-row"><span className="tp-label">To</span><span className="tp-value tp-highlight">{targetDept.name} → {targetPos.name}</span></div>
-                                <div className="tp-row"><span className="tp-label">Role</span><span className="tp-value">{toDisplayRole(selectedEmp.role)}</span></div>
+                        {selectedEmp ? (
+                            <div className="transfer-fields">
+                                {/* Employee ID Display Field */}
+                                <div className="tf-field">
+                                    <label className="tf-label">
+                                        <span>Employee ID (Database Verified)</span>
+                                        <span style={{ color: 'var(--status-active)', fontSize: 11 }}>✓ Verified</span>
+                                    </label>
+                                    <div className="h-display-box">
+                                        <span><strong>#{selectedEmp.employeeNumber}</strong> — {buildName(selectedEmp)}</span>
+                                        <StatusBadge status={toDisplayRole(selectedEmp.role)} size="sm" />
+                                    </div>
+                                </div>
+
+                                {/* Current Department/Team (System Display Field, Read-only) */}
+                                <div className="tf-field">
+                                    <label className="tf-label">
+                                        <span>Current Department / Team (System Display Field, Read-only)</span>
+                                    </label>
+                                    <div className="h-display-box" style={{ background: '#f8fafc' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Building2 size={15} color="var(--text-secondary)" />
+                                            <strong>{currentDeptName}</strong>
+                                        </div>
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{selectedEmp.jobPositionName || 'No position'}</span>
+                                    </div>
+                                </div>
+
+                                {/* New Department/Team (Dropdown Input, Required: 3 Defined Departments) */}
+                                <div className="tf-field">
+                                    <label className="tf-label">
+                                        <span>New Department / Team <span style={{ color: 'var(--status-failed)' }}>*</span></span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Required: 3 Client Departments</span>
+                                    </label>
+                                    <select
+                                        className="fm-select"
+                                        value={targetDeptId}
+                                        onChange={e => {
+                                            setTargetDeptId(e.target.value);
+                                            setTargetPosId('');
+                                        }}
+                                    >
+                                        <option value="">Select destination department/team</option>
+                                        {departments
+                                            .filter(d => d.isActive && d.id !== selectedEmp?.departmentId)
+                                            .map(d => (
+                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            ))}
+                                    </select>
+                                </div>
+
+                                {/* Target Job Position (Optional) */}
+                                <div className="tf-field">
+                                    <label className="tf-label">
+                                        <span>Target Job Position (Optional)</span>
+                                    </label>
+                                    <select
+                                        className="fm-select"
+                                        value={targetPosId}
+                                        onChange={e => setTargetPosId(e.target.value)}
+                                        disabled={!targetDeptId}
+                                    >
+                                        <option value="">{targetDeptId ? 'Select job position' : 'Select department first'}</option>
+                                        {targetPositions.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Effective Date of Transfer (Date Input, Required) */}
+                                <div className="tf-field">
+                                    <label className="tf-label">
+                                        <span>Effective Date of Transfer <span style={{ color: 'var(--status-failed)' }}>*</span></span>
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="fm-input"
+                                        value={effectiveDate}
+                                        onChange={e => setEffectiveDate(e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                {/* Transfer Summary / Task Scope Preview */}
+                                {targetDept && (
+                                    <div className="transfer-preview">
+                                        <div className="tp-row">
+                                            <span className="tp-label">Employee</span>
+                                            <span className="tp-value">{buildName(selectedEmp)}</span>
+                                        </div>
+                                        <div className="tp-row">
+                                            <span className="tp-label">From Department</span>
+                                            <span className="tp-value">{currentDeptName}</span>
+                                        </div>
+                                        <div className="tp-row">
+                                            <span className="tp-label">To Department</span>
+                                            <span className="tp-value tp-highlight">{targetDept.name}</span>
+                                        </div>
+                                        <div className="tp-row">
+                                            <span className="tp-label">Task Visibility Scope</span>
+                                            <span className="tp-value" style={{ color: 'var(--status-active)' }}>
+                                                Reassigned to {targetDept.name}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Confirmation Checkbox (Checkbox Input, Required) */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 4, padding: '10px 12px', background: 'var(--bg-input)', borderRadius: 8 }}>
+                                    <input
+                                        type="checkbox"
+                                        id="transferConfirmCheckbox"
+                                        checked={isConfirmed}
+                                        onChange={e => setIsConfirmed(e.target.checked)}
+                                        style={{ marginTop: 2, cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="transferConfirmCheckbox" style={{ fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer', lineHeight: 1.4 }}>
+                                        <strong>Confirmation:</strong> I confirm that I want to transfer this employee to <strong>{targetDept?.name || 'the selected department'}</strong>, effective <strong>{effectiveDate}</strong>, and update their task visibility and assignment scope.
+                                    </label>
+                                </div>
+
+                                {apiErr && (
+                                    <div className="transfer-error">
+                                        <AlertCircle size={14} /> {apiErr}
+                                    </div>
+                                )}
+
+                                <button
+                                    className="btn btn-primary transfer-btn"
+                                    disabled={!targetDeptId || !isConfirmed || submitting}
+                                    onClick={handleTransfer}
+                                >
+                                    {submitting ? <Loader2 size={15} className="fm-spin" /> : <ArrowRight size={15} />}
+                                    {submitting ? 'Transferring...' : 'Transfer Employee'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-input)', borderRadius: 8 }}>
+                                <UserCircle2 size={36} style={{ opacity: 0.3, marginBottom: 10 }} />
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>No Employee Selected</div>
+                                <div style={{ fontSize: 12, marginTop: 4 }}>Search and select an active employee from the left panel to begin transfer.</div>
                             </div>
                         )}
-
-                        {apiErr && (
-                            <div className="transfer-error"><AlertCircle size={14} /> {apiErr}</div>
-                        )}
-
-                        <button className="btn btn-primary transfer-btn"
-                            disabled={!targetPosId || submitting} onClick={handleTransfer}>
-                            {submitting ? <Loader2 size={15} className="fm-spin" /> : <ArrowRight size={15} />}
-                            {submitting ? 'Transferring...' : 'Transfer Employee'}
-                        </button>
                     </div>
                 </div>
             </div>
 
-            <ConfirmationModal isOpen={confirmTransfer} variant="warning" title="Confirm Transfer"
+            {/* Confirmation Dialog (Step 6 & 7) */}
+            <ConfirmationModal
+                isOpen={confirmTransfer}
+                variant="warning"
+                title="Confirm Employee Transfer"
                 description={
-                    selectedEmp && targetDept && targetPos ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div>Transfer <strong>{buildName(selectedEmp)}</strong>?</div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>From: {selectedEmp.departmentName || '—'} → {selectedEmp.jobPositionName || '—'}</div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>To: <strong style={{ color: 'var(--primary)' }}>{targetDept.name}</strong> → <strong style={{ color: 'var(--primary)' }}>{targetPos.name}</strong></div>
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-input)', padding: '8px 10px', borderRadius: 6, marginTop: 4 }}>
-                                Task visibility and assignment scope will update for the new department.
+                    selectedEmp && targetDept ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div>Are you sure you want to finalize the transfer for <strong>{buildName(selectedEmp)}</strong> (#{selectedEmp.employeeNumber})?</div>
+                            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 8, fontSize: 13, color: '#92400e' }}>
+                                <div><strong>From:</strong> {currentDeptName}</div>
+                                <div><strong>To:</strong> {targetDept.name} {targetPos ? `(${targetPos.name})` : ''}</div>
+                                <div><strong>Effective Date:</strong> {effectiveDate}</div>
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                Employee task visibility and department scope will update immediately. This action will be logged in the Audit Log.
                             </div>
                         </div>
                     ) : ''
                 }
-                confirmLabel="Confirm Transfer" isLoading={submitting}
-                onConfirm={doTransfer} onCancel={() => setConfirmTransfer(false)}
+                confirmLabel="Confirm & Finalize Transfer"
+                isLoading={submitting}
+                onConfirm={doTransfer}
+                onCancel={() => setConfirmTransfer(false)}
             />
 
+            {/* Confirmation Message Modal (Step 11) */}
             {showSuccess && (
-                <FormModal isOpen={true} onClose={() => setShowSuccess(false)} size="sm"
-                    title="Transfer Complete" subtitle={successMsg}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--status-active-bg)', border: '1px solid rgba(5,150,105,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13 }}>
-                        <CheckCircle2 size={15} style={{ flexShrink: 0 }} color="var(--status-active)" />
-                        <span>Employee transferred successfully. Task visibility updated.</span>
+                <FormModal
+                    isOpen={true}
+                    onClose={() => setShowSuccess(false)}
+                    size="sm"
+                    title="Transfer Complete"
+                    subtitle="Employee department and task visibility updated"
+                >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'var(--status-active-bg)', border: '1px solid rgba(5,150,105,0.25)', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13 }}>
+                        <CheckCircle2 size={18} style={{ flexShrink: 0, marginTop: 2 }} color="var(--status-active)" />
+                        <span>{successMsg}</span>
                     </div>
-                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowSuccess(false)}>Done</button>
+                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowSuccess(false)}>
+                        Done
+                    </button>
                 </FormModal>
             )}
         </div>
@@ -1314,13 +1853,17 @@ export default function OrgStructureTab() {
                     departments={departments}
                     positions={positions}
                     selectedInitialEmployee={selectedMappingEmp}
-                    onComplete={() => {
-                        fetchAll();
-                        // Displays updated chart
-                    }}
+                    onComplete={fetchAll}
                 />
             )}
-            {subTab === 'departments' && <DepartmentsView departments={departments} employees={employees} onRefresh={fetchAll} />}
+            {subTab === 'departments' && (
+                <DepartmentsView
+                    departments={departments}
+                    employees={employees}
+                    positions={positions}
+                    onRefresh={fetchAll}
+                />
+            )}
             {subTab === 'positions' && <PositionsView positions={positions} departments={departments} employees={employees} onRefresh={fetchAll} />}
             {subTab === 'transfers' && <TransfersView employees={employees} departments={departments} positions={positions} onRefresh={fetchAll} />}
         </div>

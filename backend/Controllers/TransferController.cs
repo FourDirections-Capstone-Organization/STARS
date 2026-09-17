@@ -1,4 +1,6 @@
-﻿using Backend.Models.DTOs;
+using System.Security.Claims;
+using Backend.Models;
+using Backend.Models.DTOs;
 using Backend.Modules.OrganizationalStructure;
 using Backend.Modules.RoleBasedAccessControl;
 using Microsoft.AspNetCore.Authorization;
@@ -20,12 +22,16 @@ public class TransferController : ControllerBase
 
     [HttpPost("{userId:guid}")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
-    public async Task<IActionResult> TransferUser(Guid userId, TransferUserDTO dto)
+    public async Task<IActionResult> TransferUser(Guid userId, [FromBody] TransferUserDTO dto)
     {
-        var result = await _transferService.TransferUserAsync(userId, dto);
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(currentUserId) || !Guid.TryParse(currentUserId, out var managerUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _transferService.TransferUserAsync(userId, dto, managerUserId);
         if (!result.IsSuccess)
         {
-            if(result.Message.Contains("not found"))
+            if (result.Message.Contains("not found"))
                 return NotFound(result);
 
             return BadRequest(result);
@@ -33,5 +39,4 @@ public class TransferController : ControllerBase
 
         return Ok(result);
     }
-
 }

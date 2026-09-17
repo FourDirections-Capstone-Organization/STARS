@@ -85,6 +85,145 @@
   align-items: center;
 }
 
+/* ── 3 Defined Departments Banner ── */
+.dept-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border: 1.5px solid #bae6fd;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.dept-flow-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.dept-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dept-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: white;
+  border: 1.5px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dept-pill.pill-coord {
+  border-color: #00A99D;
+  color: #008177;
+  background: #e6faf8;
+}
+
+.dept-pill.pill-dispatch {
+  border-color: #FFB547;
+  color: #b45309;
+  background: #fff8eb;
+}
+
+.dept-pill.pill-forwarding {
+  border-color: #4318FF;
+  color: #3110bb;
+  background: #f0eeff;
+}
+
+/* ── Department Rosters Grid ── */
+.dept-rosters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.dept-roster-card {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  transition: all 0.2s;
+}
+
+.dept-roster-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px rgba(0, 169, 157, 0.1);
+}
+
+.dept-roster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dept-roster-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dept-roster-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.dept-roster-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.dept-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.dept-roster-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border-radius: 8px;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.dept-roster-item:hover {
+  background: #edf2f7;
+}
+
 /* ── Org Chart ── */
 @keyframes org-spin {
   to { transform: rotate(360deg); }
