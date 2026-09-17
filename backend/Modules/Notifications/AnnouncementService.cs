@@ -174,6 +174,7 @@ public class AnnouncementService : IAnnouncementService
             var acknowledgments = await _db.AnnouncementAcknowledgments
                 .Where(x => x.AnnouncementId == a.Id)
                 .Include(x => x.User)
+                .OrderBy(x => x.CreatedAt)
                 .ToListAsync();
 
             var comments = await _db.AnnouncementComments
@@ -189,6 +190,7 @@ public class AnnouncementService : IAnnouncementService
                 {
                     UserId = x.UserId,
                     FullName = x.User is not null ? $"{x.User.FirstName} {x.User.LastName}".Trim() : "Unknown",
+                    Role = x.User?.Role.ToString() ?? "",
                     AcknowledgedAt = x.CreatedAt
                 }).ToList(),
                 comments.Select(c => new CommentDTO
@@ -196,6 +198,7 @@ public class AnnouncementService : IAnnouncementService
                     Id = c.Id,
                     UserId = c.UserId,
                     FullName = c.User is not null ? $"{c.User.FirstName} {c.User.LastName}".Trim() : "Unknown",
+                    Role = c.User?.Role.ToString() ?? "",
                     Content = c.Content,
                     CreatedAt = c.CreatedAt
                 }).ToList()));
@@ -227,6 +230,19 @@ public class AnnouncementService : IAnnouncementService
         if (announcement is null)
             return ApiResponseDTO<bool>.Failure("Announcement not found");
 
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null)
+            return ApiResponseDTO<bool>.Failure("User not found");
+
+        // Validate targeted audience
+        if (!announcement.IsPublic && !string.IsNullOrEmpty(announcement.TargetRoles)
+            && !announcement.TargetRoles.Contains("All")
+            && !announcement.TargetRoles.Contains(user.Role.ToString())
+            && user.Role != UserRole.Manager && user.Role != UserRole.Coordinator)
+        {
+            return ApiResponseDTO<bool>.Failure("You are not targeted for this announcement");
+        }
+
         var existing = await _db.AnnouncementAcknowledgments
             .AnyAsync(x => x.AnnouncementId == announcementId && x.UserId == userId);
 
@@ -236,46 +252,67 @@ public class AnnouncementService : IAnnouncementService
         _db.AnnouncementAcknowledgments.Add(new AnnouncementAcknowledgment
         {
             AnnouncementId = announcementId,
-            UserId = userId
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
 
-        var user = await _db.Users.FindAsync(userId);
-        var userName = user is not null ? $"{user.FirstName} {user.LastName}".Trim() : "Unknown";
+        var userName = $"{user.FirstName} {user.LastName}".Trim();
         await _auditLogService.LogAsync(userId, AuditActionType.Create, "AnnouncementAcknowledgment", announcementId, null,
-            $"User {userName} acknowledged announcement '{announcement.Title}'", "Announcements");
+            $"User {userName} ({user.Role}) acknowledged announcement '{announcement.Title}' (ID: {announcementId})", "Announcements");
 
-        return ApiResponseDTO<bool>.Success(true, "Announcement acknowledged");
+        return ApiResponseDTO<bool>.Success(true, "Announcement acknowledged successfully");
     }
 
     public async Task<ApiResponseDTO<CommentDTO>> AddCommentAsync(Guid announcementId, Guid userId, string content)
     {
+        if (string.IsNullOrWhiteSpace(content))
+            return ApiResponseDTO<CommentDTO>.Failure("Comment content is required");
+
+        var trimmedContent = content.Trim();
+        if (trimmedContent.Length > 500)
+            return ApiResponseDTO<CommentDTO>.Failure("Comment content cannot exceed 500 characters");
+
         var announcement = await _db.Announcements.FindAsync(announcementId);
         if (announcement is null)
             return ApiResponseDTO<CommentDTO>.Failure("Announcement not found");
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null)
+            return ApiResponseDTO<CommentDTO>.Failure("User not found");
+
+        // Validate targeted audience
+        if (!announcement.IsPublic && !string.IsNullOrEmpty(announcement.TargetRoles)
+            && !announcement.TargetRoles.Contains("All")
+            && !announcement.TargetRoles.Contains(user.Role.ToString())
+            && user.Role != UserRole.Manager && user.Role != UserRole.Coordinator)
+        {
+            return ApiResponseDTO<CommentDTO>.Failure("You are not targeted for this announcement");
+        }
 
         var comment = new AnnouncementComment
         {
             AnnouncementId = announcementId,
             UserId = userId,
-            Content = content.Trim()
+            Content = trimmedContent,
+            CreatedAt = DateTime.UtcNow
         };
         _db.AnnouncementComments.Add(comment);
         await _db.SaveChangesAsync();
 
-        var user = await _db.Users.FindAsync(userId);
-        var userName = user is not null ? $"{user.FirstName} {user.LastName}".Trim() : "Unknown";
+        var userName = $"{user.FirstName} {user.LastName}".Trim();
         await _auditLogService.LogAsync(userId, AuditActionType.Create, "AnnouncementComment", announcementId, null,
-            $"User {userName} commented on announcement '{announcement.Title}'", "Announcements");
+            $"User {userName} ({user.Role}) commented on announcement '{announcement.Title}' (ID: {announcementId})", "Announcements");
 
         return ApiResponseDTO<CommentDTO>.Success(new CommentDTO
         {
             Id = comment.Id,
             UserId = userId,
             FullName = userName,
+            Role = user.Role.ToString(),
             Content = comment.Content,
             CreatedAt = comment.CreatedAt
-        }, "Comment added");
+        }, "Comment posted successfully");
     }
 
     public async Task<(byte[] FileBytes, string ContentType, string FileName)?> GetAttachmentAsync(Guid announcementId)
@@ -323,6 +360,7 @@ public class AnnouncementService : IAnnouncementService
             AttachmentFileName = a.AttachmentFileName,
             AttachmentContentType = a.AttachmentContentType,
             AttachmentSizeBytes = a.AttachmentSizeBytes,
+            CreatedById = a.CreatedById,
             CreatedByName = creatorName,
             CreatedByRole = creatorRole,
             CreatedAt = a.CreatedAt,
@@ -333,4 +371,5 @@ public class AnnouncementService : IAnnouncementService
         };
     }
 }
+
 

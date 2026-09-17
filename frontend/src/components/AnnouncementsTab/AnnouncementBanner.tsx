@@ -1,24 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Megaphone, AlertTriangle, AlertCircle, Info, ChevronRight, CheckCircle2, Paperclip, ThumbsUp, Loader2 } from 'lucide-react';
+import { Megaphone, AlertTriangle, AlertCircle, ChevronRight, CheckCircle2, Paperclip, ThumbsUp, Loader2, Eye } from 'lucide-react';
 import api from '../../api';
-
-interface AnnouncementItem {
-    id: string;
-    title: string;
-    content: string;
-    targetRoles?: string;
-    effectiveDate: string;
-    expiryDate?: string;
-    priority: string;
-    isPublic: boolean;
-    attachmentFileName?: string;
-    hasAttachment?: boolean;
-    createdByName: string;
-    createdByRole: string;
-    createdAt: string;
-    isAcknowledged: boolean;
-    acknowledgmentCount: number;
-}
+import AnnouncementDetailModal, { AnnouncementItem } from './AnnouncementDetailModal';
 
 interface AnnouncementBannerProps {
     onNavigateToAnnouncements?: () => void;
@@ -28,6 +11,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
     const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [acknowledging, setAcknowledging] = useState<Record<string, boolean>>({});
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementItem | null>(null);
 
     const fetchActive = async () => {
         try {
@@ -88,6 +72,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                     <div
                         key={a.id}
                         className="card"
+                        onClick={() => setSelectedAnnouncement(a)}
                         style={{
                             margin: 0,
                             padding: '14px 18px',
@@ -99,6 +84,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                             gap: 16,
                             flexWrap: 'wrap',
                             boxShadow: isUrgent ? '0 4px 14px rgba(239, 68, 68, 0.12)' : undefined,
+                            cursor: 'pointer',
                         }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 260 }}>
@@ -147,7 +133,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
                             <button
                                 className={`btn btn-sm ${a.isAcknowledged ? 'btn-success' : ''}`}
                                 onClick={(e) => !a.isAcknowledged && handleAcknowledge(a.id, e)}
@@ -165,19 +151,37 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                                 {' '}{a.isAcknowledged ? 'Acknowledged' : 'Acknowledge'}
                             </button>
 
+                            <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => setSelectedAnnouncement(a)}
+                                style={{ fontSize: 12, padding: '5px 10px', height: 32, display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                                <Eye size={13} /> View
+                            </button>
+
                             {onNavigateToAnnouncements && (
                                 <button
                                     className="btn btn-sm"
                                     onClick={onNavigateToAnnouncements}
                                     style={{ fontSize: 12, padding: '5px 10px', height: 32 }}
                                 >
-                                    View Board <ChevronRight size={13} />
+                                    Board <ChevronRight size={13} />
                                 </button>
                             )}
                         </div>
                     </div>
                 );
             })}
+
+            {selectedAnnouncement && (
+                <AnnouncementDetailModal
+                    announcement={selectedAnnouncement}
+                    onClose={() => setSelectedAnnouncement(null)}
+                    onUpdated={() => {
+                        fetchActive();
+                    }}
+                />
+            )}
         </div>
     );
 };

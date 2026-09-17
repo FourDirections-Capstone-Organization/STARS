@@ -42,6 +42,7 @@ public class AnnouncementResponseDTO
     public string? AttachmentContentType { get; set; }
     public long? AttachmentSizeBytes { get; set; }
     public bool HasAttachment => !string.IsNullOrEmpty(AttachmentFileName);
+    public Guid CreatedById { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public string CreatedByRole { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -55,6 +56,7 @@ public class AcknowledgmentUserDTO
 {
     public Guid UserId { get; set; }
     public string FullName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
     public DateTime AcknowledgedAt { get; set; }
 }
 
@@ -63,6 +65,7 @@ public class CommentDTO
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string FullName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }
@@ -70,7 +73,8 @@ public class CommentDTO
 public class AddCommentDTO
 {
     [Required]
-    [MaxLength(2000)]
+    [MaxLength(500)]
     public string Content { get; set; } = string.Empty;
 }
+
 

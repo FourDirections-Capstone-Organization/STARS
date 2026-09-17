@@ -3,46 +3,11 @@ import {
     Megaphone, Plus, X, Loader2, AlertCircle, CheckCircle2, Clock, Users,
     Calendar, MessageSquare, ThumbsUp, Send, Paperclip, Download, FileText,
     Image as ImageIcon, Eye, Edit3, Bold, Italic, List, ListOrdered, Heading, Quote,
-    AlertTriangle, Globe, Lock, ShieldAlert, Sparkles
+    AlertTriangle, Globe, Lock, UserCheck, Copy, Check
 } from 'lucide-react';
 import FormModal from '../FormModal/FormModal';
 import api from '../../api';
-
-interface CommentDTO {
-    id: string;
-    userId: string;
-    fullName: string;
-    content: string;
-    createdAt: string;
-}
-
-interface AcknowledgmentUserDTO {
-    userId: string;
-    fullName: string;
-    acknowledgedAt: string;
-}
-
-interface AnnouncementDTO {
-    id: string;
-    title: string;
-    content: string;
-    targetRoles?: string;
-    effectiveDate: string;
-    expiryDate?: string;
-    priority: string;
-    isPublic: boolean;
-    attachmentFileName?: string;
-    attachmentContentType?: string;
-    attachmentSizeBytes?: number;
-    hasAttachment?: boolean;
-    createdByName: string;
-    createdByRole: string;
-    createdAt: string;
-    isAcknowledged: boolean;
-    acknowledgmentCount: number;
-    acknowledgments: AcknowledgmentUserDTO[];
-    comments: CommentDTO[];
-}
+import AnnouncementDetailModal, { AnnouncementItem, AcknowledgmentUserDTO, CommentDTO } from './AnnouncementDetailModal';
 
 interface AnnouncementsTabProps {
     canCreate: boolean;
@@ -84,7 +49,6 @@ const renderFormattedText = (text: string) => {
     if (!text) return null;
     const lines = text.split('\n');
     return lines.map((line, idx) => {
-        // Headers
         if (line.startsWith('### ')) {
             return <h4 key={idx} style={{ margin: '8px 0 4px', fontSize: 15, fontWeight: 700 }}>{line.slice(4)}</h4>;
         }
@@ -94,7 +58,6 @@ const renderFormattedText = (text: string) => {
         if (line.startsWith('# ')) {
             return <h2 key={idx} style={{ margin: '12px 0 8px', fontSize: 18, fontWeight: 800 }}>{line.slice(2)}</h2>;
         }
-        // Blockquote
         if (line.startsWith('> ')) {
             return (
                 <blockquote key={idx} style={{ margin: '6px 0', paddingLeft: 12, borderLeft: '3px solid var(--primary)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
@@ -102,7 +65,6 @@ const renderFormattedText = (text: string) => {
                 </blockquote>
             );
         }
-        // Bullet points
         if (line.startsWith('- ') || line.startsWith('* ')) {
             return (
                 <div key={idx} style={{ display: 'flex', gap: 6, margin: '2px 0 2px 8px' }}>
@@ -111,7 +73,6 @@ const renderFormattedText = (text: string) => {
                 </div>
             );
         }
-        // Numbered list
         const numMatch = line.match(/^(\d+)\.\s+(.*)/);
         if (numMatch) {
             return (
@@ -121,7 +82,6 @@ const renderFormattedText = (text: string) => {
                 </div>
             );
         }
-        // Empty line
         if (line.trim() === '') {
             return <div key={idx} style={{ height: 8 }} />;
         }
@@ -130,15 +90,17 @@ const renderFormattedText = (text: string) => {
 };
 
 const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
-    const [announcements, setAnnouncements] = useState<AnnouncementDTO[]>([]);
+    const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showCreate, setShowCreate] = useState(false);
+    const [selectedDetail, setSelectedDetail] = useState<AnnouncementItem | null>(null);
     const [commentText, setCommentText] = useState<Record<string, string>>({});
     const [sendingComment, setSendingComment] = useState<Record<string, boolean>>({});
     const [acknowledging, setAcknowledging] = useState<Record<string, boolean>>({});
     const [filterPriority, setFilterPriority] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState<string>('');
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
     const fetchAnnouncements = async () => {
         setLoading(true);
@@ -177,6 +139,8 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
     const handleComment = async (id: string) => {
         const text = commentText[id]?.trim();
         if (!text) return;
+        if (text.length > 500) return;
+
         setSendingComment(prev => ({ ...prev, [id]: true }));
         try {
             await api.post(`/api/Announcement/${id}/comments`, { content: text });
@@ -189,18 +153,36 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
         }
     };
 
-    const handleDownloadAttachment = (id: string, fileName?: string) => {
+    const handleDownloadAttachment = (id: string) => {
         const baseUrl = api.defaults.baseURL || '';
         const downloadUrl = `${baseUrl}/api/Announcement/${id}/attachment`;
         window.open(downloadUrl, '_blank');
+    };
+
+    const handleCopyId = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(id);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
     };
 
     const currentUserId = (() => {
         try {
             const token = localStorage.getItem('authToken');
             if (!token) return '';
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            return payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || payload.sub || '';
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '')));
+            return payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || payload.sub || payload.nameid || '';
+        } catch {
+            return '';
+        }
+    })();
+
+    const currentUserRole = (() => {
+        try {
+            const token = localStorage.getItem('authToken');
+            if (!token) return '';
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '')));
+            return payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || payload.role || '';
         } catch {
             return '';
         }
@@ -308,6 +290,8 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                         const isUrgent = a.priority === 'Urgent';
                         const isImportant = a.priority === 'Important';
                         const borderLeftColor = isUrgent ? 'var(--status-failed, #ef4444)' : isImportant ? 'var(--status-pending, #f59e0b)' : 'var(--primary)';
+                        const isPublisher = currentUserRole === 'Manager' || currentUserRole === 'Coordinator' || (a.createdById && a.createdById === currentUserId);
+                        const commentCount = a.comments?.length || 0;
 
                         return (
                             <div key={a.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -322,7 +306,7 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                                             : 'linear-gradient(135deg, rgba(67, 24, 255, 0.03) 0%, transparent 100%)',
                                     }}
                                 >
-                                    {/* Top Row: Title + Badges + Date */}
+                                    {/* Top Row: Title + Badges + Date + System Reference */}
                                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                                         <div style={{ flex: 1, minWidth: 260 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -348,6 +332,27 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                                                 ) : (
                                                     <span className="badge badge-green" style={{ fontSize: 10 }}>All Users</span>
                                                 )}
+
+                                                {/* Ref ID Badge */}
+                                                <span
+                                                    onClick={(e) => handleCopyId(a.id, e)}
+                                                    title="Click to copy Announcement ID"
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        fontSize: 10,
+                                                        color: 'var(--text-muted)',
+                                                        background: 'var(--bg-main)',
+                                                        padding: '2px 6px',
+                                                        borderRadius: 4,
+                                                        border: '1px solid var(--border)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 3,
+                                                        fontFamily: 'monospace',
+                                                    }}
+                                                >
+                                                    ID: {a.id.slice(0, 8)} {copiedId === a.id ? <Check size={10} style={{ color: 'var(--status-active)' }} /> : <Copy size={10} />}
+                                                </span>
                                             </div>
 
                                             <h4 style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
@@ -377,8 +382,17 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                                             </div>
                                         </div>
 
-                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: 2 }}>
-                                            Posted {fmtDateTime(a.createdAt)}
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                                Posted {fmtDateTime(a.createdAt)}
+                                            </span>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setSelectedDetail(a)}
+                                                style={{ fontSize: 11, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                                            >
+                                                <Eye size={12} /> View Full Notice
+                                            </button>
                                         </div>
                                     </div>
 
@@ -442,7 +456,7 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
 
                                             <button
                                                 className="btn btn-sm"
-                                                onClick={() => handleDownloadAttachment(a.id, a.attachmentFileName)}
+                                                onClick={() => handleDownloadAttachment(a.id)}
                                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
                                             >
                                                 <Download size={12} /> Download
@@ -457,6 +471,7 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                                             onClick={() => !a.isAcknowledged && handleAcknowledge(a.id)}
                                             disabled={a.isAcknowledged || acknowledging[a.id]}
                                             style={a.isAcknowledged ? { cursor: 'default' } : {}}
+                                            title={a.isAcknowledged ? 'You have already acknowledged this announcement' : 'Click to acknowledge'}
                                         >
                                             {acknowledging[a.id] ? (
                                                 <Loader2 size={12} className="spin" />
@@ -475,30 +490,35 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
 
                                         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                                             <MessageSquare size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
-                                            {a.comments.length} comment{a.comments.length !== 1 ? 's' : ''}
+                                            {commentCount} comment{commentCount !== 1 ? 's' : ''}
                                         </span>
                                     </div>
 
-                                    {/* Acknowledgments list */}
-                                    {a.acknowledgments && a.acknowledgments.length > 0 && (
+                                    {/* Publisher View: Acknowledgments list */}
+                                    {isPublisher && a.acknowledgments && a.acknowledgments.length > 0 && (
                                         <details style={{ marginTop: 12, fontSize: 12 }}>
                                             <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                                <UserCheck size={13} style={{ marginRight: 4, verticalAlign: -2, color: 'var(--status-active)' }} />
                                                 Acknowledged by {a.acknowledgments.length} user{a.acknowledgments.length !== 1 ? 's' : ''}
                                             </summary>
                                             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 150, overflowY: 'auto' }}>
-                                                {a.acknowledgments.map(ack => (
+                                                {a.acknowledgments.map((ack, idx) => (
                                                     <div
-                                                        key={ack.userId}
+                                                        key={ack.userId || idx}
                                                         style={{
                                                             display: 'flex',
                                                             justifyContent: 'space-between',
+                                                            alignItems: 'center',
                                                             padding: '4px 10px',
                                                             background: 'var(--bg-main)',
                                                             borderRadius: 6,
                                                             border: '1px solid var(--border)',
                                                         }}
                                                     >
-                                                        <span style={{ fontWeight: 500 }}>{ack.fullName}</span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ fontWeight: 500 }}>{ack.fullName}</span>
+                                                            {ack.role && <span className="badge badge-blue" style={{ fontSize: 9 }}>{ack.role}</span>}
+                                                        </div>
                                                         <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{fmtDateTime(ack.acknowledgedAt)}</span>
                                                     </div>
                                                 ))}
@@ -508,7 +528,7 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
 
                                     {/* Comments thread */}
                                     <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                                        {a.comments.map(c => (
+                                        {a.comments && a.comments.map(c => (
                                             <div
                                                 key={c.id}
                                                 style={{
@@ -537,46 +557,62 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                                                     {c.fullName.charAt(0).toUpperCase()}
                                                 </div>
                                                 <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, fontSize: 12 }}>
-                                                        {c.fullName}{' '}
-                                                        <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 11 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        <span style={{ fontWeight: 600, fontSize: 12 }}>
+                                                            {c.fullName}
+                                                        </span>
+                                                        {c.role && (
+                                                            <span className="badge badge-blue" style={{ fontSize: 9 }}>
+                                                                {c.role}
+                                                            </span>
+                                                        )}
+                                                        <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 11, marginLeft: 'auto' }}>
                                                             {fmtDateTime(c.createdAt)}
                                                         </span>
                                                     </div>
-                                                    <div style={{ marginTop: 2, lineHeight: 1.45, color: 'var(--text-primary)' }}>
+                                                    <div style={{ marginTop: 2, lineHeight: 1.45, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                                                         {c.content}
                                                     </div>
                                                 </div>
                                             </div>
                                         ))}
 
-                                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                                            <input
-                                                type="text"
-                                                placeholder="Write a comment or response..."
-                                                value={commentText[a.id] || ''}
-                                                onChange={e => setCommentText(prev => ({ ...prev, [a.id]: e.target.value }))}
-                                                onKeyDown={e => { if (e.key === 'Enter') handleComment(a.id); }}
-                                                style={{
-                                                    flex: 1,
-                                                    padding: '8px 12px',
-                                                    borderRadius: 8,
-                                                    border: '1px solid var(--border)',
-                                                    fontSize: 13,
-                                                    outline: 'none',
-                                                    fontFamily: 'inherit',
-                                                    background: 'var(--bg-main)',
-                                                    color: 'var(--text-primary)',
-                                                }}
-                                                disabled={sendingComment[a.id]}
-                                            />
-                                            <button
-                                                className="btn btn-primary btn-sm"
-                                                onClick={() => handleComment(a.id)}
-                                                disabled={!commentText[a.id]?.trim() || sendingComment[a.id]}
-                                            >
-                                                {sendingComment[a.id] ? <Loader2 size={12} className="spin" /> : <Send size={12} />}
-                                            </button>
+                                        {/* In-card Comment Form (max 500 characters) */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
+                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Write a comment or question (max 500 chars)..."
+                                                    value={commentText[a.id] || ''}
+                                                    maxLength={500}
+                                                    onChange={e => setCommentText(prev => ({ ...prev, [a.id]: e.target.value }))}
+                                                    onKeyDown={e => { if (e.key === 'Enter') handleComment(a.id); }}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '8px 12px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid var(--border)',
+                                                        fontSize: 13,
+                                                        outline: 'none',
+                                                        fontFamily: 'inherit',
+                                                        background: 'var(--bg-main)',
+                                                        color: 'var(--text-primary)',
+                                                    }}
+                                                    disabled={sendingComment[a.id]}
+                                                />
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    onClick={() => handleComment(a.id)}
+                                                    disabled={!commentText[a.id]?.trim() || sendingComment[a.id]}
+                                                >
+                                                    {sendingComment[a.id] ? <Loader2 size={12} className="spin" /> : <Send size={12} />}
+                                                </button>
+                                            </div>
+                                            {(commentText[a.id]?.length || 0) > 0 && (
+                                                <div style={{ alignSelf: 'flex-end', fontSize: 10, color: (commentText[a.id]?.length || 0) > 450 ? 'var(--status-failed)' : 'var(--text-muted)' }}>
+                                                    {commentText[a.id]?.length || 0}/500
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -586,11 +622,23 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
                 </div>
             )}
 
+            {/* Create Announcement Modal */}
             {showCreate && (
                 <CreateAnnouncementModal
                     onClose={() => setShowCreate(false)}
                     onCreated={() => {
                         setShowCreate(false);
+                        fetchAnnouncements();
+                    }}
+                />
+            )}
+
+            {/* Detail Announcement Modal */}
+            {selectedDetail && (
+                <AnnouncementDetailModal
+                    announcement={selectedDetail}
+                    onClose={() => setSelectedDetail(null)}
+                    onUpdated={() => {
                         fetchAnnouncements();
                     }}
                 />
@@ -865,7 +913,7 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                 </div>
             </div>
 
-            {/* Role Multi-Select (if Specific Roles is selected) */}
+            {/* Role Multi-Select */}
             {!isAllAudience && (
                 <div className="field" style={{ background: 'var(--bg-main)', padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, display: 'block' }}>
@@ -897,7 +945,7 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                 </div>
             )}
 
-            {/* Content Field with Rich Text formatting and Preview */}
+            {/* Content Field with formatting and preview */}
             <div className="field">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <label style={{ margin: 0, fontWeight: 600 }}>
@@ -1048,7 +1096,6 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
 
             {/* Attachment & Public View Option Row */}
             <div className="field-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 16, alignItems: 'center' }}>
-                {/* File Upload (PDF/JPG/PNG max 10MB) */}
                 <div className="field">
                     <label style={{ fontWeight: 600 }}>
                         Attachment <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(Optional, PDF/JPG/PNG, max 10MB)</span>
@@ -1092,7 +1139,6 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                     </div>
                 </div>
 
-                {/* Public View Checkbox */}
                 <div className="field" style={{ paddingTop: 18 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, margin: 0 }}>
                         <input
