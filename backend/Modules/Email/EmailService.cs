@@ -1,4 +1,4 @@
-﻿using MailKit.Net.Smtp;
+using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using Microsoft.Extensions.Options;
@@ -19,11 +19,13 @@ public class EmailService : IEmailService
 {
     private readonly SmtpSettings _smtpSettings;
     private readonly ILogger<EmailService> _logger;
+    private readonly string _frontendUrl;
 
-    public EmailService(IOptions<SmtpSettings> smtpSettings, ILogger<EmailService> logger)
+    public EmailService(IOptions<SmtpSettings> smtpSettings, ILogger<EmailService> logger, IConfiguration configuration)
     {
         _smtpSettings = smtpSettings.Value;
         _logger = logger;
+        _frontendUrl = configuration["AppSettings:FrontendUrl"] ?? "https://stars-two-chi.vercel.app";
     }
 
     public async Task SendWelcomeEmailAsync(string toEmail, string toName, string employeeNumber, string tempPassword)
@@ -45,7 +47,7 @@ public class EmailService : IEmailService
                     
                     <p><strong>Important:</strong> Please change your password after your first login for security purposes.</p>
                     
-                    <p>You can login at: <a href='http://localhost:5173' style='color: #00A99D;'>http://localhost:5173</a></p>
+                    <p>You can login at: <a href='{_frontendUrl}' style='color: #00A99D;'>{_frontendUrl}</a></p>
                     
                     <p>If you have any questions, please contact your manager or IT support.</p>
                     
@@ -174,7 +176,7 @@ public class EmailService : IEmailService
                     </div>
                     <p>This task has passed its deadline and requires immediate attention.</p>
                     <div style='text-align: center; margin: 30px 0;'>
-                        <a href='http://localhost:5173' style='background-color: #e74c3c; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;'>View Task</a>
+                        <a href='{_frontendUrl}' style='background-color: #e74c3c; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;'>View Task</a>
                     </div>
                     <p>Best regards,<br/>STARS System</p>
                     <hr style='border: none; border-top: 1px solid #eee; margin: 20px 0;'/>
@@ -190,11 +192,20 @@ public class EmailService : IEmailService
 
     private async Task SendEmailAsync(string toEmail, string subject, string htmlBody)
     {
+        if (string.IsNullOrWhiteSpace(_smtpSettings.Host) ||
+            string.IsNullOrWhiteSpace(_smtpSettings.Username) ||
+            string.IsNullOrWhiteSpace(_smtpSettings.Password) ||
+            _smtpSettings.Password.Contains("YOUR_SMTP_APP_PASSWORD"))
+        {
+            _logger.LogWarning("SMTP credentials are not configured or are placeholder. Skipped sending email to {Email}.", toEmail);
+            return;
+        }
+
         try
         {
             var message = new MimeMessage();
             message.From.Add(new MailboxAddress(_smtpSettings.FromName, _smtpSettings.FromEmail));
-            message.To.Add(new MailboxAddress("", toEmail)); // "" display name of MailboxAddress - empty | sent in two parts the Display Name (recipient sees in their inbox) and Email Address
+            message.To.Add(new MailboxAddress("", toEmail));
             message.Subject = subject;
 
             var bodyBuilder = new BodyBuilder
@@ -204,26 +215,18 @@ public class EmailService : IEmailService
             message.Body = bodyBuilder.ToMessageBody();
 
             using var client = new SmtpClient();
-
-            // For development purposes, accept all of the certificates
             client.ServerCertificateValidationCallback = (s, c, h, e) => true;
 
-            // Steps to send the email.
-                // 1. Connect to the mail server using Start TLS - Plain text to encrypted.
-                // 2. Authenticate with the username and password like logging in
-                // 3. Send the email message
-                // 4. Disconnect gracefully
             await client.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port, SecureSocketOptions.StartTls);
             await client.AuthenticateAsync(_smtpSettings.Username, _smtpSettings.Password);
             await client.SendAsync(message);
             await client.DisconnectAsync(true);
 
             _logger.LogInformation("Email sent successfully to {Email}", toEmail);
-
-        } catch (Exception ex)
+        }
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send email to {Email}", toEmail);
-            // Do not throw because email failure shouldn't break the main operation.
         }
     }
 }

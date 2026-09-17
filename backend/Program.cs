@@ -20,6 +20,31 @@ using Backend.Models.Enums;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.SetIsOriginAllowed(origin =>
+        {
+            if (string.IsNullOrEmpty(origin)) return false;
+            try
+            {
+                var uri = new Uri(origin);
+                return uri.Host == "localhost"
+                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        })
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi(options =>
 {
@@ -193,6 +218,7 @@ else
 // Get session settings for middleware
 var sessionSettings = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SessionSettings>>().Value;
 
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuditLogAccessLogging();
 app.UseAuthorization();
