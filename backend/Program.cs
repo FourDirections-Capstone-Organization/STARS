@@ -74,8 +74,31 @@ builder.Services.AddOpenApi(options =>
     });
 });
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("POSTGRESQLCONNSTR_DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("CUSTOMCONNSTR_DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    Console.WriteLine("[CRITICAL ERROR] No PostgreSQL ConnectionString found in Configuration or Environment Variables.");
+    throw new InvalidOperationException("CRITICAL: PostgreSQL connection string is missing. Please set 'ConnectionStrings__DefaultConnection' in Azure App Service Application Settings.");
+}
+
+try
+{
+    var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    Console.WriteLine($"[STARTUP] PostgreSQL Connection Configured -> Host: '{csb.Host}', Port: {csb.Port}, Database: '{csb.Database}', User: '{csb.Username}', SSL: {csb.SslMode}");
+}
+catch
+{
+    Console.WriteLine("[STARTUP] PostgreSQL Connection Configured (Raw string provided)");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // Configure settings
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
@@ -168,7 +191,17 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    db.Database.Migrate();
+    try
+    {
+        Console.WriteLine("[STARTUP] Applying database migrations...");
+        db.Database.Migrate();
+        Console.WriteLine("[STARTUP] Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[STARTUP ERROR] Database migration failed: {ex.Message}");
+        throw;
+    }
 
     // Seed default departments and positions
     var departmentService = scope.ServiceProvider.GetRequiredService<IDepartmentService>();
