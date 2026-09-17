@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import {
@@ -54,6 +54,7 @@ import TaskRecommendations from '../../components/TaskRecommendations/TaskRecomm
 import api from '../../api';
 import axios from 'axios';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
+import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskCharts from '../../components/TaskCharts/TaskCharts';
 import { BarChart2 } from 'lucide-react';
 
@@ -2235,12 +2236,18 @@ export default function EmployeeDashboard() {
                 />
 
                 {activeTab === 'dashboard' && (
-                    <DashboardTab
-                        tasks={tasks} user={user}
-                        onView={setViewingId} onUpdate={setUpdatingId}
-                        onGoTasks={() => setActiveTab('my-tasks')}
-                    />
+                    <>
+                        <div className="dashboard-content" style={{ paddingBottom: 0, marginBottom: -10 }}>
+                            <AnnouncementBanner onNavigateToAnnouncements={() => setActiveTab('announcements')} />
+                        </div>
+                        <DashboardTab
+                            tasks={tasks} user={user}
+                            onView={setViewingId} onUpdate={setUpdatingId}
+                            onGoTasks={() => setActiveTab('my-tasks')}
+                        />
+                    </>
                 )}
+
                 {activeTab === 'my-tasks' && (
                     <MyTasksTab
                         tasks={tasks} loading={tasksLoading} error={tasksError}

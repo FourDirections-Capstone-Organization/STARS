@@ -67,6 +67,7 @@ import api from '../../api';
 import axios from 'axios';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
+import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -6807,20 +6808,26 @@ export default function OpsAdminDashboard() {
                 />
 
                 {activeTab === 'dashboard' && (
-                    <DashboardTab
-                        dashboardData={dashboardData}
-                        dashboardEmployees={dashboardEmployees}
-                        dashboardDepartments={dashboardDepartments}
-                        dashboardLoading={dashboardLoading}
-                        dashboardError={dashboardError}
-                        filters={dashboardFilters}
-                        onFilterChange={setDashboardFilters}
-                        onClearFilters={handleDashboardClearFilters}
-                        onNewTask={() => { handleNavChange('tasks'); setTaskSubTab('create'); }}
-                        tasks={tasks}
-                        onViewTask={task => { setActiveTab('tasks'); setDetailTask(task); }}
-                    />
+                    <>
+                        <div className="dashboard-content" style={{ paddingBottom: 0, marginBottom: -10 }}>
+                            <AnnouncementBanner onNavigateToAnnouncements={() => handleNavChange('announcements')} />
+                        </div>
+                        <DashboardTab
+                            dashboardData={dashboardData}
+                            dashboardEmployees={dashboardEmployees}
+                            dashboardDepartments={dashboardDepartments}
+                            dashboardLoading={dashboardLoading}
+                            dashboardError={dashboardError}
+                            filters={dashboardFilters}
+                            onFilterChange={setDashboardFilters}
+                            onClearFilters={handleDashboardClearFilters}
+                            onNewTask={() => { handleNavChange('tasks'); setTaskSubTab('create'); }}
+                            tasks={tasks}
+                            onViewTask={task => { setActiveTab('tasks'); setDetailTask(task); }}
+                        />
+                    </>
                 )}
+
                 {activeTab === 'tasks' && (
                     <>
                         {detailTask ? (
@@ -6962,10 +6969,9 @@ export default function OpsAdminDashboard() {
                     </div>
                 )}
                 {activeTab === 'announcements' && (
-                    <div className="dashboard-content">
-                        <AnnouncementsTab canCreate={false} />
-                    </div>
+                    <AnnouncementsTab canCreate={true} />
                 )}
+
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
                         <div className="card">

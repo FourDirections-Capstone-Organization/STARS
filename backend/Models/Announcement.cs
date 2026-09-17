@@ -12,7 +12,7 @@ public class Announcement
     public string Title { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(5000)]
+    [MaxLength(10000)]
     public string Content { get; set; } = string.Empty;
 
     [MaxLength(500)]
@@ -23,6 +23,22 @@ public class Announcement
 
     public DateTime? ExpiryDate { get; set; }
 
+    [MaxLength(50)]
+    public string Priority { get; set; } = "Normal";
+
+    public bool IsPublic { get; set; } = false;
+
+    [MaxLength(255)]
+    public string? AttachmentFileName { get; set; }
+
+    [MaxLength(500)]
+    public string? AttachmentFilePath { get; set; }
+
+    [MaxLength(100)]
+    public string? AttachmentContentType { get; set; }
+
+    public long? AttachmentSizeBytes { get; set; }
+
     public Guid CreatedById { get; set; }
     public User? CreatedBy { get; set; }
 
@@ -30,3 +46,4 @@ public class Announcement
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+

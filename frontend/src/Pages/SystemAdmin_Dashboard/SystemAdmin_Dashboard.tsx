@@ -66,6 +66,7 @@ import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
 import { ReportsTab } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import TaskManager from '../../components/TaskManager/TaskManager';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
+import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import api from '../../api';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
@@ -3204,21 +3205,27 @@ export default function Dashboard() {
                 )}
 
                 {activeTab === 'dashboard' && (
-                    <DashboardTab
-                        employees={employees}
-                        recentEmployees={recentEmployees}
-                        activityLogs={activityLogs}
-                        loading={empLoading}
-                        onSelectEmployee={emp => { setEmpModalEditMode(false); setSelectedEmployee(emp); }}
-                        onEditEmployee={emp => { setEmpModalEditMode(true); setSelectedEmployee(emp); }}
-                        onViewAll={() => { handleNavChange('employees'); setSelectedPanelEmployee(null); }}
-                        onAddEmployee={() => setShowAddModal(true)}
-                        rolesCount={rolesList.length}
-                        activityLogPage={activityLogPage}
-                        activityLogTotalPages={activityLogTotalPages}
-                        onActivityLogPageChange={fetchActivityLogs}
-                    />
+                    <>
+                        <div className="dashboard-content" style={{ paddingBottom: 0, marginBottom: -10 }}>
+                            <AnnouncementBanner onNavigateToAnnouncements={() => handleNavChange('announcements')} />
+                        </div>
+                        <DashboardTab
+                            employees={employees}
+                            recentEmployees={recentEmployees}
+                            activityLogs={activityLogs}
+                            loading={empLoading}
+                            onSelectEmployee={emp => { setEmpModalEditMode(false); setSelectedEmployee(emp); }}
+                            onEditEmployee={emp => { setEmpModalEditMode(true); setSelectedEmployee(emp); }}
+                            onViewAll={() => { handleNavChange('employees'); setSelectedPanelEmployee(null); }}
+                            onAddEmployee={() => setShowAddModal(true)}
+                            rolesCount={rolesList.length}
+                            activityLogPage={activityLogPage}
+                            activityLogTotalPages={activityLogTotalPages}
+                            onActivityLogPageChange={fetchActivityLogs}
+                        />
+                    </>
                 )}
+
 
                 {activeTab === 'employees' && (
                     selectedPanelEmployee ? (

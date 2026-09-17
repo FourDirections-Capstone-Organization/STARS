@@ -23,7 +23,7 @@ public class AnnouncementController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
-    public async Task<IActionResult> Create([FromBody] CreateAnnouncementDTO dto)
+    public async Task<IActionResult> Create([FromForm] CreateAnnouncementDTO dto)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var creatorId))
@@ -53,6 +53,16 @@ public class AnnouncementController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:guid}/attachment")]
+    public async Task<IActionResult> DownloadAttachment(Guid id)
+    {
+        var attachment = await _announcementService.GetAttachmentAsync(id);
+        if (attachment is null)
+            return NotFound(ApiResponseDTO<object>.Failure("Attachment not found"));
+
+        return File(attachment.Value.FileBytes, attachment.Value.ContentType, attachment.Value.FileName);
+    }
+
     [HttpPost("{id:guid}/acknowledge")]
     public async Task<IActionResult> Acknowledge(Guid id)
     {
@@ -77,3 +87,4 @@ public class AnnouncementController : ControllerBase
         return Ok(result);
     }
 }
+

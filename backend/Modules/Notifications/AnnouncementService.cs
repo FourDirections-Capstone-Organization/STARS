@@ -12,12 +12,24 @@ public class AnnouncementService : IAnnouncementService
     private readonly AppDbContext _db;
     private readonly INotificationService _notificationService;
     private readonly IAuditLogService _auditLogService;
+    private readonly ILogger<AnnouncementService> _logger;
 
-    public AnnouncementService(AppDbContext db, INotificationService notificationService, IAuditLogService auditLogService)
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf", ".jpg", ".jpeg", ".png"
+    };
+    private const long MaxAttachmentSizeBytes = 10 * 1024 * 1024; // 10MB
+
+    public AnnouncementService(
+        AppDbContext db,
+        INotificationService notificationService,
+        IAuditLogService auditLogService,
+        ILogger<AnnouncementService> logger)
     {
         _db = db;
         _notificationService = notificationService;
         _auditLogService = auditLogService;
+        _logger = logger;
     }
 
     public async Task<ApiResponseDTO<AnnouncementResponseDTO>> CreateAsync(CreateAnnouncementDTO dto, Guid creatorId)
@@ -29,16 +41,76 @@ public class AnnouncementService : IAnnouncementService
         if (creator.Role != UserRole.Coordinator && creator.Role != UserRole.Manager)
             return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Only Coordinators and Managers can publish announcements");
 
+        if (string.IsNullOrWhiteSpace(dto.Title))
+            return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Announcement title is required");
+
+        if (string.IsNullOrWhiteSpace(dto.Content))
+            return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Announcement content is required");
+
         if (dto.ExpiryDate.HasValue && dto.ExpiryDate.Value < dto.EffectiveDate)
             return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Expiry date must not precede effective date");
 
+        var announcementId = Guid.NewGuid();
+        string? attachmentFileName = null;
+        string? attachmentFilePath = null;
+        string? attachmentContentType = null;
+        long? attachmentSizeBytes = null;
+
+        if (dto.Attachment is not null && dto.Attachment.Length > 0)
+        {
+            if (dto.Attachment.Length > MaxAttachmentSizeBytes)
+                return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Attachment size cannot exceed 10MB");
+
+            var ext = Path.GetExtension(dto.Attachment.FileName);
+            if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
+                return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Only PDF, JPG, and PNG files are allowed as attachments");
+
+            try
+            {
+                var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "announcements", announcementId.ToString());
+                if (!Directory.Exists(uploadDir))
+                    Directory.CreateDirectory(uploadDir);
+
+                var uniqueFileName = $"{Guid.NewGuid()}{ext}";
+                var fullFilePath = Path.Combine(uploadDir, uniqueFileName);
+
+                using (var stream = new FileStream(fullFilePath, FileMode.Create))
+                {
+                    await dto.Attachment.CopyToAsync(stream);
+                }
+
+                attachmentFileName = Path.GetFileName(dto.Attachment.FileName);
+                attachmentFilePath = fullFilePath;
+                attachmentContentType = dto.Attachment.ContentType ?? "application/octet-stream";
+                attachmentSizeBytes = dto.Attachment.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save announcement attachment");
+                return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Failed to upload attachment file");
+            }
+        }
+
+        var priority = string.IsNullOrWhiteSpace(dto.Priority) ? "Normal" : dto.Priority.Trim();
+        if (priority != "Normal" && priority != "Important" && priority != "Urgent")
+        {
+            priority = "Normal";
+        }
+
         var announcement = new Announcement
         {
+            Id = announcementId,
             Title = dto.Title.Trim(),
             Content = dto.Content.Trim(),
             TargetRoles = dto.TargetRoles?.Trim(),
             EffectiveDate = DateTime.SpecifyKind(dto.EffectiveDate, DateTimeKind.Utc),
             ExpiryDate = dto.ExpiryDate.HasValue ? DateTime.SpecifyKind(dto.ExpiryDate.Value, DateTimeKind.Utc) : null,
+            Priority = priority,
+            IsPublic = dto.IsPublic,
+            AttachmentFileName = attachmentFileName,
+            AttachmentFilePath = attachmentFilePath,
+            AttachmentContentType = attachmentContentType,
+            AttachmentSizeBytes = attachmentSizeBytes,
             CreatedById = creatorId,
             IsPublished = true,
             CreatedAt = DateTime.UtcNow
@@ -47,20 +119,27 @@ public class AnnouncementService : IAnnouncementService
         _db.Announcements.Add(announcement);
         await _db.SaveChangesAsync();
 
-        var recipients = await GetTargetUserIds(dto.TargetRoles);
+        // 6. Targeted users receive in-app notifications
+        var recipients = await GetTargetUserIds(dto.TargetRoles, dto.IsPublic);
         if (recipients.Count > 0)
         {
-            var title = announcement.Title.Length > 100 ? announcement.Title[..100] + "..." : announcement.Title;
+            var previewTitle = announcement.Title.Length > 100 ? announcement.Title[..100] + "..." : announcement.Title;
+            var notificationTitle = priority == "Urgent" ? $"[URGENT] {previewTitle}" : (priority == "Important" ? $"[IMPORTANT] {previewTitle}" : $"Announcement: {previewTitle}");
             await _notificationService.SendBulkNotificationAsync(
-                recipients, NotificationType.TaskAssigned, "New Announcement",
-                $"New announcement: {title}", null);
+                recipients, NotificationType.TaskAssigned, notificationTitle,
+                $"{announcement.Title}", null);
         }
 
         var creatorName = $"{creator.FirstName} {creator.LastName}".Trim();
+        var targetAudienceLabel = dto.IsPublic ? "Public (All Users)" : (string.IsNullOrWhiteSpace(dto.TargetRoles) ? "All Users" : dto.TargetRoles);
+        
+        // 7. Audit Log entry
         await _auditLogService.LogAsync(creatorId, AuditActionType.Create, "Announcement", announcement.Id, null,
-            $"Announcement published: '{announcement.Title}' by {creatorName}. Target: {dto.TargetRoles ?? "All Users"}", "Announcements");
+            $"Announcement published: '{announcement.Title}' by {creatorName}. Priority: {priority}, Target: {targetAudienceLabel}", "Announcements");
 
-        return ApiResponseDTO<AnnouncementResponseDTO>.Success(MapToDTO(announcement, creatorName, creator.Role.ToString(), false, 0, new(), new()), "Announcement published successfully");
+        return ApiResponseDTO<AnnouncementResponseDTO>.Success(
+            MapToDTO(announcement, creatorName, creator.Role.ToString(), false, 0, new(), new()),
+            "Announcement published successfully");
     }
 
     public async Task<ApiResponseDTO<List<AnnouncementResponseDTO>>> GetActiveAsync(string? userRole, Guid? currentUserId)
@@ -72,14 +151,19 @@ public class AnnouncementService : IAnnouncementService
             .Where(a => a.IsPublished && a.EffectiveDate <= now)
             .Where(a => !a.ExpiryDate.HasValue || a.ExpiryDate.Value >= now);
 
-        if (!string.IsNullOrEmpty(userRole))
+        if (!string.IsNullOrEmpty(userRole) && userRole != "Manager" && userRole != "Coordinator")
         {
-            query = query.Where(a => string.IsNullOrEmpty(a.TargetRoles)
-                || a.TargetRoles!.Contains("All")
-                || a.TargetRoles!.Contains(userRole));
+            // Regular employees only see if IsPublic OR TargetRoles contains role OR TargetRoles contains "All" or empty
+            query = query.Where(a => a.IsPublic
+                || string.IsNullOrEmpty(a.TargetRoles)
+                || a.TargetRoles.Contains("All")
+                || a.TargetRoles.Contains(userRole));
         }
 
-        var announcements = await query.OrderByDescending(a => a.CreatedAt).ToListAsync();
+        var announcements = await query
+            .OrderByDescending(a => a.Priority == "Urgent" ? 3 : (a.Priority == "Important" ? 2 : 1))
+            .ThenByDescending(a => a.CreatedAt)
+            .ToListAsync();
 
         var result = new List<AnnouncementResponseDTO>();
         foreach (var a in announcements)
@@ -122,7 +206,10 @@ public class AnnouncementService : IAnnouncementService
 
     public async Task<ApiResponseDTO<List<AnnouncementResponseDTO>>> GetAllAsync()
     {
-        var announcements = await _db.Announcements.Include(a => a.CreatedBy).OrderByDescending(a => a.CreatedAt).ToListAsync();
+        var announcements = await _db.Announcements
+            .Include(a => a.CreatedBy)
+            .OrderByDescending(a => a.CreatedAt)
+            .ToListAsync();
 
         var result = announcements.Select(a =>
         {
@@ -191,9 +278,25 @@ public class AnnouncementService : IAnnouncementService
         }, "Comment added");
     }
 
-    private async Task<List<Guid>> GetTargetUserIds(string? targetRoles)
+    public async Task<(byte[] FileBytes, string ContentType, string FileName)?> GetAttachmentAsync(Guid announcementId)
     {
-        if (string.IsNullOrEmpty(targetRoles) || targetRoles.Contains("All"))
+        var announcement = await _db.Announcements.FindAsync(announcementId);
+        if (announcement is null || string.IsNullOrEmpty(announcement.AttachmentFilePath))
+            return null;
+
+        if (!File.Exists(announcement.AttachmentFilePath))
+            return null;
+
+        var bytes = await File.ReadAllBytesAsync(announcement.AttachmentFilePath);
+        var contentType = announcement.AttachmentContentType ?? "application/octet-stream";
+        var fileName = announcement.AttachmentFileName ?? "attachment";
+
+        return (bytes, contentType, fileName);
+    }
+
+    private async Task<List<Guid>> GetTargetUserIds(string? targetRoles, bool isPublic)
+    {
+        if (isPublic || string.IsNullOrEmpty(targetRoles) || targetRoles.Contains("All"))
             return await _db.Users.Where(u => u.IsActive && !u.IsDeactivated).Select(u => u.Id).ToListAsync();
 
         var roles = targetRoles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -215,6 +318,11 @@ public class AnnouncementService : IAnnouncementService
             TargetRoles = a.TargetRoles,
             EffectiveDate = a.EffectiveDate,
             ExpiryDate = a.ExpiryDate,
+            Priority = a.Priority ?? "Normal",
+            IsPublic = a.IsPublic,
+            AttachmentFileName = a.AttachmentFileName,
+            AttachmentContentType = a.AttachmentContentType,
+            AttachmentSizeBytes = a.AttachmentSizeBytes,
             CreatedByName = creatorName,
             CreatedByRole = creatorRole,
             CreatedAt = a.CreatedAt,
@@ -225,3 +333,4 @@ public class AnnouncementService : IAnnouncementService
         };
     }
 }
+

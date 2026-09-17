@@ -10,4 +10,6 @@ public interface IAnnouncementService
     Task<ApiResponseDTO<List<AnnouncementResponseDTO>>> GetAllAsync();
     Task<ApiResponseDTO<bool>> AcknowledgeAsync(Guid announcementId, Guid userId);
     Task<ApiResponseDTO<CommentDTO>> AddCommentAsync(Guid announcementId, Guid userId, string content);
+    Task<(byte[] FileBytes, string ContentType, string FileName)?> GetAttachmentAsync(Guid announcementId);
 }
+
