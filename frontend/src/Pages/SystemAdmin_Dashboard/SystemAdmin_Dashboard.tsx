@@ -63,6 +63,7 @@ import Sidebar from '../../components/Sidebar/Sidebar';
 import StatusCard from '../../components/StatusCard/StatusCard';
 import ActionButton from '../../components/ActionButton/ActionButton';
 import DataTable, { ActionsDropdown } from '../../components/ui/DataTable';
+import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
 import { ReportsTab } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
@@ -3449,29 +3450,21 @@ export default function Dashboard() {
                                         ))}
                                     </select>
 
-                                    {/* Filter: Date Range — From */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <label style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>From</label>
-                                        <input
-                                            type="date"
-                                            value={activityLogDateFrom}
-                                            onChange={e => setActivityLogDateFrom(e.target.value)}
-                                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 140, boxSizing: 'border-box', outline: 'none' }}
-                                            aria-label="Date from"
-                                        />
-                                    </div>
-
-                                    {/* Filter: Date Range — To */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <label style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To</label>
-                                        <input
-                                            type="date"
-                                            value={activityLogDateTo}
-                                            onChange={e => setActivityLogDateTo(e.target.value)}
-                                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 140, boxSizing: 'border-box', outline: 'none' }}
-                                            aria-label="Date to"
-                                        />
-                                    </div>
+                                    {/* Filter: Single Unified Date Range Calendar Filter */}
+                                    <DateRangePicker
+                                        startDate={activityLogDateFrom}
+                                        endDate={activityLogDateTo}
+                                        onChange={(start, end) => {
+                                            setActivityLogDateFrom(start);
+                                            setActivityLogDateTo(end);
+                                        }}
+                                        onClear={() => {
+                                            setActivityLogDateFrom('');
+                                            setActivityLogDateTo('');
+                                        }}
+                                        placeholder="Filter by date range…"
+                                        ariaLabel="Filter audit logs by date range"
+                                    />
 
                                     {/* Clear all filters */}
                                     {(activityLogSearch || activityLogEmployee || activityLogType || activityLogDateFrom || activityLogDateTo) && (
