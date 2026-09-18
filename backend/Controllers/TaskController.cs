@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Backend.Data;
@@ -52,7 +52,8 @@ public class TaskController : ControllerBase
         [FromQuery] Guid? assignedToUserId = null,
         [FromQuery] Guid? departmentId = null,
         [FromQuery] string? search = null,
-        [FromQuery] Models.Enums.TaskStatus? excludeStatus = null)
+        [FromQuery] Models.Enums.TaskStatus? excludeStatus = null,
+        [FromQuery] string? excludeStatuses = null)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
@@ -70,10 +71,24 @@ public class TaskController : ControllerBase
             requestUserDepartmentId = user?.DepartmentId;
         }
 
+        List<Models.Enums.TaskStatus>? excludedList = null;
+        if (!string.IsNullOrEmpty(excludeStatuses))
+        {
+            excludedList = new List<Models.Enums.TaskStatus>();
+            var parts = excludeStatuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var part in parts)
+            {
+                if (int.TryParse(part, out var intVal) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), intVal))
+                    excludedList.Add((Models.Enums.TaskStatus)intVal);
+                else if (Enum.TryParse<Models.Enums.TaskStatus>(part, true, out var enumVal))
+                    excludedList.Add(enumVal);
+            }
+        }
+
         var result = await _taskService.GetAllAsync(
             requestUserId, requestUserRole, requestUserDepartmentId,
             pageNumber, pageSize,
-            status, priority, classification, assignedToUserId, departmentId, search, excludeStatus);
+            status, priority, classification, assignedToUserId, departmentId, search, excludeStatus, excludedList);
         return Ok(result);
     }
 

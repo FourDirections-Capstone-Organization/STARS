@@ -5713,7 +5713,7 @@ export default function OpsAdminDashboard() {
         project: t.taskCategory,
         assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
         priority: t.priority as TMTask['priority'],
-        status: ({ Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', 'In Progress': 'In progress', 'Pending Admin Review': 'In review', Done: 'Done', Completed: 'Done', Overdue: 'In progress' } as Record<string, TMTask['status']>)[t.taskStatus] || 'Backlog',
+        status: ({ Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', 'In Progress': 'In progress', 'Pending Admin Review': 'In review', Done: 'Done', Completed: 'Done', 'On Hold': 'On hold', Cancelled: 'Cancelled', Overdue: 'In progress' } as Record<string, TMTask['status']>)[t.taskStatus] || 'Backlog',
         dueDate: t.dueAt || undefined,
         progress: t.taskStatus === 'Completed' || t.taskStatus === 'Done' ? 100 : t.taskStatus === 'In Progress' ? 50 : t.taskStatus === 'Pending Admin Review' ? 80 : t.taskStatus === 'Assigned' || t.taskStatus === 'Pending' ? 10 : 0,
         isArchived: false,
@@ -6132,12 +6132,12 @@ export default function OpsAdminDashboard() {
             setLoadingTasks(true);
         }
         try {
-            const statusParam = taskTabRef.current === 'completed' ? `&status=3` : ``;
-            // The Active tab filters out Done tasks client-side (TaskManager tabTasks),
-            // so exclude Completed (status 3) server-side BEFORE pagination. Otherwise a
-            // Completed task landing on a page gets dropped client-side and that page
+            const statusParam = taskTabRef.current === 'completed' ? `&status=3` : taskTabRef.current === 'bin' ? `&status=5` : ``;
+            // The Active tab filters out Done and Cancelled tasks client-side (TaskManager tabTasks),
+            // so exclude Completed (status 3) and Cancelled (status 5) server-side BEFORE pagination. Otherwise a
+            // Completed or Cancelled task landing on a page gets dropped client-side and that page
             // shows fewer rows than the page size.
-            const excludeStatusParam = taskTabRef.current === 'active' ? `&excludeStatus=3` : ``;
+            const excludeStatusParam = taskTabRef.current === 'active' ? `&excludeStatuses=3,5` : ``;
             // Dropdown filters are sent server-side so the server filters AND paginates
             // consistently — each page then shows the same number of matching rows.
             const prioParam = taskFilterPrioRef.current ? `&priority=${encodeURIComponent(taskFilterPrioRef.current)}` : ``;

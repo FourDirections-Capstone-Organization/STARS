@@ -31,6 +31,7 @@ const COLOR_STATUS: Record<string, string> = {
     completed:      '#059669',
     done:           '#059669',
     overdue:        '#DC2626',
+    cancelled:      '#94A3B8',
 };
 
 const COLOR_PRIORITY: Record<string, string> = {
@@ -47,6 +48,7 @@ const STATUS_LABEL: Record<string, string> = {
     completed:      'Completed',
     done:           'Done',
     overdue:        'Overdue',
+    cancelled:      'Cancelled',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,6 +59,7 @@ const effectiveStatus = (t: ChartTask): string => {
         t.status !== 'done' &&
         t.status !== 'pending-review' &&
         t.status !== 'assigned' &&
+        t.status !== 'cancelled' &&
         !!t.deadline &&
         new Date(t.deadline + 'T00:00:00') < new Date();
     return isOverdue ? 'overdue' : t.status;

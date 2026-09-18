@@ -76,7 +76,7 @@ const getAccountIdFromToken = (): string => {
 // --- Types --------------------------------------------------------------------
 
 type Priority = 'high' | 'medium' | 'low';
-type TaskStatus = 'pending' | 'assigned' | 'in-progress' | 'pending-review' | 'done' | 'completed' | 'on-hold' | 'overdue';
+type TaskStatus = 'pending' | 'assigned' | 'in-progress' | 'pending-review' | 'done' | 'completed' | 'on-hold' | 'overdue' | 'cancelled';
 type NavTab = 'dashboard' | 'my-tasks' | 'task-progress-review' | 'profile' | 'activity_logs' | 'announcements' | 'notifications';
 
 interface Task {
@@ -166,11 +166,11 @@ const dtoToTask = (dto: TaskResponseDTO): Task => {
     const statusMap: Record<string, TaskStatus> = {
         Draft: 'pending', Pending: 'pending', Assigned: 'assigned',
         'In Progress': 'in-progress', 'Pending Admin Review': 'pending-review', Done: 'done', Completed: 'completed',
-        'On Hold': 'on-hold',
+        'On Hold': 'on-hold', Cancelled: 'cancelled',
     };
     const status: TaskStatus = statusMap[statusStr] ?? 'pending';
     const defaultProgress: Record<TaskStatus, number> = {
-        pending: 0, assigned: 0, 'in-progress': 50, 'pending-review': 90, done: 90, completed: 100, overdue: 0,
+        pending: 0, assigned: 0, 'in-progress': 50, 'pending-review': 90, done: 90, completed: 100, overdue: 0, cancelled: 0,
     };
     return {
         id: taskId,
@@ -250,7 +250,7 @@ const renderChanges = (oldValue?: string | null, newValue?: string | null) => {
 };
 
 const isEffectivelyOverdue = (t: Task): boolean =>
-    t.status !== 'completed' && t.status !== 'done' && t.status !== 'pending-review' && t.status !== 'assigned' && t.status !== 'on-hold' && !!t.deadline && new Date(t.deadline + 'T00:00:00') < new Date();
+    t.status !== 'completed' && t.status !== 'done' && t.status !== 'pending-review' && t.status !== 'assigned' && t.status !== 'on-hold' && t.status !== 'cancelled' && !!t.deadline && new Date(t.deadline + 'T00:00:00') < new Date();
 
 const effectiveStatus = (t: Task): TaskStatus =>
     isEffectivelyOverdue(t) ? 'overdue' : t.status;
@@ -287,6 +287,7 @@ const statusMeta: Record<string, { label: string; cls: string; icon: React.React
     completed: { label: 'Completed', cls: 'badge-green', icon: <CheckCircle2 size={11} /> },
     'on-hold': { label: 'On Hold', cls: 'badge-gray', icon: <PauseCircle size={11} /> },
     overdue: { label: 'Overdue', cls: 'badge-red', icon: <AlertCircle size={11} /> },
+    cancelled: { label: 'Cancelled', cls: 'badge-gray', icon: <AlertCircle size={11} /> },
 };
 
 const FSM_EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
@@ -296,6 +297,7 @@ const FSM_EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
     'on-hold': [],
     done: [],
     completed: [],
+    cancelled: [],
 };
 
 const priorityMeta: Record<Priority, { cls: string; bar: string }> = {
@@ -776,16 +778,17 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     const URGENT_PAGE_SIZE = 6;
     const PROGRESS_PAGE_SIZE = 8;
 
-    const total = tasks.length;
-    const done = tasks.filter(t => t.status === 'completed').length;
-    const inProg = tasks.filter(t => t.status === 'in-progress').length;
-    const overdue = tasks.filter(t => effectiveStatus(t) === 'overdue').length;
+    const activeAndCompletedTasks = tasks.filter(t => t.status !== 'cancelled');
+    const total = activeAndCompletedTasks.length;
+    const done = activeAndCompletedTasks.filter(t => t.status === 'completed').length;
+    const inProg = activeAndCompletedTasks.filter(t => t.status === 'in-progress').length;
+    const overdue = activeAndCompletedTasks.filter(t => effectiveStatus(t) === 'overdue').length;
     const pct = total ? Math.round(done / total * 100) : 0;
     const firstName = user.fullName ? user.fullName.split(' ')[0] : 'Employee';
     const initials = getInitials(user.fullName);
 
     // My Progress - always newest first, searchable + status filter, paginated.
-    const progressSource = [...tasks].sort((a, b) =>
+    const progressSource = [...tasks.filter(t => t.status !== 'cancelled')].sort((a, b) =>
         (b.createdAt || '').localeCompare(a.createdAt || ''));
     const progressFiltered = progressSource
         .filter(t => !progressSearch || t.name.toLowerCase().includes(progressSearch.toLowerCase()))
@@ -794,9 +797,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     const safeProgressPage = Math.min(progressPage, progressTotalPages);
     const progressItems = progressFiltered.slice((safeProgressPage - 1) * PROGRESS_PAGE_SIZE, safeProgressPage * PROGRESS_PAGE_SIZE);
 
-    // High Priority - not completed, searchable + status filter, paginated.
+    // High Priority - not completed or cancelled, searchable + status filter, paginated.
     const urgentFiltered = tasks
-        .filter(t => t.priority === 'high' && t.status !== 'completed')
+        .filter(t => t.priority === 'high' && t.status !== 'completed' && t.status !== 'cancelled')
         .filter(t => !urgentSearch || t.name.toLowerCase().includes(urgentSearch.toLowerCase()))
         .filter(t => !urgentStatus || effectiveStatus(t) === urgentStatus);
     const urgentTotalPages = Math.max(1, Math.ceil(urgentFiltered.length / URGENT_PAGE_SIZE));
@@ -991,7 +994,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
     const PAGE_SIZE = 9;
 
     const filters: { key: 'all' | TaskStatus; label: string; count: number }[] = [
-        { key: 'all', label: 'All', count: tasks.length },
+        { key: 'all', label: 'All', count: tasks.filter(t => t.status !== 'cancelled').length },
         { key: 'pending', label: 'Pending', count: tasks.filter(t => t.status === 'pending').length },
         { key: 'in-progress', label: 'In Progress', count: tasks.filter(t => t.status === 'in-progress').length },
         { key: 'completed', label: 'Completed', count: tasks.filter(t => t.status === 'completed').length },
@@ -999,7 +1002,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
     ];
 
     const baseFiltered = filter === 'all'
-        ? tasks
+        ? tasks.filter(t => t.status !== 'cancelled')
         : filter === 'overdue'
             ? tasks.filter(t => effectiveStatus(t) === 'overdue')
             : tasks.filter(t => t.status === filter);

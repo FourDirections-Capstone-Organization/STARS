@@ -165,7 +165,8 @@ public class TaskService : ITaskService
         Guid? assignedToUserId = null,
         Guid? departmentId = null,
         string? search = null,
-        Models.Enums.TaskStatus? excludeStatus = null)
+        Models.Enums.TaskStatus? excludeStatus = null,
+        List<Models.Enums.TaskStatus>? excludeStatuses = null)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -219,12 +220,14 @@ public class TaskService : ITaskService
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
 
-        // The "Active" tab shows every non-completed status, so the caller can pass
-        // excludeStatus to drop a status (e.g. Completed) from the result BEFORE
+        // The "Active" tab shows every non-completed and non-cancelled status, so the caller can pass
+        // excludeStatus or excludeStatuses to drop statuses (e.g. Completed, Cancelled) from the result BEFORE
         // pagination. This keeps server pages consistent with the client-side
-        // Active-tab filter — otherwise a Completed task landing mid-list silently
+        // Active-tab filter — otherwise a Completed/Cancelled task landing mid-list silently
         // shrinks that page's visible row count.
-        if (excludeStatus.HasValue)
+        if (excludeStatuses != null && excludeStatuses.Any())
+            query = query.Where(t => !excludeStatuses.Contains(t.Status));
+        else if (excludeStatus.HasValue)
             query = query.Where(t => t.Status != excludeStatus.Value);
 
         if (priority.HasValue)

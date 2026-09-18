@@ -12,7 +12,7 @@ export interface TMTask {
     project?: string;
     assignee?: { id: string; name: string };
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
-    status: 'Backlog' | 'To do' | 'In progress' | 'In review' | 'Done';
+    status: 'Backlog' | 'To do' | 'In progress' | 'In review' | 'Done' | 'Cancelled' | 'On hold';
     dueDate?: string;
     startDate?: string;
     progress: number;
@@ -69,7 +69,7 @@ interface TMProps {
 const PRIORITIES: TMTask['priority'][] = ['Urgent', 'High', 'Medium', 'Low'];
 const PRIO_COLORS: Record<string, string> = { Urgent: '#dc2626', High: '#ea580c', Medium: '#d97706', Low: '#2563eb' };
 const PRIO_BG: Record<string, string> = { Urgent: '#fef2f2', High: '#fff7ed', Medium: '#fffbeb', Low: '#eff6ff' };
-const STATUS_DOT: Record<string, string> = { Backlog: '#94a3b8', 'To do': '#3b82f6', 'In progress': '#16a34a', 'In review': '#d97706', Done: '#94a3b8' };
+const STATUS_DOT: Record<string, string> = { Backlog: '#94a3b8', 'To do': '#3b82f6', 'In progress': '#16a34a', 'In review': '#d97706', Done: '#059669', Cancelled: '#94a3b8', 'On hold': '#d97706' };
 const ASSIGNEE_COLORS = ['#4318ff', '#059669', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#c026d3'];
 const getAc = (n: string) => ASSIGNEE_COLORS[n.length % ASSIGNEE_COLORS.length];
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
@@ -164,9 +164,9 @@ export default function TaskManager({
     };
 
     const tabTasks = useMemo(() => {
-        if (tab === 'active') return tasks.filter(t => t.status !== 'Done' && !t.isArchived && !t.isDeleted);
+        if (tab === 'active') return tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted);
         if (tab === 'completed') return tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted);
-        return tasks.filter(t => t.isArchived || t.isDeleted);
+        return tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled');
     }, [tasks, tab]);
 
     const filtered = useMemo(() => {
@@ -183,7 +183,7 @@ export default function TaskManager({
     const paginated = serverPagination ? filtered : filtered.slice((page - 1) * 8, page * 8);
     const totalInProgress = summary?.inProgress ?? tasks.filter(t => t.status === 'In progress' && !t.isArchived && !t.isDeleted).length;
     const totalDone = summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length;
-    const totalOverdue = summary?.overdue ?? tasks.filter(t => t.status !== 'Done' && !t.isArchived && !t.isDeleted && t.dueDate).filter(t => { try { return new Date(t.dueDate!) < new Date(); } catch { return false; } }).length;
+    const totalOverdue = summary?.overdue ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted && t.dueDate).filter(t => { try { return new Date(t.dueDate!) < new Date(); } catch { return false; } }).length;
     const activeTotal = summary?.active ?? tabTasks.length;
     const completionRate = summary ? (activeTotal + totalDone > 0 ? Math.round(totalDone / (activeTotal + totalDone) * 100) : 0) : (tasks.length ? Math.round(totalDone / tasks.length * 100) : 0);
 
@@ -206,7 +206,7 @@ export default function TaskManager({
         { label: 'Rate', value: `${completionRate}%`, icon: <BarChart3 size={18} />, variant: 'success' as const, subtext: 'Completion rate' },
     ] : [
         { label: 'Archived', value: tabTasks.filter(t => t.isArchived).length, icon: <Archive size={18} />, variant: 'warning' as const, subtext: 'Archived tasks' },
-        { label: 'Deleted', value: tabTasks.filter(t => t.isDeleted).length, icon: <Trash2 size={18} />, variant: 'danger' as const, subtext: 'Deleted tasks' },
+        { label: 'Cancelled', value: tabTasks.filter(t => t.status === 'Cancelled').length, icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: 'Cancelled tasks' },
         { label: 'Total', value: tabTasks.length, icon: <ClipboardList size={18} />, variant: 'teal' as const, subtext: 'In bin' },
     ];
 
@@ -219,9 +219,9 @@ export default function TaskManager({
             </div>
             <DataTable
                 tabs={[
-                    { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && !t.isArchived && !t.isDeleted).length },
+                    { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
                     { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
-                    { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted).length },
+                    { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
                 ]}
                 activeTab={tab}
                 onTabChange={handleTabChange}
