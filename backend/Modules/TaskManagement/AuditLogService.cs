@@ -31,15 +31,20 @@ public class AuditLogService : IAuditLogService
     {
         try
         {
+            var safeDesc = string.IsNullOrEmpty(description) ? string.Empty : (description.Length > 500 ? description[..497] + "..." : description);
+            var safeEntity = string.IsNullOrEmpty(targetEntity) ? "Unknown" : (targetEntity.Length > 100 ? targetEntity[..100] : targetEntity);
+            var safeModule = string.IsNullOrEmpty(module) ? "General" : (module.Length > 100 ? module[..100] : module);
+            var safeIp = string.IsNullOrEmpty(ipAddress) ? null : (ipAddress.Length > 50 ? ipAddress[..50] : ipAddress);
+
             var entry = new AuditLog
             {
                 UserId = userId,
                 ActionType = actionType,
-                TargetEntity = targetEntity,
+                TargetEntity = safeEntity,
                 TargetEntityId = targetEntityId,
-                IpAddress = ipAddress,
-                Description = description,
-                Module = module,
+                IpAddress = safeIp,
+                Description = safeDesc,
+                Module = safeModule,
                 OldValue = oldValue,
                 NewValue = newValue,
                 Timestamp = DateTime.UtcNow

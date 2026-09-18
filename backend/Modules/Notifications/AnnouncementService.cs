@@ -47,8 +47,33 @@ public class AnnouncementService : IAnnouncementService
         if (string.IsNullOrWhiteSpace(dto.Content))
             return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Announcement content is required");
 
-        if (dto.ExpiryDate.HasValue && dto.ExpiryDate.Value < dto.EffectiveDate)
-            return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Expiry date must not precede effective date");
+        DateTime effectiveUtc;
+        if (dto.EffectiveDate == default)
+        {
+            effectiveUtc = DateTime.UtcNow;
+        }
+        else if (dto.EffectiveDate.Kind == DateTimeKind.Utc)
+        {
+            effectiveUtc = dto.EffectiveDate;
+        }
+        else if (dto.EffectiveDate.Kind == DateTimeKind.Local)
+        {
+            effectiveUtc = dto.EffectiveDate.ToUniversalTime();
+        }
+        else
+        {
+            effectiveUtc = DateTime.SpecifyKind(dto.EffectiveDate, DateTimeKind.Utc);
+        }
+
+        DateTime? expiryUtc = null;
+        if (dto.ExpiryDate.HasValue && dto.ExpiryDate.Value != default)
+        {
+            var exp = dto.ExpiryDate.Value;
+            expiryUtc = exp.Kind == DateTimeKind.Utc ? exp : (exp.Kind == DateTimeKind.Local ? exp.ToUniversalTime() : DateTime.SpecifyKind(exp, DateTimeKind.Utc));
+
+            if (expiryUtc.Value < effectiveUtc)
+                return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Expiry date must not precede effective date");
+        }
 
         var announcementId = Guid.NewGuid();
         string? attachmentFileName = null;
@@ -103,8 +128,8 @@ public class AnnouncementService : IAnnouncementService
             Title = dto.Title.Trim(),
             Content = dto.Content.Trim(),
             TargetRoles = dto.TargetRoles?.Trim(),
-            EffectiveDate = DateTime.SpecifyKind(dto.EffectiveDate, DateTimeKind.Utc),
-            ExpiryDate = dto.ExpiryDate.HasValue ? DateTime.SpecifyKind(dto.ExpiryDate.Value, DateTimeKind.Utc) : null,
+            EffectiveDate = effectiveUtc,
+            ExpiryDate = expiryUtc,
             Priority = priority,
             IsPublic = dto.IsPublic,
             AttachmentFileName = attachmentFileName,
@@ -120,22 +145,39 @@ public class AnnouncementService : IAnnouncementService
         await _db.SaveChangesAsync();
 
         // 6. Targeted users receive in-app notifications
-        var recipients = await GetTargetUserIds(dto.TargetRoles, dto.IsPublic);
-        if (recipients.Count > 0)
+        try
         {
-            var previewTitle = announcement.Title.Length > 100 ? announcement.Title[..100] + "..." : announcement.Title;
-            var notificationTitle = priority == "Urgent" ? $"[URGENT] {previewTitle}" : (priority == "Important" ? $"[IMPORTANT] {previewTitle}" : $"Announcement: {previewTitle}");
-            await _notificationService.SendBulkNotificationAsync(
-                recipients, NotificationType.TaskAssigned, notificationTitle,
-                $"{announcement.Title}", null);
+            var recipients = await GetTargetUserIds(dto.TargetRoles, dto.IsPublic);
+            if (recipients.Count > 0)
+            {
+                var previewTitle = announcement.Title.Length > 100 ? announcement.Title[..100] + "..." : announcement.Title;
+                var notificationTitle = priority == "Urgent" ? $"[URGENT] {previewTitle}" : (priority == "Important" ? $"[IMPORTANT] {previewTitle}" : $"Announcement: {previewTitle}");
+                await _notificationService.SendBulkNotificationAsync(
+                    recipients, NotificationType.TaskAssigned, notificationTitle,
+                    $"{announcement.Title}", null);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send notification for announcement {AnnouncementId}", announcement.Id);
         }
 
         var creatorName = $"{creator.FirstName} {creator.LastName}".Trim();
         var targetAudienceLabel = dto.IsPublic ? "Public (All Users)" : (string.IsNullOrWhiteSpace(dto.TargetRoles) ? "All Users" : dto.TargetRoles);
         
         // 7. Audit Log entry
-        await _auditLogService.LogAsync(creatorId, AuditActionType.Create, "Announcement", announcement.Id, null,
-            $"Announcement published: '{announcement.Title}' by {creatorName}. Priority: {priority}, Target: {targetAudienceLabel}", "Announcements");
+        try
+        {
+            var auditDesc = $"Announcement published: '{announcement.Title}' by {creatorName}. Priority: {priority}, Target: {targetAudienceLabel}";
+            if (auditDesc.Length > 500) auditDesc = auditDesc[..497] + "...";
+
+            await _auditLogService.LogAsync(creatorId, AuditActionType.Create, "Announcement", announcement.Id, null,
+                auditDesc, "Announcements");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for announcement {AnnouncementId}", announcement.Id);
+        }
 
         return ApiResponseDTO<AnnouncementResponseDTO>.Success(
             MapToDTO(announcement, creatorName, creator.Role.ToString(), false, 0, new(), new()),

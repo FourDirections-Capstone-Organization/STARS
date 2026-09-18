@@ -212,7 +212,27 @@ const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate }) => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     {canCreate && (
-                        <button className="btn btn-primary" onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                            className="btn"
+                            onClick={() => setShowCreate(true)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                background: '#06b6d4',
+                                color: '#ffffff',
+                                border: '1px solid #0891b2',
+                                fontWeight: 600,
+                                fontSize: 13,
+                                padding: '8px 16px',
+                                borderRadius: 8,
+                                boxShadow: '0 2px 6px rgba(6, 182, 212, 0.35)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#0891b2'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#06b6d4'; }}
+                        >
                             <Plus size={16} /> New Announcement
                         </button>
                     )}
@@ -764,9 +784,7 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                 formData.append('attachment', attachment);
             }
 
-            const res = await api.post('/api/Announcement', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            const res = await api.upload('/api/Announcement', formData);
 
             if (res.data?.isSuccess) {
                 setSuccessMessage('Announcement published successfully! Notifying targeted users...');
@@ -778,7 +796,9 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                 setSubmitting(false);
             }
         } catch (err: any) {
-            setFormError(err.response?.data?.message || err.message || 'Failed to create announcement.');
+            const resp = err.response?.data;
+            const msg = resp?.message || (resp?.errors ? Object.values(resp.errors).flat().join('. ') : '') || err.message || 'Failed to create announcement.';
+            setFormError(msg);
             setSubmitting(false);
         }
     };
@@ -800,7 +820,21 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                     <button className="btn" onClick={onClose} disabled={submitting}>
                         Cancel
                     </button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting || !!successMessage}>
+                    <button
+                        className="btn"
+                        onClick={handleSubmit}
+                        disabled={submitting || !!successMessage}
+                        style={{
+                            background: '#06b6d4',
+                            color: '#ffffff',
+                            border: '1px solid #0891b2',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            cursor: submitting || !!successMessage ? 'not-allowed' : 'pointer',
+                        }}
+                    >
                         {submitting ? (
                             <>
                                 <Loader2 size={13} className="spin" /> Publishing...

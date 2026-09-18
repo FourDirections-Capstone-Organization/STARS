@@ -9,31 +9,31 @@
  * - Session timeout detection
  * - Deactivated/locked account redirect
  */
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 
 const api = {
-  get: <TResponse = any>(url: string, params?: Record<string, any>) =>
-    axios.get<TResponse>(url, { params }),
+  get: <TResponse = any>(url: string, params?: Record<string, any>, config?: AxiosRequestConfig) =>
+    axios.get<TResponse>(url, { params, ...config }),
 
-  post: <TResponse = any>(url: string, data?: any) =>
-    axios.post<TResponse>(url, data),
+  post: <TResponse = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    axios.post<TResponse>(url, data, config),
 
-  put: <TResponse = any>(url: string, data?: any) =>
-    axios.put<TResponse>(url, data),
+  put: <TResponse = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    axios.put<TResponse>(url, data, config),
 
-  patch: <TResponse = any>(url: string, data?: any) =>
-    axios.patch<TResponse>(url, data),
+  patch: <TResponse = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    axios.patch<TResponse>(url, data, config),
 
-  delete: <TResponse = any>(url: string) =>
-    axios.delete<TResponse>(url),
+  delete: <TResponse = any>(url: string, config?: AxiosRequestConfig) =>
+    axios.delete<TResponse>(url, config),
 
   /** Upload file(s) via FormData — Content-Type with boundary is set automatically by axios */
-  upload: <TResponse = any>(url: string, formData: FormData) =>
-    axios.post<TResponse>(url, formData),
+  upload: <TResponse = any>(url: string, formData: FormData, config?: AxiosRequestConfig) =>
+    axios.post<TResponse>(url, formData, config),
 
   /** Upload file(s) via PUT with FormData */
-  uploadPut: <TResponse = any>(url: string, formData: FormData) =>
-    axios.put<TResponse>(url, formData),
+  uploadPut: <TResponse = any>(url: string, formData: FormData, config?: AxiosRequestConfig) =>
+    axios.put<TResponse>(url, formData, config),
 };
 
 export default api;
