@@ -3983,36 +3983,53 @@ export default function Dashboard() {
                                             if (file.size > 20 * 1024 * 1024) { setNewTaskApiError('File size must not exceed 20MB.'); return; }
                                         }
                                         setNewTaskApiError('');
-                                        setNewTaskSupportingEvidence(files);
+                                        const existingKeys = new Set(newTaskSupportingEvidence.map(f => `${f.name}-${f.size}`));
+                                        const newUnique = files.filter(f => !existingKeys.has(`${f.name}-${f.size}`));
+                                        setNewTaskSupportingEvidence(prev => [...prev, ...newUnique]);
                                     }}
-                                    style={{ flex: 1, fontSize: 13 }} />
-                                {newTaskSupportingEvidence.length > 0 && (
-                                    <button type="button" onClick={() => { setNewTaskSupportingEvidence([]); if (newTaskFileRef.current) newTaskFileRef.current.value = ''; }}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 4 }}>
-                                        <X size={14} />
-                                    </button>
-                                )}
+                                    style={{ display: newTaskSupportingEvidence.length > 0 ? 'none' : 'block', flex: 1, fontSize: 13 }} />
                             </div>
                             {newTaskSupportingEvidence.length > 0 && (
-                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {newTaskSupportingEvidence.map((file, idx) => (
-                                        <div key={`${file.name}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(0,169,157,0.05)', border: '1px solid rgba(0,169,157,0.18)', borderRadius: 6 }}>
-                                            <span style={{ fontSize: 11, color: 'var(--status-active)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const next = newTaskSupportingEvidence.filter((_, i) => i !== idx);
-                                                    setNewTaskSupportingEvidence(next);
-                                                }}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 2 }}
-                                                aria-label={`Remove ${file.name}`}
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
+                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        {newTaskSupportingEvidence.map((file, idx) => (
+                                            <div key={`${file.name}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(0,169,157,0.05)', border: '1px solid rgba(0,169,157,0.18)', borderRadius: 6 }}>
+                                                <span style={{ fontSize: 11, color: 'var(--status-active)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const next = newTaskSupportingEvidence.filter((_, i) => i !== idx);
+                                                        setNewTaskSupportingEvidence(next);
+                                                    }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 2 }}
+                                                    aria-label={`Remove ${file.name}`}
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => newTaskFileRef.current?.click()}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--primary, #0284c7)', background: 'rgba(2, 132, 199, 0.08)', border: '1px dashed rgba(2, 132, 199, 0.4)', borderRadius: 6, cursor: 'pointer' }}
+                                        >
+                                            <Plus size={13} /> Upload more
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setNewTaskSupportingEvidence([]);
+                                                if (newTaskFileRef.current) newTaskFileRef.current.value = '';
+                                            }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 4, fontSize: 11, fontWeight: 600 }}
+                                        >
+                                            Clear all
+                                        </button>
+                                    </div>
                                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
                                         {newTaskSupportingEvidence.length} file{newTaskSupportingEvidence.length === 1 ? '' : 's'} selected — uploaded after the task is saved.
                                     </span>

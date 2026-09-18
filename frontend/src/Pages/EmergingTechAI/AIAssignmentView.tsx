@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     UserCircle2, Users, Building, Search, CheckCircle2, AlertCircle,
     Loader2, X, Lock, Save, Lightbulb, Activity, Bell, FileText, Calendar,
     Shield, ChevronRight, ChevronLeft, Clock, Briefcase, ExternalLink,
-    Brain, TrendingUp, Zap, ChevronDown, ChevronUp
+    Brain, TrendingUp, Zap, ChevronDown, ChevronUp, Plus
 } from 'lucide-react';
 import './AIAssignmentView.css';
 import api from '../../api';
@@ -129,6 +129,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
     const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState('');
 
@@ -741,7 +742,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
             }
         }
         setFormError('');
-        setSupportingFiles(files);
+        const existingKeys = new Set(supportingFiles.map(f => `${f.name}-${f.size}`));
+        const newUnique = files.filter(f => !existingKeys.has(`${f.name}-${f.size}`));
+        setSupportingFiles(prev => [...prev, ...newUnique]);
     };
 
     const todayStart = new Date();
@@ -1000,23 +1003,45 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     {/* Supporting Document */}
                     <div className="ai-field ai-field-full">
                         <label>Supporting Document <span className="ai-opt">(optional) — select one or more files</span></label>
-                        <input type="file" multiple accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
+                        <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
                             onChange={handleFileChange}
+                            style={{ display: supportingFiles.length > 0 ? 'none' : 'block' }}
                             className="ai-file-input" />
                         {supportingFiles.length > 0 && (
-                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                {supportingFiles.map((file, idx) => (
-                                    <span key={`${file.name}-${idx}`} className="ai-file-badge">
-                                        ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
-                                        <button
-                                            onClick={() => setSupportingFiles(supportingFiles.filter((_, i) => i !== idx))}
-                                            className="ai-file-remove"
-                                            aria-label={`Remove ${file.name}`}
-                                        >
-                                            <X size={12} />
-                                        </button>
-                                    </span>
-                                ))}
+                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {supportingFiles.map((file, idx) => (
+                                        <span key={`${file.name}-${idx}`} className="ai-file-badge">
+                                            ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                                            <button
+                                                onClick={() => setSupportingFiles(supportingFiles.filter((_, i) => i !== idx))}
+                                                className="ai-file-remove"
+                                                aria-label={`Remove ${file.name}`}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--primary, #0284c7)', background: 'rgba(2, 132, 199, 0.08)', border: '1px dashed rgba(2, 132, 199, 0.4)', borderRadius: 6, cursor: 'pointer' }}
+                                    >
+                                        <Plus size={13} /> Upload more
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSupportingFiles([]);
+                                            if (fileInputRef.current) fileInputRef.current.value = '';
+                                        }}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 4, fontSize: 11, fontWeight: 600 }}
+                                    >
+                                        Clear all
+                                    </button>
+                                </div>
                                 <span className="ai-opt" style={{ fontSize: 11 }}>
                                     {supportingFiles.length} file{supportingFiles.length === 1 ? '' : 's'} selected — uploaded after the task is created.
                                 </span>
