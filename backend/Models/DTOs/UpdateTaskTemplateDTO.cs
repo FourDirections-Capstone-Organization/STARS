@@ -22,6 +22,8 @@ public class UpdateTaskTemplateDTO
 
     public Guid? DefaultAssigneeId { get; set; }
 
+    public bool? ClearDefaultAssignee { get; set; }
+
     public Guid? DefaultDepartmentId { get; set; }
 
     public RecurrenceRule? RecurrenceRule { get; set; }

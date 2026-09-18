@@ -78,6 +78,12 @@ public class TaskTemplateService : ITaskTemplateService
         _db.TaskTemplates.Add(template);
         await _db.SaveChangesAsync();
 
+        if (template.DefaultAssigneeId.HasValue)
+            await _db.Entry(template).Reference(t => t.DefaultAssignee).LoadAsync();
+        if (template.DefaultDepartmentId.HasValue)
+            await _db.Entry(template).Reference(t => t.DefaultDepartment).LoadAsync();
+        await _db.Entry(template).Reference(t => t.CreatedBy).LoadAsync();
+
         await _auditLogService.LogAsync(
             creatorId,
             AuditActionType.Create,
@@ -183,8 +189,21 @@ public class TaskTemplateService : ITaskTemplateService
         if (dto.DefaultAssignmentScope.HasValue)
             template.DefaultAssignmentScope = dto.DefaultAssignmentScope.Value;
 
-        if (dto.DefaultAssigneeId.HasValue)
+        if (dto.ClearDefaultAssignee == true)
+        {
+            template.DefaultAssigneeId = null;
+        }
+        else if (dto.DefaultAssigneeId.HasValue)
+        {
+            var assigneeExists = await _db.Users
+                .AnyAsync(u => u.Id == dto.DefaultAssigneeId.Value && u.IsActive && !u.IsDeactivated);
+
+            if (!assigneeExists)
+                return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
+                    "Default assignee is inactive or does not exist");
+
             template.DefaultAssigneeId = dto.DefaultAssigneeId;
+        }
 
         if (dto.DefaultDepartmentId.HasValue)
             template.DefaultDepartmentId = dto.DefaultDepartmentId;
@@ -205,6 +224,18 @@ public class TaskTemplateService : ITaskTemplateService
 
         template.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        if (template.DefaultAssigneeId.HasValue)
+            await _db.Entry(template).Reference(t => t.DefaultAssignee).LoadAsync();
+        else
+            template.DefaultAssignee = null;
+
+        if (template.DefaultDepartmentId.HasValue)
+            await _db.Entry(template).Reference(t => t.DefaultDepartment).LoadAsync();
+        else
+            template.DefaultDepartment = null;
+
+        await _db.Entry(template).Reference(t => t.CreatedBy).LoadAsync();
 
         // AL-002 step 7: capture Old Value and New Value for changed template fields
         var oldParts = new List<string>();

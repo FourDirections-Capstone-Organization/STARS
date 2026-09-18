@@ -2425,6 +2425,21 @@ const TasksTab: React.FC<{
 
 // --- Task Template Tab ---------------------------------------------------------
 
+const mapTemplatePriority = (p: any): string => {
+    if (p === 0 || p === '0' || p === 'Low') return 'Low';
+    if (p === 1 || p === '1' || p === 'Medium') return 'Medium';
+    if (p === 2 || p === '2' || p === 'High') return 'High';
+    if (p === 3 || p === '3' || p === 'Urgent') return 'Urgent';
+    return typeof p === 'string' && p ? p : 'Medium';
+};
+
+const mapTemplateRecurrence = (r: any): string => {
+    if (r === 0 || r === '0' || r === 'Daily') return 'Daily';
+    if (r === 1 || r === '1' || r === 'Weekly') return 'Weekly';
+    if (r === 2 || r === '2' || r === 'Monthly') return 'Monthly';
+    return typeof r === 'string' && r ? r : 'Daily';
+};
+
 const TemplateTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) => {
     const { success, error } = useToast();
     const [templates, setTemplates] = useState<TaskTemplateDTO[]>([]);
@@ -2432,6 +2447,30 @@ const TemplateTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) =
     const [showModal, setShowModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState<TaskTemplateDTO | null>(null);
     const [templatePage, setTemplatePage] = useState(1);
+    const [assignableMembers, setAssignableMembers] = useState<TeamMember[]>(teamMembers);
+
+    useEffect(() => {
+        setAssignableMembers(teamMembers);
+    }, [teamMembers]);
+
+    useEffect(() => {
+        if (!teamMembers || teamMembers.length === 0) {
+            api.get('/api/Task/assignable-users?pageNumber=1&pageSize=100')
+                .then(res => {
+                    const body = res.data;
+                    const rawList: any[] = Array.isArray(body) ? body : (Array.isArray(body?.data?.items) ? body.data.items : (Array.isArray(body?.data?.data) ? body.data.data : (Array.isArray(body?.data) ? body.data : [])));
+                    if (rawList.length > 0) {
+                        setAssignableMembers(rawList.map(e => ({
+                            accountId: e.userId ?? e.UserId ?? e.id,
+                            employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? '').trim(),
+                            role: e.role ?? '',
+                            presenceStatus: e.availabilityStatus ?? e.AvailabilityStatus ?? 'Active',
+                        })));
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [teamMembers]);
 
     const fetchTemplates = async () => {
         setLoading(true);
@@ -2439,30 +2478,36 @@ const TemplateTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) =
             const res = await api.get('/api/TaskTemplate');
             const body = res.data;
             const list: any[] = body.isSuccess && Array.isArray(body.data?.items) ? body.data.items : (Array.isArray(body.data) ? body.data : (Array.isArray(body.data?.data) ? body.data.data : []));
-            setTemplates(list.map((t: any) => ({
-                templateId: t.id ?? t.templateId,
-                templateName: t.templateName ?? '',
-                defaultTitle: t.defaultTitle ?? '',
-                templateDescription: t.defaultDescription ?? '',
-                priorityLevel: String(t.defaultPriorityLevel ?? t.priorityLevel ?? 'Medium'),
-                recurrenceType: String(t.recurrenceRule ?? t.recurrenceType ?? 'Daily'),
-                recurrenceStartDate: t.recurrenceStartDate ?? '',
-                assignedEmployeeId: t.defaultAssigneeId ?? t.assignedEmployeeId ?? null,
-                assignedEmployeeName: t.assignedEmployeeName ?? null,
-                templateStatus: t.isActive ? 'Active' : 'Inactive',
-                nextGenerationDate: t.nextGenerationDate ?? null,
-                lastGeneratedDate: t.lastGeneratedDate ?? null,
-                createdBy: t.createdBy ?? '',
-                createdByName: t.createdByName ?? null,
-                createdAt: t.createdAt ?? '',
-            })));
+            setTemplates(list.map((t: any) => {
+                const assigneeId = t.defaultAssigneeId ?? t.assignedEmployeeId ?? null;
+                const membersList = assignableMembers.length > 0 ? assignableMembers : teamMembers;
+                const matchedMember = assigneeId ? membersList.find(m => m.accountId === assigneeId) : null;
+                const assigneeName = (t.defaultAssigneeName ?? t.assignedEmployeeName ?? matchedMember?.employeeName ?? '').trim() || null;
+                return {
+                    templateId: t.id ?? t.templateId,
+                    templateName: t.templateName ?? '',
+                    defaultTitle: t.defaultTitle ?? '',
+                    templateDescription: t.defaultDescription ?? '',
+                    priorityLevel: mapTemplatePriority(t.defaultPriorityLevel ?? t.priorityLevel),
+                    recurrenceType: mapTemplateRecurrence(t.recurrenceRule ?? t.recurrenceType),
+                    recurrenceStartDate: t.recurrenceStartDate ? String(t.recurrenceStartDate).substring(0, 10) : '',
+                    assignedEmployeeId: assigneeId,
+                    assignedEmployeeName: assigneeName,
+                    templateStatus: t.isActive ? 'Active' : 'Inactive',
+                    nextGenerationDate: t.nextGenerationDate ?? null,
+                    lastGeneratedDate: t.lastGeneratedDate ?? null,
+                    createdBy: t.createdBy ?? '',
+                    createdByName: t.createdByName ?? null,
+                    createdAt: t.createdAt ?? '',
+                };
+            }));
         } catch {
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { fetchTemplates(); }, []);
+    useEffect(() => { fetchTemplates(); }, [assignableMembers]);
 
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -2501,14 +2546,16 @@ const TemplateTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) =
     const RECUR_TO_BACKEND: Record<string, number> = { Daily: 0, Weekly: 1, Monthly: 2 };
     const handleSave = async (data: CreateTemplateDTO, templateId?: string) => {
         const backendPayload = {
-            templateName: data.templateName,
-            defaultTitle: data.defaultTitle || data.templateName,
-            defaultDescription: data.templateDescription,
+            templateName: data.templateName.trim(),
+            defaultTitle: (data.defaultTitle || data.templateName).trim(),
+            defaultDescription: data.templateDescription.trim(),
             defaultPriorityLevel: PRIO_TO_BACKEND[data.priorityLevel] ?? 1,
             defaultClassification: 0,
+            defaultAssignmentScope: 0,
             recurrenceRule: RECUR_TO_BACKEND[data.recurrenceType] ?? 0,
             recurrenceStartDate: data.recurrenceStartDate,
-            defaultAssigneeId: data.assignedEmployee || null,
+            defaultAssigneeId: data.assignedEmployee ? data.assignedEmployee : null,
+            clearDefaultAssignee: !data.assignedEmployee,
             isActive: data.templateStatus === 'Active',
         };
         if (templateId) {
@@ -2601,7 +2648,7 @@ const TemplateTab: React.FC<{ teamMembers: TeamMember[] }> = ({ teamMembers }) =
             {showModal && (
                 <TemplateModal
                     template={editingTemplate}
-                    teamMembers={teamMembers}
+                    teamMembers={assignableMembers.length > 0 ? assignableMembers : teamMembers}
                     onSave={handleSave}
                     onClose={() => { setShowModal(false); setEditingTemplate(null); }}
                 />
@@ -2623,11 +2670,11 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
     const isEdit = !!template;
     const [form, setForm] = useState({
         templateName: template?.templateName ?? '',
-        defaultTitle: template?.defaultTitle ?? '',
+        defaultTitle: template?.defaultTitle ?? template?.templateName ?? '',
         templateDescription: template?.templateDescription ?? '',
-        priorityLevel: template?.priorityLevel ?? 'Medium',
-        recurrenceType: template?.recurrenceType ?? 'Daily',
-        recurrenceStartDate: template?.recurrenceStartDate ? template.recurrenceStartDate.substring(0, 10) : '',
+        priorityLevel: template?.priorityLevel ? mapTemplatePriority(template.priorityLevel) : 'Medium',
+        recurrenceType: template?.recurrenceType ? mapTemplateRecurrence(template.recurrenceType) : 'Daily',
+        recurrenceStartDate: template?.recurrenceStartDate ? String(template.recurrenceStartDate).substring(0, 10) : new Date().toISOString().substring(0, 10),
         assignedEmployee: template?.assignedEmployeeId ?? '',
         templateStatus: template?.templateStatus ?? 'Active',
     });
@@ -2655,7 +2702,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
         try {
             await onSave({
                 templateName: form.templateName.trim(),
-                defaultTitle: form.defaultTitle.trim(),
+                defaultTitle: (form.defaultTitle || form.templateName).trim(),
                 templateDescription: form.templateDescription.trim(),
                 priorityLevel: form.priorityLevel,
                 recurrenceType: form.recurrenceType,
@@ -2673,6 +2720,16 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
     const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setForm(p => ({ ...p, [key]: e.target.value }));
         setErrors(p => ({ ...p, [key]: '' }));
+    };
+
+    const handleTemplateNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setForm(p => ({
+            ...p,
+            templateName: val,
+            defaultTitle: !isEdit && (!p.defaultTitle || p.defaultTitle === p.templateName) ? val : p.defaultTitle,
+        }));
+        setErrors(p => ({ ...p, templateName: '', defaultTitle: '' }));
     };
 
     const FieldErr = ({ name }: { name: string }) => errors[name] ? <span className="report-field-error">{errors[name]}</span> : null;
@@ -2696,7 +2753,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
             <div className="field">
                 <label>Template Name *</label>
                 <input type="text" className={errors.templateName ? 'report-input report-input-error' : 'report-input'}
-                    value={form.templateName} onChange={set('templateName')} maxLength={150} placeholder="e.g. Weekly Warehouse Inventory" />
+                    value={form.templateName} onChange={handleTemplateNameChange} maxLength={150} placeholder="e.g. Weekly Warehouse Inventory" />
                 <FieldErr name="templateName" />
             </div>
 
@@ -2741,7 +2798,11 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
                     <label>Assigned Employee</label>
                     <select className="report-select" value={form.assignedEmployee} onChange={set('assignedEmployee')}>
                         <option value="">Auto-assign (unassigned)</option>
-                        {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
+                        {teamMembers.map(m => (
+                            <option key={m.accountId} value={m.accountId}>
+                                {m.employeeName}{m.role ? ` (${m.role})` : ''}
+                            </option>
+                        ))}
                     </select>
                 </div>
             </div>
