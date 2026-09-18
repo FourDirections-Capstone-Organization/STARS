@@ -634,8 +634,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     error(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
                 }
             }
+            const createdTitle = created?.data?.title ?? created?.title ?? created?.data?.Title ?? payload.title;
             setStep('submitted');
-            success('Task assigned successfully — Neo4j graph updated, notifications sent, audit log recorded.');
+            success(`Task "${createdTitle}" assigned successfully — Neo4j graph updated, notifications sent, audit log recorded.`);
             // Notify the parent dashboard so the Task List tab refreshes immediately
             if (onTaskCreated) onTaskCreated();
         } catch (err: any) {
@@ -1557,6 +1558,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     <div style={{ margin: '4px 0 12px', padding: '10px 12px', background: 'rgba(2, 132, 199, 0.06)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: 8, fontSize: 13 }}>
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>New task: {pendingPayload.title}</div>
                         <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{pendingPayload.description}</div>
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#0284c7' }}>
+                            💡 <strong>Auto-numbering rule:</strong> If an existing task shares the exact title, the new task title will automatically receive an increment number upon creation (e.g., &quot;Title 1&quot;, &quot;Title 2&quot;).
+                        </div>
                     </div>
                     <div style={{ overflowX: 'auto', margin: '8px 0 4px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

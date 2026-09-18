@@ -39,11 +39,13 @@ import {
     Bell,
     Megaphone,
     Lightbulb,
+    Info,
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import './SystemAdmin_Dashboard.css';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../components/Toast/Toast';
+import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
 import SearchBar from '../../components/ui/SearchBar';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorBanner from '../../components/ui/ErrorBanner';
@@ -2643,6 +2645,7 @@ export default function Dashboard() {
             const res = await api.post('/api/Task', createPayload);
             const created = res.data;
             const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
+            const createdTitle = created?.data?.title ?? created?.title ?? created?.data?.Title ?? t;
 
             // Upload supporting documents (one or more files) if provided
             if (taskId && newTaskSupportingEvidence.length > 0) {
@@ -2658,7 +2661,7 @@ export default function Dashboard() {
                     setNewTaskApiError(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
                 }
             }
-            success('Task created successfully.');
+            success(`Task "${createdTitle}" created successfully.`);
             setShowNewTask(false);
             fetchManagerTasks();
         } catch (err: any) {
@@ -3696,6 +3699,17 @@ export default function Dashboard() {
                                     <AlertCircle size={11} />{newTaskErrors.title}
                                 </span>
                             )}
+                            {!newTaskErrors.title && newTaskForm.title.trim().length >= 3 && (() => {
+                                const preview = resolveIncrementalTitlePreview(newTaskForm.title, (tmTasks || []).map(taskItem => taskItem.name || ''));
+                                if (preview && preview !== newTaskForm.title.trim()) {
+                                    return (
+                                        <span style={{ fontSize: 11, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                            <Info size={11} /> Existing title found: will create as &quot;<strong>{preview}</strong>&quot;
+                                        </span>
+                                    );
+                                }
+                                return null;
+                            })()}
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Description <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>

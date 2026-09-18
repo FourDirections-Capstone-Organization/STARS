@@ -1,4 +1,4 @@
-﻿using Backend.Models;
+using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Task = System.Threading.Tasks.Task;
@@ -24,5 +24,6 @@ public interface ITaskService
     Task<ApiResponseDTO<TaskResponseDTO>> GetByIdAsync(Guid id, Guid requestUserId, UserRole requestUserRole);
     Task<ApiResponseDTO<TaskResponseDTO>> UpdateAsync(Guid id, UpdateTaskDTO dto, Guid requestUserId, string? ipAddress = null);
     Task<ApiResponseDTO<PaginatedResponseDTO<TaskAssigneeDTO>>> GetAssignableUsersAsync(int pageNumber = 1, int pageSize = 10);
+    Task<string> GenerateUniqueTaskTitleAsync(string requestedTitle);
     Task SeedDemoTasksAsync();
 }

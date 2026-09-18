@@ -211,9 +211,9 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public void GetAllRoles_Returns5Roles()
+    public void GetAllRoles_Returns6Roles()
     {
         var roles = Enum.GetValues<UserRole>();
-        Assert.Equal(5, roles.Length);
+        Assert.Equal(6, roles.Length);
     }
 }

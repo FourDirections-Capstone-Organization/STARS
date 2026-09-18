@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -82,9 +83,11 @@ public class TaskService : ITaskService
             }
         }
 
+        var uniqueTitle = await GenerateUniqueTaskTitleAsync(dto.Title);
+
         var task = new Models.Task
         {
-            Title = dto.Title.Trim(),
+            Title = uniqueTitle,
             Description = dto.Description.Trim(),
             PriorityLevel = dto.PriorityLevel,
             Classification = dto.Classification,
@@ -844,5 +847,65 @@ public class TaskService : ITaskService
         }
 
         await _db.SaveChangesAsync();
+    }
+
+    public async Task<string> GenerateUniqueTaskTitleAsync(string requestedTitle)
+    {
+        if (string.IsNullOrWhiteSpace(requestedTitle))
+            return requestedTitle;
+
+        var trimmed = requestedTitle.Trim();
+        var lowerTrimmed = trimmed.ToLower();
+        var prefix = lowerTrimmed + " ";
+
+        var candidateTitles = await _db.Tasks
+            .Where(t => t.Title.ToLower() == lowerTrimmed || t.Title.ToLower().StartsWith(prefix))
+            .Select(t => t.Title)
+            .ToListAsync();
+
+        return ResolveIncrementalTitle(trimmed, candidateTitles);
+    }
+
+    public static string ResolveIncrementalTitle(string baseTitle, IEnumerable<string> existingTitles)
+    {
+        if (string.IsNullOrWhiteSpace(baseTitle))
+            return baseTitle;
+
+        var trimmed = baseTitle.Trim();
+        var pattern = $@"^{Regex.Escape(trimmed)}(?:\s+(\d+))?$";
+        var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+
+        bool baseExists = false;
+        var existingSuffixes = new HashSet<int>();
+
+        foreach (var title in existingTitles)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                continue;
+
+            var match = regex.Match(title.Trim());
+            if (match.Success)
+            {
+                if (match.Groups[1].Success && int.TryParse(match.Groups[1].Value, out var num))
+                {
+                    existingSuffixes.Add(num);
+                }
+                else
+                {
+                    baseExists = true;
+                }
+            }
+        }
+
+        if (!baseExists)
+            return trimmed;
+
+        int nextNumber = 1;
+        while (existingSuffixes.Contains(nextNumber))
+        {
+            nextNumber++;
+        }
+
+        return $"{trimmed} {nextNumber}";
     }
 }

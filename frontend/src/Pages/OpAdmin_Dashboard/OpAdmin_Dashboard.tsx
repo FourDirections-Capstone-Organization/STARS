@@ -43,12 +43,14 @@ import {
     Clock,
     Play,
     Bell,
+    Info,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
 import { useNavigate } from 'react-router-dom';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import { useToast } from '../../components/Toast/Toast';
+import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
 
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import GlobalHeader, { NotificationItem } from '../../components/GlobalHeader/GlobalHeader';
@@ -659,6 +661,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
     ];
 
     const isSLAEditLock = mode === 'edit' && initial.isSLALocked;
+    const existingTitles = useMemo(() => (tasks || []).map(t => t.taskTitle || ''), [tasks]);
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
@@ -949,9 +952,17 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                         />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <FieldErr name="taskTitle" />
-                            {!errors.taskTitle && form.taskTitle.trim().length >= 3 && (
-                                <span style={{ fontSize: 11, color: 'var(--status-active)', marginTop: 3 }}>✓ Looks good</span>
-                            )}
+                            {!errors.taskTitle && form.taskTitle.trim().length >= 3 && (() => {
+                                const preview = mode === 'new' ? resolveIncrementalTitlePreview(form.taskTitle, existingTitles) : '';
+                                if (preview && preview !== form.taskTitle.trim()) {
+                                    return (
+                                        <span style={{ fontSize: 11, color: '#0284c7', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            <Info size={11} /> Existing title found: will create as &quot;<strong>{preview}</strong>&quot;
+                                        </span>
+                                    );
+                                }
+                                return <span style={{ fontSize: 11, color: 'var(--status-active)', marginTop: 3 }}>✓ Looks good</span>;
+                            })()}
                             <CharCount value={form.taskTitle} max={150} />
                         </div>
                     </div>
@@ -5569,6 +5580,9 @@ const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
                 {newTaskDescription && (
                     <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{snippet(newTaskDescription)}</div>
                 )}
+                <div style={{ marginTop: 6, fontSize: 11, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Info size={12} /> Auto-numbering rule: If a task with this exact title exists, an increment number (e.g. &quot;1&quot;, &quot;2&quot;) will be added automatically.
+                </div>
             </div>
         )}
         <div style={{ overflowX: 'auto', margin: '8px 0 4px' }}>
@@ -6332,6 +6346,7 @@ export default function OpsAdminDashboard() {
             const res = await api.post('/api/Task', data);
             const created = res.data;
             const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
+            const createdTitle = created?.data?.title ?? created?.title ?? created?.data?.Title ?? data.title;
 
             // Upload supporting documents if provided
             if (taskId && pendingFiles.length > 0) {
@@ -6346,10 +6361,10 @@ export default function OpsAdminDashboard() {
                 if (failed > 0) {
                     error(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
                 } else {
-                    success(`Task created. ${uploaded} attachment(s) uploaded.`);
+                    success(`Task "${createdTitle}" created. ${uploaded} attachment(s) uploaded.`);
                 }
             } else {
-                success('Task created successfully.');
+                success(`Task "${createdTitle}" created successfully.`);
             }
 
             setShowNew(false);

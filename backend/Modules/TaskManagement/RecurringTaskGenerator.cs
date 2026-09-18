@@ -61,9 +61,17 @@ public class RecurringTaskGenerator : BackgroundService
                     ? now.AddHours(24)
                     : now.AddDays(7);
 
+                var lowerTitle = template.DefaultTitle.Trim().ToLower();
+                var prefix = lowerTitle + " ";
+                var candidateTitles = await db.Tasks
+                    .Where(t => t.Title.ToLower() == lowerTitle || t.Title.ToLower().StartsWith(prefix))
+                    .Select(t => t.Title)
+                    .ToListAsync(stoppingToken);
+                var uniqueTitle = TaskService.ResolveIncrementalTitle(template.DefaultTitle, candidateTitles);
+
                 var task = new Models.Task
                 {
-                    Title = template.DefaultTitle,
+                    Title = uniqueTitle,
                     Description = template.DefaultDescription,
                     PriorityLevel = template.DefaultPriorityLevel,
                     Classification = template.DefaultClassification,

@@ -281,9 +281,17 @@ public class TaskTemplateService : ITaskTemplateService
         var now = DateTime.UtcNow;
         var deadline = CalculateDeadline(template.DefaultPriorityLevel, now);
 
+        var lowerTitle = template.DefaultTitle.Trim().ToLower();
+        var prefix = lowerTitle + " ";
+        var candidateTitles = await _db.Tasks
+            .Where(t => t.Title.ToLower() == lowerTitle || t.Title.ToLower().StartsWith(prefix))
+            .Select(t => t.Title)
+            .ToListAsync();
+        var uniqueTitle = TaskService.ResolveIncrementalTitle(template.DefaultTitle, candidateTitles);
+
         var task = new Models.Task
         {
-            Title = template.DefaultTitle,
+            Title = uniqueTitle,
             Description = template.DefaultDescription,
             PriorityLevel = template.DefaultPriorityLevel,
             Classification = template.DefaultClassification,
