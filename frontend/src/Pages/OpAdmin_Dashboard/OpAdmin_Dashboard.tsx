@@ -508,6 +508,42 @@ const getAuditBadgeStyle = (raw: string): { background: string; color: string } 
     }
 };
 
+const getActivityDescription = (log: any): string => {
+    if (log.description && log.description.trim()) {
+        return log.description;
+    }
+    const actor = log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : 'User');
+    const action = formatActionType(log.actionType);
+    const entity = log.targetEntity || 'record';
+    
+    switch (log.actionType) {
+        case 'Create':
+            return `${actor} created new ${entity.toLowerCase()}${log.targetEntityId ? ` (#${String(log.targetEntityId).slice(0, 8)})` : ''}`;
+        case 'Update':
+            return `${actor} updated ${entity.toLowerCase()}`;
+        case 'Delete':
+            return `${actor} deleted ${entity.toLowerCase()}`;
+        case 'StatusChange':
+            return `${actor} changed ${entity.toLowerCase()} status${log.newValue ? ` to "${log.newValue}"` : ''}`;
+        case 'Login':
+            return `${actor} logged into the system`;
+        case 'Logout':
+            return `${actor} logged out`;
+        case 'Upload':
+            return `${actor} uploaded attachment for ${entity.toLowerCase()}`;
+        case 'Export':
+            return `${actor} exported ${entity.toLowerCase()} report data`;
+        case 'AccessDenied':
+            return `Unauthorized access attempt to ${entity}`;
+        case 'BlockedAction':
+            return `Blocked action attempt on ${entity}`;
+        case 'DuplicateOverride':
+            return `${actor} confirmed duplicate task override`;
+        default:
+            return `${actor} performed ${action} on ${entity}`;
+    }
+};
+
 const fmtChangeValue = (v?: string | null): string => {
     if (!v) return '';
     const s = String(v);
@@ -6168,24 +6204,60 @@ export default function OpsAdminDashboard() {
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [activityLogPage, setActivityLogPage] = useState(1);
     const [activityLogTotalPages, setActivityLogTotalPages] = useState(1);
+    const [activityLogTotalRecords, setActivityLogTotalRecords] = useState(0);
+    const [activityLogLoading, setActivityLogLoading] = useState(false);
+    const [activityLogSearch, setActivityLogSearch] = useState('');
+    const [activityLogType, setActivityLogType] = useState('');
+    const [activityLogDate, setActivityLogDate] = useState('');
     const ACTIVITY_LOG_PAGE_SIZE = 15;
 
-    const fetchActivityLogs = async (page: number) => {
+    const fetchActivityLogs = useCallback(async (page: number, silent = false) => {
+        if (!silent) setActivityLogLoading(true);
         try {
-            const res = await api.get('/api/audit-logs/my', { pageNumber: page, pageSize: ACTIVITY_LOG_PAGE_SIZE });
+            const endpoint = rawRole === 'Manager' ? '/api/audit-logs' : '/api/audit-logs/my';
+            const params: any = { pageNumber: page, pageSize: ACTIVITY_LOG_PAGE_SIZE };
+            if (activityLogType) params.actionType = activityLogType;
+            if (activityLogDate) {
+                params.dateRangeStart = activityLogDate;
+                params.dateRangeEnd = activityLogDate;
+            }
+            const res = await api.get(endpoint, params);
             const json = res.data;
             const d = json?.data;
             if (json?.isSuccess && d?.items) {
                 setActivityLogs(d.items);
                 setActivityLogPage(d.pageNumber || page);
                 setActivityLogTotalPages(d.totalPages || 1);
+                setActivityLogTotalRecords(d.totalCount ?? d.items.length);
             } else {
                 setActivityLogs([]);
+                setActivityLogTotalRecords(0);
             }
         } catch {
             setActivityLogs([]);
+            setActivityLogTotalRecords(0);
+        } finally {
+            if (!silent) setActivityLogLoading(false);
         }
-    };
+    }, [rawRole, activityLogType, activityLogDate]);
+
+    const filteredActivityLogs = useMemo(() => {
+        if (!activityLogSearch) return activityLogs;
+        const q = activityLogSearch.toLowerCase().trim();
+        return activityLogs.filter(log =>
+            (log.actorName || '').toLowerCase().includes(q) ||
+            (log.actorRole || '').toLowerCase().includes(q) ||
+            (log.actionType || '').toLowerCase().includes(q) ||
+            (log.description || '').toLowerCase().includes(q) ||
+            (log.targetEntity || '').toLowerCase().includes(q)
+        );
+    }, [activityLogs, activityLogSearch]);
+
+    useEffect(() => {
+        if (activeTab === 'activity_logs') {
+            fetchActivityLogs(1);
+        }
+    }, [activeTab, fetchActivityLogs]);
 
     // -- Update fetchTasks --
     const fetchTasks = useCallback(async (silent: boolean = false) => {
@@ -7013,42 +7085,118 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'activity_logs' && (
                     <div className="dashboard-content">
                         <DataTable
-                            title="My Activity Logs"
-                            headers={['Date & Time', 'Action', 'Affected Employee / Entity', 'Description', 'Changes (Old → New)']}
-                            loading={false}
+                            title="Activity & Audit Logs"
+                            headers={['Date & Time', 'User / Role', 'Action', 'Activity Description', 'Affected Record', 'Changes (Old → New)']}
+                            loading={activityLogLoading}
+                            searchQuery={activityLogSearch}
+                            onSearchChange={val => setActivityLogSearch(val)}
+                            searchPlaceholder="Search by user, action, description, or entity…"
+                            filterElements={
+                                <>
+                                    <select
+                                        value={activityLogType}
+                                        onChange={e => { setActivityLogType(e.target.value); }}
+                                        style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}
+                                        aria-label="Filter by action type"
+                                    >
+                                        <option value="">All Action Types</option>
+                                        {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
+                                            <option key={value} value={value}>{label}</option>
+                                        ))}
+                                    </select>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <input
+                                            type="date"
+                                            value={activityLogDate}
+                                            onChange={e => setActivityLogDate(e.target.value)}
+                                            title="Filter by date"
+                                            style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: activityLogDate ? '#0f172a' : '#64748b' }}
+                                        />
+                                        {activityLogDate && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setActivityLogDate('')}
+                                                title="Clear date filter"
+                                                style={{ height: 36, padding: '0 8px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    {(activityLogSearch || activityLogType || activityLogDate) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setActivityLogSearch('');
+                                                setActivityLogType('');
+                                                setActivityLogDate('');
+                                            }}
+                                            style={{ height: 36, padding: '0 10px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#dc2626', cursor: 'pointer' }}
+                                        >
+                                            Reset Filters
+                                        </button>
+                                    )}
+                                </>
+                            }
                             emptyMessage="No activity logs found."
                             emptyIcon={<Activity size={24} />}
-                            totalRecords={activityLogs.length}
+                            totalRecords={activityLogTotalRecords || filteredActivityLogs.length}
                             currentPage={activityLogPage}
                             totalPages={activityLogTotalPages}
                             onPageChange={p => fetchActivityLogs(p)}
                         >
-                            {activityLogs.map((log: any) => {
+                            {filteredActivityLogs.map((log: any) => {
                                 const badge = getAuditBadgeStyle(log.actionType ?? '');
+                                const activityDesc = getActivityDescription(log);
                                 return (
-                                    <tr key={log.id}>
+                                    <tr key={log.id || `${log.timestamp}-${log.actionType}-${Math.random()}`}>
                                         <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                            {fmtDateTime(log.timestamp)}
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                {fmtDate(log.timestamp || log.createdAt)}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                {log.timestamp || log.createdAt ? new Date(log.timestamp || log.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                                            </div>
+                                        </td>
+                                        <td style={{ fontSize: 13 }}>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                {log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : 'System')}
+                                            </div>
+                                            {log.actorRole && (
+                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                    {log.actorRole}
+                                                </div>
+                                            )}
                                         </td>
                                         <td>
                                             <span style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600,
+                                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
                                                 background: badge.background, color: badge.color,
                                             }}>
                                                 {formatActionType(log.actionType)}
                                             </span>
                                         </td>
-                                        <td style={{ fontSize: 13 }}>
-                                            <div style={{ color: 'var(--text-primary)' }}>
-                                                {[log.actorName, log.actorRole].filter(Boolean).join(', ') || '—'}
+                                        <td style={{ fontSize: 13, color: 'var(--text-primary)', maxWidth: 300 }}>
+                                            <div style={{ fontWeight: 500, lineHeight: 1.4 }}>
+                                                {activityDesc}
                                             </div>
-                                            {log.targetEntity && (
-                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                                    Entity: {log.targetEntity}
-                                                </div>
+                                        </td>
+                                        <td style={{ fontSize: 13 }}>
+                                            {log.targetEntity ? (
+                                                <>
+                                                    <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                                                        {log.targetEntity}
+                                                    </div>
+                                                    {log.targetEntityId && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                                                            ID: {String(log.targetEntityId).length > 8 ? `${String(log.targetEntityId).slice(0, 8)}…` : log.targetEntityId}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ fontSize: 13, color: 'var(--text-primary)' }}>{log.description}</td>
                                         <td style={{ color: 'var(--text-primary)' }}>{renderChanges(log.oldValue, log.newValue)}</td>
                                     </tr>
                                 );
