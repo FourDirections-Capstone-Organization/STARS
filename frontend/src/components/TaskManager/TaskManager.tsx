@@ -55,6 +55,10 @@ interface TMProps {
     onSearchChange?: (val: string) => void;
     filterPrio?: string;
     onFilterPrioChange?: (val: string) => void;
+    filterStatus?: string;
+    onFilterStatusChange?: (val: string) => void;
+    filterDueDate?: string;
+    onFilterDueDateChange?: (val: string) => void;
     filterClassification?: string;
     onFilterClassificationChange?: (val: string) => void;
     filterAssignee?: string;
@@ -73,7 +77,6 @@ const STATUS_DOT: Record<string, string> = { Backlog: '#94a3b8', 'To do': '#3b82
 const ASSIGNEE_COLORS = ['#4318ff', '#059669', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#c026d3'];
 const getAc = (n: string) => ASSIGNEE_COLORS[n.length % ASSIGNEE_COLORS.length];
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
-const getProgress = (s: string) => s === 'Done' ? 100 : s === 'In progress' ? 50 : s === 'In review' ? 80 : s === 'To do' ? 10 : 0;
 
 const PriorityBadge = ({ p }: { p: string }) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: PRIO_BG[p] || '#f1f5f9', color: PRIO_COLORS[p] || '#475569' }}>
@@ -116,6 +119,10 @@ export default function TaskManager({
     onSearchChange,
     filterPrio: externalFilterPrio,
     onFilterPrioChange,
+    filterStatus: externalFilterStatus,
+    onFilterStatusChange,
+    filterDueDate: externalFilterDueDate,
+    onFilterDueDateChange,
     filterClassification: externalFilterClassification,
     onFilterClassificationChange,
     filterAssignee: externalFilterAssignee,
@@ -128,12 +135,16 @@ export default function TaskManager({
     const tab = controlledTab !== undefined ? controlledTab : internalTab;
     const [internalSearch, setInternalSearch] = useState('');
     const [internalFilterPrio, setInternalFilterPrio] = useState('');
+    const [internalFilterStatus, setInternalFilterStatus] = useState('');
+    const [internalFilterDueDate, setInternalFilterDueDate] = useState('');
     const [internalFilterClassification, setInternalFilterClassification] = useState('');
     const [internalFilterAssignee, setInternalFilterAssignee] = useState('');
     const [page, setPage] = useState(1);
 
     const search = externalSearch !== undefined ? externalSearch : internalSearch;
     const filterPrio = externalFilterPrio !== undefined ? externalFilterPrio : internalFilterPrio;
+    const filterStatus = externalFilterStatus !== undefined ? externalFilterStatus : internalFilterStatus;
+    const filterDueDate = externalFilterDueDate !== undefined ? externalFilterDueDate : internalFilterDueDate;
     const filterClassification = externalFilterClassification !== undefined ? externalFilterClassification : internalFilterClassification;
     const filterAssignee = externalFilterAssignee !== undefined ? externalFilterAssignee : internalFilterAssignee;
 
@@ -143,6 +154,14 @@ export default function TaskManager({
     };
     const handlePrioChange = (val: string) => {
         if (onFilterPrioChange) onFilterPrioChange(val); else setInternalFilterPrio(val);
+        setPage(1);
+    };
+    const handleStatusChange = (val: string) => {
+        if (onFilterStatusChange) onFilterStatusChange(val); else setInternalFilterStatus(val);
+        setPage(1);
+    };
+    const handleDueDateChange = (val: string) => {
+        if (onFilterDueDateChange) onFilterDueDateChange(val); else setInternalFilterDueDate(val);
         setPage(1);
     };
     const handleClassificationChange = (val: string) => {
@@ -163,6 +182,12 @@ export default function TaskManager({
         else setSelectedIds(new Set(paginated.map(t => t.id)));
     };
 
+    const availableStatuses: TMTask['status'][] = useMemo(() => {
+        if (tab === 'active') return ['Backlog', 'To do', 'In progress', 'In review', 'On hold'];
+        if (tab === 'completed') return ['Done'];
+        return ['Cancelled'];
+    }, [tab]);
+
     const tabTasks = useMemo(() => {
         if (tab === 'active') return tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted);
         if (tab === 'completed') return tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted);
@@ -174,10 +199,27 @@ export default function TaskManager({
         const q = search.toLowerCase().trim();
         if (q) list = list.filter(t => t.name.toLowerCase().includes(q) || (t.assignee?.name || '').toLowerCase().includes(q) || (t.project || '').toLowerCase().includes(q));
         if (filterPrio) list = list.filter(t => t.priority === filterPrio);
+        if (filterStatus) list = list.filter(t => t.status === filterStatus);
+        if (filterDueDate) {
+            list = list.filter(t => {
+                if (!t.dueDate) return false;
+                try {
+                    const d = new Date(t.dueDate);
+                    if (isNaN(d.getTime())) return t.dueDate.startsWith(filterDueDate);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const localDateStr = `${year}-${month}-${day}`;
+                    return localDateStr === filterDueDate || t.dueDate.startsWith(filterDueDate);
+                } catch {
+                    return t.dueDate.startsWith(filterDueDate);
+                }
+            });
+        }
         if (filterClassification) list = list.filter(t => t.classification === filterClassification);
         if (filterAssignee) list = list.filter(t => t.assignee?.id === filterAssignee);
         return list;
-    }, [tabTasks, search, filterPrio, filterClassification, filterAssignee]);
+    }, [tabTasks, search, filterPrio, filterStatus, filterDueDate, filterClassification, filterAssignee]);
 
     const totalPages = serverPagination?.totalPages ?? Math.ceil(filtered.length / 8);
     const paginated = serverPagination ? filtered : filtered.slice((page - 1) * 8, page * 8);
@@ -190,6 +232,8 @@ export default function TaskManager({
     const handleTabChange = (key: string) => {
         const next = key as TabType;
         setPage(1);
+        setInternalFilterStatus('');
+        if (onFilterStatusChange) onFilterStatusChange('');
         if (controlledTabChange) controlledTabChange(next);
         else setInternalTab(next);
     };
@@ -230,6 +274,29 @@ export default function TaskManager({
                 onSearchChange={handleSearch}
                 searchPlaceholder="Search by task, assignee, project…"
                 filterElements={tab !== 'bin' ? <>
+                    <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                        <option value="">All Statuses</option>
+                        {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <input
+                            type="date"
+                            value={filterDueDate}
+                            onChange={e => handleDueDateChange(e.target.value)}
+                            title="Filter by due date"
+                            style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: filterDueDate ? '#0f172a' : '#64748b' }}
+                        />
+                        {filterDueDate && (
+                            <button
+                                type="button"
+                                onClick={() => handleDueDateChange('')}
+                                title="Clear due date filter"
+                                style={{ height: 36, padding: '0 8px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
                     <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
                         <option value="">All Priorities</option>
                         {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -271,7 +338,7 @@ export default function TaskManager({
                                     <span>{t.name}</span>
                                     {tab !== 'bin' && (
                                         <span title="AI Insights available — click to view" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)', cursor: 'help' }}>
-                                            <Brain size={13} />
+                                             <Brain size={13} />
                                         </span>
                                     )}
                                     {t.classification && tab !== 'bin' && (
@@ -300,12 +367,7 @@ export default function TaskManager({
                             <td><PriorityBadge p={t.priority} /></td>
                             <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} /></td>
                             <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <StatusBadge status={t.status} size="sm" />
-                                    <div style={{ width: 50, height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }}>
-                                        <div style={{ width: `${getProgress(t.status)}%`, height: '100%', background: t.status === 'Done' ? '#059669' : '#4318ff', borderRadius: 2 }} />
-                                    </div>
-                                </div>
+                                <StatusBadge status={t.status} size="sm" />
                             </td>
                             <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
                                 <ActionsDropdown
