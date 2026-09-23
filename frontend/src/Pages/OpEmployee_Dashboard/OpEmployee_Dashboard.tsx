@@ -37,6 +37,10 @@ import {
     Download,
     Lightbulb,
     PauseCircle,
+    LayoutGrid,
+    LayoutList,
+    GripVertical,
+    Kanban,
 } from 'lucide-react';
 import './OpEmployee_Dashboard.css';
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
@@ -975,6 +979,240 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     );
 };
 
+// --- Kanban Board Components (Employee Side) --------------------------------
+
+interface KanbanCardProps {
+    task: Task;
+    onView: (id: string) => void;
+    onUpdate: (id: string) => void;
+    onDragStart: (e: React.DragEvent, task: Task) => void;
+    onDragEnd: (e: React.DragEvent) => void;
+    isDragging: boolean;
+}
+
+const KanbanCard: React.FC<KanbanCardProps> = ({ task, onView, onUpdate, onDragStart, onDragEnd, isDragging }) => {
+    const es = effectiveStatus(task);
+    const sm = statusMeta[es] || statusMeta['pending'];
+    const pm = priorityMeta[task.priority] || priorityMeta['medium'];
+    const od = es === 'overdue';
+    const isHold = task.status === 'on-hold';
+    const isCompleted = task.status === 'completed';
+    const isPendingReview = task.status === 'pending-review' || task.status === 'done';
+
+    // Employee can drag if not on-hold and not already completed/pending-review
+    const canDrag = !isHold && !isCompleted && !isPendingReview;
+
+    const daysLeft = task.deadline
+        ? Math.ceil((new Date(task.deadline + 'T00:00:00').getTime() - Date.now()) / 86400000)
+        : null;
+
+    return (
+        <div
+            className={`kanban-card${isDragging ? ' dragging' : ''}${od ? ' overdue' : ''}${isHold ? ' on-hold' : ''}`}
+            draggable={canDrag}
+            onDragStart={(e) => onDragStart(e, task)}
+            onDragEnd={onDragEnd}
+            onClick={() => onView(task.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && onView(task.id)}
+            style={{ cursor: canDrag ? 'grab' : 'pointer' }}
+        >
+            <div className="kanban-card-header">
+                <span className="kanban-card-ref">#{task.referenceNumber || task.id.slice(0, 8).toUpperCase()}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {task.isConfidential && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--status-failed)', background: 'rgba(238,93,80,0.08)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>
+                            CONFIDENTIAL
+                        </span>
+                    )}
+                    <span className={`badge ${sm.cls}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                        {sm.icon} {sm.label}
+                    </span>
+                </div>
+            </div>
+
+            <div className="kanban-card-title">{task.name}</div>
+            {task.description && <div className="kanban-card-desc">{task.description}</div>}
+
+            {/* Push back notice */}
+            {task.pushBackComment && task.status === 'in-progress' && (
+                <div className="kanban-card-pushback">
+                    <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <RefreshCw size={10} /> Returned for Revision:
+                    </span>
+                    <span>"{task.pushBackComment}"</span>
+                </div>
+            )}
+
+            {/* Pending review notice */}
+            {isPendingReview && (
+                <div className="kanban-card-review">
+                    <Eye size={12} /> Awaiting Coordinator Review
+                </div>
+            )}
+
+            {/* Completed notice */}
+            {isCompleted && (
+                <div className="kanban-card-approved">
+                    <CheckCircle2 size={12} /> Approved & Completed
+                </div>
+            )}
+
+            {/* Progress bar */}
+            <div className="tc-progress-row" style={{ marginTop: 8 }}>
+                <div className="tc-bar">
+                    <div className={`tc-fill ${pm.bar}`} style={{ width: `${task.progress}%` }} />
+                </div>
+                <span className="tc-pct">{task.progress}%</span>
+            </div>
+
+            <div className="kanban-card-meta">
+                <span className={`tc-deadline${od ? ' overdue-text' : daysLeft !== null && daysLeft <= 2 ? ' warning-text' : ''}`} style={{ fontSize: 11 }}>
+                    {od ? '⚠️ Overdue' : daysLeft !== null ? (daysLeft === 0 ? 'Due today' : daysLeft === 1 ? 'Due tomorrow' : `${daysLeft}d left`) : fmtDate(task.deadline)}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {canDrag && <GripVertical size={13} style={{ color: 'var(--text-muted)' }} title="Drag to move status" />}
+                    <button
+                        className="btn btn-secondary"
+                        style={{ height: 24, padding: '0 8px', fontSize: 11, borderRadius: 5 }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdate(task.id);
+                        }}
+                    >
+                        Update
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface EmployeeKanbanBoardProps {
+    tasks: Task[];
+    onView: (id: string) => void;
+    onUpdate: (id: string) => void;
+    onKanbanMove: (taskId: string, targetCol: 'todo' | 'in-progress' | 'done') => Promise<void>;
+}
+
+const EmployeeKanbanBoard: React.FC<EmployeeKanbanBoardProps> = ({ tasks, onView, onUpdate, onKanbanMove }) => {
+    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+    const todoTasks = useMemo(() => tasks.filter(t => (t.status === 'pending' || t.status === 'assigned') && t.status !== 'cancelled'), [tasks]);
+    const inProgressTasks = useMemo(() => tasks.filter(t => (t.status === 'in-progress' || t.status === 'overdue' || t.status === 'on-hold') && t.status !== 'cancelled'), [tasks]);
+    const doneTasks = useMemo(() => tasks.filter(t => (t.status === 'pending-review' || t.status === 'done' || t.status === 'completed') && t.status !== 'cancelled'), [tasks]);
+
+    const handleDragStart = (e: React.DragEvent, task: Task) => {
+        setDraggingTaskId(task.id);
+        e.dataTransfer.setData('text/plain', task.id);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragEnd = () => {
+        setDraggingTaskId(null);
+        setDragOverCol(null);
+    };
+
+    const handleDragOver = (e: React.DragEvent, colKey: string) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverCol !== colKey) {
+            setDragOverCol(colKey);
+        }
+    };
+
+    const handleDragLeave = (colKey: string) => {
+        if (dragOverCol === colKey) {
+            setDragOverCol(null);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, colKey: 'todo' | 'in-progress' | 'done') => {
+        e.preventDefault();
+        setDragOverCol(null);
+        const taskId = e.dataTransfer.getData('text/plain') || draggingTaskId;
+        if (taskId) {
+            onKanbanMove(taskId, colKey);
+        }
+        setDraggingTaskId(null);
+    };
+
+    const columns: { key: 'todo' | 'in-progress' | 'done'; title: string; count: number; items: Task[]; icon: React.ReactNode; hint: string }[] = [
+        {
+            key: 'todo',
+            title: 'To Do',
+            count: todoTasks.length,
+            items: todoTasks,
+            icon: <Clock size={15} style={{ color: 'var(--primary)' }} />,
+            hint: 'Assigned tasks waiting to be started',
+        },
+        {
+            key: 'in-progress',
+            title: 'In Progress',
+            count: inProgressTasks.length,
+            items: inProgressTasks,
+            icon: <Loader2 size={15} style={{ color: '#d97706' }} />,
+            hint: 'Currently active tasks',
+        },
+        {
+            key: 'done',
+            title: 'Done & Review',
+            count: doneTasks.length,
+            items: doneTasks,
+            icon: <CheckCircle2 size={15} style={{ color: '#059669' }} />,
+            hint: 'Submitted for Coordinator review',
+        },
+    ];
+
+    return (
+        <div className="kanban-board-container">
+            {columns.map(col => {
+                const isOver = dragOverCol === col.key;
+                return (
+                    <div
+                        key={col.key}
+                        className={`kanban-column${isOver ? ' drag-over' : ''}`}
+                        onDragOver={(e) => handleDragOver(e, col.key)}
+                        onDragLeave={() => handleDragLeave(col.key)}
+                        onDrop={(e) => handleDrop(e, col.key)}
+                    >
+                        <div className="kanban-column-header">
+                            <div className="kanban-column-title-group">
+                                {col.icon}
+                                <span className="kanban-column-title">{col.title}</span>
+                            </div>
+                            <span className="kanban-column-count">{col.count}</span>
+                        </div>
+
+                        <div className="kanban-column-cards">
+                            {col.items.length === 0 ? (
+                                <div className="kanban-drop-zone-empty">
+                                    <p>No tasks in {col.title}</p>
+                                    <span style={{ fontSize: 11, opacity: 0.75 }}>{isOver ? 'Drop task here' : col.hint}</span>
+                                </div>
+                            ) : (
+                                col.items.map(t => (
+                                    <KanbanCard
+                                        key={t.id}
+                                        task={t}
+                                        onView={onView}
+                                        onUpdate={onUpdate}
+                                        onDragStart={handleDragStart}
+                                        onDragEnd={handleDragEnd}
+                                        isDragging={draggingTaskId === t.id}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // --- My Tasks Tab -------------------------------------------------------------
 
 interface MyTasksTabProps {
@@ -983,10 +1221,12 @@ interface MyTasksTabProps {
     error: string;
     onView: (id: string) => void;
     onUpdate: (id: string) => void;
+    onKanbanMove: (taskId: string, targetCol: 'todo' | 'in-progress' | 'done') => Promise<void>;
     onRetry: () => void;
 }
 
-const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, onUpdate, onRetry }) => {
+const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, onUpdate, onKanbanMove, onRetry }) => {
+    const [viewMode, setViewMode] = useState<'board' | 'grid'>('board');
     const [filter, setFilter] = useState<'all' | TaskStatus>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -1048,16 +1288,39 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
 
     return (
         <div className="tab-content">
-            <div className="filter-pills">
-                {filters.map(f => (
+            {/* Top Toolbar: Filter Pills and View Mode Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                <div className="filter-pills">
+                    {filters.map(f => (
+                        <button
+                            key={f.key}
+                            className={`filter-pill${filter === f.key ? ' active' : ''}`}
+                            onClick={() => setFilter(f.key)}
+                        >
+                            {f.label}<span className="fp-count">{f.count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* View Switcher: Board vs Grid */}
+                <div className="kanban-view-toggle">
                     <button
-                        key={f.key}
-                        className={`filter-pill${filter === f.key ? ' active' : ''}`}
-                        onClick={() => setFilter(f.key)}
+                        type="button"
+                        className={`kanban-toggle-btn${viewMode === 'board' ? ' active' : ''}`}
+                        onClick={() => setViewMode('board')}
+                        title="Kanban Board View"
                     >
-                        {f.label}<span className="fp-count">{f.count}</span>
+                        <Kanban size={13} /> Board View
                     </button>
-                ))}
+                    <button
+                        type="button"
+                        className={`kanban-toggle-btn${viewMode === 'grid' ? ' active' : ''}`}
+                        onClick={() => setViewMode('grid')}
+                        title="Grid / List View"
+                    >
+                        <LayoutGrid size={13} /> Grid View
+                    </button>
+                </div>
             </div>
 
             {/* Search by title + urgency filter */}
@@ -1098,6 +1361,13 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                 <div className="card">
                     <div className="empty-state"><ClipboardList size={22} /><p>No tasks match your filters</p></div>
                 </div>
+            ) : viewMode === 'board' ? (
+                <EmployeeKanbanBoard
+                    tasks={filtered}
+                    onView={onView}
+                    onUpdate={onUpdate}
+                    onKanbanMove={onKanbanMove}
+                />
             ) : (
                 <>
                     <div className="task-grid">
@@ -2171,6 +2441,66 @@ export default function EmployeeDashboard() {
         } : t));
     };
 
+    const { success: toastSuccess, error: toastError } = useToast();
+
+    const handleKanbanMove = async (taskId: string, targetCol: 'todo' | 'in-progress' | 'done') => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (task.status === 'on-hold') {
+            toastError('This task is currently On Hold by your coordinator and cannot be moved.');
+            return;
+        }
+
+        const currentStatus = task.status;
+
+        // FSM rule 1: Moving to To Do
+        if (targetCol === 'todo') {
+            if (currentStatus === 'pending' || currentStatus === 'assigned') {
+                return;
+            }
+            toastError('Tasks in progress or completed cannot be moved back to To Do.');
+            return;
+        }
+
+        // FSM rule 2: Moving to In Progress
+        if (targetCol === 'in-progress') {
+            if (currentStatus === 'in-progress' || currentStatus === 'overdue') {
+                return;
+            }
+            if (currentStatus === 'pending-review' || currentStatus === 'done' || currentStatus === 'completed') {
+                toastError('Tasks awaiting review or already approved cannot be moved back to In Progress.');
+                return;
+            }
+            try {
+                const initialProgress = task.progress > 0 ? task.progress : 25;
+                await handleSaveProgress(task.id, 'in-progress', initialProgress, task.remarks || '');
+                toastSuccess(`Task "${task.name}" moved to In Progress.`);
+            } catch (err: any) {
+                toastError(err.message || 'Failed to update task status.');
+            }
+            return;
+        }
+
+        // FSM rule 3: Moving to Done (Submit for review)
+        if (targetCol === 'done') {
+            if (currentStatus === 'pending-review' || currentStatus === 'done' || currentStatus === 'completed') {
+                return;
+            }
+            if (currentStatus === 'pending' || currentStatus === 'assigned') {
+                toastError('FSM Rule: Cannot jump directly from To Do to Done. Please move the task to In Progress first.');
+                return;
+            }
+            try {
+                await handleSaveProgress(task.id, 'pending-review', 100, task.remarks || '');
+                toastSuccess(`Task "${task.name}" submitted for Coordinator review.`);
+            } catch (err: any) {
+                toastError(err.message || 'Failed to submit task for review.');
+            }
+            return;
+        }
+    };
+
     const viewingTask = viewingId != null ? tasks.find(t => t.id === viewingId) ?? null : null;
     const updatingTask = updatingId != null ? tasks.find(t => t.id === updatingId) ?? null : null;
     const initials = getInitials(user.fullName);
@@ -2255,6 +2585,7 @@ export default function EmployeeDashboard() {
                     <MyTasksTab
                         tasks={tasks} loading={tasksLoading} error={tasksError}
                         onView={setViewingId} onUpdate={setUpdatingId}
+                        onKanbanMove={handleKanbanMove}
                         onRetry={fetchTasks}
                     />
                 )}

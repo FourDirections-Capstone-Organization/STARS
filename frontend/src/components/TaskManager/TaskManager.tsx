@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain } from 'lucide-react';
+import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import StatusCard from '../StatusCard/StatusCard';
+import './TaskManager.css';
 
 export interface TMTask {
     id: string;
@@ -73,7 +74,6 @@ interface TMProps {
 const PRIORITIES: TMTask['priority'][] = ['Urgent', 'High', 'Medium', 'Low'];
 const PRIO_COLORS: Record<string, string> = { Urgent: '#dc2626', High: '#ea580c', Medium: '#d97706', Low: '#2563eb' };
 const PRIO_BG: Record<string, string> = { Urgent: '#fef2f2', High: '#fff7ed', Medium: '#fffbeb', Low: '#eff6ff' };
-const STATUS_DOT: Record<string, string> = { Backlog: '#94a3b8', 'To do': '#3b82f6', 'In progress': '#16a34a', 'In review': '#d97706', Done: '#059669', Cancelled: '#94a3b8', 'On hold': '#d97706' };
 const ASSIGNEE_COLORS = ['#4318ff', '#059669', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#c026d3'];
 const getAc = (n: string) => ASSIGNEE_COLORS[n.length % ASSIGNEE_COLORS.length];
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
@@ -112,6 +112,211 @@ const DueLabel = ({ date, isSLALocked }: { date?: string; isSLALocked?: boolean 
     </span>;
 };
 
+// ─── TaskManager Kanban Board Subcomponent ──────────────────────────────────
+
+interface TMKanbanBoardProps {
+    tasks: TMTask[];
+    onView: (id: string) => void;
+    onEdit: (id: string) => void;
+    onMarkDone: (ids: string[]) => void;
+    onArchive: (ids: string[]) => void;
+}
+
+const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, onMarkDone, onArchive }) => {
+    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+    const todoTasks = useMemo(() => tasks.filter(t => t.status === 'Backlog' || t.status === 'To do'), [tasks]);
+    const inProgressTasks = useMemo(() => tasks.filter(t => t.status === 'In progress' || t.status === 'On hold'), [tasks]);
+    const reviewTasks = useMemo(() => tasks.filter(t => t.status === 'In review'), [tasks]);
+    const doneTasks = useMemo(() => tasks.filter(t => t.status === 'Done'), [tasks]);
+
+    const handleDragStart = (e: React.DragEvent, taskId: string) => {
+        setDraggingTaskId(taskId);
+        e.dataTransfer.setData('text/plain', taskId);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragEnd = () => {
+        setDraggingTaskId(null);
+        setDragOverCol(null);
+    };
+
+    const handleDragOver = (e: React.DragEvent, colKey: string) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverCol !== colKey) {
+            setDragOverCol(colKey);
+        }
+    };
+
+    const handleDragLeave = (colKey: string) => {
+        if (dragOverCol === colKey) {
+            setDragOverCol(null);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, colKey: 'todo' | 'in-progress' | 'review' | 'done') => {
+        e.preventDefault();
+        setDragOverCol(null);
+        const taskId = e.dataTransfer.getData('text/plain') || draggingTaskId;
+        if (taskId) {
+            if (colKey === 'done') {
+                onMarkDone([taskId]);
+            } else {
+                onEdit(taskId);
+            }
+        }
+        setDraggingTaskId(null);
+    };
+
+    const columns: { key: 'todo' | 'in-progress' | 'review' | 'done'; title: string; count: number; items: TMTask[]; icon: React.ReactNode }[] = [
+        {
+            key: 'todo',
+            title: 'To Do / Backlog',
+            count: todoTasks.length,
+            items: todoTasks,
+            icon: <ClipboardList size={14} style={{ color: '#3b82f6' }} />,
+        },
+        {
+            key: 'in-progress',
+            title: 'In Progress',
+            count: inProgressTasks.length,
+            items: inProgressTasks,
+            icon: <Loader2 size={14} style={{ color: '#d97706' }} />,
+        },
+        {
+            key: 'review',
+            title: 'In Review',
+            count: reviewTasks.length,
+            items: reviewTasks,
+            icon: <Eye size={14} style={{ color: '#6d28d9' }} />,
+        },
+        {
+            key: 'done',
+            title: 'Done / Completed',
+            count: doneTasks.length,
+            items: doneTasks,
+            icon: <CheckCircle2 size={14} style={{ color: '#059669' }} />,
+        },
+    ];
+
+    return (
+        <div className="tm-board-container">
+            {columns.map(col => {
+                const isOver = dragOverCol === col.key;
+                return (
+                    <div
+                        key={col.key}
+                        className={`tm-board-column${isOver ? ' drag-over' : ''}`}
+                        onDragOver={(e) => handleDragOver(e, col.key)}
+                        onDragLeave={() => handleDragLeave(col.key)}
+                        onDrop={(e) => handleDrop(e, col.key)}
+                    >
+                        <div className="tm-board-col-header">
+                            <div className="tm-board-col-title-wrap">
+                                {col.icon}
+                                <span className="tm-board-col-title">{col.title}</span>
+                            </div>
+                            <span className="tm-board-col-badge">{col.count}</span>
+                        </div>
+
+                        <div className="tm-board-col-cards">
+                            {col.items.length === 0 ? (
+                                <div className="tm-board-empty-col">
+                                    <p>No tasks in {col.title}</p>
+                                    <span style={{ fontSize: 11, opacity: 0.75 }}>{isOver ? 'Drop task here' : 'Empty'}</span>
+                                </div>
+                            ) : (
+                                col.items.map(t => {
+                                    const refDisplay = t.referenceNumber || t.id.slice(0, 8).toUpperCase();
+                                    const isDragging = draggingTaskId === t.id;
+                                    return (
+                                        <div
+                                            key={t.id}
+                                            className={`tm-board-card${isDragging ? ' dragging' : ''}`}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, t.id)}
+                                            onDragEnd={handleDragEnd}
+                                            onClick={() => onView(t.id)}
+                                        >
+                                            <div className="tm-board-card-top">
+                                                <span className="tm-board-card-ref">#{refDisplay}</span>
+                                                <PriorityBadge p={t.priority} />
+                                            </div>
+
+                                            <div className="tm-board-card-title">{t.name}</div>
+
+                                            <div className="tm-board-card-badges">
+                                                {t.classification && (
+                                                    <span
+                                                        style={{
+                                                            fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                                                            background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
+                                                            color: t.classification === 'special' ? '#4318FF' : '#059669',
+                                                            whiteSpace: 'nowrap', letterSpacing: '0.03em'
+                                                        }}
+                                                    >
+                                                        {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
+                                                    </span>
+                                                )}
+                                                {t.isConfidential && (
+                                                    <span
+                                                        title="Confidential"
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: 'var(--status-failed, #ee5d50)', background: 'rgba(238, 93, 80, 0.08)', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}
+                                                    >
+                                                        <Lock size={9} /> CONFIDENTIAL
+                                                    </span>
+                                                )}
+                                                <span title="AI Insights" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)' }}>
+                                                    <Brain size={12} />
+                                                </span>
+                                            </div>
+
+                                            <div className="tm-board-card-meta">
+                                                <div>
+                                                    {t.assignee ? (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <AssigneeAvatar name={t.assignee.name} />
+                                                            <span style={{ fontSize: 11, color: '#1e293b' }}>{t.assignee.name}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span style={{ color: '#94a3b8', fontSize: 11 }}>Unassigned</span>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} />
+                                                    <div className="tm-board-card-actions" onClick={e => e.stopPropagation()}>
+                                                        <button className="tm-board-action-btn" title="View Details" onClick={() => onView(t.id)}>
+                                                            <Eye size={12} />
+                                                        </button>
+                                                        <button className="tm-board-action-btn" title="Edit Task" onClick={() => onEdit(t.id)}>
+                                                            <Pencil size={12} />
+                                                        </button>
+                                                        {t.status !== 'Done' && (
+                                                            <button className="tm-board-action-btn" title="Mark Done" onClick={() => onMarkDone([t.id])} style={{ color: '#059669' }}>
+                                                                <CheckCircle2 size={12} />
+                                                            </button>
+                                                        )}
+                                                        <button className="tm-board-action-btn" title="Archive" onClick={() => onArchive([t.id])} style={{ color: '#dc2626' }}>
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 export default function TaskManager({
     tasks, teamMembers, onNewTask, onEdit, onView, onArchive, onRestore, onDelete, onMarkDone,
     summary,
@@ -131,6 +336,7 @@ export default function TaskManager({
     activeTab: controlledTab,
     onTabChange: controlledTabChange,
 }: TMProps) {
+    const [viewMode, setViewMode] = useState<'table' | 'board'>('table');
     const [internalTab, setInternalTab] = useState<TabType>('active');
     const tab = controlledTab !== undefined ? controlledTab : internalTab;
     const [internalSearch, setInternalSearch] = useState('');
@@ -261,133 +467,225 @@ export default function TaskManager({
                     <StatusCard key={s.label} icon={s.icon} label={s.label} value={s.value} subtext={s.subtext} variant={s.variant} />
                 ))}
             </div>
-            <DataTable
-                tabs={[
-                    { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
-                    { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
-                    { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
-                ]}
-                activeTab={tab}
-                onTabChange={handleTabChange}
-                title="Task Manager"
-                searchQuery={search}
-                onSearchChange={handleSearch}
-                searchPlaceholder="Search by task, assignee, project…"
-                filterElements={tab !== 'bin' ? <>
-                    <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                        <option value="">All Statuses</option>
-                        {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <input
-                            type="date"
-                            value={filterDueDate}
-                            onChange={e => handleDueDateChange(e.target.value)}
-                            title="Filter by due date"
-                            style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: filterDueDate ? '#0f172a' : '#64748b' }}
-                        />
-                        {filterDueDate && (
+
+            {viewMode === 'board' && tab !== 'bin' ? (
+                <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
+                    {/* Header & Controls for Board View */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <div className="tm-view-toggle-group">
+                                <button
+                                    type="button"
+                                    className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                    onClick={() => setViewMode('table')}
+                                    title="Table View"
+                                >
+                                    <LayoutList size={13} /> Table
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                                    onClick={() => setViewMode('board')}
+                                    title="Board View"
+                                >
+                                    <Kanban size={13} /> Board
+                                </button>
+                            </div>
+
+                            <input
+                                type="text"
+                                placeholder="Search tasks, assignees…"
+                                value={search}
+                                onChange={e => handleSearch(e.target.value)}
+                                style={{ height: 36, width: 220, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 12, outline: 'none' }}
+                            />
+
+                            <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                <option value="">All Priorities</option>
+                                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+
+                            <select value={filterClassification} onChange={e => handleClassificationChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                <option value="">All Classifications</option>
+                                <option value="routine">Routine Daily</option>
+                                <option value="special">Special Task</option>
+                            </select>
+
+                            <select value={filterAssignee} onChange={e => handleAssigneeChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                <option value="">All Assignees</option>
+                                {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
+                            </select>
+                        </div>
+
+                        {tab === 'active' && (
                             <button
                                 type="button"
-                                onClick={() => handleDueDateChange('')}
-                                title="Clear due date filter"
-                                style={{ height: 36, padding: '0 8px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+                                className="btn btn-primary"
+                                onClick={onNewTask}
+                                style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 8 }}
                             >
-                                Clear
+                                <Plus size={14} /> New Task
                             </button>
                         )}
                     </div>
-                    <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                        <option value="">All Priorities</option>
-                        {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    <select value={filterClassification} onChange={e => handleClassificationChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                        <option value="">All Classifications</option>
-                        <option value="routine">Routine Daily</option>
-                        <option value="special">Special Task</option>
-                    </select>
-                    <select value={filterAssignee} onChange={e => handleAssigneeChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                        <option value="">All Assignees</option>
-                        {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
-                    </select>
-                </> : undefined}
-                actionButton={tab === 'active' ? { label: 'New Task', icon: <Plus size={14} />, onClick: onNewTask } : undefined}
-                headers={['', '#', 'Task', 'Assignee', 'Priority', 'Due Date', 'Status', '']}
-                loading={false}
-                emptyMessage="No tasks found."
-                emptyIcon={<Package size={20} />}
-                totalRecords={serverPagination?.totalRecords ?? filtered.length}
-                currentPage={serverPagination?.currentPage ?? page}
-                totalPages={totalPages}
-                onPageChange={serverPagination?.onPageChange ?? handlePageChange}
-                pageSize={serverPagination?.pageSize}
-                pageSizeOptions={serverPagination?.onPageSizeChange ? [8, 15, 30, 50] : undefined}
-                onPageSizeChange={serverPagination?.onPageSizeChange}
-            >
-                {paginated.map(t => {
-                    const refDisplay = t.referenceNumber || t.id.slice(0, 8).toUpperCase();
-                    const isChecked = selectedIds.has(t.id);
-                    return (
-                        <tr key={t.id} onClick={() => tab !== 'bin' ? onView(t.id) : null} style={{ cursor: tab !== 'bin' ? 'pointer' : 'default', opacity: tab === 'bin' ? 0.75 : 1 }}>
-                            <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                                <input type="checkbox" checked={isChecked} onChange={() => toggleSelect(t.id)} style={{ cursor: 'pointer' }} />
-                            </td>
-                            <td style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>#{refDisplay}</td>
-                            <td style={{ fontWeight: 600, color: tab === 'bin' ? '#94a3b8' : '#0f172a', textDecoration: tab === 'bin' ? 'line-through' : 'none' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <span>{t.name}</span>
-                                    {tab !== 'bin' && (
-                                        <span title="AI Insights available — click to view" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)', cursor: 'help' }}>
-                                             <Brain size={13} />
-                                        </span>
-                                    )}
-                                    {t.classification && tab !== 'bin' && (
-                                        <span
-                                            style={{
-                                                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                                                background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
-                                                color: t.classification === 'special' ? '#4318FF' : '#059669',
-                                                whiteSpace: 'nowrap', letterSpacing: '0.03em'
-                                            }}
-                                        >
-                                            {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
-                                        </span>
-                                    )}
-                                    {t.isConfidential && tab !== 'bin' && (
-                                        <span
-                                            title="Confidential — only Coordinators and Manager can view"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: 'var(--status-failed, #ee5d50)', background: 'rgba(238, 93, 80, 0.08)', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap', letterSpacing: '0.04em' }}
-                                        >
-                                            <Lock size={9} /> CONFIDENTIAL
-                                        </span>
-                                    )}
-                                </div>
-                            </td>
-                            <td>{t.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AssigneeAvatar name={t.assignee.name} /><span style={{ fontSize: 13 }}>{t.assignee.name}</span></div> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
-                            <td><PriorityBadge p={t.priority} /></td>
-                            <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} /></td>
-                            <td>
-                                <StatusBadge status={t.status} size="sm" />
-                            </td>
-                            <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                                <ActionsDropdown
-                                    actions={[
-                                        ...(tab !== 'bin' ? [
-                                            { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },
-                                            { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEdit(t.id) },
-                                            { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
-                                        ] as const : [
-                                            { label: 'Restore', icon: <CheckCircle2 size={12} />, onClick: () => onRestore?.([t.id]), variant: 'success' as const },
-                                            { label: 'Delete Permanently', icon: <Trash2 size={12} />, onClick: () => { onDelete([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
-                                        ] as const),
-                                    ]}
-                                />
-                            </td>
-                        </tr>
-                    );
-                })}
-            </DataTable>
-            {selectedIds.size > 0 && (
+
+                    {/* Board Content */}
+                    <TMKanbanBoard
+                        tasks={filtered}
+                        onView={onView}
+                        onEdit={onEdit}
+                        onMarkDone={onMarkDone}
+                        onArchive={onArchive}
+                    />
+                </div>
+            ) : (
+                <DataTable
+                    tabs={[
+                        { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
+                        { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
+                        { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
+                    ]}
+                    activeTab={tab}
+                    onTabChange={handleTabChange}
+                    title="Task Manager"
+                    searchQuery={search}
+                    onSearchChange={handleSearch}
+                    searchPlaceholder="Search by task, assignee, project…"
+                    filterElements={tab !== 'bin' ? <>
+                        <div className="tm-view-toggle-group">
+                            <button
+                                type="button"
+                                className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                onClick={() => setViewMode('table')}
+                                title="Table View"
+                            >
+                                <LayoutList size={13} /> Table
+                            </button>
+                            <button
+                                type="button"
+                                className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                                onClick={() => setViewMode('board')}
+                                title="Board View"
+                            >
+                                <Kanban size={13} /> Board
+                            </button>
+                        </div>
+                        <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                            <option value="">All Statuses</option>
+                            {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                                type="date"
+                                value={filterDueDate}
+                                onChange={e => handleDueDateChange(e.target.value)}
+                                title="Filter by due date"
+                                style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: filterDueDate ? '#0f172a' : '#64748b' }}
+                            />
+                            {filterDueDate && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleDueDateChange('')}
+                                    title="Clear due date filter"
+                                    style={{ height: 36, padding: '0 8px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                            <option value="">All Priorities</option>
+                            {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <select value={filterClassification} onChange={e => handleClassificationChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                            <option value="">All Classifications</option>
+                            <option value="routine">Routine Daily</option>
+                            <option value="special">Special Task</option>
+                        </select>
+                        <select value={filterAssignee} onChange={e => handleAssigneeChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                            <option value="">All Assignees</option>
+                            {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
+                        </select>
+                    </> : undefined}
+                    actionButton={tab === 'active' ? { label: 'New Task', icon: <Plus size={14} />, onClick: onNewTask } : undefined}
+                    headers={['', '#', 'Task', 'Assignee', 'Priority', 'Due Date', 'Status', '']}
+                    loading={false}
+                    emptyMessage="No tasks found."
+                    emptyIcon={<Package size={20} />}
+                    totalRecords={serverPagination?.totalRecords ?? filtered.length}
+                    currentPage={serverPagination?.currentPage ?? page}
+                    totalPages={totalPages}
+                    onPageChange={serverPagination?.onPageChange ?? handlePageChange}
+                    pageSize={serverPagination?.pageSize}
+                    pageSizeOptions={serverPagination?.onPageSizeChange ? [8, 15, 30, 50] : undefined}
+                    onPageSizeChange={serverPagination?.onPageSizeChange}
+                >
+                    {paginated.map(t => {
+                        const refDisplay = t.referenceNumber || t.id.slice(0, 8).toUpperCase();
+                        const isChecked = selectedIds.has(t.id);
+                        return (
+                            <tr key={t.id} onClick={() => tab !== 'bin' ? onView(t.id) : null} style={{ cursor: tab !== 'bin' ? 'pointer' : 'default', opacity: tab === 'bin' ? 0.75 : 1 }}>
+                                <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                                    <input type="checkbox" checked={isChecked} onChange={() => toggleSelect(t.id)} style={{ cursor: 'pointer' }} />
+                                </td>
+                                <td style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>#{refDisplay}</td>
+                                <td style={{ fontWeight: 600, color: tab === 'bin' ? '#94a3b8' : '#0f172a', textDecoration: tab === 'bin' ? 'line-through' : 'none' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                        <span>{t.name}</span>
+                                        {tab !== 'bin' && (
+                                            <span title="AI Insights available — click to view" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)', cursor: 'help' }}>
+                                                 <Brain size={13} />
+                                            </span>
+                                        )}
+                                        {t.classification && tab !== 'bin' && (
+                                            <span
+                                                style={{
+                                                    fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                                                    background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
+                                                    color: t.classification === 'special' ? '#4318FF' : '#059669',
+                                                    whiteSpace: 'nowrap', letterSpacing: '0.03em'
+                                                }}
+                                            >
+                                                {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
+                                            </span>
+                                        )}
+                                        {t.isConfidential && tab !== 'bin' && (
+                                            <span
+                                                title="Confidential — only Coordinators and Manager can view"
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: 'var(--status-failed, #ee5d50)', background: 'rgba(238, 93, 80, 0.08)', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap', letterSpacing: '0.04em' }}
+                                            >
+                                                <Lock size={9} /> CONFIDENTIAL
+                                            </span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td>{t.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AssigneeAvatar name={t.assignee.name} /><span style={{ fontSize: 13 }}>{t.assignee.name}</span></div> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                                <td><PriorityBadge p={t.priority} /></td>
+                                <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} /></td>
+                                <td>
+                                    <StatusBadge status={t.status} size="sm" />
+                                </td>
+                                <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                                    <ActionsDropdown
+                                        actions={[
+                                            ...(tab !== 'bin' ? [
+                                                { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },
+                                                { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEdit(t.id) },
+                                                { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
+                                            ] as const : [
+                                                { label: 'Restore', icon: <CheckCircle2 size={12} />, onClick: () => onRestore?.([t.id]), variant: 'success' as const },
+                                                { label: 'Delete Permanently', icon: <Trash2 size={12} />, onClick: () => { onDelete([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
+                                            ] as const),
+                                        ]}
+                                    />
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </DataTable>
+            )}
+
+            {selectedIds.size > 0 && viewMode === 'table' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
                     <span style={{ fontWeight: 600, color: '#1e293b' }}>{selectedIds.size} selected</span>
                     {tab !== 'bin' && <button onClick={() => { onMarkDone([...selectedIds]); setSelectedIds(new Set()); }} style={{ padding: '4px 10px', borderRadius: 6, border: '0.5px solid #e2e8f0', background: '#fff', fontSize: 12, cursor: 'pointer' }}>Mark done</button>}
@@ -398,4 +696,4 @@ export default function TaskManager({
             )}
         </div>
     );
-}
+}

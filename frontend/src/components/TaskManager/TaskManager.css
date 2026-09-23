@@ -1,0 +1,229 @@
+/* ─── TaskManager Kanban Board & View Switcher ─── */
+
+.tm-view-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.tm-view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.tm-view-toggle-btn:hover {
+    color: #1e293b;
+}
+
+.tm-view-toggle-btn.active {
+    background: #ffffff;
+    color: #4318ff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tm-board-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+    align-items: start;
+}
+
+@media (max-width: 1200px) {
+    .tm-board-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .tm-board-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.tm-board-column {
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+    transition: background-color 0.2s, border-color 0.2s;
+    overflow: hidden;
+}
+
+.tm-board-column.drag-over {
+    background: #f0f4ff;
+    border: 2px dashed #4318ff;
+}
+
+.tm-board-col-header {
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #e2e8f0;
+    background: #ffffff;
+}
+
+.tm-board-col-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tm-board-col-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.tm-board-col-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.tm-board-col-cards {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(100vh - 340px);
+}
+
+.tm-board-card {
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    cursor: grab;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+    position: relative;
+}
+
+.tm-board-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(67, 24, 255, 0.08);
+    border-color: #cbd5e1;
+}
+
+.tm-board-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: scale(0.98);
+}
+
+.tm-board-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.tm-board-card-ref {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    font-family: monospace;
+    letter-spacing: 0.03em;
+}
+
+.tm-board-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.35;
+    margin-bottom: 6px;
+    cursor: pointer;
+}
+
+.tm-board-card-title:hover {
+    color: #4318ff;
+}
+
+.tm-board-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.tm-board-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #f1f5f9;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tm-board-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.tm-board-card:hover .tm-board-card-actions {
+    opacity: 1;
+}
+
+.tm-board-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.tm-board-action-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+.tm-board-empty-col {
+    padding: 24px 12px;
+    text-align: center;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 500;
+    margin: auto 0;
+    background: rgba(255, 255, 255, 0.6);
+}
