@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using Backend.Models.Enums;
 
 namespace Backend.Models.DTOs;
@@ -37,4 +37,9 @@ public class RegisterUserDTO
     public Guid? DepartmentId { get; set; }
 
     public Guid? JobPositionId { get; set; }
+
+    public DateTime? HireDate { get; set; }
+
+    [MaxLength(50)]
+    public string? EmploymentStatus { get; set; }
 }

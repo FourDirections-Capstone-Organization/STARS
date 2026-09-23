@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Modules.AuthenticationAndCredentials.Jwt;
@@ -62,27 +62,10 @@ public class SessionTimeoutMiddleware
             return;
         }
 
-        // Check last activity
-        if (user.LastActivityAt.HasValue)
-        {
-            var timeSinceLastActivity = DateTime.UtcNow - user.LastActivityAt.Value;
-            if (timeSinceLastActivity.TotalMinutes > _sessionSettings.InactivityTimeoutInMinutes)
-            {
-                context.Response.StatusCode = 401;
-                await context.Response.WriteAsJsonAsync(new 
-                { 
-                    message = "Session expired due to inactivity",
-                    code = "SESSION_TIMEOUT"
-                });
-                return;
-            }
-        }
-
+        // Update last activity time (throttled to at most once per minute)
         if (!user.LastActivityAt.HasValue || (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes >= 1)
         {
-            // Update last activity time
             user.LastActivityAt = DateTime.UtcNow;
-        
             await db.SaveChangesAsync();
         }
         

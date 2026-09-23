@@ -108,6 +108,7 @@ interface EmployeeRegisterDTO {
     jobPositionId: string;
     role: string;
     employmentStatus: string;
+    hireDate: string;
 }
 
 interface FieldError {
@@ -118,6 +119,8 @@ interface FieldError {
     jobPositionId?: string;
     role?: string;
     contactNumber?: string;
+    employmentStatus?: string;
+    hireDate?: string;
 }
 
 type FormState = EmployeeRegisterDTO;
@@ -133,7 +136,8 @@ const EMPTY_FORM: FormState = {
     departmentId: '',
     jobPositionId: '',
     role: '',
-    employmentStatus: '',
+    employmentStatus: 'Regular',
+    hireDate: new Date().toISOString().split('T')[0],
 };
 
 interface ActivityLog {
@@ -170,6 +174,9 @@ interface RecentEmployee {
     accountStatus: string;
     presenceStatus?: string;
     email?: string;
+    departmentName?: string;
+    employmentStatus?: string;
+    hireDate?: string;
     attachments?: Array<{
         employeeAttachmentId: string;
         fileName: string;
@@ -229,7 +236,53 @@ const POSITIONS: Record<string, string[]> = {
     'Administration': ['Administrative Officer', 'Encoder', 'Data Entry Specialist'],
 };
 
-const EMPLOYMENT_STATUSES = ['Active', 'Probationary', 'Contractual'];
+const EMPLOYMENT_STATUSES = ['Regular', 'Probationary', 'Contractual'];
+
+export function getRolesForPosition(positionName?: string, allRoles: string[] = SYSTEM_ROLES): string[] {
+    if (!positionName) return allRoles;
+    const lower = positionName.toLowerCase().trim();
+
+    if (lower.includes('encoder') || lower.includes('data entry')) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'encoder');
+        return match.length > 0 ? match : ['Encoder'];
+    }
+    if (lower.includes('courier') || lower.includes('driver') || lower.includes('delivery')) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'courier');
+        return match.length > 0 ? match : ['Courier'];
+    }
+    if (lower.includes('dispatcher') || lower.includes('dispatch')) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'dispatcher');
+        return match.length > 0 ? match : ['Dispatcher'];
+    }
+    if (lower.includes('accountant') || lower.includes('accounting') || lower.includes('finance analyst')) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'accountant');
+        return match.length > 0 ? match : ['Accountant'];
+    }
+    if (lower.includes('manager')) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'manager');
+        return match.length > 0 ? match : ['Manager'];
+    }
+    if (
+        lower.includes('coordinator') ||
+        lower.includes('lead') ||
+        lower.includes('specialist') ||
+        lower.includes('analyst') ||
+        lower.includes('admin') ||
+        lower.includes('officer') ||
+        lower.includes('representative') ||
+        lower.includes('recruiter') ||
+        lower.includes('developer') ||
+        lower.includes('support')
+    ) {
+        const match = allRoles.filter(r => r.toLowerCase() === 'coordinator');
+        return match.length > 0 ? match : ['Coordinator'];
+    }
+
+    const directMatch = allRoles.filter(r => lower.includes(r.toLowerCase()));
+    if (directMatch.length > 0) return directMatch;
+
+    return allRoles;
+}
 
 const PAGE_SIZE = 10;
 
@@ -408,6 +461,11 @@ function validate(form: FormState): FieldError {
         errs.employmentStatus = 'Please select an employment status.';
     }
 
+    // Hire Date
+    if (!form.hireDate) {
+        errs.hireDate = 'Hire date is required.';
+    }
+
     return errs;
 }
 
@@ -574,6 +632,11 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         ? jobPositions.filter(p => p.departmentId === form.departmentId)
         : [];
 
+    const selectedPosition = jobPositions.find(p => p.jobPositionId === form.jobPositionId);
+    const allowedRoles = form.jobPositionId
+        ? getRolesForPosition(selectedPosition?.name, availableRoles)
+        : [];
+
     const validateField = (key: keyof FormState, value: string): string => {
         switch (key) {
             case 'email': {
@@ -589,6 +652,8 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 return !value ? 'Please select a position.' : '';
             case 'role':
                 return !value ? 'Please select a system role.' : '';
+            case 'hireDate':
+                return !value ? 'Hire date is required.' : '';
             case 'contactNumber': {
                 const v = value.trim();
                 if (!v) return 'Contact number is required.';
@@ -604,10 +669,31 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         setDirty(true);
         const value = e.target.value;
 
-        // If department changes, reset position
+        // If department changes, reset position and role
         if (key === 'departmentId') {
-            setForm(prev => ({ ...prev, departmentId: value, jobPositionId: '' }));
-            setErrors(prev => ({ ...prev, departmentId: value ? undefined : 'Please select a department.', jobPositionId: undefined }));
+            setForm(prev => ({ ...prev, departmentId: value, jobPositionId: '', role: '' }));
+            setErrors(prev => ({ ...prev, departmentId: value ? undefined : 'Please select a department.', jobPositionId: undefined, role: undefined }));
+            setApiError('');
+            return;
+        }
+
+        // If position changes, dynamically filter role and auto-select if single match
+        if (key === 'jobPositionId') {
+            const pos = jobPositions.find(p => p.jobPositionId === value);
+            const rolesForPos = value ? getRolesForPosition(pos?.name, availableRoles) : [];
+            let autoRole = form.role;
+            if (rolesForPos.length === 1) {
+                autoRole = rolesForPos[0];
+            } else if (!rolesForPos.includes(form.role)) {
+                autoRole = '';
+            }
+
+            setForm(prev => ({ ...prev, jobPositionId: value, role: autoRole }));
+            setErrors(prev => ({
+                ...prev,
+                jobPositionId: value ? undefined : 'Please select a position.',
+                role: autoRole ? undefined : (value ? 'Please select a system role.' : undefined)
+            }));
             setApiError('');
             return;
         }
@@ -633,7 +719,8 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 email: form.email.trim(),
                 departmentId: form.departmentId || null,
                 jobPositionId: form.jobPositionId || null,
-                employmentStatus: form.employmentStatus || null,
+                employmentStatus: form.employmentStatus || 'Regular',
+                hireDate: form.hireDate ? new Date(form.hireDate).toISOString() : null,
             });
 
             const responseData = res.data;
@@ -891,7 +978,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 </div>
 
                 <div className="fm-section">
-                    <h5 className="fm-section-title">System Role & Employment Status</h5>
+                    <h5 className="fm-section-title">Role, Employment & Hire Date</h5>
                     <div className="fm-field-grid">
                         {/* System Role */}
                         <div className="fm-field">
@@ -903,10 +990,21 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                 value={form.role}
                                 onChange={handleChange('role')}
                                 className="fm-select"
-                                style={inputStyle(errors.role)}
+                                style={{
+                                    ...inputStyle(errors.role),
+                                    opacity: !form.jobPositionId ? 0.6 : 1,
+                                    cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
+                                }}
+                                disabled={!form.jobPositionId || loadingOrg}
                             >
-                                <option value="">Select a role</option>
-                                {availableRoles.map(r => (
+                                <option value="">
+                                    {!form.departmentId
+                                        ? 'Select department first'
+                                        : !form.jobPositionId
+                                            ? 'Select position first'
+                                            : 'Select a role'}
+                                </option>
+                                {allowedRoles.map(r => (
                                     <option key={r} value={r}>
                                         {r}
                                     </option>
@@ -928,11 +1026,27 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                 style={inputStyle(errors.employmentStatus)}
                             >
                                 <option value="">Select status</option>
-                                <option value="Active">Active</option>
+                                <option value="Regular">Regular</option>
                                 <option value="Probationary">Probationary</option>
                                 <option value="Contractual">Contractual</option>
                             </select>
                             <FieldErr msg={errors.employmentStatus} />
+                        </div>
+
+                        {/* Hire Date */}
+                        <div className="fm-field">
+                            <label className="fm-label" htmlFor="emp-hire-date">
+                                Hire Date <span style={{ color: 'var(--status-failed)' }}>*</span>
+                            </label>
+                            <input
+                                id="emp-hire-date"
+                                type="date"
+                                value={form.hireDate}
+                                onChange={handleChange('hireDate')}
+                                className="fm-input"
+                                style={inputStyle(errors.hireDate)}
+                            />
+                            <FieldErr msg={errors.hireDate} />
                         </div>
                     </div>
                 </div>
@@ -959,9 +1073,11 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                             { label: 'Name', value: [form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(' ') },
                             { label: 'Email', value: form.email },
                             { label: 'Contact', value: form.contactNumber },
+                            { label: 'Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || form.departmentId },
+                            { label: 'Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name || form.jobPositionId },
                             { label: 'Role', value: form.role },
-                            { label: 'Department', value: departments.find(d => d.id === form.departmentId)?.name || form.departmentId },
                             { label: 'Employment Status', value: form.employmentStatus },
+                            { label: 'Hire Date', value: fmtDate(form.hireDate) },
                         ].map(item => (
                             <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                                 <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{item.label}</span>
@@ -1001,10 +1117,11 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                         <div style={{ background: 'var(--bg-input)', borderRadius: 10, border: '1px solid var(--border)', padding: '12px 16px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {[
                                 { label: 'Employee ID', value: successData.employeeNumber },
-                                { label: 'Department', value: departments.find(d => d.departmentId === form.departmentId)?.name },
-                                { label: 'Position', value: jobPositions.find(p => p.jobPositionId === form.jobPositionId)?.name },
+                                { label: 'Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name },
+                                { label: 'Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name },
                                 { label: 'Role', value: form.role },
                                 { label: 'Status', value: form.employmentStatus },
+                                { label: 'Hire Date', value: fmtDate(form.hireDate) },
                                 { label: 'Email', value: form.email.trim() },
                             ].map(({ label, value }, i, arr) => (
                                 <div key={label}>
@@ -3080,6 +3197,8 @@ export default function Dashboard() {
                     presenceStatus: e.presenceStatus ?? 'Offline',
                     email: e.email ?? '',
                     departmentName: e.departmentName ?? e.DepartmentName ?? '',
+                    employmentStatus: e.employmentStatus ?? 'Regular',
+                    hireDate: e.hireDate ?? null,
                     attachments: e.attachments ?? [],
                 })).filter((e: RecentEmployee) => e.accountStatus !== 'Deleted' && e.employeeNumber !== currentEmployeeId);
                 setEmployees(list);

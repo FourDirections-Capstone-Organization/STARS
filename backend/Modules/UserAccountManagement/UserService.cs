@@ -1,4 +1,4 @@
-﻿using Backend.Data;
+using Backend.Data;
 using Backend.Models;
 using Backend.Modules.Email;
 using Backend.Models.DTOs;
@@ -84,6 +84,8 @@ public class UserService : IUserService
             Role = dto.Role,
             DepartmentId = dto.DepartmentId,
             JobPositionId = dto.JobPositionId,
+            HireDate = dto.HireDate,
+            EmploymentStatus = dto.EmploymentStatus ?? "Regular",
             IsActive = false,
             IsDeactivated = false,
             IsEmailVerified = false,
@@ -267,6 +269,12 @@ public class UserService : IUserService
 
         if (dto.ContactNumber != null)
             user.ContactNumber = dto.ContactNumber;
+
+        if (dto.HireDate.HasValue)
+            user.HireDate = dto.HireDate;
+
+        if (dto.EmploymentStatus != null)
+            user.EmploymentStatus = dto.EmploymentStatus;
 
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -467,6 +475,8 @@ public class UserService : IUserService
             IsDeactivated = user.IsDeactivated,
             IsEmailVerified = user.IsEmailVerified,
             IsPasswordChanged = user.IsPasswordChanged,
+            HireDate = user.HireDate,
+            EmploymentStatus = user.EmploymentStatus,
             CreatedAt = user.CreatedAt,
             FullName = $"{user.FirstName} {user.MiddleName} {user.LastName} {user.Suffix}"
                 .Replace("  ", " ").Trim(),

@@ -2,10 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// Safety-net timeout (30 min). Backend handles the actual session timeout
-// via SessionTimeoutMiddleware; this frontend timer only fires as a last
-// resort if the backend check is somehow bypassed.
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
+// 15-minute inactivity timeout based on real user UI interaction
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 5 * 60 * 1000;
 const RESET_THROTTLE = 1000;
 // Real user activity (scroll/click/navigate) pings the backend so its
@@ -28,7 +26,7 @@ export function useSessionTimeout() {
 
     const logout = useCallback(() => {
         localStorage.clear();
-        navigate('/', { replace: true });
+        navigate('/?reason=inactivity', { replace: true });
     }, [navigate]);
 
     logoutRef.current = logout;

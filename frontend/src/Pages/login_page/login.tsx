@@ -73,6 +73,11 @@ export default function Login() {
             'firstName', 'middleName', 'lastName', 'suffix',
             'contactNumber', 'email', 'role', 'isPasswordChanged', 'userRole']
             .forEach(k => localStorage.removeItem(k));
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('reason') === 'inactivity') {
+            updateStatus('You were logged out due to 15 minutes of inactivity.', 'info');
+        }
     }, []);
 
     const updateStatus = (message: string, type: StatusType) => {
@@ -164,6 +169,9 @@ export default function Login() {
             }
 
             localStorage.setItem('authToken', d.accessToken);
+            if (d.refreshToken) {
+                localStorage.setItem('refreshToken', d.refreshToken);
+            }
             localStorage.setItem('userRole', normalizedRole);
             localStorage.setItem('employeeId', d.employeeNumber ?? employeeId.trim());
             localStorage.setItem('isPasswordChanged', (d.isPasswordChanged ?? false).toString());

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Backend.Models.DTOs;
 
@@ -22,4 +22,9 @@ public class UpdateUserDTO
     [MaxLength(100)]
     [EmailAddress]
     public string? Email { get; set; }
+
+    public DateTime? HireDate { get; set; }
+
+    [MaxLength(50)]
+    public string? EmploymentStatus { get; set; }
 }

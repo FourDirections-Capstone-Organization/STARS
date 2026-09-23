@@ -217,6 +217,11 @@ public class EmailService : IEmailService
             using var client = new SmtpClient();
             client.ServerCertificateValidationCallback = (s, c, h, e) => true;
 
+            // Steps to send the email.
+                // 1. Connect to the mail server using Start TLS - Plain text to encrypted.
+                // 2. Authenticate with the username and password like logging in
+                // 3. Send the email message
+                // 4. Disconnect gracefully
             await client.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port, SecureSocketOptions.StartTls);
             await client.AuthenticateAsync(_smtpSettings.Username, _smtpSettings.Password);
             await client.SendAsync(message);

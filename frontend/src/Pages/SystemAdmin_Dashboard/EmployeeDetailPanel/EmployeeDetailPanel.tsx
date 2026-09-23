@@ -27,6 +27,8 @@ import {
     Activity,
     Lightbulb,
     Building,
+    Briefcase,
+    Calendar,
 } from 'lucide-react';
 import './EmployeeDetailPanel.css';
 import { useToast } from '../../../components/Toast/Toast';
@@ -69,8 +71,11 @@ interface RecentEmployee {
     contactNumber: string;
     role: string;
     accountStatus: string;
+    presenceStatus?: string;
     email?: string;
     departmentName?: string;
+    employmentStatus?: string;
+    hireDate?: string;
     attachments?: Array<{
         employeeAttachmentId: string;
         fileName: string;
@@ -837,6 +842,8 @@ export default function EmployeeDetailPanel({
                                     { label: 'Contact Number', value: profile.contactNumber || '—', icon: Phone },
                                     { label: 'Role', value: toDisplayRole(profile.role), icon: Shield },
                                     { label: 'Department', value: profile.departmentName || '—', icon: Building },
+                                    { label: 'Employment Status', value: profile.employmentStatus || 'Regular', icon: Briefcase },
+                                    { label: 'Hire Date', value: fmtDate(profile.hireDate ?? null), icon: Calendar },
                                     { label: 'Account Status', value: profile.accountStatus, icon: CheckCircle2 },
                                 ].map(({ label, value, icon: Icon }) => (
                                     <div key={label} className="ed-info-row">

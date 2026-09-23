@@ -1,4 +1,4 @@
-﻿using Backend.Models.Enums;
+using Backend.Models.Enums;
 
 namespace Backend.Models.DTOs;
 
@@ -22,6 +22,8 @@ public class UserResponseDTO
     public bool IsDeactivated { get; set; }
     public bool IsEmailVerified { get; set; }
     public bool IsPasswordChanged { get; set; }
+    public DateTime? HireDate { get; set; }
+    public string? EmploymentStatus { get; set; }
     public DateTime CreatedAt { get; set; }
     public string FullName { get; set; } = string.Empty;
     /// <summary>Online/Offline derived from the user's active session activity.</summary>
