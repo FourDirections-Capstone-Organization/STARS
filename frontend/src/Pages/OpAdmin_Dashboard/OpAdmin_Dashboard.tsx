@@ -1913,7 +1913,7 @@ const DashboardTab: React.FC<{
                         </button>
                     </div>
                     {td ? (
-                        <div className="stats-row">
+                        <div className="stats-row stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="Total Tasks" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
                             <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="Active / In Progress" value={totalActive} subtext={inProgress > 0 ? `${inProgress} in progress` : 'None in progress'} />
                             <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="Pending Review" value={pendingReview} subtext={pendingReview > 0 ? 'Awaiting admin review' : 'All reviewed'} />
@@ -1922,7 +1922,7 @@ const DashboardTab: React.FC<{
                             <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="Overdue" value={overdue} subtext={overdue > 0 ? `${overdue} past deadline` : 'No overdue tasks'} />
                         </div>
                     ) : (
-                        <div className="stats-row">
+                        <div className="stats-row stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="Total Tasks" value={0} subtext="No data" />
                             <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="Active / In Progress" value={0} subtext="No data" />
                             <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="Pending Review" value={0} subtext="No data" />
@@ -4709,7 +4709,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {opReport && (
                         <>
-                            <div className="report-summary-grid">
+                            <div className="report-summary-grid stats-grid-5">
                                 <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant='teal' label="TOTAL TASKS" value={String(opReport.totalTasks)} subtext="All tasks" />
                                 <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETED" value={String(opReport.completedTasks)} subtext="Tasks finished" />
                                 <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="PENDING" value={String(opReport.pendingTasks)} subtext="Not yet completed" />
@@ -5573,7 +5573,7 @@ const ReopenTab: React.FC<{
     return (
         <div className="dashboard-content">
             {/* Stat cards */}
-            <div className="stats-row">
+            <div className="stats-row stats-row-4">
                 {[
                     { label: 'PENDING REQUESTS', value: pending.length, icon: <RotateCcw size={20} strokeWidth={2.3} />, variant: 'warning', subtext: 'Awaiting review' },
                     { label: 'APPROVED', value: history.filter(r => r.status === 'Approved').length, icon: <ThumbsUp size={20} strokeWidth={2.3} />, variant: 'success', subtext: 'Task reopened' },
