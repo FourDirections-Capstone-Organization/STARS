@@ -1383,9 +1383,13 @@
       margin-left: 0;
     }
 
+    .main-area > main {
+      padding: 0.85rem 0.65rem;
+    }
+
     /* Header: tighter padding on mobile */
     .site-header {
-      padding: 0 16px;
+      padding: 0 12px;
     }
 
     /* Reveal the hamburger drawer toggle on mobile */
@@ -1395,7 +1399,7 @@
 
     /* Header title smaller on mobile */
     .header-title {
-      font-size: 18px;
+      font-size: 16px;
     }
 
     /* Table toolbar stacks vertically */
@@ -1408,6 +1412,7 @@
     .dt-toolbar-right {
       width: 100%;
       justify-content: flex-start;
+      flex-wrap: wrap;
     }
 
     .dt-search-wrap {
@@ -1421,33 +1426,32 @@
 
     /* Notification dropdown: full width */
     .notification-dropdown {
-      width: calc(100vw - 32px);
-      right: -8px;
+      width: calc(100vw - 24px);
+      right: -6px;
     }
 
     /* Profile dropdown: full width */
     .profile-dropdown {
-      width: calc(100vw - 32px);
-      right: -8px;
+      width: calc(100vw - 24px);
+      right: -6px;
     }
 
     /* Buttons: touch-friendly minimum */
     .btn {
-      min-height: 44px;
+      min-height: 40px;
     }
   }
 
   /* ── md: Tablet (481px – 768px) ── */
   @media (min-width: 481px) and (max-width: 768px) {
 
-    /* Sidebar collapses to icon-only by default */
-    .sidebar:not(.mobile-open) {
-      width: var(--sc);
+    .main-area > main {
+      padding: 1.25rem 1rem;
     }
 
     /* Header title medium size */
     .header-title {
-      font-size: 20px;
+      font-size: 18px;
     }
 
     /* Table toolbar wraps gracefully */
@@ -1468,9 +1472,8 @@
   /* ── lg: Desktop (769px – 1024px) ── */
   @media (min-width: 769px) and (max-width: 1024px) {
 
-    /* Sidebar visible expanded */
-    .sidebar {
-      position: sticky;
+    .main-area > main {
+      padding: 1.5rem 1.25rem;
     }
 
     /* KPI cards: 2–3 columns */

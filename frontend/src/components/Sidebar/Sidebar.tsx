@@ -216,11 +216,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
         <button
-          className="sb-toggle-btn"
+          className="sb-toggle-btn sb-desktop-toggle"
           onClick={toggleCollapse}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <i className={collapsed ? "ti ti-chevron-right" : "ti ti-chevron-left"} />
+        </button>
+        <button
+          className="sb-close-mobile-btn"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation menu"
+        >
+          <i className="ti ti-x" />
         </button>
       </div>
         {profile && (

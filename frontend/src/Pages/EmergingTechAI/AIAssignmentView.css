@@ -1250,9 +1250,19 @@
 }
 
 /* ─── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .ai-container {
+        padding: 16px 20px;
+    }
+
+    .ai-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 768px) {
     .ai-container {
-        padding: 16px;
+        padding: 12px 12px 20px;
     }
 
     .ai-field-row {
@@ -1274,4 +1284,28 @@
     .ai-summary-grid {
         grid-template-columns: 1fr;
     }
+
+    .ai-card {
+        padding: 14px;
+    }
 }
+
+@media (max-width: 480px) {
+    .ai-container {
+        padding: 10px 10px 16px;
+    }
+
+    .ai-hero-header {
+        padding: 14px 12px;
+    }
+
+    .ai-hero-title {
+        font-size: 1.15rem;
+    }
+
+    .ai-tab-pill {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+}
+

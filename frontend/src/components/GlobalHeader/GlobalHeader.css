@@ -1095,7 +1095,100 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS (Tablet & Mobile Header Optimizations)
+   Desktop & Laptop view remains 100% untouched above 1024px.
+═══════════════════════════════════════════════════════════════════════════ */
 
+@media (max-width: 1024px) {
+  .site-header {
+    padding: 0 16px;
+  }
 
+  .header-menu-btn {
+    display: flex;
+  }
 
+  .header-title {
+    font-size: 20px;
+  }
+}
 
+@media (max-width: 768px) {
+  .site-header {
+    height: 60px;
+    padding: 0 12px;
+  }
+
+  .header-title {
+    font-size: 18px;
+  }
+
+  .header-breadcrumb {
+    display: none;
+  }
+
+  .header-controls {
+    gap: 8px;
+  }
+
+  .header-datetime {
+    display: none;
+  }
+
+  .header-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .header-avatar-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .notification-dropdown {
+    position: fixed;
+    top: 66px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
+  }
+
+  .profile-dropdown {
+    position: fixed;
+    top: 66px;
+    right: 12px;
+    left: auto;
+    width: min(280px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 480px) {
+  .site-header {
+    height: 54px;
+    padding: 0 10px;
+  }
+
+  .header-menu-btn {
+    width: 34px;
+    height: 34px;
+    margin-right: 8px;
+  }
+
+  .header-title {
+    font-size: 16px;
+  }
+
+  .header-controls {
+    gap: 6px;
+  }
+
+  .header-icon-btn,
+  .header-avatar-btn {
+    width: 34px;
+    height: 34px;
+  }
+}

@@ -569,37 +569,79 @@
   transform: translateX(0) scale(1);
 }
 
-/* ── Mobile Drawer (≤ 480px) ─────────────────────────────────────────────── */
+/* ── Mobile Close Button ─────────────────────────────────────────────────── */
+.sb-close-mobile-btn {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm, 8px);
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  margin-left: auto;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
 
-@media (max-width: 480px) {
+.sb-close-mobile-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+/* ── Mobile Drawer (≤ 768px) ─────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
   .sidebar {
     position: fixed;
     left: -100%;
     top: 0;
     height: 100vh;
-    width: var(--sw, 272px);
-    transition: left var(--mt-enter, 280ms) var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1));
-    z-index: var(--z-overlay, 80);
+    height: 100dvh;
+    width: min(290px, 85vw);
+    transition: left var(--mt-enter, 280ms) var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 280ms ease;
+    z-index: var(--z-overlay, 1000);
+    box-shadow: none;
   }
 
-  .sidebar.mobile-open { left: 0; }
+  .sidebar.mobile-open {
+    left: 0;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+  }
 
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: calc(var(--z-overlay, 80) - 1);
-    backdrop-filter: blur(2px);
+    background: rgba(11, 20, 55, 0.6);
+    z-index: calc(var(--z-overlay, 1000) - 1);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-out;
   }
 
-  .main-area { margin-left: 0; }
+  .sb-desktop-toggle {
+    display: none !important;
+  }
+
+  .sb-close-mobile-btn {
+    display: flex;
+  }
+
+  .main-area {
+    margin-left: 0;
+  }
 }
 
-/* ── Tablet (481px – 768px): icon-only by default ────────────────────────── */
+/* ── Tablet (769px – 1024px): icon-only or drawer support ───────────────── */
 
-@media (min-width: 481px) and (max-width: 768px) {
-  .sidebar:not(.mobile-open) { width: var(--sc, 64px); }
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar:not(.mobile-open) {
+    width: var(--sc, 64px);
+  }
 }
 
 /* ── Dark mode legacy support ────────────────────────────────────────────── */
