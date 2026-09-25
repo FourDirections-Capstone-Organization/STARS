@@ -2080,4 +2080,26 @@ input.emp-picker-checkbox {
     box-shadow: 0 2px 8px rgba(0, 169, 157, 0.3);
 }
 
+/* ─── Team Department Group Headers ────────────────────────────────────── */
+.team-dept-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+
+.team-dept-group-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.team-dept-group-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    margin-left: 8px;
+}
+
 

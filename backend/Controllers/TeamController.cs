@@ -29,9 +29,9 @@ public class TeamController : ControllerBase
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
     public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50,
-        [FromQuery] string? search = null, [FromQuery] bool includeInactive = false)
+        [FromQuery] string? search = null, [FromQuery] bool includeInactive = false, [FromQuery] Guid? departmentId = null)
     {
-        var result = await _teamService.GetAllAsync(pageNumber, pageSize, search, includeInactive);
+        var result = await _teamService.GetAllAsync(pageNumber, pageSize, search, includeInactive, departmentId);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
