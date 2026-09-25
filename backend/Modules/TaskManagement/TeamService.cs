@@ -35,7 +35,7 @@ public class TeamService : ITeamService
     };
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<TeamResponseDTO>>> GetAllAsync(
-        int pageNumber = 1, int pageSize = 50, string? search = null, bool includeInactive = false)
+        int pageNumber = 1, int pageSize = 50, string? search = null, bool includeInactive = false, Guid? departmentId = null)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 200);
@@ -47,6 +47,9 @@ public class TeamService : ITeamService
 
         if (!includeInactive)
             query = query.Where(t => t.IsActive);
+
+        if (departmentId.HasValue)
+            query = query.Where(t => t.DepartmentId == departmentId.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
