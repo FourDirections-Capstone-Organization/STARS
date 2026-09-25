@@ -5,7 +5,7 @@ namespace Backend.Modules.TaskManagement;
 
 public interface ITeamService
 {
-    Task<ApiResponseDTO<PaginatedResponseDTO<TeamResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 50, string? search = null, bool includeInactive = false, Guid? departmentId = null);
+    Task<ApiResponseDTO<PaginatedResponseDTO<TeamResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 50, string? search = null, bool includeInactive = false);
     Task<ApiResponseDTO<TeamResponseDTO>> GetByIdAsync(Guid id);
     Task<ApiResponseDTO<TeamResponseDTO>> CreateAsync(CreateTeamDTO dto, Guid createdById);
     Task<ApiResponseDTO<TeamResponseDTO>> UpdateAsync(Guid id, UpdateTeamDTO dto, Guid updatedById);

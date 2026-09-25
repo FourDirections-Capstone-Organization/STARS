@@ -1,9 +1,8 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
     Building2, Briefcase, Users, ArrowRight, Loader2, AlertCircle, CheckCircle2,
     Plus, Pencil, Trash2, X, Search, RefreshCw, GitBranch, UserCircle2,
-    Shield, Mail, Phone, Hash, XCircle, Eye, Download, Check, Layers, ChevronRight, UserPlus,
-    Filter
+    Shield, Mail, Phone, Hash, XCircle, Eye, Download, Check, Layers, ChevronRight, UserPlus
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -56,27 +55,6 @@ interface EmployeeDTO {
     jobPositionName?: string;
     isActive: boolean;
     isDeactivated: boolean;
-}
-
-interface TeamMemberDTO {
-    userId: string;
-    fullName: string;
-    employeeNumber?: string;
-    role?: string;
-    department?: string;
-    availabilityStatus?: string;
-    isAvailable?: boolean;
-    joinedAt?: string;
-}
-
-interface TeamDTO {
-    id: string;
-    name: string;
-    departmentId?: string;
-    departmentName?: string;
-    description?: string;
-    memberCount?: number;
-    members?: TeamMemberDTO[];
 }
 
 interface HierarchyEmployeeDTO {
@@ -296,110 +274,19 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
 
 // ─── Org Chart Sub-Tab ────────────────────────────────────────────────────────
 
-function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
-    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[]; teams: TeamDTO[]; onOpenMap: (emp?: EmployeeDTO) => void;
+function OrgChartView({ departments, positions, employees, onOpenMap }: {
+    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[]; onOpenMap: (emp?: EmployeeDTO) => void;
 }) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [pdfLoading, setPdfLoading] = useState(false);
-
-    // Cascading Filter State: Department > Team > Employee Member
-    const [filterDeptId, setFilterDeptId] = useState<string>('');
-    const [filterTeamId, setFilterTeamId] = useState<string>('');
-    const [filterEmployeeId, setFilterEmployeeId] = useState<string>('');
-
-    const baseActiveEmps = useMemo(() => employees.filter(e => e.isActive && !e.isDeactivated), [employees]);
-
-    // Selected department object
-    const selectedDept = useMemo(() => {
-        return departments.find(d => d.id === filterDeptId);
-    }, [departments, filterDeptId]);
-
-    // Available teams based on selected department
-    const availableTeams = useMemo(() => {
-        if (!filterDeptId) return teams;
-        return teams.filter(t => {
-            if (t.departmentId && t.departmentId.toLowerCase() === filterDeptId.toLowerCase()) return true;
-            if (selectedDept && t.departmentName && t.departmentName.trim().toLowerCase() === selectedDept.name.trim().toLowerCase()) return true;
-            return false;
-        });
-    }, [teams, filterDeptId, selectedDept]);
-
-    // Selected team object
-    const selectedTeam = useMemo(() => {
-        return teams.find(t => t.id === filterTeamId);
-    }, [teams, filterTeamId]);
-
-    // Set of user IDs in selected team
-    const teamMemberUserIds = useMemo(() => {
-        if (!selectedTeam) return null;
-        return new Set(selectedTeam.members?.map(m => m.userId) ?? []);
-    }, [selectedTeam]);
-
-    // Map of userId -> Team name (for displaying team badge on employee cards)
-    const userTeamMap = useMemo(() => {
-        const map = new Map<string, string>();
-        teams.forEach(t => {
-            t.members?.forEach(m => {
-                map.set(m.userId, t.name);
-            });
-        });
-        return map;
-    }, [teams]);
-
-    // Available employees in Employee dropdown based on Dept / Team filters
-    const availableEmployees = useMemo(() => {
-        return baseActiveEmps.filter(e => {
-            if (filterDeptId) {
-                const matchesDept = (e.departmentId && e.departmentId.toLowerCase() === filterDeptId.toLowerCase()) ||
-                    (selectedDept && e.departmentName && e.departmentName.trim().toLowerCase() === selectedDept.name.trim().toLowerCase());
-                if (!matchesDept) return false;
-            }
-            if (filterTeamId && teamMemberUserIds) {
-                if (!teamMemberUserIds.has(e.id)) return false;
-            }
-            return true;
-        });
-    }, [baseActiveEmps, filterDeptId, selectedDept, filterTeamId, teamMemberUserIds]);
-
-    // Filtered active employees rendered in the chart
-    const activeEmps = useMemo(() => {
-        return baseActiveEmps.filter(e => {
-            // Department filter
-            if (filterDeptId) {
-                const matchesDept = (e.departmentId && e.departmentId.toLowerCase() === filterDeptId.toLowerCase()) ||
-                    (selectedDept && e.departmentName && e.departmentName.trim().toLowerCase() === selectedDept.name.trim().toLowerCase());
-                if (!matchesDept) return false;
-            }
-
-            // Team filter
-            if (filterTeamId && teamMemberUserIds) {
-                if (!teamMemberUserIds.has(e.id)) return false;
-            }
-
-            // Employee filter
-            if (filterEmployeeId) {
-                if (e.id !== filterEmployeeId) return false;
-            }
-
-            return true;
-        });
-    }, [baseActiveEmps, filterDeptId, selectedDept, filterTeamId, teamMemberUserIds, filterEmployeeId]);
-
+    const activeEmps = employees.filter(e => e.isActive && !e.isDeactivated);
     const byRole = (role: string) => activeEmps.filter(e => toDisplayRole(e.role) === role);
     const roles = ['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier'];
-    const hasRole = (r: string) => baseActiveEmps.some(e => toDisplayRole(e.role) === r);
+    const hasRole = (r: string) => byRole(r).length > 0;
 
     const managers = byRole('Manager');
     const coordinators = byRole('Coordinator');
     const staffMembers = activeEmps.filter(e => ['Dispatcher', 'Encoder', 'Courier', 'Accountant'].includes(toDisplayRole(e.role)));
-
-    const hasActiveFilter = Boolean(filterDeptId || filterTeamId || filterEmployeeId);
-
-    const clearFilters = () => {
-        setFilterDeptId('');
-        setFilterTeamId('');
-        setFilterEmployeeId('');
-    };
 
     const downloadPdf = async () => {
         if (!chartRef.current) return;
@@ -446,150 +333,15 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
         );
     }
 
-    const deptListToRender = departments.filter(d => {
-        if (!d.isActive) return false;
-        if (!filterDeptId) return true;
-        return d.id === filterDeptId || (selectedDept && d.name.trim().toLowerCase() === selectedDept.name.trim().toLowerCase());
-    });
-
     return (
         <div className="org-content">
             <HierarchyFlowBanner onMapClick={() => onOpenMap()} />
-
-            {/* Department > Team > Employee Cascading Filter Bar */}
-            <div className="card org-filter-bar" style={{ padding: '14px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: '#e6faf8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                            <Filter size={15} />
-                        </div>
-                        <div>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Org Structure Hierarchy Filter</span>
-                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>Department → Team → Employee Member</span>
-                        </div>
-                    </div>
-                    {hasActiveFilter && (
-                        <button
-                            className="btn btn-outline btn-sm"
-                            onClick={clearFilters}
-                            style={{ height: 28, padding: '0 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                            <X size={12} /> Reset Filter
-                        </button>
-                    )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                    {/* Level 1 Filter: Department */}
-                    <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                            1. DEPARTMENT
-                        </label>
-                        <select
-                            value={filterDeptId}
-                            onChange={e => {
-                                const newDeptId = e.target.value;
-                                setFilterDeptId(newDeptId);
-                                if (newDeptId && filterTeamId) {
-                                    const team = teams.find(t => t.id === filterTeamId);
-                                    if (team?.departmentId && team.departmentId !== newDeptId) {
-                                        setFilterTeamId('');
-                                        setFilterEmployeeId('');
-                                    }
-                                }
-                            }}
-                            className="org-filter-select"
-                        >
-                            <option value="">All Departments ({departments.filter(d => d.isActive).length})</option>
-                            {departments.filter(d => d.isActive).map(d => (
-                                <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Level 2 Filter: Team */}
-                    <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                            2. TEAM
-                        </label>
-                        <select
-                            value={filterTeamId}
-                            onChange={e => {
-                                const newTeamId = e.target.value;
-                                setFilterTeamId(newTeamId);
-                                if (newTeamId) {
-                                    const team = teams.find(t => t.id === newTeamId);
-                                    if (team?.departmentId && !filterDeptId) {
-                                        setFilterDeptId(team.departmentId);
-                                    }
-                                }
-                                setFilterEmployeeId('');
-                            }}
-                            className="org-filter-select"
-                        >
-                            <option value="">All Teams ({availableTeams.length})</option>
-                            {availableTeams.map(t => (
-                                <option key={t.id} value={t.id}>
-                                    {t.name} {t.departmentName ? `(${t.departmentName})` : ''} • {t.memberCount ?? t.members?.length ?? 0} mbrs
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Level 3 Filter: Employee Member */}
-                    <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                            3. EMPLOYEE MEMBER
-                        </label>
-                        <select
-                            value={filterEmployeeId}
-                            onChange={e => setFilterEmployeeId(e.target.value)}
-                            className="org-filter-select"
-                        >
-                            <option value="">All Members ({availableEmployees.length})</option>
-                            {availableEmployees.map(e => (
-                                <option key={e.id} value={e.id}>
-                                    {buildName(e)} ({toDisplayRole(e.role)})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Active Filter Chips */}
-                {hasActiveFilter && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Active Filters:</span>
-                        {filterDeptId && (
-                            <span className="org-filter-chip">
-                                Dept: {selectedDept?.name || 'Selected'}
-                                <X size={12} onClick={() => { setFilterDeptId(''); setFilterTeamId(''); setFilterEmployeeId(''); }} />
-                            </span>
-                        )}
-                        {filterTeamId && (
-                            <span className="org-filter-chip">
-                                Team: {selectedTeam?.name || 'Selected'}
-                                <X size={12} onClick={() => { setFilterTeamId(''); setFilterEmployeeId(''); }} />
-                            </span>
-                        )}
-                        {filterEmployeeId && (
-                            <span className="org-filter-chip">
-                                Member: {(() => { const emp = employees.find(e => e.id === filterEmployeeId); return emp ? buildName(emp) : 'Selected'; })()}
-                                <X size={12} onClick={() => setFilterEmployeeId('')} />
-                            </span>
-                        )}
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-                            Showing <strong>{activeEmps.length}</strong> of <strong>{baseActiveEmps.length}</strong> personnel
-                        </span>
-                    </div>
-                )}
-            </div>
 
             <div className="org-stats-grid">
                 <StatusCard icon={<Shield size={18} />} label="Level 1: Manager" value={managers.length} subtext="Executive Management" variant="teal" />
                 <StatusCard icon={<GitBranch size={18} />} label="Level 2: Coordinators" value={coordinators.length} subtext="Operations Leads" variant="teal" />
                 <StatusCard icon={<Users size={18} />} label="Level 3: Execution Staff" value={staffMembers.length} subtext="Dispatchers, Encoders, Couriers" variant="success" />
-                <StatusCard icon={<Building2 size={18} />} label="Departments" value={deptListToRender.length} subtext={filterDeptId ? 'Filtered unit' : 'Active units'} variant="teal" />
+                <StatusCard icon={<Building2 size={18} />} label="Client Departments" value={departments.filter(d => d.isActive).length} subtext="Active units" variant="teal" />
             </div>
 
             <div className="card" style={{ padding: 20 }}>
@@ -620,9 +372,7 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                         </div>
                         <div className="org-chart-level-row">
                             {managers.length === 0 ? (
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                    {hasActiveFilter ? 'No Manager matching selected filter' : 'No Manager assigned'}
-                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>No Manager assigned</div>
                             ) : (
                                 managers.map(e => (
                                     <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
@@ -630,9 +380,6 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                             <div className="node-role" style={{ color: ROLE_COLORS.Manager }}>Manager</div>
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
                                             <div className="node-count">#{e.employeeNumber} • {e.departmentName || 'Coordinator & Customer Service Team'}</div>
-                                            {userTeamMap.get(e.id) && (
-                                                <div className="node-team-tag">Team: {userTeamMap.get(e.id)}</div>
-                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -651,9 +398,7 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                         </div>
                         <div className="org-chart-level-row">
                             {coordinators.length === 0 ? (
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                    {hasActiveFilter ? 'No Coordinators matching selected filter' : 'No Coordinators assigned'}
-                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>No Coordinators assigned</div>
                             ) : (
                                 coordinators.map(e => (
                                     <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
@@ -662,9 +407,6 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
                                             <div className="node-count">#{e.employeeNumber} • {e.departmentName || '—'}</div>
                                             <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.jobPositionName || 'Operations Lead'}</div>
-                                            {userTeamMap.get(e.id) && (
-                                                <div className="node-team-tag">Team: {userTeamMap.get(e.id)}</div>
-                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -682,46 +424,34 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                             </span>
                         </div>
                         <div className="org-chart-level-row" style={{ alignItems: 'flex-start' }}>
-                            {staffMembers.length === 0 ? (
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', padding: 12 }}>
-                                    {hasActiveFilter ? 'No Execution Staff matching selected filter' : 'No Execution Staff assigned'}
-                                </div>
-                            ) : (
-                                deptListToRender.map(dept => {
-                                    const staff = staffMembers.filter(e => 
-                                        (e.departmentId && e.departmentId.toLowerCase() === dept.id.toLowerCase()) || 
-                                        (e.departmentName && e.departmentName.trim().toLowerCase() === dept.name.trim().toLowerCase())
-                                    );
-                                    if (staff.length === 0) return null;
-                                    return (
-                                        <div key={dept.id} className="org-chart-department-group">
-                                            <div className="dept-header">
-                                                <span>{dept.name}</span>
-                                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>({staff.length})</span>
-                                            </div>
-                                            <div className="dept-members">
-                                                {staff.map(e => {
-                                                    const role = toDisplayRole(e.role);
-                                                    return (
-                                                        <div key={e.id} className="dept-member"
-                                                            style={{ borderLeft: `3px solid ${ROLE_COLORS[role] || '#ccc'}` }}
-                                                            onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
-                                                            <div>
-                                                                <div style={{ fontWeight: 500, fontSize: 12 }}>{buildName(e)}</div>
-                                                                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                                                    #{e.employeeNumber} • {e.jobPositionName || '—'}
-                                                                    {userTeamMap.get(e.id) && ` • Team: ${userTeamMap.get(e.id)}`}
-                                                                </div>
-                                                            </div>
-                                                            <span style={{ fontSize: 11, color: ROLE_COLORS[role] || '#999', fontWeight: 700 }}>{role}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+                            {departments.filter(d => d.isActive).map(dept => {
+                                const staff = staffMembers.filter(e => e.departmentId === dept.id);
+                                if (staff.length === 0) return null;
+                                return (
+                                    <div key={dept.id} className="org-chart-department-group">
+                                        <div className="dept-header">
+                                            <span>{dept.name}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>({staff.length})</span>
                                         </div>
-                                    );
-                                })
-                            )}
+                                        <div className="dept-members">
+                                            {staff.map(e => {
+                                                const role = toDisplayRole(e.role);
+                                                return (
+                                                    <div key={e.id} className="dept-member"
+                                                        style={{ borderLeft: `3px solid ${ROLE_COLORS[role] || '#ccc'}` }}
+                                                        onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
+                                                        <div>
+                                                            <div style={{ fontWeight: 500, fontSize: 12 }}>{buildName(e)}</div>
+                                                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>#{e.employeeNumber} • {e.jobPositionName || '—'}</div>
+                                                        </div>
+                                                        <span style={{ fontSize: 11, color: ROLE_COLORS[role] || '#999', fontWeight: 700 }}>{role}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -2054,7 +1784,6 @@ export default function OrgStructureTab() {
     const [departments, setDepartments] = useState<DeptDTO[]>([]);
     const [positions, setPositions] = useState<PosDTO[]>([]);
     const [employees, setEmployees] = useState<EmployeeDTO[]>([]);
-    const [teams, setTeams] = useState<TeamDTO[]>([]);
     const [selectedMappingEmp, setSelectedMappingEmp] = useState<EmployeeDTO | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -2069,11 +1798,10 @@ export default function OrgStructureTab() {
     const fetchAll = async () => {
         setLoading(true);
         try {
-            const [deptRes, posRes, empRes, teamRes] = await Promise.all([
+            const [deptRes, posRes, empRes] = await Promise.all([
                 api.get<DeptDTO[]>('/api/Department'),
                 api.get<PosDTO[]>('/api/job-positions'),
                 api.get<EmployeeDTO[]>('/api/user'),
-                api.get('/api/Team?pageNumber=1&pageSize=200').catch(() => ({ data: null })),
             ]);
             const fromResponse = (res: { data: any }) => {
                 const d = res.data?.data ?? res.data;
@@ -2082,11 +1810,9 @@ export default function OrgStructureTab() {
             const depts = fromResponse(deptRes) as DeptDTO[] | null;
             const pos = fromResponse(posRes) as PosDTO[] | null;
             const emps = fromResponse(empRes) as EmployeeDTO[] | null;
-            const tms = fromResponse(teamRes) as TeamDTO[] | null;
             if (depts) setDepartments(depts);
             if (pos) setPositions(pos);
             if (emps) setEmployees(emps);
-            if (tms) setTeams(tms);
         } catch { /* silently ignore */ }
         setLoading(false);
     };
@@ -2118,7 +1844,6 @@ export default function OrgStructureTab() {
                     departments={departments}
                     positions={positions}
                     employees={employees}
-                    teams={teams}
                     onOpenMap={handleOpenMapping}
                 />
             )}

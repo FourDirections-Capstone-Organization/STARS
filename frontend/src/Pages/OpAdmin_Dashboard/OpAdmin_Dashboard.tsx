@@ -2953,42 +2953,6 @@ const TeamTab: React.FC<{
         return set;
     }, [teams]);
 
-    // Hierarchy Filter State: Department > Team
-    const [filterDept, setFilterDept] = useState<string>('');
-    const [filterTeamId, setFilterTeamId] = useState<string>('');
-
-    const departmentOptions = useMemo(() => {
-        const set = new Set<string>();
-        ['Coordinator & Customer Service Team', 'Dispatch Team', 'Forwarding Team'].forEach(d => set.add(d));
-        teams.forEach(t => {
-            if (t.departmentName) set.add(t.departmentName);
-        });
-        return Array.from(set);
-    }, [teams]);
-
-    const availableTeamsForFilter = useMemo(() => {
-        if (!filterDept) return teams;
-        return teams.filter(t => (t.departmentName || 'Unassigned') === filterDept);
-    }, [teams, filterDept]);
-
-    const filteredTeams = useMemo(() => {
-        return teams.filter(t => {
-            if (filterDept && (t.departmentName || 'Unassigned') !== filterDept) return false;
-            if (filterTeamId && t.id !== filterTeamId) return false;
-            return true;
-        });
-    }, [teams, filterDept, filterTeamId]);
-
-    const groupedTeams = useMemo(() => {
-        const map = new Map<string, TeamDTO[]>();
-        filteredTeams.forEach(t => {
-            const dept = t.departmentName || 'Unassigned Department';
-            if (!map.has(dept)) map.set(dept, []);
-            map.get(dept)!.push(t);
-        });
-        return map;
-    }, [filteredTeams]);
-
     const fetchTeams = useCallback(async () => {
         setTeamsLoading(true);
         setTeamsError('');
@@ -3168,183 +3132,94 @@ const TeamTab: React.FC<{
                         <Plus size={14} /> Create Team
                     </button>
                 </div>
-
-                {/* Department > Team Hierarchy Filter Bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 20px 16px', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        <Filter size={15} style={{ color: 'var(--primary)' }} />
-                        <span>Filter:</span>
-                    </div>
-
-                    {/* Department Filter */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Department:</span>
-                        <select
-                            value={filterDept}
-                            onChange={e => {
-                                const newDept = e.target.value;
-                                setFilterDept(newDept);
-                                if (filterTeamId) {
-                                    const team = teams.find(t => t.id === filterTeamId);
-                                    if (team && (team.departmentName || 'Unassigned') !== newDept) {
-                                        setFilterTeamId('');
-                                    }
-                                }
-                            }}
-                            style={{ height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 12, background: '#fff', outline: 'none' }}
-                        >
-                            <option value="">All Departments</option>
-                            {departmentOptions.map(dept => (
-                                <option key={dept} value={dept}>{dept}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Team Filter */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Team:</span>
-                        <select
-                            value={filterTeamId}
-                            onChange={e => {
-                                const newTeamId = e.target.value;
-                                setFilterTeamId(newTeamId);
-                                if (newTeamId) {
-                                    const team = teams.find(t => t.id === newTeamId);
-                                    if (team?.departmentName && !filterDept) {
-                                        setFilterDept(team.departmentName);
-                                    }
-                                }
-                            }}
-                            style={{ height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 12, background: '#fff', outline: 'none' }}
-                        >
-                            <option value="">All Teams ({availableTeamsForFilter.length})</option>
-                            {availableTeamsForFilter.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Reset Button */}
-                    {(filterDept || filterTeamId) && (
-                        <button
-                            className="btn btn-outline btn-sm"
-                            onClick={() => { setFilterDept(''); setFilterTeamId(''); }}
-                            style={{ height: 30, padding: '0 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                            <X size={12} /> Clear Filter
-                        </button>
-                    )}
-
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-                        Showing <strong>{filteredTeams.length}</strong> of <strong>{teams.length}</strong> teams
-                    </span>
-                </div>
-
                 {teamsLoading ? (
                     <div className="empty-state"><Loader2 size={22} className="spin" /><p>Loading teams...</p></div>
                 ) : teamsError ? (
                     <div className="empty-state"><AlertCircle size={22} /><p>{teamsError}</p></div>
                 ) : teams.length === 0 ? (
                     <div className="empty-state"><Users size={22} /><p>No teams yet. Create a team to get started.</p></div>
-                ) : filteredTeams.length === 0 ? (
-                    <div className="empty-state"><Users size={22} /><p>No teams matching selected filters.</p></div>
                 ) : (
-                    <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                        {Array.from(groupedTeams.entries()).map(([deptName, deptTeams]) => (
-                            <div key={deptName} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                <div className="team-dept-group-header">
-                                    <Building size={15} style={{ color: 'var(--primary)' }} />
-                                    <span className="team-dept-group-title">{deptName}</span>
-                                    <span className="badge badge-blue" style={{ fontSize: 11 }}>
-                                        {deptTeams.length} team{deptTeams.length !== 1 ? 's' : ''}
-                                    </span>
-                                    <div className="team-dept-group-line" />
+                    <div style={{ padding: '0 20px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+                        {teams.map(t => (
+                            <div key={t.id} className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                                        <span className="badge badge-blue">{t.memberCount} member{t.memberCount !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 4 }}>
+                                        <button className="btn btn-sm" onClick={() => openEdit(t)} title="Edit team" style={{ padding: '4px 6px' }}>
+                                            <Pencil size={12} />
+                                        </button>
+                                        <button className="btn btn-sm" onClick={() => setDeleteTeamId(t.id)} title="Delete team" style={{ padding: '4px 6px', color: '#dc2626' }}>
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
                                 </div>
+                                {t.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.description}</div>}
+                                {t.departmentName && <div style={{ fontSize: 11, color: '#94a3b8' }}>Department: {t.departmentName}</div>}
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
-                                    {deptTeams.map(t => (
-                                        <div key={t.id} className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                                                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                                                    <span className="badge badge-blue">{t.memberCount} member{t.memberCount !== 1 ? 's' : ''}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: 4 }}>
-                                                    <button className="btn btn-sm" onClick={() => openEdit(t)} title="Edit team" style={{ padding: '4px 6px' }}>
-                                                        <Pencil size={12} />
-                                                    </button>
-                                                    <button className="btn btn-sm" onClick={() => setDeleteTeamId(t.id)} title="Delete team" style={{ padding: '4px 6px', color: '#dc2626' }}>
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            {t.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.description}</div>}
-                                            {t.departmentName && <div style={{ fontSize: 11, color: '#94a3b8' }}>Department: {t.departmentName}</div>}
+                                {/* Member dropdown */}
+                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>MEMBERS</div>
+                                {t.members.length === 0 ? (
+                                    <div style={{ fontSize: 12, color: '#94a3b8' }}>No members assigned.</div>
+                                ) : (
+                                    <select
+                                        value={selectedMemberId && t.members.some(m => m.userId === selectedMemberId) ? selectedMemberId : ''}
+                                        onChange={e => setSelectedMemberId(e.target.value)}
+                                        style={{ height: 34, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, width: '100%', boxSizing: 'border-box', outline: 'none', background: '#fff' }}
+                                    >
+                                        <option value="">Select a member…</option>
+                                        {t.members.map(m => (
+                                            <option key={m.userId} value={m.userId}>{m.fullName}{m.role ? ` — ${m.role}` : ''}</option>
+                                        ))}
+                                    </select>
+                                )}
 
-                                            {/* Member dropdown */}
-                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>MEMBERS</div>
-                                            {t.members.length === 0 ? (
-                                                <div style={{ fontSize: 12, color: '#94a3b8' }}>No members assigned.</div>
-                                            ) : (
-                                                <select
-                                                    value={selectedMemberId && t.members.some(m => m.userId === selectedMemberId) ? selectedMemberId : ''}
-                                                    onChange={e => setSelectedMemberId(e.target.value)}
-                                                    style={{ height: 34, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, width: '100%', boxSizing: 'border-box', outline: 'none', background: '#fff' }}
-                                                >
-                                                    <option value="">Select a member…</option>
-                                                    {t.members.map(m => (
-                                                        <option key={m.userId} value={m.userId}>{m.fullName}{m.role ? ` — ${m.role}` : ''}</option>
-                                                    ))}
-                                                </select>
-                                            )}
-
-                                            {/* Member rows with transfer + remove */}
-                                            {t.members.map(m => (
-                                                <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px' }}>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.fullName}</div>
-                                                        <div style={{ fontSize: 10, color: '#94a3b8' }}>{m.employeeNumber}{m.department ? ` · ${m.department}` : ''}</div>
-                                                    </div>
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        onClick={() => openRecommendations(m.userId, m.fullName)}
-                                                        title="Recommendation history"
-                                                        style={{ padding: '4px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                                                    >
-                                                        <Lightbulb size={11} /> Recs
-                                                    </button>
-                                                    <button className="btn btn-sm" onClick={() => handleRemoveMember(t.id, m.userId)} title="Remove from team" style={{ padding: '4px 6px', color: '#dc2626' }}>
-                                                        <X size={12} />
-                                                    </button>
-                                                </div>
-                                            ))}
-
-                                            {/* Add members */}
-                                            {unassignedEmployees.length > 0 && (
-                                                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
-                                                    <select
-                                                        value={addMembersTeamId === t.id ? addMemberIds[0] ?? '' : ''}
-                                                        onChange={e => { setAddMembersTeamId(t.id); setAddMemberIds(e.target.value ? [e.target.value] : []); }}
-                                                        style={{ flex: 1, height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff' }}
-                                                    >
-                                                        <option value="">Add member…</option>
-                                                        {unassignedEmployees.map(m => (
-                                                            <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                                        ))}
-                                                    </select>
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        disabled={addMembersTeamId !== t.id || addMemberIds.length === 0 || addingMembers}
-                                                        onClick={handleAddMembers}
-                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                                    >
-                                                        {addingMembers && addMembersTeamId === t.id ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add
-                                                    </button>
-                                                </div>
-                                            )}
+                                {/* Member rows with transfer + remove */}
+                                {t.members.map(m => (
+                                    <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px' }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.fullName}</div>
+                                            <div style={{ fontSize: 10, color: '#94a3b8' }}>{m.employeeNumber}{m.department ? ` · ${m.department}` : ''}</div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => openRecommendations(m.userId, m.fullName)}
+                                            title="Recommendation history"
+                                            style={{ padding: '4px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                                        >
+                                            <Lightbulb size={11} /> Recs
+                                        </button>
+                                        <button className="btn btn-sm" onClick={() => handleRemoveMember(t.id, m.userId)} title="Remove from team" style={{ padding: '4px 6px', color: '#dc2626' }}>
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+
+                                {/* Add members */}
+                                {unassignedEmployees.length > 0 && (
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                                        <select
+                                            value={addMembersTeamId === t.id ? addMemberIds[0] ?? '' : ''}
+                                            onChange={e => { setAddMembersTeamId(t.id); setAddMemberIds(e.target.value ? [e.target.value] : []); }}
+                                            style={{ flex: 1, height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff' }}
+                                        >
+                                            <option value="">Add member…</option>
+                                            {unassignedEmployees.map(m => (
+                                                <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            className="btn btn-primary btn-sm"
+                                            disabled={addMembersTeamId !== t.id || addMemberIds.length === 0 || addingMembers}
+                                            onClick={handleAddMembers}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                        >
+                                            {addingMembers && addMembersTeamId === t.id ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
