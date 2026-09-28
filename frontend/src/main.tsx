@@ -121,6 +121,7 @@ import AuthSyncWatcher from './components/Auth/AuthSyncWatcher'
 import SessionTimeoutWatcher from './components/Auth/SessionTimeoutWatcher'
 import { appNavigate } from './components/Auth/useAppNavigate'
 import OnboardingPage from './Pages/onboarding_page/onboarding_page'
+import TermsAndConditions, { CURRENT_TERMS_VERSION } from './Pages/terms_and_conditions/TermsAndConditions'
 
 function PasswordChangedGuard() {
     const hasToken = !!localStorage.getItem('authToken');
@@ -132,6 +133,17 @@ function PasswordChangedGuard() {
             return <Navigate to="/set-password" replace />;
         }
         return <Navigate to="/onboarding?fresh=true" replace />;
+    }
+    return <Outlet />;
+}
+
+function TermsGuard() {
+    const hasToken = !!localStorage.getItem('authToken');
+    if (!hasToken) return <Navigate to="/" replace />;
+    const hasAcceptedTerms = localStorage.getItem('hasAcceptedTerms') === 'true';
+    const termsVersion = localStorage.getItem('termsVersionAccepted');
+    if (!hasAcceptedTerms || termsVersion !== CURRENT_TERMS_VERSION) {
+        return <Navigate to="/terms-and-conditions" replace />;
     }
     return <Outlet />;
 }
@@ -152,25 +164,32 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/set-password" element={<SetPasswordPage />} />
                     <Route path="/verify-email" element={<EmailVerificationPage />} />
                     <Route path="/onboarding" element={<OnboardingPage />} />
+                    <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
 
                     {/* Manager routes */}
                     <Route element={<ProtectedRoute allowedRoles={['Manager']} />}>
                         <Route element={<PasswordChangedGuard />}>
-                            <Route path="/SystemAdmin_Dashboard" element={<SystemAdmin_Dashboard />} />
+                            <Route element={<TermsGuard />}>
+                                <Route path="/SystemAdmin_Dashboard" element={<SystemAdmin_Dashboard />} />
+                            </Route>
                         </Route>
                     </Route>
 
                     {/* Coordinator & Manager routes (Manager has full access per FR-012) */}
                     <Route element={<ProtectedRoute allowedRoles={['Manager', 'Coordinator']} />}>
                         <Route element={<PasswordChangedGuard />}>
-                            <Route path="/OpAdmin_Dashboard" element={<OpAdmin_Dashboard />} />
+                            <Route element={<TermsGuard />}>
+                                <Route path="/OpAdmin_Dashboard" element={<OpAdmin_Dashboard />} />
+                            </Route>
                         </Route>
                     </Route>
 
                     {/* Encoder / Dispatcher / Courier / Accountant routes */}
                     <Route element={<ProtectedRoute allowedRoles={['Encoder', 'Dispatcher', 'Courier', 'Accountant']} />}>
                         <Route element={<PasswordChangedGuard />}>
-                            <Route path="/OpEmployee_Dashboard" element={<OpEmployee_Dashboard />} />
+                            <Route element={<TermsGuard />}>
+                                <Route path="/OpEmployee_Dashboard" element={<OpEmployee_Dashboard />} />
+                            </Route>
                         </Route>
                     </Route>
 

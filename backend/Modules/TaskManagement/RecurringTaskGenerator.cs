@@ -44,11 +44,13 @@ public class RecurringTaskGenerator : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+        var roundRobinService = scope.ServiceProvider.GetRequiredService<IRoundRobinAssignmentService>();
 
         var now = DateTime.UtcNow;
 
         var dueTemplates = await db.TaskTemplates
             .Include(t => t.DefaultAssignee)
+            .Include(t => t.DefaultDepartment)
             .Include(t => t.CreatedBy)
             .Where(t => t.IsActive && t.NextGenerationDate <= now)
             .ToListAsync(stoppingToken);
@@ -88,46 +90,59 @@ public class RecurringTaskGenerator : BackgroundService
                 await db.SaveChangesAsync(stoppingToken);
 
                 var assigneeIds = new List<Guid>();
+                var targetDeptId = template.DefaultDepartmentId 
+                    ?? template.DefaultAssignee?.DepartmentId 
+                    ?? template.CreatedBy?.DepartmentId;
 
-                if (template.DefaultAssigneeId.HasValue)
+                if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
                 {
-                    var assigneeAvailable = await db.Users
-                        .AnyAsync(u => u.Id == template.DefaultAssigneeId.Value
-                            && u.IsActive && !u.IsDeactivated, stoppingToken);
+                    // Department broadcast: assign all active and available users in department
+                    var deptUsers = await db.Users
+                        .Where(u => u.DepartmentId == targetDeptId.Value
+                            && u.IsActive && !u.IsDeactivated
+                            && u.AvailabilityStatus == AvailabilityStatus.Active)
+                        .Select(u => u.Id)
+                        .ToListAsync(stoppingToken);
 
-                    if (assigneeAvailable)
+                    if (deptUsers.Count > 0)
                     {
-                        assigneeIds.Add(template.DefaultAssigneeId.Value);
+                        assigneeIds.AddRange(deptUsers);
                     }
                     else
                     {
-                        _logger.LogWarning(
-                            "Template {TemplateName}: designated assignee is unavailable. Task created as Unassigned.",
-                            template.TemplateName);
-
+                        _logger.LogWarning("Template {TemplateName}: No available active users in department. Task created as Unassigned.", template.TemplateName);
                         if (template.CreatedById != Guid.Empty)
                         {
                             await notificationService.SendNotificationAsync(
                                 template.CreatedById,
                                 NotificationType.TemplateTaskUnassigned,
                                 "Template Task Unassigned",
-                                $"Template task '{task.Title}' could not be auto-assigned - " +
-                                $"designated assignee is unavailable. Please route manually.",
+                                $"Template task '{task.Title}' could not be auto-assigned - no active, available employees in department. Please route manually.",
                                 task.Id);
                         }
                     }
                 }
-
-                if (template.DefaultAssignmentScope == AssignmentScope.Department
-                    && template.DefaultDepartmentId.HasValue)
+                else
                 {
-                    var deptUsers = await db.Users
-                        .Where(u => u.DepartmentId == template.DefaultDepartmentId.Value
-                            && u.IsActive && !u.IsDeactivated)
-                        .Select(u => u.Id)
-                        .ToListAsync(stoppingToken);
-
-                    assigneeIds.AddRange(deptUsers);
+                    // SingleEmployee or Team: round-robin to the employee with least tasks
+                    var winnerId = await roundRobinService.PickAssigneeAsync(targetDeptId, ct: stoppingToken);
+                    if (winnerId.HasValue)
+                    {
+                        assigneeIds.Add(winnerId.Value);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Template {TemplateName}: No available employee found for round-robin assignment. Task created as Unassigned.", template.TemplateName);
+                        if (template.CreatedById != Guid.Empty)
+                        {
+                            await notificationService.SendNotificationAsync(
+                                template.CreatedById,
+                                NotificationType.TemplateTaskUnassigned,
+                                "Template Task Unassigned",
+                                $"Template task '{task.Title}' could not be auto-assigned - all candidates are offline, on leave, or unavailable. Please route manually.",
+                                task.Id);
+                        }
+                    }
                 }
 
                 assigneeIds = assigneeIds.Distinct().ToList();

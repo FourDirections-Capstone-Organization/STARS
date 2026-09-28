@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Security.Cryptography;
@@ -97,6 +97,8 @@ public class AuthService : IAuthService
             Role = user.Role,
             IsPasswordChanged = user.IsPasswordChanged,
             IsEmailVerified = user.IsEmailVerified,
+            HasAcceptedTerms = user.HasAcceptedTerms,
+            TermsVersionAccepted = user.TermsVersionAccepted,
             ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
             RefreshTokenExpiresAt = user.RefreshTokenExpiry!.Value
         };
@@ -280,6 +282,8 @@ public class AuthService : IAuthService
             Role = user.Role,
             IsPasswordChanged = user.IsPasswordChanged,
             IsEmailVerified = user.IsEmailVerified,
+            HasAcceptedTerms = user.HasAcceptedTerms,
+            TermsVersionAccepted = user.TermsVersionAccepted,
             ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
             RefreshTokenExpiresAt = user.RefreshTokenExpiry.Value
         };
@@ -344,6 +348,33 @@ public class AuthService : IAuthService
             return ApiResponseDTO<bool>.Failure("Incorrect password");
 
         return ApiResponseDTO<bool>.Success(true, "Password verified");
+    }
+
+    public async Task<ApiResponseDTO<bool>> AcceptTermsAsync(Guid userId, string termsVersion)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null)
+            return ApiResponseDTO<bool>.Failure("User not found");
+
+        user.HasAcceptedTerms = true;
+        user.TermsVersionAccepted = termsVersion;
+        user.TermsAcceptedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var fullName = GetFullName(user);
+
+        await _auditLogService.LogAsync(
+            userId,
+            AuditActionType.Update,
+            "User",
+            userId,
+            null,
+            $"User {fullName} ({user.EmployeeNumber}) accepted Terms & Conditions ({termsVersion})",
+            "Authentication");
+
+        return ApiResponseDTO<bool>.Success(true, "Terms accepted successfully");
     }
 
     private string GenerateJwtToken(User user)

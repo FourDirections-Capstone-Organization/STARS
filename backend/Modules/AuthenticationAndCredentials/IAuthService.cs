@@ -1,4 +1,4 @@
-﻿using Backend.Models;
+using Backend.Models;
 using Backend.Models.DTOs;
 
 namespace Backend.Modules.AuthenticationAndCredentials;
@@ -13,4 +13,5 @@ public interface IAuthService
     Task<ApiResponseDTO<AuthResponseDTO>> RefreshTokenAsync(string refreshToken);
     Task<ApiResponseDTO<UserResponseDTO>> GetCurrentUserAsync(Guid userId);
     Task<ApiResponseDTO<bool>> VerifyPasswordAsync(VerifyPasswordDTO dto);
+    Task<ApiResponseDTO<bool>> AcceptTermsAsync(Guid userId, string termsVersion);
 }

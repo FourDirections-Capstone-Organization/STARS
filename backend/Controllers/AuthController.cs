@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Backend.Models.DTOs;
@@ -106,6 +106,21 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> VerifyPassword(VerifyPasswordDTO dto)
     {
         var result = await _authService.VerifyPasswordAsync(dto);
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [Authorize]
+    [HttpPost("accept-terms")]
+    public async Task<IActionResult> AcceptTerms(AcceptTermsDTO dto)
+    {
+        var userId = GetUserIdFromClaims();
+        if (!userId.HasValue)
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user"));
+
+        var result = await _authService.AcceptTermsAsync(userId.Value, dto.TermsVersion);
         if (!result.IsSuccess)
             return BadRequest(result);
 

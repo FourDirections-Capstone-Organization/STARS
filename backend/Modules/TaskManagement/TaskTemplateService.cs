@@ -12,12 +12,18 @@ public class TaskTemplateService : ITaskTemplateService
     private readonly AppDbContext _db;
     private readonly INotificationService _notificationService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IRoundRobinAssignmentService _roundRobinService;
 
-    public TaskTemplateService(AppDbContext db, INotificationService notificationService, IAuditLogService auditLogService)
+    public TaskTemplateService(
+        AppDbContext db,
+        INotificationService notificationService,
+        IAuditLogService auditLogService,
+        IRoundRobinAssignmentService roundRobinService)
     {
         _db = db;
         _notificationService = notificationService;
         _auditLogService = auditLogService;
+        _roundRobinService = roundRobinService;
     }
 
     public async Task<ApiResponseDTO<TaskTemplateResponseDTO>> CreateAsync(
@@ -301,6 +307,8 @@ public class TaskTemplateService : ITaskTemplateService
     {
         var template = await _db.TaskTemplates
             .Include(t => t.DefaultAssignee)
+            .Include(t => t.DefaultDepartment)
+            .Include(t => t.CreatedBy)
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (template is null)
@@ -339,29 +347,49 @@ public class TaskTemplateService : ITaskTemplateService
         await _db.SaveChangesAsync();
 
         var assigneeIds = new List<Guid>();
+        var targetDeptId = template.DefaultDepartmentId
+            ?? template.DefaultAssignee?.DepartmentId
+            ?? template.CreatedBy?.DepartmentId;
 
-        if (template.DefaultAssigneeId.HasValue)
-        {
-            var assigneeAvailable = await _db.Users
-                .AnyAsync(u => u.Id == template.DefaultAssigneeId.Value
-                    && u.IsActive && !u.IsDeactivated);
-
-            if (assigneeAvailable)
-            {
-                assigneeIds.Add(template.DefaultAssigneeId.Value);
-            }
-        }
-
-        if (template.DefaultAssignmentScope == AssignmentScope.Department
-            && template.DefaultDepartmentId.HasValue)
+        if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
         {
             var deptUsers = await _db.Users
-                .Where(u => u.DepartmentId == template.DefaultDepartmentId.Value
-                    && u.IsActive && !u.IsDeactivated)
+                .Where(u => u.DepartmentId == targetDeptId.Value
+                    && u.IsActive && !u.IsDeactivated
+                    && u.AvailabilityStatus == AvailabilityStatus.Active)
                 .Select(u => u.Id)
                 .ToListAsync();
 
-            assigneeIds.AddRange(deptUsers);
+            if (deptUsers.Count > 0)
+            {
+                assigneeIds.AddRange(deptUsers);
+            }
+            else
+            {
+                await _notificationService.SendNotificationAsync(
+                    coordinatorId,
+                    NotificationType.TemplateTaskUnassigned,
+                    "Template Task Unassigned",
+                    $"Template task '{task.Title}' could not be auto-assigned - no active, available employees in department. Please route manually.",
+                    task.Id);
+            }
+        }
+        else
+        {
+            var winnerId = await _roundRobinService.PickAssigneeAsync(targetDeptId);
+            if (winnerId.HasValue)
+            {
+                assigneeIds.Add(winnerId.Value);
+            }
+            else
+            {
+                await _notificationService.SendNotificationAsync(
+                    coordinatorId,
+                    NotificationType.TemplateTaskUnassigned,
+                    "Template Task Unassigned",
+                    $"Template task '{task.Title}' could not be auto-assigned - all candidates are offline, on leave, or unavailable. Please route manually.",
+                    task.Id);
+            }
         }
 
         assigneeIds = assigneeIds.Distinct().ToList();

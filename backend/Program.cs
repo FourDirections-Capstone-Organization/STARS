@@ -159,6 +159,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 builder.Services.AddScoped<ITaskTemplateService, TaskTemplateService>();
+builder.Services.AddScoped<IRoundRobinAssignmentService, RoundRobinAssignmentService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<ITaskCommentService, TaskCommentService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();

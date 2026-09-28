@@ -23,6 +23,8 @@ interface LoginResponse {
     employeeNumber: string;
     message?: string;
     isPasswordChanged: boolean;
+    hasAcceptedTerms?: boolean;
+    termsVersionAccepted?: string;
 }
 
 /* ── Role helpers ── */
@@ -71,7 +73,8 @@ export default function Login() {
     useEffect(() => {
         ['authToken', 'refreshToken', 'employeeId', 'employeeName',
             'firstName', 'middleName', 'lastName', 'suffix',
-            'contactNumber', 'email', 'role', 'isPasswordChanged', 'userRole']
+            'contactNumber', 'email', 'role', 'isPasswordChanged', 'userRole',
+            'hasAcceptedTerms', 'termsVersionAccepted']
             .forEach(k => localStorage.removeItem(k));
 
         const params = new URLSearchParams(window.location.search);
@@ -175,6 +178,8 @@ export default function Login() {
             localStorage.setItem('userRole', normalizedRole);
             localStorage.setItem('employeeId', d.employeeNumber ?? employeeId.trim());
             localStorage.setItem('isPasswordChanged', (d.isPasswordChanged ?? false).toString());
+            localStorage.setItem('hasAcceptedTerms', (d.hasAcceptedTerms ?? false).toString());
+            localStorage.setItem('termsVersionAccepted', d.termsVersionAccepted ?? '');
             localStorage.setItem('email', d.email ?? '');
 
             // Fetch full profile to populate localStorage
@@ -206,6 +211,11 @@ export default function Login() {
                 } else {
                     navigate('/onboarding?fresh=true', { replace: true });
                 }
+                return;
+            }
+
+            if (!d.hasAcceptedTerms || d.termsVersionAccepted !== 'v1.0') {
+                navigate('/terms-and-conditions', { replace: true });
                 return;
             }
 

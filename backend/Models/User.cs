@@ -62,6 +62,12 @@ public class User
     public bool IsEmailVerified { get; set; } = false;
     public bool IsPasswordChanged { get; set; } = false;
 
+    // Terms & Conditions
+    public bool HasAcceptedTerms { get; set; } = false;
+    [MaxLength(20)]
+    public string? TermsVersionAccepted { get; set; }
+    public DateTime? TermsAcceptedAt { get; set; }
+
     // Email verification
     public string? EmailVerificationToken { get; set; }
     public DateTime? EmailVerificationTokenExpiry { get; set; }
