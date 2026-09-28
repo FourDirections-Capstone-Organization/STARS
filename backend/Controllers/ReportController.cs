@@ -352,4 +352,121 @@ public class ReportController : ControllerBase
 
         return File(exportResult.Data!, contentType, fileName);
     }
+
+    [HttpPost("task-completion/export")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> ExportTaskCompletionReport([FromBody] TaskCompletionExportRequestDTO filters)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        Guid? requestUserDepartmentId = null;
+        if (requestUserRole == UserRole.Coordinator)
+        {
+            var user = await _db.Users.FindAsync(requestUserId);
+            requestUserDepartmentId = user?.DepartmentId;
+        }
+
+        var reportResult = await _reportService.GetTaskCompletionReportAsync(
+            filters.DateRangeStart, filters.DateRangeEnd, filters.EmployeeId,
+            filters.TaskPriorityLevel, filters.TaskStatus, filters.TaskCategory,
+            requestUserId, requestUserRole, requestUserDepartmentId);
+
+        if (!reportResult.IsSuccess)
+            return NotFound(reportResult);
+
+        var exportResult = await _reportService.ExportTaskCompletionReportAsync(
+            reportResult.Data!, filters.ExportFormat);
+
+        if (!exportResult.IsSuccess)
+            return BadRequest(exportResult);
+
+        var parts = exportResult.Message.Split('|');
+        var fileName = parts.Length > 1 ? parts[1] : "TaskCompletionReport.xlsx";
+        var contentType = parts.Length > 2 ? parts[2] : "application/octet-stream";
+
+        return File(exportResult.Data!, contentType, fileName);
+    }
+
+    [HttpGet("financial")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> GetFinancialReport(
+        [FromQuery] DateTime? dateRangeStart = null,
+        [FromQuery] DateTime? dateRangeEnd = null,
+        [FromQuery] Guid? departmentId = null,
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] string? fiscalPeriod = null)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        Guid? requestUserDepartmentId = null;
+        if (requestUserRole == UserRole.Coordinator)
+        {
+            var user = await _db.Users.FindAsync(requestUserId);
+            requestUserDepartmentId = user?.DepartmentId;
+        }
+
+        var result = await _reportService.GetFinancialReportAsync(
+            dateRangeStart, dateRangeEnd, departmentId, employeeId, fiscalPeriod,
+            requestUserId, requestUserRole, requestUserDepartmentId);
+
+        if (!result.IsSuccess)
+            return NotFound(result);
+
+        return Ok(result);
+    }
+
+    [HttpPost("financial/export")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> ExportFinancialReport([FromBody] FinancialReportFilterDTO filters)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        Guid? requestUserDepartmentId = null;
+        if (requestUserRole == UserRole.Coordinator)
+        {
+            var user = await _db.Users.FindAsync(requestUserId);
+            requestUserDepartmentId = user?.DepartmentId;
+        }
+
+        var reportResult = await _reportService.GetFinancialReportAsync(
+            filters.DateRangeStart, filters.DateRangeEnd, filters.DepartmentId,
+            filters.EmployeeId, filters.FiscalPeriod,
+            requestUserId, requestUserRole, requestUserDepartmentId);
+
+        if (!reportResult.IsSuccess)
+            return NotFound(reportResult);
+
+        var exportResult = await _reportService.ExportFinancialReportAsync(
+            reportResult.Data!, filters.ExportFormat);
+
+        if (!exportResult.IsSuccess)
+            return BadRequest(exportResult);
+
+        var parts = exportResult.Message.Split('|');
+        var fileName = parts.Length > 1 ? parts[1] : "FinancialReport_FOMS.xlsx";
+        var contentType = parts.Length > 2 ? parts[2] : "application/octet-stream";
+
+        return File(exportResult.Data!, contentType, fileName);
+    }
 }

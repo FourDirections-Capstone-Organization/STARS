@@ -44,6 +44,7 @@ import {
     Play,
     Bell,
     Info,
+    DollarSign,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -287,8 +288,28 @@ interface TaskCompletionReport {
     totalTasksPendingReview: number;
     totalOverdueTasks: number;
     taskCompletionRate: number;
+    overallOnTimeRate: number;
     averageTaskCompletionTimeHours: number;
     employeePerformanceSummary: EmployeePerformance[];
+    tasks: TaskCompletionItem[];
+}
+
+interface TaskCompletionItem {
+    taskId: string;
+    taskReferenceNumber: string;
+    title: string;
+    assignedEmployee: string;
+    department: string;
+    priority: string;
+    classification: string;
+    createdAt: string;
+    deadline: string;
+    revisedDeadline?: string;
+    completedAt?: string;
+    durationHours: number;
+    isOnTime: boolean;
+    overdueHours: number;
+    status: string;
 }
 
 interface EmployeePerformance {
@@ -313,10 +334,57 @@ interface OperationalSummaryReport {
     pendingTasks: number;
     overdueTasks: number;
     taskCompletionRate: number;
+    overallOnTimeRate: number;
+    overallSlaBreachRate: number;
+    departmentSummaries: DepartmentOperationalSummary[];
     employeePerformanceSummary: OperationalEmployeePerformance[];
     workloadByCategory: WorkloadItem[];
     workloadByDepartment: WorkloadItem[];
     workloadByPriority: WorkloadItem[];
+}
+
+interface DepartmentOperationalSummary {
+    departmentId?: string;
+    departmentName: string;
+    totalTasks: number;
+    completedTasks: number;
+    activeTasks: number;
+    slaBreachedTasks: number;
+    atRiskTasks: number;
+    onTimeRate: number;
+    slaBreachRate: number;
+    tasksPerMember: number;
+    workloadBalanceStatus: string; // Balanced, Moderate, Overloaded
+}
+
+interface FinancialInvoiceItem {
+    invoiceNumber: string;
+    fomsReference: string;
+    clientAccount: string;
+    department: string;
+    billingDate: string;
+    dueDate: string;
+    paymentDate?: string;
+    currency: string;
+    amountBilled: number;
+    amountPaid: number;
+    outstandingBalance: number;
+    paymentStatus: string;
+    paymentMethod: string;
+    fiscalPeriod: string;
+}
+
+interface FinancialReport {
+    totalBilled: number;
+    totalCollected: number;
+    totalOutstanding: number;
+    collectionRate: number;
+    totalInvoices: number;
+    overdueInvoicesCount: number;
+    fiscalPeriod: string;
+    dateRangeStart: string;
+    dateRangeEnd: string;
+    invoices: FinancialInvoiceItem[];
 }
 
 interface OperationalEmployeePerformance {
@@ -3713,36 +3781,162 @@ async function readBlobError(err: any, fallback: string): Promise<string> {
     return err?.response?.data?.message || err?.message || fallback;
 }
 
+type TimeChunk = 'Monthly' | 'Quarterly' | 'Annual';
+type YearType = 'Calendar' | 'Fiscal';
+
+const computeDateRange = (chunk: TimeChunk, yearType: YearType = 'Calendar', refDate: Date = new Date()) => {
+    const y = refDate.getFullYear();
+    const m = refDate.getMonth(); // 0 to 11
+
+    if (chunk === 'Monthly') {
+        const start = new Date(y, m, 1);
+        const end = new Date(y, m + 1, 0);
+        return {
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+        };
+    } else if (chunk === 'Quarterly') {
+        if (yearType === 'Fiscal') {
+            let qStartMonth = 9;
+            let qYear = y;
+            if (m >= 0 && m <= 2) { qStartMonth = 0; }
+            else if (m >= 3 && m <= 5) { qStartMonth = 3; }
+            else if (m >= 6 && m <= 8) { qStartMonth = 6; }
+            else { qStartMonth = 9; }
+            if (qStartMonth === 9 && m < 9) qYear = y - 1;
+            const start = new Date(qYear, qStartMonth, 1);
+            const end = new Date(qYear, qStartMonth + 3, 0);
+            return {
+                start: start.toISOString().split('T')[0],
+                end: end.toISOString().split('T')[0],
+            };
+        } else {
+            const q = Math.floor(m / 3);
+            const start = new Date(y, q * 3, 1);
+            const end = new Date(y, (q + 1) * 3, 0);
+            return {
+                start: start.toISOString().split('T')[0],
+                end: end.toISOString().split('T')[0],
+            };
+        }
+    } else { // Annual
+        if (yearType === 'Fiscal') {
+            const fYear = m >= 9 ? y : y - 1;
+            const start = new Date(fYear, 9, 1); // Oct 1
+            const end = new Date(fYear + 1, 9, 0); // Sep 30
+            return {
+                start: start.toISOString().split('T')[0],
+                end: end.toISOString().split('T')[0],
+            };
+        } else {
+            const start = new Date(y, 0, 1); // Jan 1
+            const end = new Date(y, 11, 31); // Dec 31
+            return {
+                start: start.toISOString().split('T')[0],
+                end: end.toISOString().split('T')[0],
+            };
+        }
+    }
+};
+
+const DateRangeEngineField: React.FC<{
+    dateRangeStart: string;
+    dateRangeEnd: string;
+    onChange: (start: string, end: string) => void;
+    label?: string;
+}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range Engine' }) => {
+    const [activeChunk, setActiveChunk] = useState<TimeChunk>('Monthly');
+    const [activeYearType, setActiveYearType] = useState<YearType>('Calendar');
+
+    const handleChunkChange = (chunk: TimeChunk) => {
+        setActiveChunk(chunk);
+        const { start, end } = computeDateRange(chunk, activeYearType);
+        onChange(start, end);
+    };
+
+    const handleYearTypeChange = (yt: YearType) => {
+        setActiveYearType(yt);
+        const { start, end } = computeDateRange(activeChunk, yt);
+        onChange(start, end);
+    };
+
+    return (
+        <div className="field" style={{ gridColumn: 'span 2' }}>
+            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{label}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Pick 1: Time Chunk • Pick 2: Year Type
+                </span>
+            </label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                <button
+                    type="button"
+                    className={`filter-pill${activeChunk === 'Monthly' ? ' active' : ''}`}
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleChunkChange('Monthly')}
+                >
+                    Monthly
+                </button>
+                <button
+                    type="button"
+                    className={`filter-pill${activeChunk === 'Quarterly' ? ' active' : ''}`}
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleChunkChange('Quarterly')}
+                >
+                    Quarterly
+                </button>
+                <button
+                    type="button"
+                    className={`filter-pill${activeChunk === 'Annual' ? ' active' : ''}`}
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleChunkChange('Annual')}
+                >
+                    Annual
+                </button>
+                <span style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px', alignSelf: 'center' }} />
+                <button
+                    type="button"
+                    className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleYearTypeChange('Calendar')}
+                    title="Calendar Year (Jan 1 - Dec 31)"
+                >
+                    Calendar Year
+                </button>
+                <button
+                    type="button"
+                    className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleYearTypeChange('Fiscal')}
+                    title="Speedex Accounting Year: Oct 1 - Sep 30"
+                >
+                    Fiscal Year (Oct-Sep)
+                </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                    type="date"
+                    className="report-select"
+                    style={{ flex: 1, padding: '6px 10px', fontSize: 13 }}
+                    value={dateRangeStart}
+                    onChange={e => onChange(e.target.value, dateRangeEnd)}
+                />
+                <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>to</span>
+                <input
+                    type="date"
+                    className="report-select"
+                    style={{ flex: 1, padding: '6px 10px', fontSize: 13 }}
+                    value={dateRangeEnd}
+                    onChange={e => onChange(dateRangeStart, e.target.value)}
+                />
+            </div>
+        </div>
+    );
+};
+
 export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; employeeName: string; role?: string }> }> = ({ teamMembers }) => {
     const { success, error } = useToast();
     const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary'>('kpi-tracking');
-
-    const DATE_PRESETS = [
-        { label: '1 Month', months: 1 },
-        { label: '3 Months', months: 3 },
-        { label: '6 Months', months: 6 },
-        { label: '12 Months', months: 12 },
-    ] as const;
-
-    const getDateRangeMonths = (months: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setMonth(start.getMonth() - months);
-        return {
-            start: start.toISOString().split('T')[0],
-            end: end.toISOString().split('T')[0],
-        };
-    };
-
-    const getDateRangeDays = (days: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - days);
-        return {
-            start: start.toISOString().split('T')[0],
-            end: end.toISOString().split('T')[0],
-        };
-    };
 
     // Shared filter options
     const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
@@ -3770,8 +3964,22 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         return teamMembers;
     }, [employees, teamMembers]);
 
+    // Download blob helper
+    const downloadBlob = (blobData: any, defaultFileName: string, mimeType: string, contentDisposition?: string) => {
+        const match = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        const fileName = match?.[1]?.replace(/['"]/g, '') || defaultFileName;
+        const url = URL.createObjectURL(new Blob([blobData], { type: mimeType }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     // --- KPI Tracking State ---
-    const initialKpiDates = useMemo(() => getDateRangeMonths(1), []);
+    const initialKpiDates = useMemo(() => computeDateRange('Monthly'), []);
     const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
         dateRangeStart: initialKpiDates.start,
         dateRangeEnd: initialKpiDates.end,
@@ -3814,16 +4022,16 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
-    // --- Performance Report State ---
-    const initialPrDates = useMemo(() => getDateRangeDays(30), []);
+    // --- Performance Report State (Part 2: 5 KPIs) ---
+    const initialPrDates = useMemo(() => computeDateRange('Monthly'), []);
     const [prFilter, setPrFilter] = useState<{
-        period: 'Weekly' | 'Monthly';
+        period: 'Weekly' | 'Monthly' | 'Quarterly' | 'Annual';
         dateRangeStart: string;
         dateRangeEnd: string;
         employeeId: string;
         departmentId: string;
     }>({
-        period: 'Weekly',
+        period: 'Monthly',
         dateRangeStart: initialPrDates.start,
         dateRangeEnd: initialPrDates.end,
         employeeId: '',
@@ -3875,7 +4083,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
-    const handlePrExport = async (format: 'Excel' | 'Pdf') => {
+    const handlePrExport = async (format: 'Excel' | 'Pdf' | 'Csv') => {
         if (!prFilter.dateRangeStart || !prFilter.dateRangeEnd) {
             setPrError('Please generate a report first before exporting.');
             return;
@@ -3898,20 +4106,18 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 error(json?.message || 'Export failed.');
                 return;
             }
-            const contentDisposition = res.headers['content-disposition'];
-            const match = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-            const fileName = match?.[1]?.replace(/['"]/g, '') || `Performance_Report_${prFilter.dateRangeStart}_${prFilter.dateRangeEnd}.${format === 'Excel' ? 'xlsx' : 'pdf'}`;
             const mimeType = format === 'Excel'
                 ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : format === 'Csv'
+                ? 'text/csv;charset=utf-8;'
                 : 'application/pdf';
-            const url = URL.createObjectURL(new Blob([res.data], { type: mimeType }));
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const ext = format === 'Excel' ? 'xlsx' : format === 'Csv' ? 'csv' : 'pdf';
+            downloadBlob(
+                res.data,
+                `Performance_Report_${prFilter.dateRangeStart}_${prFilter.dateRangeEnd}.${ext}`,
+                mimeType,
+                res.headers['content-disposition']
+            );
             success(`${format} report downloaded successfully.`);
         } catch (err: any) {
             const msg = await readBlobError(err, 'Export failed. Please try again.');
@@ -3921,68 +4127,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
-    // --- FOMS Export State ---
-    const initialFomsDates = useMemo(() => getDateRangeDays(30), []);
-    const [fomsFilter, setFomsFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
-        dateRangeStart: initialFomsDates.start,
-        dateRangeEnd: initialFomsDates.end,
-        employeeId: '',
-    });
-    const [fomsExporting, setFomsExporting] = useState(false);
-    const [fomsError, setFomsError] = useState('');
-
-    const handleFomsExport = async () => {
-        if (!fomsFilter.dateRangeStart || !fomsFilter.dateRangeEnd) {
-            setFomsError('Please select a date range.');
-            return;
-        }
-        const start = new Date(fomsFilter.dateRangeStart);
-        const end = new Date(fomsFilter.dateRangeEnd);
-        if (start > end) {
-            setFomsError('Start date must be before end date.');
-            return;
-        }
-        setFomsExporting(true);
-        setFomsError('');
-        try {
-            const body: Record<string, any> = {
-                dateRangeStart: fomsFilter.dateRangeStart,
-                dateRangeEnd: fomsFilter.dateRangeEnd,
-            };
-            if (fomsFilter.employeeId) body.employeeId = fomsFilter.employeeId;
-            const res = await axios.post('/api/foms/export', body, { responseType: 'blob' });
-            const contentType = res.headers['content-type'] ?? '';
-            if (contentType.includes('application/json')) {
-                const text = await (res.data as Blob).text();
-                const json = JSON.parse(text);
-                const msg = json?.message || 'FOMS export failed.';
-                setFomsError(msg);
-                error(msg);
-                return;
-            }
-            const contentDisposition = res.headers['content-disposition'];
-            const match = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-            const fileName = match?.[1]?.replace(/['"]/g, '') || `foms_export_${fomsFilter.dateRangeStart}_to_${fomsFilter.dateRangeEnd}.csv`;
-            const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            success('FOMS export completed successfully.');
-        } catch (err: any) {
-            const msg = await readBlobError(err, 'FOMS export failed. Please try again.');
-            setFomsError(msg);
-            error(msg);
-        } finally {
-            setFomsExporting(false);
-        }
-    };
-
-    // --- Task Completion State ---
-    const initialTcDates = useMemo(() => getDateRangeMonths(1), []);
+    // --- Task Completion State (Part 1: Granular Task Logs) ---
+    const initialTcDates = useMemo(() => computeDateRange('Monthly'), []);
     const [tcFilter, setTcFilter] = useState<ReportFilter>({
         dateRangeStart: initialTcDates.start,
         dateRangeEnd: initialTcDates.end,
@@ -3993,22 +4139,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     });
     const [tcReport, setTcReport] = useState<TaskCompletionReport | null>(null);
     const [tcLoading, setTcLoading] = useState(false);
+    const [tcExporting, setTcExporting] = useState(false);
     const [tcError, setTcError] = useState('');
     const [tcNoRecords, setTcNoRecords] = useState(false);
     const [tcGeneratedAt, setTcGeneratedAt] = useState('');
 
-    const applyTcPreset = (months: number) => {
-        const { start, end } = getDateRangeMonths(months);
-        setTcFilter(p => ({
-            ...p,
-            dateRangeStart: start,
-            dateRangeEnd: end,
-        }));
-    };
-
     const handleTcGenerate = async () => {
         if (!tcFilter.dateRangeStart || !tcFilter.dateRangeEnd) {
-            setTcError('Please select a date range preset first.');
+            setTcError('Please select a date range first.');
             return;
         }
         setTcLoading(true); setTcError(''); setTcNoRecords(false); setTcReport(null);
@@ -4041,34 +4179,49 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         setTcReport(null); setTcError(''); setTcNoRecords(false); setTcGeneratedAt('');
     };
 
-    const exportCSV = () => {
-        if (!tcReport) return;
-        const rows: string[] = [];
-        rows.push('Task Completion Report');
-        rows.push(`Generated,${tcGeneratedAt}`);
-        rows.push(''); rows.push('Summary');
-        rows.push(`Total Tasks Assigned,${tcReport.totalTasksAssigned}`);
-        rows.push(`Total Tasks Completed,${tcReport.totalTasksCompleted}`);
-        rows.push(`Total Tasks In Progress,${tcReport.totalTasksInProgress}`);
-        rows.push(`Total Tasks Pending Review,${tcReport.totalTasksPendingReview}`);
-        rows.push(`Total Overdue Tasks,${tcReport.totalOverdueTasks}`);
-        rows.push(`Task Completion Rate,${tcReport.taskCompletionRate}%`);
-        rows.push(`Avg Completion Time (Hours),${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}`);
-        rows.push(''); rows.push('Employee Performance');
-        rows.push('Employee,Assigned,Completed,Completion Rate,Avg Time (Hours)');
-        for (const ep of (tcReport.employeePerformanceSummary || [])) {
-            rows.push(`${ep.employeeName},${ep.totalAssigned},${ep.totalCompleted},${ep.completionRate}%,${(ep.averageCompletionTimeHours ?? 0).toFixed(1)}`);
+    const handleTcExport = async (format: 'Excel' | 'Pdf' | 'Csv') => {
+        if (!tcFilter.dateRangeStart || !tcFilter.dateRangeEnd) {
+            setTcError('Please select a date range first.');
+            return;
         }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `task-completion-report-${tcFilter.dateRangeStart}-to-${tcFilter.dateRangeEnd}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        success('CSV exported successfully.');
+        setTcExporting(true);
+        try {
+            const body = {
+                dateRangeStart: tcFilter.dateRangeStart,
+                dateRangeEnd: tcFilter.dateRangeEnd,
+                employeeId: tcFilter.employeeId || undefined,
+                taskPriorityLevel: tcFilter.taskPriorityLevel || undefined,
+                taskStatus: tcFilter.taskStatus || undefined,
+                taskCategory: tcFilter.taskCategory || undefined,
+                exportFormat: format,
+            };
+            const res = await axios.post('/api/reports/task-completion/export', body, { responseType: 'blob' });
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                error(json?.message || 'Export failed.');
+                return;
+            }
+            const mimeType = format === 'Excel'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : format === 'Csv'
+                ? 'text/csv;charset=utf-8;'
+                : 'application/pdf';
+            const ext = format === 'Excel' ? 'xlsx' : format === 'Csv' ? 'csv' : 'pdf';
+            downloadBlob(
+                res.data,
+                `Task_Completion_Report_${tcFilter.dateRangeStart}_${tcFilter.dateRangeEnd}.${ext}`,
+                mimeType,
+                res.headers['content-disposition']
+            );
+            success(`Task Completion ${format} report downloaded successfully.`);
+        } catch (err: any) {
+            const msg = await readBlobError(err, 'Task Completion export failed. Please try again.');
+            error(msg);
+        } finally {
+            setTcExporting(false);
+        }
     };
 
     const tcChartData = tcReport
@@ -4079,8 +4232,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             { name: 'Overdue', value: tcReport.totalOverdueTasks, fill: 'var(--status-failed)' },
         ].filter(d => d.value > 0) : [];
 
-    // --- Operational Summary State ---
-    const initialOpDates = useMemo(() => getDateRangeMonths(1), []);
+    // --- Operational Summary State (Part 1 & 2: SLA & Workload Balance) ---
+    const initialOpDates = useMemo(() => computeDateRange('Monthly'), []);
     const [opFilter, setOpFilter] = useState<OperationalFilter>({
         dateRangeStart: initialOpDates.start, dateRangeEnd: initialOpDates.end, departmentId: '', employeeId: '', reportFormat: 'PDF',
     });
@@ -4091,18 +4244,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     const [opNoRecords, setOpNoRecords] = useState(false);
     const [opGeneratedAt, setOpGeneratedAt] = useState('');
 
-    const applyOpPreset = (months: number) => {
-        const { start, end } = getDateRangeMonths(months);
-        setOpFilter(p => ({
-            ...p,
-            dateRangeStart: start,
-            dateRangeEnd: end,
-        }));
-    };
-
     const handleOpGenerate = async () => {
         if (!opFilter.dateRangeStart || !opFilter.dateRangeEnd) {
-            setOpError('Please select a date range preset first.');
+            setOpError('Please select a date range first.');
             return;
         }
         setOpLoading(true); setOpError(''); setOpNoRecords(false); setOpReport(null);
@@ -4133,8 +4277,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         setOpReport(null); setOpError(''); setOpNoRecords(false); setOpGeneratedAt('');
     };
 
-    const handleOpDownload = async () => {
-        if (!opReport) return;
+    const handleOpDownload = async (overrideFormat?: string) => {
+        const fmt = overrideFormat || opFilter.reportFormat;
         setOpDownloading(true);
         try {
             const params = new URLSearchParams();
@@ -4142,7 +4286,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             params.set('DateRangeEnd', opFilter.dateRangeEnd);
             if (opFilter.departmentId) params.set('DepartmentId', opFilter.departmentId);
             if (opFilter.employeeId) params.set('EmployeeId', opFilter.employeeId);
-            params.set('ReportFormat', opFilter.reportFormat);
+            params.set('ReportFormat', fmt);
 
             const res = await axios.get(`/api/reports/operational-summary/download?${params}`, { responseType: 'blob' });
 
@@ -4153,19 +4297,19 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 error(json?.message || 'Failed to download report.');
                 return;
             }
-            const mimeType = opFilter.reportFormat === 'EXCEL'
+            const mimeType = fmt === 'EXCEL'
                 ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : fmt === 'CSV'
+                ? 'text/csv;charset=utf-8;'
                 : 'application/pdf';
-            const url = URL.createObjectURL(new Blob([res.data], { type: mimeType }));
-            const a = document.createElement('a');
-            const ext = opFilter.reportFormat === 'EXCEL' ? 'xlsx' : 'pdf';
-            a.href = url;
-            a.download = `OperationalSummaryReport_${new Date().toISOString().slice(0, 10)}.${ext}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            success('Report downloaded successfully.');
+            const ext = fmt === 'EXCEL' ? 'xlsx' : fmt === 'CSV' ? 'csv' : 'pdf';
+            downloadBlob(
+                res.data,
+                `OperationalSummaryReport_${new Date().toISOString().slice(0, 10)}.${ext}`,
+                mimeType,
+                res.headers['content-disposition']
+            );
+            success(`${fmt} report downloaded successfully.`);
         } catch (err: any) {
             const msg = await readBlobError(err, 'Failed to download report. Please try again.');
             error(msg);
@@ -4174,20 +4318,153 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
+    // --- Financial Report (FOMS) State (Part 1: Realistic Financial Ledger) ---
+    const initialFomsDates = useMemo(() => computeDateRange('Monthly'), []);
+    const [fomsFilter, setFomsFilter] = useState<{
+        dateRangeStart: string;
+        dateRangeEnd: string;
+        departmentId: string;
+        status: string;
+    }>({
+        dateRangeStart: initialFomsDates.start,
+        dateRangeEnd: initialFomsDates.end,
+        departmentId: '',
+        status: 'All',
+    });
+    const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null);
+    const [financialLoading, setFinancialLoading] = useState(false);
+    const [financialExporting, setFinancialExporting] = useState(false);
+    const [financialError, setFinancialError] = useState('');
+    const [financialNoRecords, setFinancialNoRecords] = useState(false);
+    const [financialGeneratedAt, setFinancialGeneratedAt] = useState('');
+
+    const handleFinancialGenerate = async () => {
+        if (!fomsFilter.dateRangeStart || !fomsFilter.dateRangeEnd) {
+            setFinancialError('Please select a date range.');
+            return;
+        }
+        setFinancialLoading(true);
+        setFinancialError('');
+        setFinancialNoRecords(false);
+        setFinancialReport(null);
+        try {
+            const params = new URLSearchParams();
+            params.set('DateRangeStart', fomsFilter.dateRangeStart);
+            params.set('DateRangeEnd', fomsFilter.dateRangeEnd);
+            if (fomsFilter.departmentId) params.set('DepartmentId', fomsFilter.departmentId);
+            if (fomsFilter.status && fomsFilter.status !== 'All') params.set('Status', fomsFilter.status);
+
+            const res = await api.get(`/api/reports/financial?${params.toString()}`);
+            const json = res.data;
+            if (json?.isSuccess && json?.data) {
+                setFinancialReport(json.data);
+                setFinancialGeneratedAt(new Date().toLocaleString());
+            } else {
+                setFinancialNoRecords(true);
+            }
+        } catch (err: any) {
+            if (err.response?.status === 404) {
+                setFinancialNoRecords(true);
+                return;
+            }
+            setFinancialError(err?.response?.data?.message || err.message || 'Failed to load Financial Report.');
+        } finally {
+            setFinancialLoading(false);
+        }
+    };
+
+    const handleFinancialExport = async (format: 'Excel' | 'Pdf' | 'Csv') => {
+        if (!fomsFilter.dateRangeStart || !fomsFilter.dateRangeEnd) {
+            setFinancialError('Please select a date range first.');
+            return;
+        }
+        setFinancialExporting(true);
+        try {
+            const body = {
+                dateRangeStart: fomsFilter.dateRangeStart,
+                dateRangeEnd: fomsFilter.dateRangeEnd,
+                departmentId: fomsFilter.departmentId || undefined,
+                status: fomsFilter.status !== 'All' ? fomsFilter.status : undefined,
+                exportFormat: format,
+            };
+            const res = await axios.post('/api/reports/financial/export', body, { responseType: 'blob' });
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                error(json?.message || 'Financial export failed.');
+                return;
+            }
+            const mimeType = format === 'Excel'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : format === 'Csv'
+                ? 'text/csv;charset=utf-8;'
+                : 'application/pdf';
+            const ext = format === 'Excel' ? 'xlsx' : format === 'Csv' ? 'csv' : 'pdf';
+            downloadBlob(
+                res.data,
+                `Speedex_Financial_Report_${fomsFilter.dateRangeStart}_to_${fomsFilter.dateRangeEnd}.${ext}`,
+                mimeType,
+                res.headers['content-disposition']
+            );
+            success(`Financial ${format} report exported successfully.`);
+        } catch (err: any) {
+            const msg = await readBlobError(err, 'Financial export failed. Please try again.');
+            error(msg);
+        } finally {
+            setFinancialExporting(false);
+        }
+    };
+
+    const handleLegacyFomsTaskExport = async () => {
+        if (!fomsFilter.dateRangeStart || !fomsFilter.dateRangeEnd) {
+            setFinancialError('Please select a date range.');
+            return;
+        }
+        setFinancialExporting(true);
+        try {
+            const body: Record<string, any> = {
+                dateRangeStart: fomsFilter.dateRangeStart,
+                dateRangeEnd: fomsFilter.dateRangeEnd,
+            };
+            const res = await axios.post('/api/foms/export', body, { responseType: 'blob' });
+            const contentType = res.headers['content-type'] ?? '';
+            if (contentType.includes('application/json')) {
+                const text = await (res.data as Blob).text();
+                const json = JSON.parse(text);
+                error(json?.message || 'FOMS export failed.');
+                return;
+            }
+            downloadBlob(
+                res.data,
+                `foms_tasks_export_${fomsFilter.dateRangeStart}_to_${fomsFilter.dateRangeEnd}.csv`,
+                'text/csv;charset=utf-8;',
+                res.headers['content-disposition']
+            );
+            success('FOMS task records exported successfully.');
+        } catch (err: any) {
+            const msg = await readBlobError(err, 'FOMS export failed. Please try again.');
+            error(msg);
+        } finally {
+            setFinancialExporting(false);
+        }
+    };
+
     return (
         <div className="dashboard-content" style={{ padding: 0 }}>
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
-                    { key: 'performance-report', label: 'Performance Report', icon: <BarChart3 size={14} /> },
-                    { key: 'foms-export', label: 'FOMS Export', icon: <Download size={14} /> },
                     { key: 'task-completion', label: 'Task Completion Report', icon: <FileText size={14} /> },
-                    { key: 'operational-summary', label: 'Operational Summary Report', icon: <BarChart3 size={14} /> },
+                    { key: 'operational-summary', label: 'Operational Report', icon: <BarChart3 size={14} /> },
+                    { key: 'performance-report', label: 'Performance Report', icon: <BarChart3 size={14} /> },
+                    { key: 'foms-export', label: 'Financial Report (FOMS)', icon: <DollarSign size={14} /> },
                 ]}
                 activeTab={reportSubTab}
                 onTabChange={key => setReportSubTab(key as 'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary')}
             />
 
+            {/* 1. KPI Tracking */}
             {reportSubTab === 'kpi-tracking' && (
                 <>
                     <div className="card report-filter-card">
@@ -4195,37 +4472,11 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>KPI Tracking</h3>
                         </div>
                         <div className="report-filter-grid">
-                            <div className="field">
-                                <label>Date Range</label>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {DATE_PRESETS.map(p => {
-                                        const { start } = getDateRangeMonths(p.months);
-                                        const isActive = kpiFilter.dateRangeStart === start;
-                                        return (
-                                            <button key={p.label}
-                                                type="button"
-                                                className={`filter-pill${isActive ? ' active' : ''}`}
-                                                style={{ fontSize: 12, padding: '6px 14px' }}
-                                                onClick={() => {
-                                                    const { start: s, end: e } = getDateRangeMonths(p.months);
-                                                    setKpiFilter(prev => ({
-                                                        ...prev,
-                                                        dateRangeStart: s,
-                                                        dateRangeEnd: e,
-                                                    }));
-                                                }}
-                                            >
-                                                {p.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {kpiFilter.dateRangeStart && kpiFilter.dateRangeEnd && (
-                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
-                                        {kpiFilter.dateRangeStart} → {kpiFilter.dateRangeEnd}
-                                    </span>
-                                )}
-                            </div>
+                            <DateRangeEngineField
+                                dateRangeStart={kpiFilter.dateRangeStart}
+                                dateRangeEnd={kpiFilter.dateRangeEnd}
+                                onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                            />
                             <div className="field">
                                 <label>Employee</label>
                                 <select value={kpiFilter.employeeId}
@@ -4333,289 +4584,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {reportSubTab === 'performance-report' && (
-                <>
-                    <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Performance Report</h3>
-                        </div>
-                        <div className="report-filter-grid">
-                            <div className="field">
-                                <label>Date Range *</label>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {[
-                                        { label: 'Last 7 Days', days: 7 },
-                                        { label: 'Last 30 Days', days: 30 },
-                                        { label: 'Last 90 Days', days: 90 },
-                                    ].map(p => {
-                                        const { start } = getDateRangeDays(p.days);
-                                        const isActive = prFilter.dateRangeStart === start;
-                                        return (
-                                            <button key={p.label}
-                                                type="button"
-                                                className={`filter-pill${isActive ? ' active' : ''}`}
-                                                style={{ fontSize: 12, padding: '6px 14px' }}
-                                                onClick={() => {
-                                                    const { start: s, end: e } = getDateRangeDays(p.days);
-                                                    setPrFilter(prev => ({ ...prev, dateRangeStart: s, dateRangeEnd: e }));
-                                                }}
-                                            >
-                                                {p.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {prFilter.dateRangeStart && prFilter.dateRangeEnd && (
-                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
-                                        {prFilter.dateRangeStart} → {prFilter.dateRangeEnd}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="field">
-                                <label>Period *</label>
-                                <select value={prFilter.period} onChange={e => setPrFilter(prev => ({ ...prev, period: e.target.value as 'Weekly' | 'Monthly' }))}>
-                                    <option value="Weekly">Weekly</option>
-                                    <option value="Monthly">Monthly</option>
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Employee</label>
-                                <select value={prFilter.employeeId} onChange={e => setPrFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(m => (
-                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Department</label>
-                                <select value={prFilter.departmentId} onChange={e => setPrFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
-                                    <option value="">All Departments</option>
-                                    {departments.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading}>
-                                    {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {prError && (
-                        <div className="card" style={{ marginTop: 16 }}>
-                            <div className="empty-state">
-                                <AlertCircle size={22} style={{ color: 'var(--danger)' }} />
-                                <p>{prError}</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {prNoRecords && (
-                        <div className="card" style={{ marginTop: 16 }}>
-                            <div className="report-empty-state">
-                                <FileText size={22} />
-                                <p>No completed tasks found for the selected criteria.</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {prData && !prError && !prNoRecords && (
-                        <>
-                            <div className="stats-row" style={{ marginTop: 16 }}>
-                                {[
-                                    { label: 'Total Completed', value: prData.totalCompletedTasks, icon: <CheckCircle2 size={18} />, variant: 'teal' as const, subtext: 'Completed tasks' },
-                                    { label: 'On-Time', value: Math.round((prData.totalCompletedTasks ?? 0) * ((prData.overallOnTimeRate ?? 0) / 100)), icon: <CheckCircle2 size={18} />, variant: 'success' as const, subtext: `${prData.overallOnTimeRate ?? 0}% rate` },
-                                    { label: 'Late', value: Math.round((prData.totalCompletedTasks ?? 0) * ((prData.overallLateRate ?? 0) / 100)), icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: `${prData.overallLateRate ?? 0}% rate` },
-                                ].map(s => (
-                                    <StatusCard key={s.label} icon={s.icon} variant={s.variant} label={s.label} value={s.value} subtext={s.subtext} />
-                                ))}
-                            </div>
-
-                            <div className="card" style={{ marginTop: 16 }}>
-                                <div className="card-header-layout">
-                                    <h3>Employee Breakdown ({prData.period})</h3>
-                                    <span className="badge badge-blue">{prData.employeeBreakdown?.length || 0} employees</span>
-                                </div>
-                                {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th>Employee</th>
-                                                <th>Department</th>
-                                                <th>Role</th>
-                                                <th style={{ textAlign: 'center' }}>Completed</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time</th>
-                                                <th style={{ textAlign: 'center' }}>Late</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {prData.employeeBreakdown.map((kpi: any) => {
-                                                const rate = kpi.onTimeRate ?? 0;
-                                                return (
-                                                    <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
-                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
-                                                        <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: rate >= 80 ? 'rgba(5,205,153,0.12)' : rate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                color: rate >= 80 ? 'var(--status-active)' : rate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                             }}>{rate}%</span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <div className="empty-state" style={{ padding: '32px 0' }}>
-                                        <CheckCircle2 size={22} />
-                                        <p>No completed tasks found for the selected criteria.</p>
-                                    </div>
-                                )}
-                                <div className="report-export-row">
-                                    <span className="report-generated-badge">
-                                        <Calendar size={12} /> {prData.dateRangeStart?.split('T')[0]} to {prData.dateRangeEnd?.split('T')[0]}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                        <button className="btn btn-primary" onClick={() => handlePrExport('Excel')} disabled={prExporting}>
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => handlePrExport('Pdf')} disabled={prExporting}>
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </>
-            )}
-
-            {reportSubTab === 'foms-export' && (
-                <>
-                    <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>FOMS Export</h3>
-                            <span className="badge badge-blue">CSV</span>
-                        </div>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, padding: '0 24px' }}>
-                            Export completed task records for the Field Operations Management System.
-                            Only reviewed and completed tasks are included.
-                        </p>
-                        <div className="report-filter-grid">
-                            <div className="field">
-                                <label>Date Range *</label>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {[
-                                        { label: 'Last 7 Days', days: 7 },
-                                        { label: 'Last 30 Days', days: 30 },
-                                        { label: 'Last 90 Days', days: 90 },
-                                    ].map(p => {
-                                        const { start } = getDateRangeDays(p.days);
-                                        const isActive = fomsFilter.dateRangeStart === start;
-                                        return (
-                                            <button key={p.label}
-                                                type="button"
-                                                className={`filter-pill${isActive ? ' active' : ''}`}
-                                                style={{ fontSize: 12, padding: '6px 14px' }}
-                                                onClick={() => {
-                                                    const { start: s, end: e } = getDateRangeDays(p.days);
-                                                    setFomsFilter(prev => ({ ...prev, dateRangeStart: s, dateRangeEnd: e }));
-                                                }}
-                                            >
-                                                {p.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {fomsFilter.dateRangeStart && fomsFilter.dateRangeEnd && (
-                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
-                                        {fomsFilter.dateRangeStart} → {fomsFilter.dateRangeEnd}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="field">
-                                <label>Employee</label>
-                                <select value={fomsFilter.employeeId} onChange={e => setFomsFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(m => (
-                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handleFomsExport} disabled={fomsExporting}>
-                                    {fomsExporting ? <><Loader2 size={14} className="spin" /> Exporting...</> : <><Download size={14} /> Export to CSV</>}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {fomsError && (
-                        <div className="card" style={{ marginTop: 16 }}>
-                            <div className="empty-state">
-                                <AlertCircle size={22} style={{ color: 'var(--danger)' }} />
-                                <p>{fomsError}</p>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="card" style={{ marginTop: 16 }}>
-                        <div className="card-header-layout">
-                            <h3>Export Format</h3>
-                        </div>
-                        <div style={{ padding: '16px 24px' }}>
-                            <table style={{ width: '100%', fontSize: 13 }}>
-                                <thead>
-                                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Column</th>
-                                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Description</th>
-                                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Source</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {[
-                                        ['TaskReferenceNumber', 'Task identifier', 'Task title (truncated)'],
-                                        ['Title', 'Full task title', 'Task title'],
-                                        ['Status', 'Task status', 'Always "Completed"'],
-                                        ['Priority', 'Priority level', 'Task priority level'],
-                                        ['Classification', 'Task classification', 'Task classification'],
-                                        ['AssignedEmployee', 'Assigned employee(s)', 'Task assignments'],
-                                        ['Department', 'Department name', 'Assigned department'],
-                                        ['Deadline', 'Original deadline', 'Task deadline'],
-                                        ['RevisedDeadline', 'Revised deadline (if any)', 'Revised deadline'],
-                                        ['CreatedAt', 'Task creation timestamp', 'Created timestamp'],
-                                        ['CompletedAt', 'Completion timestamp', 'Updated timestamp'],
-                                        ['DurationHours', 'Total duration in hours', 'CompletedAt - CreatedAt'],
-                                        ['IsOnTime', 'Whether completed on time', 'CompletedAt <= Deadline'],
-                                        ['OvertimeHours', 'Overtime hours if late', 'CompletedAt - Deadline (if late)'],
-                                        ['IsSLALocked', 'SLA enforcement flag', 'SLA lock status'],
-                                        ['ReviewRemarks', 'Reviewer remarks', 'Review remarks'],
-                                        ['PushBackComment', 'Push-back comment', 'Push back comment'],
-                                    ].map(([col, desc, src]) => (
-                                        <tr key={col} style={{ borderBottom: '1px solid var(--border)' }}>
-                                            <td style={{ padding: '8px 12px', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>{col}</td>
-                                            <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{desc}</td>
-                                            <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{src}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
-
+            {/* 2. Task Completion Report (Part 1: Granular Task Logs + Multi-format Export) */}
             {reportSubTab === 'task-completion' && (
                 <>
                     <div className="card report-filter-card">
@@ -4623,28 +4592,11 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Task Completion Reports</h3>
                         </div>
                         <div className="report-filter-grid">
-                            <div className="field">
-                                <label>Date Range *</label>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {DATE_PRESETS.map(p => {
-                                        const { start } = getDateRangeMonths(p.months);
-                                        const isActive = tcFilter.dateRangeStart === start;
-                                        return (
-                                            <button key={p.label} type="button"
-                                                className={`filter-pill${isActive ? ' active' : ''}`}
-                                                onClick={() => applyTcPreset(p.months)}
-                                                style={{ fontSize: 12, padding: '6px 14px' }}>
-                                                {p.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {tcFilter.dateRangeStart && tcFilter.dateRangeEnd && (
-                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
-                                        {tcFilter.dateRangeStart} → {tcFilter.dateRangeEnd}
-                                    </span>
-                                )}
-                            </div>
+                            <DateRangeEngineField
+                                dateRangeStart={tcFilter.dateRangeStart}
+                                dateRangeEnd={tcFilter.dateRangeEnd}
+                                onChange={(start, end) => setTcFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                            />
                             <div className="field">
                                 <label>Employee</label>
                                 <select className="report-select"
@@ -4710,10 +4662,77 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="IN PROGRESS" value={String(tcReport.totalTasksInProgress)} subtext="Ongoing" />
                                 <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant='teal' label="PENDING REVIEW" value={String(tcReport.totalTasksPendingReview)} subtext="Awaiting review" />
                                 <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={String(tcReport.totalOverdueTasks)} subtext="Past deadline" />
-                                <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${tcReport.taskCompletionRate}%`} subtext="Overall rate" />
+                                <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${tcReport.taskCompletionRate}%`} subtext="Part 2 KPI" />
+                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${tcReport.overallOnTimeRate ?? 0}%`} subtext="Part 2 KPI" />
                                 <StatusCard icon={<Calendar size={20} strokeWidth={2.3} />} variant="warning" label="AVG TIME" value={`${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}h`} subtext="Per task" />
                             </div>
-                            <div className="card">
+
+                            {/* Part 1: Granular Task Logs ("Who did it, when, was it late") */}
+                            <div className="card" style={{ marginTop: 16 }}>
+                                <div className="card-header-layout">
+                                    <h3>Task Logs & Granular Completion ({tcReport.tasks?.length || 0} tasks)</h3>
+                                    <span className="badge badge-blue">Part 1 Logs</span>
+                                </div>
+                                {tcReport.tasks && tcReport.tasks.length > 0 ? (
+                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Task Title</th>
+                                                <th>Assigned To</th>
+                                                <th>Department</th>
+                                                <th style={{ textAlign: 'center' }}>Priority</th>
+                                                <th>Deadline</th>
+                                                <th>Completed At</th>
+                                                <th style={{ textAlign: 'center' }}>On-Time Status</th>
+                                                <th style={{ textAlign: 'center' }}>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {tcReport.tasks.map((task) => (
+                                                <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                                                        <div>{task.title}</div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Ref: {task.taskReferenceNumber}</div>
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px' }}>{task.assignedEmployee || 'Unassigned'}</td>
+                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{task.department || 'N/A'}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                        <span className={`badge ${task.priority === 'Urgent' ? 'badge-red' : task.priority === 'High' ? 'badge-amber' : 'badge-blue'}`}>
+                                                            {task.priority}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                        {task.deadline ? new Date(task.deadline).toLocaleDateString() : 'N/A'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                        {task.completedAt ? new Date(task.completedAt).toLocaleDateString() : '—'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                        <span style={{
+                                                            display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+                                                            fontSize: 12, fontWeight: 700,
+                                                            background: task.isOnTime ? 'rgba(5,205,153,0.12)' : 'rgba(238,93,80,0.12)',
+                                                            color: task.isOnTime ? 'var(--status-active)' : 'var(--status-failed)',
+                                                        }}>
+                                                            {task.isOnTime ? 'On-Time' : `Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
+                                                        <span className="badge badge-teal">{task.status}</span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="empty-state" style={{ padding: '32px 0' }}>
+                                        <CheckCircle2 size={22} />
+                                        <p>No task execution logs available for selected range.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="card" style={{ marginTop: 16 }}>
                                 <DataTable title="Employee Performance Summary"
                                     headers={['Employee', 'Assigned', 'Completed', 'Rate', 'Avg Time (h)']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
@@ -4729,7 +4748,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     ))}
                                 </DataTable>
                             </div>
-                            <div className="card">
+
+                            <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout"><h3>Task Status Distribution</h3></div>
                                 {tcChartData.length === 0 ? (
                                     <div className="report-empty-state" style={{ padding: '20px 0' }}><p>No status data available.</p></div>
@@ -4748,46 +4768,39 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     </ResponsiveContainer>
                                 )}
                             </div>
+
                             <div className="report-export-row">
                                 <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {tcGeneratedAt}</span>
-                                <button className="btn btn-primary" onClick={exportCSV}>
-                                    <Download size={14} /> Export CSV
-                                </button>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button className="btn btn-primary" onClick={() => handleTcExport('Csv')} disabled={tcExporting}>
+                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
+                                    </button>
+                                    <button className="btn btn-primary" onClick={() => handleTcExport('Excel')} disabled={tcExporting}>
+                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
+                                    </button>
+                                    <button className="btn btn-primary" onClick={() => handleTcExport('Pdf')} disabled={tcExporting}>
+                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
+                                    </button>
+                                </div>
                             </div>
                         </>
                     )}
                 </>
             )}
 
+            {/* 3. Operational Summary Report (Part 1 & 2: SLA Breach & Workload Balance) */}
             {reportSubTab === 'operational-summary' && (
                 <>
                     <div className="card report-filter-card">
                         <div className="card-header-layout">
-                            <h3><BarChart3 size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />Operational Summary Report</h3>
+                            <h3><BarChart3 size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />Operational Report</h3>
                         </div>
                         <div className="report-filter-grid">
-                            <div className="field">
-                                <label>Date Range *</label>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {DATE_PRESETS.map(p => {
-                                        const { start } = getDateRangeMonths(p.months);
-                                        const isActive = opFilter.dateRangeStart === start;
-                                        return (
-                                            <button key={p.label} type="button"
-                                                className={`filter-pill${isActive ? ' active' : ''}`}
-                                                onClick={() => applyOpPreset(p.months)}
-                                                style={{ fontSize: 12, padding: '6px 14px' }}>
-                                                {p.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {opFilter.dateRangeStart && opFilter.dateRangeEnd && (
-                                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
-                                        {opFilter.dateRangeStart} → {opFilter.dateRangeEnd}
-                                    </span>
-                                )}
-                            </div>
+                            <DateRangeEngineField
+                                dateRangeStart={opFilter.dateRangeStart}
+                                dateRangeEnd={opFilter.dateRangeEnd}
+                                onChange={(start, end) => setOpFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                            />
                             <div className="field">
                                 <label>Department</label>
                                 <select className="report-select"
@@ -4811,12 +4824,13 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </select>
                             </div>
                             <div className="field">
-                                <label>Report Format</label>
+                                <label>Default Export Format</label>
                                 <select className="report-select"
                                     value={opFilter.reportFormat}
                                     onChange={e => setOpFilter(p => ({ ...p, reportFormat: e.target.value }))}>
                                     <option value="PDF">PDF</option>
                                     <option value="EXCEL">Excel</option>
+                                    <option value="CSV">CSV</option>
                                 </select>
                             </div>
                         </div>
@@ -4840,9 +4854,73 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="PENDING" value={String(opReport.pendingTasks)} subtext="Not yet completed" />
                                 <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={String(opReport.overdueTasks)} subtext="Past deadline" />
                                 <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${opReport.taskCompletionRate.toFixed(1)}%`} subtext="Overall rate" />
+                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${(opReport.overallOnTimeRate ?? 0).toFixed(1)}%`} subtext="Part 2 KPI" />
+                                <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="SLA BREACH RATE" value={`${(opReport.overallSlaBreachRate ?? 0).toFixed(1)}%`} subtext="Part 2 KPI" />
                             </div>
 
-                            <div className="card">
+                            {/* Part 1 & 2: Department SLA Breach & Workload Balance Table */}
+                            {opReport.departmentSummaries && opReport.departmentSummaries.length > 0 && (
+                                <div className="card" style={{ marginTop: 16 }}>
+                                    <div className="card-header-layout">
+                                        <h3>Department SLA Breach & Workload Balance</h3>
+                                        <span className="badge badge-blue">{opReport.departmentSummaries.length} Departments</span>
+                                    </div>
+                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Department</th>
+                                                <th style={{ textAlign: 'center' }}>Total Tasks</th>
+                                                <th style={{ textAlign: 'center' }}>Completed</th>
+                                                <th style={{ textAlign: 'center' }}>Active Tasks</th>
+                                                <th style={{ textAlign: 'center' }}>SLA Breached</th>
+                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
+                                                <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
+                                                <th style={{ textAlign: 'center' }}>Tasks / Member</th>
+                                                <th style={{ textAlign: 'center' }}>Workload Balance</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {opReport.departmentSummaries.map((dept) => {
+                                                const status = dept.workloadBalanceStatus || 'Balanced';
+                                                const isBalanced = status === 'Balanced';
+                                                const isModerate = status === 'Moderate';
+                                                return (
+                                                    <tr key={dept.departmentName} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{dept.departmentName}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.totalTasks}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.completedTasks}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.activeTasks}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: dept.slaBreachedTasks > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                            {dept.slaBreachedTasks}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
+                                                            {dept.onTimeRate.toFixed(1)}%
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: dept.slaBreachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                            {dept.slaBreachRate.toFixed(1)}%
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>
+                                                            {dept.tasksPerMember.toFixed(1)}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            <span style={{
+                                                                display: 'inline-block', padding: '3px 12px', borderRadius: 999,
+                                                                fontSize: 12, fontWeight: 700,
+                                                                background: isBalanced ? 'rgba(5,205,153,0.12)' : isModerate ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                                color: isBalanced ? 'var(--status-active)' : isModerate ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                            }}>
+                                                                {status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            <div className="card" style={{ marginTop: 16 }}>
                                 <DataTable title="Employee Performance Summary"
                                     headers={['Employee', 'Assigned', 'Completed', 'Overdue', 'Completion Rate']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
@@ -4860,7 +4938,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
 
                             {opReport.workloadByCategory.length > 0 && (
-                                <div className="card">
+                                <div className="card" style={{ marginTop: 16 }}>
                                     <div className="card-header-layout"><h3>Workload by Category</h3></div>
                                     <DataTable headers={['Category', 'Task Count', 'Percentage']}
                                         loading={false} emptyMessage="No data."
@@ -4877,7 +4955,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             )}
 
                             {opReport.workloadByDepartment.length > 0 && (
-                                <div className="card">
+                                <div className="card" style={{ marginTop: 16 }}>
                                     <div className="card-header-layout"><h3>Workload by Department</h3></div>
                                     <DataTable headers={['Department', 'Task Count', 'Percentage']}
                                         loading={false} emptyMessage="No data."
@@ -4894,7 +4972,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             )}
 
                             {opReport.workloadByPriority.length > 0 && (
-                                <div className="card">
+                                <div className="card" style={{ marginTop: 16 }}>
                                     <div className="card-header-layout"><h3>Workload by Priority</h3></div>
                                     <DataTable headers={['Priority', 'Task Count', 'Percentage']}
                                         loading={false} emptyMessage="No data."
@@ -4912,10 +4990,403 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                             <div className="report-export-row">
                                 <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {opGeneratedAt}</span>
-                                <button className="btn btn-primary" onClick={handleOpDownload} disabled={opDownloading}>
-                                    {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                                    {' '}{opDownloading ? 'Preparing...' : `Download ${opFilter.reportFormat === 'EXCEL' ? 'Excel' : 'PDF'}`}
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button className="btn btn-primary" onClick={() => handleOpDownload('PDF')} disabled={opDownloading}>
+                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download PDF
+                                    </button>
+                                    <button className="btn btn-primary" onClick={() => handleOpDownload('EXCEL')} disabled={opDownloading}>
+                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download Excel
+                                    </button>
+                                    <button className="btn btn-primary" onClick={() => handleOpDownload('CSV')} disabled={opDownloading}>
+                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download CSV
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </>
+            )}
+
+            {/* 4. Performance Report (Part 1 & 2: The 5 KPIs) */}
+            {reportSubTab === 'performance-report' && (
+                <>
+                    <div className="card report-filter-card">
+                        <div className="card-header-layout">
+                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Performance Report</h3>
+                        </div>
+                        <div className="report-filter-grid">
+                            <DateRangeEngineField
+                                dateRangeStart={prFilter.dateRangeStart}
+                                dateRangeEnd={prFilter.dateRangeEnd}
+                                onChange={(start, end) => setPrFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                            />
+                            <div className="field">
+                                <label>Period *</label>
+                                <select value={prFilter.period} onChange={e => setPrFilter(prev => ({ ...prev, period: e.target.value as any }))}>
+                                    <option value="Weekly">Weekly</option>
+                                    <option value="Monthly">Monthly</option>
+                                    <option value="Quarterly">Quarterly</option>
+                                    <option value="Annual">Annual</option>
+                                </select>
+                            </div>
+                            <div className="field">
+                                <label>Employee</label>
+                                <select value={prFilter.employeeId} onChange={e => setPrFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
+                                    <option value="">All Employees</option>
+                                    {allEmployeeOptions.map(m => (
+                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="field">
+                                <label>Department</label>
+                                <select value={prFilter.departmentId} onChange={e => setPrFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
+                                    <option value="">All Departments</option>
+                                    {departments.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="field" style={{ alignSelf: 'flex-end' }}>
+                                <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading}>
+                                    {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {prError && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="empty-state">
+                                <AlertCircle size={22} style={{ color: 'var(--danger)' }} />
+                                <p>{prError}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {prNoRecords && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="report-empty-state">
+                                <FileText size={22} />
+                                <p>No completed tasks found for the selected criteria.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {prData && !prError && !prNoRecords && (
+                        <>
+                            {/* Part 2: The 5 KPIs Row */}
+                            <div className="stats-row" style={{ marginTop: 16 }}>
+                                <StatusCard
+                                    icon={<BarChart3 size={18} />}
+                                    variant="teal"
+                                    label="1. COMPLETION RATE"
+                                    value={`${prData.overallCompletionRate ?? prData.overallOnTimeRate ?? 0}%`}
+                                    subtext="Completed vs assigned"
+                                />
+                                <StatusCard
+                                    icon={<CheckCircle2 size={18} />}
+                                    variant="success"
+                                    label="2. ON-TIME RATE"
+                                    value={`${prData.overallOnTimeRate ?? 0}%`}
+                                    subtext="Delivered by deadline"
+                                />
+                                <StatusCard
+                                    icon={<AlertCircle size={18} />}
+                                    variant="danger"
+                                    label="3. SLA BREACH RATE"
+                                    value={`${prData.overallSlaBreachRate ?? 0}%`}
+                                    subtext="Missed SLA window"
+                                />
+                                <StatusCard
+                                    icon={<RotateCcw size={18} />}
+                                    variant="warning"
+                                    label="4. REWORK RATE"
+                                    value={`${prData.overallReworkRate ?? 0}%`}
+                                    subtext="Push-back / revised"
+                                />
+                                <StatusCard
+                                    icon={<ClipboardList size={18} />}
+                                    variant="teal"
+                                    label="TOTAL COMPLETED"
+                                    value={prData.totalCompletedTasks}
+                                    subtext="Finished tasks"
+                                />
+                            </div>
+
+                            <div className="card" style={{ marginTop: 16 }}>
+                                <div className="card-header-layout">
+                                    <h3>Employee Breakdown & 5 KPIs ({prData.period})</h3>
+                                    <span className="badge badge-blue">{prData.employeeBreakdown?.length || 0} employees</span>
+                                </div>
+                                {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
+                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Employee</th>
+                                                <th>Department</th>
+                                                <th>Role</th>
+                                                <th style={{ textAlign: 'center' }}>Assigned</th>
+                                                <th style={{ textAlign: 'center' }}>Completed</th>
+                                                <th style={{ textAlign: 'center' }}>Completion Rate</th>
+                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
+                                                <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
+                                                <th style={{ textAlign: 'center' }}>Rework Rate</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {prData.employeeBreakdown.map((kpi: any) => {
+                                                const completionRate = kpi.completionRate ?? 0;
+                                                const onTimeRate = kpi.onTimeRate ?? 0;
+                                                const breachRate = kpi.slaBreachRate ?? 0;
+                                                const reworkRate = kpi.reworkRate ?? 0;
+                                                return (
+                                                    <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
+                                                        <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalAssigned}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            <span style={{
+                                                                display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                                                                fontSize: 12, fontWeight: 700,
+                                                                background: completionRate >= 80 ? 'rgba(5,205,153,0.12)' : 'rgba(255,181,71,0.12)',
+                                                                color: completionRate >= 80 ? 'var(--status-active)' : 'var(--status-pending)',
+                                                            }}>{completionRate}%</span>
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            <span style={{
+                                                                display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                                                                fontSize: 12, fontWeight: 700,
+                                                                background: onTimeRate >= 80 ? 'rgba(5,205,153,0.12)' : onTimeRate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                                color: onTimeRate >= 80 ? 'var(--status-active)' : onTimeRate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                            }}>{onTimeRate}%</span>
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: breachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                                                            {breachRate}%
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: reworkRate > 0 ? 'var(--status-pending)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                                                            {reworkRate}%
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="empty-state" style={{ padding: '32px 0' }}>
+                                        <CheckCircle2 size={22} />
+                                        <p>No completed tasks found for the selected criteria.</p>
+                                    </div>
+                                )}
+                                <div className="report-export-row">
+                                    <span className="report-generated-badge">
+                                        <Calendar size={12} /> {prData.dateRangeStart?.split('T')[0]} to {prData.dateRangeEnd?.split('T')[0]}
+                                    </span>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button className="btn btn-primary" onClick={() => handlePrExport('Excel')} disabled={prExporting}>
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
+                                        </button>
+                                        <button className="btn btn-primary" onClick={() => handlePrExport('Pdf')} disabled={prExporting}>
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
+                                        </button>
+                                        <button className="btn btn-primary" onClick={() => handlePrExport('Csv')} disabled={prExporting}>
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </>
+            )}
+
+            {/* 5. Financial Report (FOMS) (Part 1: Realistic Billing & Financial Ledger) */}
+            {reportSubTab === 'foms-export' && (
+                <>
+                    <div className="card report-filter-card">
+                        <div className="card-header-layout">
+                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Financial Report (FOMS)</h3>
+                            <span className="badge badge-blue">FOMS Financial Ledger</span>
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, padding: '0 24px' }}>
+                            Speedex Operations & Field Operations Management System (FOMS) Financial Report. Track billed charges, collections, outstanding balances, and invoice settlements.
+                        </p>
+                        <div className="report-filter-grid">
+                            <DateRangeEngineField
+                                dateRangeStart={fomsFilter.dateRangeStart}
+                                dateRangeEnd={fomsFilter.dateRangeEnd}
+                                onChange={(start, end) => setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                            />
+                            <div className="field">
+                                <label>Department</label>
+                                <select className="report-select"
+                                    value={fomsFilter.departmentId}
+                                    onChange={e => setFomsFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
+                                    <option value="">All Departments</option>
+                                    {departments.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="field">
+                                <label>Invoice Status</label>
+                                <select className="report-select"
+                                    value={fomsFilter.status}
+                                    onChange={e => setFomsFilter(prev => ({ ...prev, status: e.target.value }))}>
+                                    <option value="All">All Invoices</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Overdue">Overdue</option>
+                                </select>
+                            </div>
+                            <div className="field" style={{ alignSelf: 'flex-end' }}>
+                                <button className="btn btn-primary" onClick={handleFinancialGenerate} disabled={financialLoading}>
+                                    {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {financialError && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="empty-state">
+                                <AlertCircle size={22} style={{ color: 'var(--danger)' }} />
+                                <p>{financialError}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {financialNoRecords && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="report-empty-state">
+                                <FileText size={22} />
+                                <p>No financial records found for the selected criteria.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {financialReport && (
+                        <>
+                            <div className="stats-row" style={{ marginTop: 16 }}>
+                                <StatusCard
+                                    icon={<DollarSign size={18} />}
+                                    variant="teal"
+                                    label="TOTAL BILLED"
+                                    value={`₱${(financialReport.totalBilled || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    subtext="Invoiced amount"
+                                />
+                                <StatusCard
+                                    icon={<CheckCircle2 size={18} />}
+                                    variant="success"
+                                    label="TOTAL COLLECTED"
+                                    value={`₱${(financialReport.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    subtext="Received payments"
+                                />
+                                <StatusCard
+                                    icon={<AlertCircle size={18} />}
+                                    variant="warning"
+                                    label="OUTSTANDING BALANCE"
+                                    value={`₱${(financialReport.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    subtext="Pending payment"
+                                />
+                                <StatusCard
+                                    icon={<BarChart3 size={18} />}
+                                    variant="success"
+                                    label="COLLECTION RATE"
+                                    value={`${financialReport.collectionRate.toFixed(1)}%`}
+                                    subtext="Payment recovery"
+                                />
+                                <StatusCard
+                                    icon={<FileText size={18} />}
+                                    variant="teal"
+                                    label="TOTAL INVOICES"
+                                    value={financialReport.totalInvoices}
+                                    subtext={`${financialReport.overdueInvoicesCount} overdue`}
+                                />
+                            </div>
+
+                            <div className="card" style={{ marginTop: 16 }}>
+                                <div className="card-header-layout">
+                                    <h3>Speedex Financial Invoices & FOMS Ledger</h3>
+                                    <span className="badge badge-blue">{financialReport.invoices?.length || 0} Invoices</span>
+                                </div>
+                                {financialReport.invoices && financialReport.invoices.length > 0 ? (
+                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Invoice #</th>
+                                                <th>FOMS Ref</th>
+                                                <th>Client Account</th>
+                                                <th>Department</th>
+                                                <th>Billing Date</th>
+                                                <th>Due Date</th>
+                                                <th style={{ textAlign: 'right' }}>Amount Billed</th>
+                                                <th style={{ textAlign: 'right' }}>Amount Paid</th>
+                                                <th style={{ textAlign: 'right' }}>Balance</th>
+                                                <th style={{ textAlign: 'center' }}>Status</th>
+                                                <th>Method</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {financialReport.invoices.map((inv) => (
+                                                <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '10px 12px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
+                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.fomsReference}</td>
+                                                    <td style={{ padding: '10px 12px' }}>{inv.clientAccount}</td>
+                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{inv.department}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.billingDate}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.dueDate}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                                                        ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                        ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                        ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                        <span style={{
+                                                            display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+                                                            fontSize: 12, fontWeight: 700,
+                                                            background: inv.paymentStatus === 'Paid' ? 'rgba(5,205,153,0.12)' : inv.paymentStatus === 'Pending' ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                            color: inv.paymentStatus === 'Paid' ? 'var(--status-active)' : inv.paymentStatus === 'Pending' ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                        }}>
+                                                            {inv.paymentStatus}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="empty-state" style={{ padding: '32px 0' }}>
+                                        <CheckCircle2 size={22} />
+                                        <p>No invoice records for selected criteria.</p>
+                                    </div>
+                                )}
+                                <div className="report-export-row">
+                                    <span className="report-generated-badge">
+                                        <Calendar size={12} /> {financialGeneratedAt || `${fomsFilter.dateRangeStart} to ${fomsFilter.dateRangeEnd}`}
+                                    </span>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Excel')} disabled={financialExporting}>
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
+                                        </button>
+                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Pdf')} disabled={financialExporting}>
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
+                                        </button>
+                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Csv')} disabled={financialExporting}>
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
+                                        </button>
+                                        <button className="btn" onClick={handleLegacyFomsTaskExport} disabled={financialExporting} title="Export task records for Field Operations">
+                                            <FileText size={14} /> Export Tasks CSV
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </>
                     )}

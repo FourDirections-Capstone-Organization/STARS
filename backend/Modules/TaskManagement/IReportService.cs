@@ -50,6 +50,10 @@ public interface IReportService
         UserRole requestUserRole,
         Guid? requestUserDepartmentId);
 
+    Task<ApiResponseDTO<byte[]>> ExportTaskCompletionReportAsync(
+        TaskCompletionReportDTO reportData,
+        ExportFormat format);
+
     Task<ApiResponseDTO<OperationalSummaryReportDTO>> GetOperationalSummaryAsync(
         DateTime? dateRangeStart,
         DateTime? dateRangeEnd,
@@ -62,4 +66,18 @@ public interface IReportService
     Task<ApiResponseDTO<byte[]>> ExportOperationalSummaryAsync(
         OperationalSummaryReportDTO reportData,
         string reportFormat);
+
+    Task<ApiResponseDTO<FinancialReportDTO>> GetFinancialReportAsync(
+        DateTime? dateRangeStart,
+        DateTime? dateRangeEnd,
+        Guid? departmentId,
+        Guid? employeeId,
+        string? fiscalPeriod,
+        Guid requestUserId,
+        UserRole requestUserRole,
+        Guid? requestUserDepartmentId);
+
+    Task<ApiResponseDTO<byte[]>> ExportFinancialReportAsync(
+        FinancialReportDTO reportData,
+        ExportFormat format);
 }
