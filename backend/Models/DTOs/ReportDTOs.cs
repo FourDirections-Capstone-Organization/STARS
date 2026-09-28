@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Backend.Models.DTOs;
 
 /// <summary>
@@ -55,6 +57,7 @@ public class TaskCompletionExportRequestDTO
     public string? TaskPriorityLevel { get; set; }
     public string? TaskStatus { get; set; }
     public string? TaskCategory { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public Backend.Models.Enums.ExportFormat ExportFormat { get; set; } = Backend.Models.Enums.ExportFormat.Excel;
 }
 
@@ -151,6 +154,8 @@ public class FinancialReportFilterDTO
     public Guid? DepartmentId { get; set; }
     public Guid? EmployeeId { get; set; }
     public string? FiscalPeriod { get; set; }
+    public string? Status { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public Backend.Models.Enums.ExportFormat ExportFormat { get; set; } = Backend.Models.Enums.ExportFormat.Excel;
 }
 

@@ -59,9 +59,6 @@ public class FomsExportService : IFomsExportService
                 .OrderByDescending(t => t.UpdatedAt)
                 .ToListAsync();
 
-            if (tasks.Count == 0)
-                return ApiResponseDTO<byte[]>.Failure("No completed tasks found for the selected criteria.");
-
             var sb = new StringBuilder();
             sb.AppendLine("TaskReferenceNumber,Title,Status,Priority,Classification,AssignedEmployee,Department,Deadline,RevisedDeadline,CreatedAt,CompletedAt,DurationHours,IsOnTime,OvertimeHours,IsSLALocked,ReviewRemarks,PushBackComment");
 
@@ -86,7 +83,9 @@ public class FomsExportService : IFomsExportService
                 sb.AppendLine($"{refNum},{title},Completed,{task.PriorityLevel},{task.Classification},{EscapeCsv(assigneeStr)},{dept},{task.Deadline:yyyy-MM-dd HH:mm},{(task.RevisedDeadline.HasValue ? task.RevisedDeadline.Value.ToString("yyyy-MM-dd HH:mm") : "")},{task.CreatedAt:yyyy-MM-dd HH:mm},{completedAt:yyyy-MM-dd HH:mm},{durationHours},{isOnTime},{overtimeHours},{task.IsSLALocked},{EscapeCsv(task.ReviewRemarks ?? "")},{EscapeCsv(task.PushBackComment ?? "")}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var utf8BOM = Encoding.UTF8.GetPreamble();
+            var contentBytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = utf8BOM.Concat(contentBytes).ToArray();
 
             await _auditLogService.LogAsync(
                 requestUserId,

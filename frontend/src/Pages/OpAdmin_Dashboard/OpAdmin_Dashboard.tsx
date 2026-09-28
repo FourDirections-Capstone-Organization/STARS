@@ -3775,11 +3775,19 @@ async function readBlobError(err: any, fallback: string): Promise<string> {
         if (blob instanceof Blob) {
             const text = await blob.text();
             const json = JSON.parse(text);
+            if (json?.errors && typeof json.errors === 'object') {
+                const errorMessages = Object.entries(json.errors)
+                    .map(([field, msgs]: [string, any]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                    .join('; ');
+                if (errorMessages) return `${json.title || 'Validation error'}: ${errorMessages}`;
+            }
             return json?.message || json?.title || fallback;
         }
     } catch { /* ignore parse errors */ }
     return err?.response?.data?.message || err?.message || fallback;
 }
+
+const REPORT_PAGE_SIZE = 20;
 
 type TimeChunk = 'Monthly' | 'Quarterly' | 'Annual';
 type YearType = 'Calendar' | 'Fiscal';
@@ -3978,6 +3986,25 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         URL.revokeObjectURL(url);
     };
 
+    // Pagination states (20 records per page)
+    const [kpiPage, setKpiPage] = useState(1);
+    const [prEmpPage, setPrEmpPage] = useState(1);
+    const [tcLogsPage, setTcLogsPage] = useState(1);
+    const [tcEmpPage, setTcEmpPage] = useState(1);
+    const [opDeptPage, setOpDeptPage] = useState(1);
+    const [opEmpPage, setOpEmpPage] = useState(1);
+    const [financialPage, setFinancialPage] = useState(1);
+
+    useEffect(() => {
+        setKpiPage(1);
+        setPrEmpPage(1);
+        setTcLogsPage(1);
+        setTcEmpPage(1);
+        setOpDeptPage(1);
+        setOpEmpPage(1);
+        setFinancialPage(1);
+    }, [reportSubTab]);
+
     // --- KPI Tracking State ---
     const initialKpiDates = useMemo(() => computeDateRange('Monthly'), []);
     const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
@@ -3995,6 +4022,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             setKpiError('Please select a date range first.');
             return;
         }
+        setKpiPage(1);
         setKpiLoading(true);
         setKpiError('');
         setKpiNoRecords(false);
@@ -4054,6 +4082,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             setPrError('Start date must be before end date.');
             return;
         }
+        setPrEmpPage(1);
         setPrLoading(true);
         setPrError('');
         setPrNoRecords(false);
@@ -4149,6 +4178,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             setTcError('Please select a date range first.');
             return;
         }
+        setTcLogsPage(1);
+        setTcEmpPage(1);
         setTcLoading(true); setTcError(''); setTcNoRecords(false); setTcReport(null);
         try {
             const params = new URLSearchParams();
@@ -4175,6 +4206,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     };
 
     const handleTcReset = () => {
+        setTcLogsPage(1);
+        setTcEmpPage(1);
         setTcFilter({ dateRangeStart: initialTcDates.start, dateRangeEnd: initialTcDates.end, employeeId: '', taskPriorityLevel: '', taskStatus: '', taskCategory: '' });
         setTcReport(null); setTcError(''); setTcNoRecords(false); setTcGeneratedAt('');
     };
@@ -4249,6 +4282,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             setOpError('Please select a date range first.');
             return;
         }
+        setOpDeptPage(1);
+        setOpEmpPage(1);
         setOpLoading(true); setOpError(''); setOpNoRecords(false); setOpReport(null);
         try {
             const params = new URLSearchParams();
@@ -4273,6 +4308,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     };
 
     const handleOpReset = () => {
+        setOpDeptPage(1);
+        setOpEmpPage(1);
         setOpFilter({ dateRangeStart: initialOpDates.start, dateRangeEnd: initialOpDates.end, departmentId: '', employeeId: '', reportFormat: 'PDF' });
         setOpReport(null); setOpError(''); setOpNoRecords(false); setOpGeneratedAt('');
     };
@@ -4343,6 +4380,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             setFinancialError('Please select a date range.');
             return;
         }
+        setFinancialPage(1);
         setFinancialLoading(true);
         setFinancialError('');
         setFinancialNoRecords(false);
@@ -4450,6 +4488,56 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
+    // Pagination data slices (PAGE_SIZE = 20)
+    const pagedEmployeeKpis = useMemo(() => {
+        if (!kpiData?.employeeKpis) return [];
+        const start = (kpiPage - 1) * REPORT_PAGE_SIZE;
+        return kpiData.employeeKpis.slice(start, start + REPORT_PAGE_SIZE);
+    }, [kpiData?.employeeKpis, kpiPage]);
+    const totalKpiPages = Math.ceil((kpiData?.employeeKpis?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedTcTasks = useMemo(() => {
+        if (!tcReport?.tasks) return [];
+        const start = (tcLogsPage - 1) * REPORT_PAGE_SIZE;
+        return tcReport.tasks.slice(start, start + REPORT_PAGE_SIZE);
+    }, [tcReport?.tasks, tcLogsPage]);
+    const totalTcLogPages = Math.ceil((tcReport?.tasks?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedTcEmp = useMemo(() => {
+        if (!tcReport?.employeePerformanceSummary) return [];
+        const start = (tcEmpPage - 1) * REPORT_PAGE_SIZE;
+        return tcReport.employeePerformanceSummary.slice(start, start + REPORT_PAGE_SIZE);
+    }, [tcReport?.employeePerformanceSummary, tcEmpPage]);
+    const totalTcEmpPages = Math.ceil((tcReport?.employeePerformanceSummary?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedOpDept = useMemo(() => {
+        if (!opReport?.departmentSummaries) return [];
+        const start = (opDeptPage - 1) * REPORT_PAGE_SIZE;
+        return opReport.departmentSummaries.slice(start, start + REPORT_PAGE_SIZE);
+    }, [opReport?.departmentSummaries, opDeptPage]);
+    const totalOpDeptPages = Math.ceil((opReport?.departmentSummaries?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedOpEmp = useMemo(() => {
+        if (!opReport?.employeePerformanceSummary) return [];
+        const start = (opEmpPage - 1) * REPORT_PAGE_SIZE;
+        return opReport.employeePerformanceSummary.slice(start, start + REPORT_PAGE_SIZE);
+    }, [opReport?.employeePerformanceSummary, opEmpPage]);
+    const totalOpEmpPages = Math.ceil((opReport?.employeePerformanceSummary?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedPrEmp = useMemo(() => {
+        if (!prData?.employeeBreakdown) return [];
+        const start = (prEmpPage - 1) * REPORT_PAGE_SIZE;
+        return prData.employeeBreakdown.slice(start, start + REPORT_PAGE_SIZE);
+    }, [prData?.employeeBreakdown, prEmpPage]);
+    const totalPrEmpPages = Math.ceil((prData?.employeeBreakdown?.length || 0) / REPORT_PAGE_SIZE);
+
+    const pagedInvoices = useMemo(() => {
+        if (!financialReport?.invoices) return [];
+        const start = (financialPage - 1) * REPORT_PAGE_SIZE;
+        return financialReport.invoices.slice(start, start + REPORT_PAGE_SIZE);
+    }, [financialReport?.invoices, financialPage]);
+    const totalFinancialPages = Math.ceil((financialReport?.invoices?.length || 0) / REPORT_PAGE_SIZE);
+
     return (
         <div className="dashboard-content" style={{ padding: 0 }}>
             <SubTabNav
@@ -4532,46 +4620,58 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     {kpiData.employeeKpis && <span className="badge badge-blue">{kpiData.employeeKpis.length} employees</span>}
                                 </div>
                                 {kpiData.employeeKpis && kpiData.employeeKpis.length > 0 ? (
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th>Employee</th>
-                                                <th>Department</th>
-                                                <th style={{ textAlign: 'center' }}>Completed</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time</th>
-                                                <th style={{ textAlign: 'center' }}>Late</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                <th style={{ textAlign: 'center' }}>Late Rate</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {kpiData.employeeKpis.map((kpi: any) => {
-                                                const onTimeRate = kpi.onTimeRate ?? 0;
-                                                const isGood = onTimeRate >= 80;
-                                                const isWarning = onTimeRate >= 50 && onTimeRate < 80;
-                                                return (
-                                                    <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
-                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: isGood ? 'rgba(5,205,153,0.12)' : isWarning ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                color: isGood ? 'var(--status-active)' : isWarning ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                            }}>
-                                                                {onTimeRate}%
-                                                            </span>
-                                                        </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                    <>
+                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Employee</th>
+                                                    <th>Department</th>
+                                                    <th style={{ textAlign: 'center' }}>Completed</th>
+                                                    <th style={{ textAlign: 'center' }}>On-Time</th>
+                                                    <th style={{ textAlign: 'center' }}>Late</th>
+                                                    <th style={{ textAlign: 'center' }}>On-Time Rate</th>
+                                                    <th style={{ textAlign: 'center' }}>Late Rate</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pagedEmployeeKpis.map((kpi: any) => {
+                                                    const onTimeRate = kpi.onTimeRate ?? 0;
+                                                    const isGood = onTimeRate >= 80;
+                                                    const isWarning = onTimeRate >= 50 && onTimeRate < 80;
+                                                    return (
+                                                        <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+                                                                    fontSize: 12, fontWeight: 700,
+                                                                    background: isGood ? 'rgba(5,205,153,0.12)' : isWarning ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                                    color: isGood ? 'var(--status-active)' : isWarning ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                                }}>
+                                                                    {onTimeRate}%
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                Showing {Math.min((kpiPage - 1) * REPORT_PAGE_SIZE + 1, kpiData.employeeKpis.length)}–{Math.min(kpiPage * REPORT_PAGE_SIZE, kpiData.employeeKpis.length)} of {kpiData.employeeKpis.length} records
+                                            </span>
+                                            <Pagination
+                                                currentPage={kpiPage}
+                                                totalPages={totalKpiPages}
+                                                onPageChange={setKpiPage}
+                                            />
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="empty-state" style={{ padding: '32px 0' }}>
                                         <CheckCircle2 size={22} />
@@ -4674,7 +4774,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <span className="badge badge-blue">Part 1 Logs</span>
                                 </div>
                                 {tcReport.tasks && tcReport.tasks.length > 0 ? (
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <>
+                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>
                                             <tr>
                                                 <th>Task Title</th>
@@ -4688,7 +4789,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {tcReport.tasks.map((task) => (
+                                            {pagedTcTasks.map((task) => (
                                                 <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
                                                     <td style={{ padding: '10px 12px', fontWeight: 600 }}>
                                                         <div>{task.title}</div>
@@ -4724,6 +4825,17 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             ))}
                                         </tbody>
                                     </table>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                            Showing {Math.min((tcLogsPage - 1) * REPORT_PAGE_SIZE + 1, tcReport.tasks.length)}–{Math.min(tcLogsPage * REPORT_PAGE_SIZE, tcReport.tasks.length)} of {tcReport.tasks.length} records
+                                        </span>
+                                        <Pagination
+                                            currentPage={tcLogsPage}
+                                            totalPages={totalTcLogPages}
+                                            onPageChange={setTcLogsPage}
+                                        />
+                                    </div>
+                                    </>
                                 ) : (
                                     <div className="empty-state" style={{ padding: '32px 0' }}>
                                         <CheckCircle2 size={22} />
@@ -4736,8 +4848,12 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <DataTable title="Employee Performance Summary"
                                     headers={['Employee', 'Assigned', 'Completed', 'Rate', 'Avg Time (h)']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
-                                    totalRecords={tcReport.employeePerformanceSummary.length}>
-                                    {tcReport.employeePerformanceSummary.map(ep => (
+                                    totalRecords={tcReport.employeePerformanceSummary.length}
+                                    currentPage={tcEmpPage}
+                                    totalPages={totalTcEmpPages}
+                                    onPageChange={setTcEmpPage}
+                                    pageSize={REPORT_PAGE_SIZE}>
+                                    {pagedTcEmp.map(ep => (
                                         <tr key={ep.employeeName}>
                                             <td style={{ fontWeight: 600 }}>{ep.employeeName}</td>
                                             <td>{ep.totalAssigned}</td>
@@ -4880,7 +4996,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {opReport.departmentSummaries.map((dept) => {
+                                            {pagedOpDept.map((dept) => {
                                                 const status = dept.workloadBalanceStatus || 'Balanced';
                                                 const isBalanced = status === 'Balanced';
                                                 const isModerate = status === 'Moderate';
@@ -4917,6 +5033,16 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             })}
                                         </tbody>
                                     </table>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                            Showing {Math.min((opDeptPage - 1) * REPORT_PAGE_SIZE + 1, opReport.departmentSummaries.length)}–{Math.min(opDeptPage * REPORT_PAGE_SIZE, opReport.departmentSummaries.length)} of {opReport.departmentSummaries.length} records
+                                        </span>
+                                        <Pagination
+                                            currentPage={opDeptPage}
+                                            totalPages={totalOpDeptPages}
+                                            onPageChange={setOpDeptPage}
+                                        />
+                                    </div>
                                 </div>
                             )}
 
@@ -4924,8 +5050,12 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <DataTable title="Employee Performance Summary"
                                     headers={['Employee', 'Assigned', 'Completed', 'Overdue', 'Completion Rate']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
-                                    totalRecords={opReport.employeePerformanceSummary.length}>
-                                    {opReport.employeePerformanceSummary.map(ep => (
+                                    totalRecords={opReport.employeePerformanceSummary.length}
+                                    currentPage={opEmpPage}
+                                    totalPages={totalOpEmpPages}
+                                    onPageChange={setOpEmpPage}
+                                    pageSize={REPORT_PAGE_SIZE}>
+                                    {pagedOpEmp.map(ep => (
                                         <tr key={ep.employeeName}>
                                             <td style={{ fontWeight: 600 }}>{ep.employeeName}</td>
                                             <td>{ep.assigned}</td>
@@ -5120,60 +5250,72 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <span className="badge badge-blue">{prData.employeeBreakdown?.length || 0} employees</span>
                                 </div>
                                 {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th>Employee</th>
-                                                <th>Department</th>
-                                                <th>Role</th>
-                                                <th style={{ textAlign: 'center' }}>Assigned</th>
-                                                <th style={{ textAlign: 'center' }}>Completed</th>
-                                                <th style={{ textAlign: 'center' }}>Completion Rate</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
-                                                <th style={{ textAlign: 'center' }}>Rework Rate</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {prData.employeeBreakdown.map((kpi: any) => {
-                                                const completionRate = kpi.completionRate ?? 0;
-                                                const onTimeRate = kpi.onTimeRate ?? 0;
-                                                const breachRate = kpi.slaBreachRate ?? 0;
-                                                const reworkRate = kpi.reworkRate ?? 0;
-                                                return (
-                                                    <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
-                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
-                                                        <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalAssigned}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: completionRate >= 80 ? 'rgba(5,205,153,0.12)' : 'rgba(255,181,71,0.12)',
-                                                                color: completionRate >= 80 ? 'var(--status-active)' : 'var(--status-pending)',
-                                                            }}>{completionRate}%</span>
-                                                        </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: onTimeRate >= 80 ? 'rgba(5,205,153,0.12)' : onTimeRate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                color: onTimeRate >= 80 ? 'var(--status-active)' : onTimeRate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                            }}>{onTimeRate}%</span>
-                                                        </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: breachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                                                            {breachRate}%
-                                                        </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: reworkRate > 0 ? 'var(--status-pending)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                                                            {reworkRate}%
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                    <>
+                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Employee</th>
+                                                    <th>Department</th>
+                                                    <th>Role</th>
+                                                    <th style={{ textAlign: 'center' }}>Assigned</th>
+                                                    <th style={{ textAlign: 'center' }}>Completed</th>
+                                                    <th style={{ textAlign: 'center' }}>Completion Rate</th>
+                                                    <th style={{ textAlign: 'center' }}>On-Time Rate</th>
+                                                    <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
+                                                    <th style={{ textAlign: 'center' }}>Rework Rate</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pagedPrEmp.map((kpi: any) => {
+                                                    const completionRate = kpi.completionRate ?? 0;
+                                                    const onTimeRate = kpi.onTimeRate ?? 0;
+                                                    const breachRate = kpi.slaBreachRate ?? 0;
+                                                    const reworkRate = kpi.reworkRate ?? 0;
+                                                    return (
+                                                        <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
+                                                            <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalAssigned}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                                                                    fontSize: 12, fontWeight: 700,
+                                                                    background: completionRate >= 80 ? 'rgba(5,205,153,0.12)' : 'rgba(255,181,71,0.12)',
+                                                                    color: completionRate >= 80 ? 'var(--status-active)' : 'var(--status-pending)',
+                                                                }}>{completionRate}%</span>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                                                                    fontSize: 12, fontWeight: 700,
+                                                                    background: onTimeRate >= 80 ? 'rgba(5,205,153,0.12)' : onTimeRate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                                    color: onTimeRate >= 80 ? 'var(--status-active)' : onTimeRate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                                }}>{onTimeRate}%</span>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: breachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                                                                {breachRate}%
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: reworkRate > 0 ? 'var(--status-pending)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                                                                {reworkRate}%
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                Showing {Math.min((prEmpPage - 1) * REPORT_PAGE_SIZE + 1, prData.employeeBreakdown.length)}–{Math.min(prEmpPage * REPORT_PAGE_SIZE, prData.employeeBreakdown.length)} of {prData.employeeBreakdown.length} records
+                                            </span>
+                                            <Pagination
+                                                currentPage={prEmpPage}
+                                                totalPages={totalPrEmpPages}
+                                                onPageChange={setPrEmpPage}
+                                            />
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="empty-state" style={{ padding: '32px 0' }}>
                                         <CheckCircle2 size={22} />
@@ -5313,55 +5455,67 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <span className="badge badge-blue">{financialReport.invoices?.length || 0} Invoices</span>
                                 </div>
                                 {financialReport.invoices && financialReport.invoices.length > 0 ? (
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th>Invoice #</th>
-                                                <th>FOMS Ref</th>
-                                                <th>Client Account</th>
-                                                <th>Department</th>
-                                                <th>Billing Date</th>
-                                                <th>Due Date</th>
-                                                <th style={{ textAlign: 'right' }}>Amount Billed</th>
-                                                <th style={{ textAlign: 'right' }}>Amount Paid</th>
-                                                <th style={{ textAlign: 'right' }}>Balance</th>
-                                                <th style={{ textAlign: 'center' }}>Status</th>
-                                                <th>Method</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {financialReport.invoices.map((inv) => (
-                                                <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '10px 12px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
-                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.fomsReference}</td>
-                                                    <td style={{ padding: '10px 12px' }}>{inv.clientAccount}</td>
-                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{inv.department}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.billingDate}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.dueDate}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
-                                                        ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
-                                                        ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
-                                                        ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                        <span style={{
-                                                            display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                            fontSize: 12, fontWeight: 700,
-                                                            background: inv.paymentStatus === 'Paid' ? 'rgba(5,205,153,0.12)' : inv.paymentStatus === 'Pending' ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                            color: inv.paymentStatus === 'Paid' ? 'var(--status-active)' : inv.paymentStatus === 'Pending' ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                        }}>
-                                                            {inv.paymentStatus}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
+                                    <>
+                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Invoice #</th>
+                                                    <th>FOMS Ref</th>
+                                                    <th>Client Account</th>
+                                                    <th>Department</th>
+                                                    <th>Billing Date</th>
+                                                    <th>Due Date</th>
+                                                    <th style={{ textAlign: 'right' }}>Amount Billed</th>
+                                                    <th style={{ textAlign: 'right' }}>Amount Paid</th>
+                                                    <th style={{ textAlign: 'right' }}>Balance</th>
+                                                    <th style={{ textAlign: 'center' }}>Status</th>
+                                                    <th>Method</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {pagedInvoices.map((inv) => (
+                                                    <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ padding: '10px 12px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
+                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.fomsReference}</td>
+                                                        <td style={{ padding: '10px 12px' }}>{inv.clientAccount}</td>
+                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{inv.department}</td>
+                                                        <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.billingDate}</td>
+                                                        <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.dueDate}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                                                            ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                            ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                            ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            <span style={{
+                                                                display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+                                                                fontSize: 12, fontWeight: 700,
+                                                                background: inv.paymentStatus === 'Paid' ? 'rgba(5,205,153,0.12)' : inv.paymentStatus === 'Pending' ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
+                                                                color: inv.paymentStatus === 'Paid' ? 'var(--status-active)' : inv.paymentStatus === 'Pending' ? 'var(--status-pending)' : 'var(--status-failed)',
+                                                            }}>
+                                                                {inv.paymentStatus}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                Showing {Math.min((financialPage - 1) * REPORT_PAGE_SIZE + 1, financialReport.invoices.length)}–{Math.min(financialPage * REPORT_PAGE_SIZE, financialReport.invoices.length)} of {financialReport.invoices.length} records
+                                            </span>
+                                            <Pagination
+                                                currentPage={financialPage}
+                                                totalPages={totalFinancialPages}
+                                                onPageChange={setFinancialPage}
+                                            />
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="empty-state" style={{ padding: '32px 0' }}>
                                         <CheckCircle2 size={22} />

@@ -411,31 +411,45 @@ public class ReportService : IReportService
     {
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Performance Report");
+        worksheet.ShowGridLines = true;
 
         worksheet.Cell(1, 1).Value = "STARS Performance Report";
         worksheet.Cell(1, 1).Style.Font.Bold = true;
         worksheet.Cell(1, 1).Style.Font.FontSize = 16;
+        worksheet.Cell(1, 1).Style.Font.FontColor = XLColor.FromHtml("#00A99D");
         worksheet.Range(1, 1, 1, 14).Merge();
 
-        worksheet.Cell(2, 1).Value = $"Period: {report.DateRangeStart:MMM dd, yyyy} - {report.DateRangeEnd:MMM dd, yyyy}";
+        worksheet.Cell(2, 1).Value = $"Period ({report.Period}): {report.DateRangeStart:MMM dd, yyyy} - {report.DateRangeEnd:MMM dd, yyyy}";
+        worksheet.Cell(2, 1).Style.Font.FontSize = 10;
+        worksheet.Cell(2, 1).Style.Font.FontColor = XLColor.FromHtml("#64748B");
         worksheet.Range(2, 1, 2, 14).Merge();
 
         worksheet.Cell(4, 1).Value = "Performance Summary (The 5 KPIs)";
         worksheet.Cell(4, 1).Style.Font.Bold = true;
+        worksheet.Cell(4, 1).Style.Font.FontSize = 11;
+        worksheet.Cell(4, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
+
         worksheet.Cell(5, 1).Value = "Total Assigned Tasks:";
+        worksheet.Cell(5, 1).Style.Font.Bold = true;
         worksheet.Cell(5, 2).Value = report.TotalAssignedTasks;
         worksheet.Cell(5, 4).Value = "Total Completed Tasks:";
+        worksheet.Cell(5, 4).Style.Font.Bold = true;
         worksheet.Cell(5, 5).Value = report.TotalCompletedTasks;
-        worksheet.Cell(6, 1).Value = "Completion Rate:";
+        worksheet.Cell(6, 1).Value = "1. Completion Rate:";
+        worksheet.Cell(6, 1).Style.Font.Bold = true;
         worksheet.Cell(6, 2).Value = $"{report.OverallCompletionRate}%";
-        worksheet.Cell(6, 4).Value = "On-Time Rate:";
+        worksheet.Cell(6, 4).Value = "2. On-Time Rate:";
+        worksheet.Cell(6, 4).Style.Font.Bold = true;
         worksheet.Cell(6, 5).Value = $"{report.OverallOnTimeRate}%";
-        worksheet.Cell(7, 1).Value = "SLA Breach Rate:";
+        worksheet.Cell(7, 1).Value = "3. SLA Breach Rate:";
+        worksheet.Cell(7, 1).Style.Font.Bold = true;
         worksheet.Cell(7, 2).Value = $"{report.OverallSlaBreachRate}%";
-        worksheet.Cell(7, 4).Value = "Rework / Push-Back Rate:";
+        worksheet.Cell(7, 4).Value = "4. Rework Rate:";
+        worksheet.Cell(7, 4).Style.Font.Bold = true;
         worksheet.Cell(7, 5).Value = $"{report.OverallReworkRate}%";
 
         var headerRow = 9;
+        worksheet.Row(headerRow).Height = 26;
         var headers = new[]
         {
             "Employee Name", "Employee #", "Department", "Role",
@@ -447,12 +461,21 @@ public class ReportService : IReportService
             var cell = worksheet.Cell(headerRow, i + 1);
             cell.Value = headers[i];
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#00A99D");
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.Horizontal = i < 4 ? XLAlignmentHorizontalValues.Left : XLAlignmentHorizontalValues.Center;
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#007A71");
         }
 
         var dataRow = headerRow + 1;
+        int rowIndex = 0;
         foreach (var emp in report.EmployeeBreakdown)
         {
+            var rowColor = (rowIndex % 2 == 1) ? XLColor.FromHtml("#F8FAFC") : XLColor.White;
+            worksheet.Row(dataRow).Height = 20;
+
             worksheet.Cell(dataRow, 1).Value = emp.EmployeeName;
             worksheet.Cell(dataRow, 2).Value = emp.EmployeeNumber;
             worksheet.Cell(dataRow, 3).Value = emp.Department;
@@ -467,10 +490,22 @@ public class ReportService : IReportService
             worksheet.Cell(dataRow, 12).Value = $"{emp.SlaBreachRate}%";
             worksheet.Cell(dataRow, 13).Value = emp.ReworkCount;
             worksheet.Cell(dataRow, 14).Value = $"{emp.ReworkRate}%";
+
+            for (int col = 1; col <= 14; col++)
+            {
+                var c = worksheet.Cell(dataRow, col);
+                c.Style.Fill.BackgroundColor = rowColor;
+                c.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                c.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E2E8F0");
+                c.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (col >= 5) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
             dataRow++;
+            rowIndex++;
         }
 
-        worksheet.Columns().AdjustToContents();
+        worksheet.Columns().AdjustToContents(10, 45);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -1352,32 +1387,54 @@ public class ReportService : IReportService
     {
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Task Completion");
+        worksheet.ShowGridLines = true;
 
         worksheet.Cell(1, 1).Value = "STARS Task Completion Report";
         worksheet.Cell(1, 1).Style.Font.Bold = true;
         worksheet.Cell(1, 1).Style.Font.FontSize = 16;
+        worksheet.Cell(1, 1).Style.Font.FontColor = XLColor.FromHtml("#00A99D");
         worksheet.Range(1, 1, 1, 13).Merge();
 
-        worksheet.Cell(3, 1).Value = "KPI Summary";
-        worksheet.Cell(3, 1).Style.Font.Bold = true;
-        worksheet.Cell(4, 1).Value = "Total Tasks Assigned:";
-        worksheet.Cell(4, 2).Value = report.TotalTasksAssigned;
-        worksheet.Cell(4, 4).Value = "Total Tasks Completed:";
-        worksheet.Cell(4, 5).Value = report.TotalTasksCompleted;
-        worksheet.Cell(5, 1).Value = "Completion Rate:";
-        worksheet.Cell(5, 2).Value = $"{report.TaskCompletionRate}%";
-        worksheet.Cell(5, 4).Value = "On-Time Rate:";
-        worksheet.Cell(5, 5).Value = $"{report.OverallOnTimeRate}%";
-        worksheet.Cell(6, 1).Value = "Tasks In Progress:";
-        worksheet.Cell(6, 2).Value = report.TotalTasksInProgress;
-        worksheet.Cell(6, 4).Value = "Pending Review:";
-        worksheet.Cell(6, 5).Value = report.TotalTasksPendingReview;
-        worksheet.Cell(7, 1).Value = "Overdue Tasks:";
-        worksheet.Cell(7, 2).Value = report.TotalOverdueTasks;
-        worksheet.Cell(7, 4).Value = "Avg Duration (Hrs):";
-        worksheet.Cell(7, 5).Value = report.AverageTaskCompletionTimeHours;
+        worksheet.Cell(2, 1).Value = $"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm UTC}";
+        worksheet.Cell(2, 1).Style.Font.FontSize = 10;
+        worksheet.Cell(2, 1).Style.Font.FontColor = XLColor.FromHtml("#64748B");
+        worksheet.Range(2, 1, 2, 13).Merge();
 
-        var headerRow = 9;
+        worksheet.Cell(4, 1).Value = "KPI Summary";
+        worksheet.Cell(4, 1).Style.Font.Bold = true;
+        worksheet.Cell(4, 1).Style.Font.FontSize = 11;
+        worksheet.Cell(4, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
+
+        worksheet.Cell(5, 1).Value = "Total Tasks Assigned:";
+        worksheet.Cell(5, 1).Style.Font.Bold = true;
+        worksheet.Cell(5, 2).Value = report.TotalTasksAssigned;
+        worksheet.Cell(5, 4).Value = "Total Tasks Completed:";
+        worksheet.Cell(5, 4).Style.Font.Bold = true;
+        worksheet.Cell(5, 5).Value = report.TotalTasksCompleted;
+
+        worksheet.Cell(6, 1).Value = "Completion Rate:";
+        worksheet.Cell(6, 1).Style.Font.Bold = true;
+        worksheet.Cell(6, 2).Value = $"{report.TaskCompletionRate}%";
+        worksheet.Cell(6, 4).Value = "On-Time Rate:";
+        worksheet.Cell(6, 4).Style.Font.Bold = true;
+        worksheet.Cell(6, 5).Value = $"{report.OverallOnTimeRate}%";
+
+        worksheet.Cell(7, 1).Value = "Tasks In Progress:";
+        worksheet.Cell(7, 1).Style.Font.Bold = true;
+        worksheet.Cell(7, 2).Value = report.TotalTasksInProgress;
+        worksheet.Cell(7, 4).Value = "Pending Review:";
+        worksheet.Cell(7, 4).Style.Font.Bold = true;
+        worksheet.Cell(7, 5).Value = report.TotalTasksPendingReview;
+
+        worksheet.Cell(8, 1).Value = "Overdue Tasks:";
+        worksheet.Cell(8, 1).Style.Font.Bold = true;
+        worksheet.Cell(8, 2).Value = report.TotalOverdueTasks;
+        worksheet.Cell(8, 4).Value = "Avg Duration (Hrs):";
+        worksheet.Cell(8, 4).Style.Font.Bold = true;
+        worksheet.Cell(8, 5).Value = report.AverageTaskCompletionTimeHours;
+
+        var headerRow = 10;
+        worksheet.Row(headerRow).Height = 26;
         var headers = new[]
         {
             "Reference", "Task Title", "Assigned Employee", "Department",
@@ -1389,12 +1446,21 @@ public class ReportService : IReportService
             var cell = worksheet.Cell(headerRow, i + 1);
             cell.Value = headers[i];
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#00A99D");
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.Horizontal = (i <= 3) ? XLAlignmentHorizontalValues.Left : XLAlignmentHorizontalValues.Center;
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#007A71");
         }
 
         var dataRow = headerRow + 1;
+        int rowIndex = 0;
         foreach (var task in report.Tasks)
         {
+            var rowColor = (rowIndex % 2 == 1) ? XLColor.FromHtml("#F8FAFC") : XLColor.White;
+            worksheet.Row(dataRow).Height = 20;
+
             worksheet.Cell(dataRow, 1).Value = task.TaskReferenceNumber;
             worksheet.Cell(dataRow, 2).Value = task.Title;
             worksheet.Cell(dataRow, 3).Value = task.AssignedEmployee;
@@ -1408,10 +1474,22 @@ public class ReportService : IReportService
             worksheet.Cell(dataRow, 11).Value = task.IsOnTime ? "Yes" : "No";
             worksheet.Cell(dataRow, 12).Value = task.OverdueHours > 0 ? task.OverdueHours : 0;
             worksheet.Cell(dataRow, 13).Value = task.Status;
+
+            for (int col = 1; col <= 13; col++)
+            {
+                var c = worksheet.Cell(dataRow, col);
+                c.Style.Fill.BackgroundColor = rowColor;
+                c.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                c.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E2E8F0");
+                c.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (col >= 5 && col != 13) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
             dataRow++;
+            rowIndex++;
         }
 
-        worksheet.Columns().AdjustToContents();
+        worksheet.Columns().AdjustToContents(10, 45);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -1545,47 +1623,79 @@ public class ReportService : IReportService
     {
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Operational Summary");
+        worksheet.ShowGridLines = true;
 
         worksheet.Cell(1, 1).Value = "STARS Operational Summary Report";
         worksheet.Cell(1, 1).Style.Font.Bold = true;
         worksheet.Cell(1, 1).Style.Font.FontSize = 16;
+        worksheet.Cell(1, 1).Style.Font.FontColor = XLColor.FromHtml("#00A99D");
         worksheet.Range(1, 1, 1, 9).Merge();
 
-        worksheet.Cell(3, 1).Value = "KPI Summary";
-        worksheet.Cell(3, 1).Style.Font.Bold = true;
-        worksheet.Cell(4, 1).Value = "Total Tasks:";
-        worksheet.Cell(4, 2).Value = report.TotalTasks;
-        worksheet.Cell(4, 4).Value = "Completed Tasks:";
-        worksheet.Cell(4, 5).Value = report.CompletedTasks;
-        worksheet.Cell(5, 1).Value = "Pending Tasks:";
-        worksheet.Cell(5, 2).Value = report.PendingTasks;
-        worksheet.Cell(5, 4).Value = "Overdue Tasks:";
-        worksheet.Cell(5, 5).Value = report.OverdueTasks;
-        worksheet.Cell(6, 1).Value = "Completion Rate:";
-        worksheet.Cell(6, 2).Value = $"{report.TaskCompletionRate}%";
-        worksheet.Cell(6, 4).Value = "Overall On-Time Rate:";
-        worksheet.Cell(6, 5).Value = $"{report.OverallOnTimeRate}%";
-        worksheet.Cell(7, 1).Value = "Overall SLA Breach Rate:";
-        worksheet.Cell(7, 2).Value = $"{report.OverallSlaBreachRate}%";
+        worksheet.Cell(2, 1).Value = $"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm UTC}";
+        worksheet.Cell(2, 1).Style.Font.FontSize = 10;
+        worksheet.Cell(2, 1).Style.Font.FontColor = XLColor.FromHtml("#64748B");
+        worksheet.Range(2, 1, 2, 9).Merge();
+
+        worksheet.Cell(4, 1).Value = "KPI Summary";
+        worksheet.Cell(4, 1).Style.Font.Bold = true;
+        worksheet.Cell(4, 1).Style.Font.FontSize = 11;
+        worksheet.Cell(4, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
+
+        worksheet.Cell(5, 1).Value = "Total Tasks:";
+        worksheet.Cell(5, 1).Style.Font.Bold = true;
+        worksheet.Cell(5, 2).Value = report.TotalTasks;
+        worksheet.Cell(5, 4).Value = "Completed Tasks:";
+        worksheet.Cell(5, 4).Style.Font.Bold = true;
+        worksheet.Cell(5, 5).Value = report.CompletedTasks;
+
+        worksheet.Cell(6, 1).Value = "Pending Tasks:";
+        worksheet.Cell(6, 1).Style.Font.Bold = true;
+        worksheet.Cell(6, 2).Value = report.PendingTasks;
+        worksheet.Cell(6, 4).Value = "Overdue Tasks:";
+        worksheet.Cell(6, 4).Style.Font.Bold = true;
+        worksheet.Cell(6, 5).Value = report.OverdueTasks;
+
+        worksheet.Cell(7, 1).Value = "Completion Rate:";
+        worksheet.Cell(7, 1).Style.Font.Bold = true;
+        worksheet.Cell(7, 2).Value = $"{report.TaskCompletionRate}%";
+        worksheet.Cell(7, 4).Value = "Overall On-Time Rate:";
+        worksheet.Cell(7, 4).Style.Font.Bold = true;
+        worksheet.Cell(7, 5).Value = $"{report.OverallOnTimeRate}%";
+
+        worksheet.Cell(8, 1).Value = "Overall SLA Breach Rate:";
+        worksheet.Cell(8, 1).Style.Font.Bold = true;
+        worksheet.Cell(8, 2).Value = $"{report.OverallSlaBreachRate}%";
 
         // Department Summaries & Workload Balance
-        var deptRow = 9;
+        var deptRow = 10;
         worksheet.Cell(deptRow, 1).Value = "Department Summaries & Workload Balance";
         worksheet.Cell(deptRow, 1).Style.Font.Bold = true;
+        worksheet.Cell(deptRow, 1).Style.Font.FontSize = 12;
+        worksheet.Cell(deptRow, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
         deptRow++;
 
+        worksheet.Row(deptRow).Height = 26;
         var deptHeaders = new[] { "Department", "Total Tasks", "Active Tasks", "Completed", "SLA Breaches", "SLA Breach Rate", "On-Time Rate", "Tasks / Member", "Workload Status" };
         for (int i = 0; i < deptHeaders.Length; i++)
         {
             var cell = worksheet.Cell(deptRow, i + 1);
             cell.Value = deptHeaders[i];
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#00A99D");
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.Horizontal = (i == 0) ? XLAlignmentHorizontalValues.Left : XLAlignmentHorizontalValues.Center;
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#007A71");
         }
 
         deptRow++;
+        int deptIndex = 0;
         foreach (var d in report.DepartmentSummaries)
         {
+            var rowColor = (deptIndex % 2 == 1) ? XLColor.FromHtml("#F8FAFC") : XLColor.White;
+            worksheet.Row(deptRow).Height = 20;
+
             worksheet.Cell(deptRow, 1).Value = d.DepartmentName;
             worksheet.Cell(deptRow, 2).Value = d.TotalTasks;
             worksheet.Cell(deptRow, 3).Value = d.ActiveTasks;
@@ -1595,36 +1705,72 @@ public class ReportService : IReportService
             worksheet.Cell(deptRow, 7).Value = $"{d.OnTimeRate}%";
             worksheet.Cell(deptRow, 8).Value = d.TasksPerMember;
             worksheet.Cell(deptRow, 9).Value = d.WorkloadBalanceStatus;
+
+            for (int col = 1; col <= 9; col++)
+            {
+                var c = worksheet.Cell(deptRow, col);
+                c.Style.Fill.BackgroundColor = rowColor;
+                c.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                c.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E2E8F0");
+                c.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (col >= 2) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
             deptRow++;
+            deptIndex++;
         }
 
         // Employee performance
         deptRow += 2;
         worksheet.Cell(deptRow, 1).Value = "Employee Performance Summary";
         worksheet.Cell(deptRow, 1).Style.Font.Bold = true;
+        worksheet.Cell(deptRow, 1).Style.Font.FontSize = 12;
+        worksheet.Cell(deptRow, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
         deptRow++;
 
+        worksheet.Row(deptRow).Height = 26;
         var headers = new[] { "Employee", "Assigned", "Completed", "Overdue", "Completion Rate" };
         for (int i = 0; i < headers.Length; i++)
         {
             var cell = worksheet.Cell(deptRow, i + 1);
             cell.Value = headers[i];
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#00A99D");
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.Horizontal = (i == 0) ? XLAlignmentHorizontalValues.Left : XLAlignmentHorizontalValues.Center;
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#007A71");
         }
 
         deptRow++;
+        int empIndex = 0;
         foreach (var emp in report.EmployeePerformanceSummary)
         {
+            var rowColor = (empIndex % 2 == 1) ? XLColor.FromHtml("#F8FAFC") : XLColor.White;
+            worksheet.Row(deptRow).Height = 20;
+
             worksheet.Cell(deptRow, 1).Value = emp.EmployeeName;
             worksheet.Cell(deptRow, 2).Value = emp.Assigned;
             worksheet.Cell(deptRow, 3).Value = emp.Completed;
             worksheet.Cell(deptRow, 4).Value = emp.Overdue;
             worksheet.Cell(deptRow, 5).Value = $"{emp.CompletionRate}%";
+
+            for (int col = 1; col <= 5; col++)
+            {
+                var c = worksheet.Cell(deptRow, col);
+                c.Style.Fill.BackgroundColor = rowColor;
+                c.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                c.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E2E8F0");
+                c.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (col >= 2) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
             deptRow++;
+            empIndex++;
         }
 
-        worksheet.Columns().AdjustToContents();
+        worksheet.Columns().AdjustToContents(10, 45);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -1913,34 +2059,50 @@ public class ReportService : IReportService
     {
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Financial Ledger (FOMS)");
+        worksheet.ShowGridLines = true;
 
         worksheet.Cell(1, 1).Value = "STARS / FOMS Financial Operations Report";
         worksheet.Cell(1, 1).Style.Font.Bold = true;
         worksheet.Cell(1, 1).Style.Font.FontSize = 16;
+        worksheet.Cell(1, 1).Style.Font.FontColor = XLColor.FromHtml("#00A99D");
         worksheet.Range(1, 1, 1, 11).Merge();
 
         worksheet.Cell(2, 1).Value = $"Fiscal Period: {report.FiscalPeriod} | Date Range: {report.DateRangeStart:MMM dd, yyyy} - {report.DateRangeEnd:MMM dd, yyyy}";
+        worksheet.Cell(2, 1).Style.Font.FontSize = 10;
+        worksheet.Cell(2, 1).Style.Font.FontColor = XLColor.FromHtml("#64748B");
         worksheet.Range(2, 1, 2, 11).Merge();
 
         worksheet.Cell(4, 1).Value = "Financial KPI Summary";
         worksheet.Cell(4, 1).Style.Font.Bold = true;
+        worksheet.Cell(4, 1).Style.Font.FontSize = 11;
+        worksheet.Cell(4, 1).Style.Font.FontColor = XLColor.FromHtml("#1E293B");
+
         worksheet.Cell(5, 1).Value = "Total Billed:";
+        worksheet.Cell(5, 1).Style.Font.Bold = true;
         worksheet.Cell(5, 2).Value = report.TotalBilled;
         worksheet.Cell(5, 2).Style.NumberFormat.Format = "₱#,##0.00";
         worksheet.Cell(5, 4).Value = "Total Collected:";
+        worksheet.Cell(5, 4).Style.Font.Bold = true;
         worksheet.Cell(5, 5).Value = report.TotalCollected;
         worksheet.Cell(5, 5).Style.NumberFormat.Format = "₱#,##0.00";
+
         worksheet.Cell(6, 1).Value = "Outstanding Balance:";
+        worksheet.Cell(6, 1).Style.Font.Bold = true;
         worksheet.Cell(6, 2).Value = report.TotalOutstanding;
         worksheet.Cell(6, 2).Style.NumberFormat.Format = "₱#,##0.00";
         worksheet.Cell(6, 4).Value = "Collection Rate:";
+        worksheet.Cell(6, 4).Style.Font.Bold = true;
         worksheet.Cell(6, 5).Value = $"{report.CollectionRate}%";
+
         worksheet.Cell(7, 1).Value = "Total Invoices:";
+        worksheet.Cell(7, 1).Style.Font.Bold = true;
         worksheet.Cell(7, 2).Value = report.TotalInvoices;
         worksheet.Cell(7, 4).Value = "Overdue Invoices:";
+        worksheet.Cell(7, 4).Style.Font.Bold = true;
         worksheet.Cell(7, 5).Value = report.OverdueInvoicesCount;
 
         var headerRow = 9;
+        worksheet.Row(headerRow).Height = 26;
         var headers = new[]
         {
             "Invoice #", "FOMS Ref", "Client Account", "Department",
@@ -1952,12 +2114,21 @@ public class ReportService : IReportService
             var cell = worksheet.Cell(headerRow, i + 1);
             cell.Value = headers[i];
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#00A99D");
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.Horizontal = (i < 4) ? XLAlignmentHorizontalValues.Left : ((i >= 7 && i <= 9) ? XLAlignmentHorizontalValues.Right : XLAlignmentHorizontalValues.Center);
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#007A71");
         }
 
         var dataRow = headerRow + 1;
+        int rowIndex = 0;
         foreach (var inv in report.Invoices)
         {
+            var rowColor = (rowIndex % 2 == 1) ? XLColor.FromHtml("#F8FAFC") : XLColor.White;
+            worksheet.Row(dataRow).Height = 20;
+
             worksheet.Cell(dataRow, 1).Value = inv.InvoiceNumber;
             worksheet.Cell(dataRow, 2).Value = inv.FomsReference;
             worksheet.Cell(dataRow, 3).Value = inv.ClientAccount;
@@ -1972,10 +2143,23 @@ public class ReportService : IReportService
             worksheet.Cell(dataRow, 10).Value = inv.OutstandingBalance;
             worksheet.Cell(dataRow, 10).Style.NumberFormat.Format = "₱#,##0.00";
             worksheet.Cell(dataRow, 11).Value = inv.PaymentStatus;
+
+            for (int col = 1; col <= 11; col++)
+            {
+                var c = worksheet.Cell(dataRow, col);
+                c.Style.Fill.BackgroundColor = rowColor;
+                c.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                c.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E2E8F0");
+                c.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (col >= 5 && col <= 7 || col == 11) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                else if (col >= 8 && col <= 10) c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            }
+
             dataRow++;
+            rowIndex++;
         }
 
-        worksheet.Columns().AdjustToContents();
+        worksheet.Columns().AdjustToContents(10, 45);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
