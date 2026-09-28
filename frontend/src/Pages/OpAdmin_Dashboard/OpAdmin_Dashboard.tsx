@@ -65,6 +65,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import Pagination from '../../components/ui/Pagination';
 import SubTabNav from '../../components/ui/SubTabNav';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 import TaskManager, { TMTask } from '../../components/TaskManager/TaskManager';
 import api from '../../api';
 import axios from 'axios';
@@ -2162,16 +2163,22 @@ const DashboardTab: React.FC<{
                                     <option value="1">Team</option>
                                     <option value="2">Department</option>
                                 </select>
-                                <select value={wlFilters.employeeId} style={{ height: 36, borderRadius: 'var(--r-sm, 8px)', border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
-                                    onChange={e => setWlFilters(p => ({ ...p, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {dashboardEmployees.map(m => (<option key={m.employeeId} value={m.employeeId}>{m.employeeName}</option>))}
-                                </select>
-                                <select value={wlFilters.departmentId} style={{ height: 36, borderRadius: 'var(--r-sm, 8px)', border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
-                                    onChange={e => setWlFilters(p => ({ ...p, departmentId: e.target.value }))}>
-                                    <option value="">All Departments</option>
-                                    {dashboardDepartments.map(d => (<option key={d.departmentId} value={d.departmentId}>{d.departmentName}</option>))}
-                                </select>
+                                <SearchableSelect
+                                    value={wlFilters.employeeId}
+                                    onChange={val => setWlFilters(p => ({ ...p, employeeId: val }))}
+                                    options={dashboardEmployees.map(m => ({ value: m.employeeId, label: m.employeeName }))}
+                                    placeholder="All Employees"
+                                    searchPlaceholder="Search employees..."
+                                    width={160}
+                                />
+                                <SearchableSelect
+                                    value={wlFilters.departmentId}
+                                    onChange={val => setWlFilters(p => ({ ...p, departmentId: val }))}
+                                    options={dashboardDepartments.map(d => ({ value: d.departmentId, label: d.departmentName }))}
+                                    placeholder="All Departments"
+                                    searchPlaceholder="Search departments..."
+                                    width={160}
+                                />
                                 <select value={wlFilters.taskStatus} style={{ height: 36, borderRadius: 'var(--r-sm, 8px)', border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
                                     onChange={e => setWlFilters(p => ({ ...p, taskStatus: e.target.value }))}>
                                     <option value="">All Statuses</option>
@@ -2405,12 +2412,14 @@ const TasksTab: React.FC<{
                             <option value="Medium">Medium</option>
                             <option value="Low">Low</option>
                         </select>
-                        <select value={filterEmployee} onChange={e => { setFilterEmployee(e.target.value); setTaskPage(1); }}>
-                            <option value="">All Employees</option>
-                            {teamMembers.map(m => (
-                                <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                            ))}
-                        </select>
+                        <SearchableSelect
+                            value={filterEmployee}
+                            onChange={val => { setFilterEmployee(val); setTaskPage(1); }}
+                            placeholder="All Employees"
+                            searchPlaceholder="Search employees..."
+                            options={teamMembers.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                            width={160}
+                        />
                         <input type="date" value={filterDeadline}
                             onChange={e => { setFilterDeadline(e.target.value); setTaskPage(1); }}
                             style={{ height: 38, borderRadius: 8, border: '1.5px solid var(--border, #e8ecf4)', padding: '0 12px', fontSize: '0.82rem', fontFamily: 'inherit', background: 'white', color: 'var(--text-primary)', outline: 'none' }} />
@@ -2900,14 +2909,14 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ template, teamMembers, on
                 </div>
                 <div className="field">
                     <label>Assigned Employee</label>
-                    <select className="report-select" value={form.assignedEmployee} onChange={set('assignedEmployee')}>
-                        <option value="">Auto-assign (unassigned)</option>
-                        {teamMembers.map(m => (
-                            <option key={m.accountId} value={m.accountId}>
-                                {m.employeeName}{m.role ? ` (${m.role})` : ''}
-                            </option>
-                        ))}
-                    </select>
+                    <SearchableSelect
+                        value={form.assignedEmployee}
+                        onChange={val => setForm(p => ({ ...p, assignedEmployee: val }))}
+                        options={teamMembers.map(m => ({ value: m.accountId, label: m.employeeName, sublabel: m.role }))}
+                        placeholder="Auto-assign (unassigned)"
+                        searchPlaceholder="Search employees..."
+                        width="100%"
+                    />
                 </div>
             </div>
 
@@ -4567,14 +4576,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             />
                             <div className="field">
                                 <label>Employee</label>
-                                <select value={kpiFilter.employeeId}
-                                    onChange={e => setKpiFilter(prev => ({ ...prev, employeeId: e.target.value }))}
-                                >
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(m => (
-                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                    ))}
-                                </select>
+                                <SearchableSelect
+                                    value={kpiFilter.employeeId}
+                                    onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
+                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                    placeholder="All Employees"
+                                    searchPlaceholder="Search employees..."
+                                    width="100%"
+                                />
                             </div>
                             <div className="field" style={{ alignSelf: 'flex-end' }}>
                                 <button className="btn btn-primary" onClick={handleKpiGenerate} disabled={kpiLoading}>
@@ -4699,14 +4708,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             />
                             <div className="field">
                                 <label>Employee</label>
-                                <select className="report-select"
+                                <SearchableSelect
                                     value={tcFilter.employeeId}
-                                    onChange={e => setTcFilter(p => ({ ...p, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(m => (
-                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                    ))}
-                                </select>
+                                    onChange={val => setTcFilter(p => ({ ...p, employeeId: val }))}
+                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                    placeholder="All Employees"
+                                    searchPlaceholder="Search employees..."
+                                    width="100%"
+                                />
                             </div>
                             <div className="field">
                                 <label>Priority</label>
@@ -4930,14 +4939,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                             <div className="field">
                                 <label>Employee</label>
-                                <select className="report-select"
+                                <SearchableSelect
                                     value={opFilter.employeeId}
-                                    onChange={e => setOpFilter(p => ({ ...p, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(e => (
-                                        <option key={e.accountId} value={e.accountId}>{e.employeeName}</option>
-                                    ))}
-                                </select>
+                                    onChange={val => setOpFilter(p => ({ ...p, employeeId: val }))}
+                                    options={allEmployeeOptions.map(e => ({ value: e.accountId, label: e.employeeName }))}
+                                    placeholder="All Employees"
+                                    searchPlaceholder="Search employees..."
+                                    width="100%"
+                                />
                             </div>
                             <div className="field">
                                 <label>Default Export Format</label>
@@ -5161,21 +5170,25 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                             <div className="field">
                                 <label>Employee</label>
-                                <select value={prFilter.employeeId} onChange={e => setPrFilter(prev => ({ ...prev, employeeId: e.target.value }))}>
-                                    <option value="">All Employees</option>
-                                    {allEmployeeOptions.map(m => (
-                                        <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                    ))}
-                                </select>
+                                <SearchableSelect
+                                    value={prFilter.employeeId}
+                                    onChange={val => setPrFilter(prev => ({ ...prev, employeeId: val }))}
+                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                    placeholder="All Employees"
+                                    searchPlaceholder="Search employees..."
+                                    width="100%"
+                                />
                             </div>
                             <div className="field">
                                 <label>Department</label>
-                                <select value={prFilter.departmentId} onChange={e => setPrFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
-                                    <option value="">All Departments</option>
-                                    {departments.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
+                                <SearchableSelect
+                                    value={prFilter.departmentId}
+                                    onChange={val => setPrFilter(prev => ({ ...prev, departmentId: val }))}
+                                    options={departments.map(d => ({ value: d.id, label: d.name }))}
+                                    placeholder="All Departments"
+                                    searchPlaceholder="Search departments..."
+                                    width="100%"
+                                />
                             </div>
                             <div className="field" style={{ alignSelf: 'flex-end' }}>
                                 <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading}>

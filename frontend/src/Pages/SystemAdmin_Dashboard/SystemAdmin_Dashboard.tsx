@@ -52,6 +52,7 @@ import ErrorBanner from '../../components/ui/ErrorBanner';
 import StatusBadge from '../../components/ui/StatusBadge';
 import RoleBadge from '../../components/ui/RoleBadge';
 import Select from '../../components/ui/Select';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 import Pagination from '../../components/ui/Pagination';
 import FormModal from '../../components/FormModal/FormModal';
 import EmployeeDetailPanel from './EmployeeDetailPanel/EmployeeDetailPanel';
@@ -3542,19 +3543,17 @@ export default function Dashboard() {
                             filterElements={
                                 <>
                                     {/* Filter: User */}
-                                    <select
+                                    <SearchableSelect
                                         value={activityLogEmployee}
-                                        onChange={e => setActivityLogEmployee(e.target.value)}
-                                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 160, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}
-                                        aria-label="Filter by user"
-                                    >
-                                        <option value="">All Users</option>
-                                        {recentEmployees.slice(0, 100).map(emp => (
-                                            <option key={emp.employeeNumber} value={emp.employeeNumber}>
-                                                {getEmployeeDisplayName(emp)}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={val => setActivityLogEmployee(val)}
+                                        placeholder="All Users"
+                                        searchPlaceholder="Search users..."
+                                        options={recentEmployees.slice(0, 100).map(emp => ({
+                                            value: emp.employeeNumber,
+                                            label: getEmployeeDisplayName(emp)
+                                        }))}
+                                        width={180}
+                                    />
 
                                     {/* Filter: Action Type */}
                                     <select

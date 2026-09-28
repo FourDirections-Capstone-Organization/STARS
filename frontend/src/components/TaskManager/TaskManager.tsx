@@ -3,6 +3,7 @@ import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archi
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import StatusCard from '../StatusCard/StatusCard';
+import SearchableSelect from '../ui/SearchableSelect';
 import './TaskManager.css';
 
 export interface TMTask {
@@ -354,6 +355,10 @@ export default function TaskManager({
     const filterClassification = externalFilterClassification !== undefined ? externalFilterClassification : internalFilterClassification;
     const filterAssignee = externalFilterAssignee !== undefined ? externalFilterAssignee : internalFilterAssignee;
 
+    const assigneeOptions = useMemo(() => {
+        return teamMembers.map(m => ({ value: m.accountId, label: m.employeeName }));
+    }, [teamMembers]);
+
     const handleSearch = (val: string) => {
         if (onSearchChange) onSearchChange(val); else setInternalSearch(val);
         setPage(1);
@@ -511,10 +516,14 @@ export default function TaskManager({
                                 <option value="special">Special Task</option>
                             </select>
 
-                            <select value={filterAssignee} onChange={e => handleAssigneeChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                                <option value="">All Assignees</option>
-                                {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
-                            </select>
+                            <SearchableSelect
+                                value={filterAssignee}
+                                onChange={handleAssigneeChange}
+                                options={assigneeOptions}
+                                placeholder="All Assignees"
+                                searchPlaceholder="Search assignees..."
+                                width={160}
+                            />
                         </div>
 
                         {tab === 'active' && (
@@ -602,10 +611,14 @@ export default function TaskManager({
                             <option value="routine">Routine Daily</option>
                             <option value="special">Special Task</option>
                         </select>
-                        <select value={filterAssignee} onChange={e => handleAssigneeChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                            <option value="">All Assignees</option>
-                            {teamMembers.map(m => <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>)}
-                        </select>
+                        <SearchableSelect
+                            value={filterAssignee}
+                            onChange={handleAssigneeChange}
+                            options={assigneeOptions}
+                            placeholder="All Assignees"
+                            searchPlaceholder="Search assignees..."
+                            width={160}
+                        />
                     </> : undefined}
                     actionButton={tab === 'active' ? { label: 'New Task', icon: <Plus size={14} />, onClick: onNewTask } : undefined}
                     headers={['', '#', 'Task', 'Assignee', 'Priority', 'Due Date', 'Status', '']}

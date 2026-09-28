@@ -32,6 +32,7 @@ import SubTabNav from '../../../components/ui/SubTabNav';
 import FormModal from '../../../components/FormModal/FormModal';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
 import StatusBadge from '../../../components/ui/StatusBadge';
+import SearchableSelect from '../../../components/ui/SearchableSelect';
 import './RoleManagementTab.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1016,21 +1017,19 @@ export default function RoleManagementTab() {
                         Department Head
                         <span className="rm2-field-optional"> (optional)</span>
                     </label>
-                    <select
-                        className="form-input"
+                    <SearchableSelect
                         value={deptForm.headEmployeeId}
-                        onChange={e => setDeptField('headEmployeeId', e.target.value)}
+                        onChange={val => setDeptField('headEmployeeId', val)}
                         disabled={employeesLoading}
-                    >
-                        <option value="">
-                            {employeesLoading ? 'Loading employees…' : '— None —'}
-                        </option>
-                        {employees.map(emp => (
-                            <option key={emp.employeeId} value={emp.employeeId}>
-                                {emp.fullName}{emp.jobPositionName ? ` · ${emp.jobPositionName}` : ''}
-                            </option>
-                        ))}
-                    </select>
+                        placeholder={employeesLoading ? 'Loading employees…' : '— None —'}
+                        searchPlaceholder="Search employees..."
+                        options={employees.map(emp => ({
+                            value: emp.employeeId,
+                            label: emp.fullName,
+                            sublabel: emp.jobPositionName
+                        }))}
+                        width="100%"
+                    />
                     <span className="rm2-field-hint"><Info size={11} /> Select an active employee to lead this department.</span>
                 </div>
                 <div className="rm2-field rm2-field--sm">
@@ -1824,10 +1823,14 @@ export default function RoleManagementTab() {
                         >
                             <div className="fm-field">
                                 <label className="fm-label">Coordinator</label>
-                                <select className="fm-select" value={assignCoordinator} onChange={e => setAssignCoordinator(e.target.value)}>
-                                    <option value="">Select a coordinator...</option>
-                                    {coordinators.map(c => <option key={c.employeeId} value={c.employeeId}>{c.fullName}</option>)}
-                                </select>
+                                <SearchableSelect
+                                    value={assignCoordinator}
+                                    onChange={val => setAssignCoordinator(val)}
+                                    placeholder="Select a coordinator..."
+                                    searchPlaceholder="Search coordinators..."
+                                    options={coordinators.map(c => ({ value: c.employeeId, label: c.fullName }))}
+                                    width="100%"
+                                />
                             </div>
                             {assignCoordinator && (
                                 <div className="fm-field">

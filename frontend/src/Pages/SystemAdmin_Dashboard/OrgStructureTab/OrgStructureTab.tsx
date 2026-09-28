@@ -14,6 +14,7 @@ import FormModal from '../../../components/FormModal/FormModal';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
 import StatusCard from '../../../components/StatusCard/StatusCard';
 import StatusBadge from '../../../components/ui/StatusBadge';
+import SearchableSelect from '../../../components/ui/SearchableSelect';
 import './OrgStructureTab.css';
 import api from '../../../api';
 
@@ -492,10 +493,9 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                         {/* Level 1 Filter: Department */}
                         <div className="org-embedded-filter-group">
                             <span className="org-embedded-filter-label">1. Dept:</span>
-                            <select
+                            <SearchableSelect
                                 value={filterDeptId}
-                                onChange={e => {
-                                    const newDeptId = e.target.value;
+                                onChange={newDeptId => {
                                     setFilterDeptId(newDeptId);
                                     if (newDeptId && filterTeamId) {
                                         const team = teams.find(t => t.id === filterTeamId);
@@ -505,22 +505,19 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                         }
                                     }
                                 }}
-                                className="org-filter-select"
-                            >
-                                <option value="">All Departments ({departments.filter(d => d.isActive).length})</option>
-                                {departments.filter(d => d.isActive).map(d => (
-                                    <option key={d.id} value={d.id}>{d.name}</option>
-                                ))}
-                            </select>
+                                placeholder={`All Departments (${departments.filter(d => d.isActive).length})`}
+                                searchPlaceholder="Search departments..."
+                                options={departments.filter(d => d.isActive).map(d => ({ value: d.id, label: d.name }))}
+                                width={180}
+                            />
                         </div>
 
                         {/* Level 2 Filter: Team */}
                         <div className="org-embedded-filter-group">
                             <span className="org-embedded-filter-label">2. Team:</span>
-                            <select
+                            <SearchableSelect
                                 value={filterTeamId}
-                                onChange={e => {
-                                    const newTeamId = e.target.value;
+                                onChange={newTeamId => {
                                     setFilterTeamId(newTeamId);
                                     if (newTeamId) {
                                         const team = teams.find(t => t.id === newTeamId);
@@ -530,32 +527,30 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                     }
                                     setFilterEmployeeId('');
                                 }}
-                                className="org-filter-select"
-                            >
-                                <option value="">All Teams ({availableTeams.length})</option>
-                                {availableTeams.map(t => (
-                                    <option key={t.id} value={t.id}>
-                                        {t.name} {t.departmentName ? `(${t.departmentName})` : ''} • {t.memberCount ?? t.members?.length ?? 0} mbrs
-                                    </option>
-                                ))}
-                            </select>
+                                placeholder={`All Teams (${availableTeams.length})`}
+                                searchPlaceholder="Search teams..."
+                                options={availableTeams.map(t => ({
+                                    value: t.id,
+                                    label: `${t.name}${t.departmentName ? ` (${t.departmentName})` : ''} • ${t.memberCount ?? t.members?.length ?? 0} mbrs`
+                                }))}
+                                width={200}
+                            />
                         </div>
 
                         {/* Level 3 Filter: Employee Member */}
                         <div className="org-embedded-filter-group">
                             <span className="org-embedded-filter-label">3. Member:</span>
-                            <select
+                            <SearchableSelect
                                 value={filterEmployeeId}
-                                onChange={e => setFilterEmployeeId(e.target.value)}
-                                className="org-filter-select"
-                            >
-                                <option value="">All Members ({availableEmployees.length})</option>
-                                {availableEmployees.map(e => (
-                                    <option key={e.id} value={e.id}>
-                                        {buildName(e)} ({toDisplayRole(e.role)})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={val => setFilterEmployeeId(val)}
+                                placeholder={`All Members (${availableEmployees.length})`}
+                                searchPlaceholder="Search members..."
+                                options={availableEmployees.map(e => ({
+                                    value: e.id,
+                                    label: `${buildName(e)} (${toDisplayRole(e.role)})`
+                                }))}
+                                width={210}
+                            />
                         </div>
 
                         {/* Reset Button */}
@@ -954,19 +949,17 @@ function HierarchyMappingView({
                                 <label className="h-label">
                                     <span>Assigned Department</span>
                                 </label>
-                                <select
-                                    className="fm-select"
+                                <SearchableSelect
                                     value={targetDeptId}
-                                    onChange={e => {
-                                        setTargetDeptId(e.target.value);
+                                    onChange={val => {
+                                        setTargetDeptId(val);
                                         setTargetPosId('');
                                     }}
-                                >
-                                    <option value="">Unassigned</option>
-                                    {departments.filter(d => d.isActive).map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
+                                    placeholder="Unassigned"
+                                    searchPlaceholder="Search departments..."
+                                    options={departments.filter(d => d.isActive).map(d => ({ value: d.id, label: d.name }))}
+                                    width="100%"
+                                />
                             </div>
 
                             {/* Job Position Assignment */}
@@ -974,17 +967,15 @@ function HierarchyMappingView({
                                 <label className="h-label">
                                     <span>Assigned Job Position</span>
                                 </label>
-                                <select
-                                    className="fm-select"
+                                <SearchableSelect
                                     value={targetPosId}
-                                    onChange={e => setTargetPosId(e.target.value)}
+                                    onChange={val => setTargetPosId(val)}
                                     disabled={!targetDeptId}
-                                >
-                                    <option value="">{targetDeptId ? 'Select job position (Optional)' : 'Select department first'}</option>
-                                    {targetPositions.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
+                                    placeholder={targetDeptId ? 'Select job position (Optional)' : 'Select department first'}
+                                    searchPlaceholder="Search positions..."
+                                    options={targetPositions.map(p => ({ value: p.id, label: p.name }))}
+                                    width="100%"
+                                />
                             </div>
 
                             {/* Hierarchy Consistency Validation */}
@@ -1219,34 +1210,30 @@ function DepartmentAssignmentModal({
                                         <span>Department <span style={{ color: 'var(--status-failed)' }}>*</span></span>
                                         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Required: 3 Client Departments</span>
                                     </label>
-                                    <select
-                                        className="fm-select"
+                                    <SearchableSelect
                                         value={selectedDeptId}
-                                        onChange={e => {
-                                            setSelectedDeptId(e.target.value);
+                                        onChange={val => {
+                                            setSelectedDeptId(val);
                                             setSelectedPosId('');
                                         }}
-                                    >
-                                        <option value="">Select one of 3 client departments</option>
-                                        {departments.filter(d => d.isActive).map(d => (
-                                            <option key={d.id} value={d.id}>{d.name}</option>
-                                        ))}
-                                    </select>
+                                        placeholder="Select one of 3 client departments"
+                                        searchPlaceholder="Search departments..."
+                                        options={departments.filter(d => d.isActive).map(d => ({ value: d.id, label: d.name }))}
+                                        width="100%"
+                                    />
                                 </div>
 
                                 <div className="h-field">
                                     <label className="h-label">Job Position (Optional)</label>
-                                    <select
-                                        className="fm-select"
+                                    <SearchableSelect
                                         value={selectedPosId}
-                                        onChange={e => setSelectedPosId(e.target.value)}
+                                        onChange={val => setSelectedPosId(val)}
                                         disabled={!selectedDeptId}
-                                    >
-                                        <option value="">{selectedDeptId ? 'Select job position' : 'Select department first'}</option>
-                                        {targetPositions.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                        placeholder={selectedDeptId ? 'Select job position' : 'Select department first'}
+                                        searchPlaceholder="Search positions..."
+                                        options={targetPositions.map(p => ({ value: p.id, label: p.name }))}
+                                        width="100%"
+                                    />
                                 </div>
 
                                 {selectedDeptId && (
@@ -1642,11 +1629,14 @@ function PositionsView({ positions, departments, employees, onRefresh }: {
                 actionButton={{ label: 'Add Position', icon: <Plus size={14} />, onClick: openCreate }}
                 currentPage={page} totalPages={totalPages} onPageChange={setPage}
                 filterElements={
-                    <select value={filterDept} onChange={e => { setFilterDept(e.target.value); setPage(1); }}
-                        style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, minWidth: 160, boxSizing: 'border-box', outline: 'none', cursor: 'pointer', background: '#fff' }}>
-                        <option value="">All Departments</option>
-                        {departments.filter(d => d.isActive).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                        value={filterDept}
+                        onChange={val => { setFilterDept(val); setPage(1); }}
+                        placeholder="All Departments"
+                        searchPlaceholder="Search departments..."
+                        options={departments.filter(d => d.isActive).map(d => ({ value: d.id, label: d.name }))}
+                        width={180}
+                    />
                 }
             >
                 {paged.map(p => (
@@ -1691,10 +1681,14 @@ function PositionsView({ positions, departments, employees, onRefresh }: {
                     </div>
                     <div className="fm-field">
                         <label className="fm-label">Department <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                        <select className="fm-select" value={formDeptId} onChange={e => setFormDeptId(e.target.value)}>
-                            <option value="">Select department</option>
-                            {departments.filter(d => d.isActive).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
+                        <SearchableSelect
+                            value={formDeptId}
+                            onChange={val => setFormDeptId(val)}
+                            placeholder="Select department"
+                            searchPlaceholder="Search departments..."
+                            options={departments.filter(d => d.isActive).map(d => ({ value: d.id, label: d.name }))}
+                            width="100%"
+                        />
                     </div>
                 </FormModal>
             )}
@@ -1896,21 +1890,19 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
                                         <span>New Department / Team <span style={{ color: 'var(--status-failed)' }}>*</span></span>
                                         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Required: 3 Client Departments</span>
                                     </label>
-                                    <select
-                                        className="fm-select"
+                                    <SearchableSelect
                                         value={targetDeptId}
-                                        onChange={e => {
-                                            setTargetDeptId(e.target.value);
+                                        onChange={val => {
+                                            setTargetDeptId(val);
                                             setTargetPosId('');
                                         }}
-                                    >
-                                        <option value="">Select destination department/team</option>
-                                        {departments
+                                        placeholder="Select destination department/team"
+                                        searchPlaceholder="Search departments..."
+                                        options={departments
                                             .filter(d => d.isActive && d.id !== selectedEmp?.departmentId)
-                                            .map(d => (
-                                                <option key={d.id} value={d.id}>{d.name}</option>
-                                            ))}
-                                    </select>
+                                            .map(d => ({ value: d.id, label: d.name }))}
+                                        width="100%"
+                                    />
                                 </div>
 
                                 {/* Target Job Position (Optional) */}
@@ -1918,17 +1910,15 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
                                     <label className="tf-label">
                                         <span>Target Job Position (Optional)</span>
                                     </label>
-                                    <select
-                                        className="fm-select"
+                                    <SearchableSelect
                                         value={targetPosId}
-                                        onChange={e => setTargetPosId(e.target.value)}
+                                        onChange={val => setTargetPosId(val)}
                                         disabled={!targetDeptId}
-                                    >
-                                        <option value="">{targetDeptId ? 'Select job position' : 'Select department first'}</option>
-                                        {targetPositions.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                        placeholder={targetDeptId ? 'Select job position' : 'Select department first'}
+                                        searchPlaceholder="Search positions..."
+                                        options={targetPositions.map(p => ({ value: p.id, label: p.name }))}
+                                        width="100%"
+                                    />
                                 </div>
 
                                 {/* Effective Date of Transfer (Date Input, Required) */}
