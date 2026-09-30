@@ -25,6 +25,8 @@ interface AvailableEmployee {
     role: string;
     department: string;
     departmentId: string;
+    teamId?: string;
+    teamName?: string;
     activeTaskCount: number;
     availabilityStatus: string;
     isAvailable: boolean;
@@ -44,6 +46,7 @@ interface TeamInfo {
     teamName: string;
     memberCount: number;
     memberNames: string[];
+    memberIds?: string[];
     isActive: boolean;
     departmentId: string;
     departmentName: string;
@@ -91,16 +94,83 @@ const getInitials = (name: string): string => {
 const PRIORITY_LEVELS: Priority[] = ['Urgent', 'High', 'Medium', 'Low'];
 const PRIORITY_MAP: Record<string, number> = { Urgent: 3, High: 2, Medium: 1, Low: 0 };
 
-const CLASSIFICATION_OPTIONS = [
-    { label: 'Routine Daily Task', value: 0 },
-    { label: 'Special Task', value: 1 },
-];
-
 const CATEGORIES = ['Operations', 'Logistics', 'IT & Admin', 'Customer Service', 'Maintenance', 'Other'];
 
 const formatDateForInput = (d: Date): string => {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+export const getPriorityDeadlineRange = (priority: Priority | ''): { min: string; max?: string; maxDate?: Date; helperText: string } => {
+    const now = new Date();
+    const minStr = formatDateForInput(now);
+    
+    if (priority === 'Urgent') {
+        const d = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🔴 Urgent SLA: Locked to 24 hours from creation.',
+        };
+    }
+    if (priority === 'High') {
+        const d = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🟠 High: Deadline must be 1 to 2 days only from current date.',
+        };
+    }
+    if (priority === 'Medium') {
+        const d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🟡 Medium: Deadline must be within 1 week (7 days) from current date.',
+        };
+    }
+    if (priority === 'Low') {
+        return {
+            min: minStr,
+            max: undefined,
+            maxDate: undefined,
+            helperText: '🟢 Low: Any future date can be selected.',
+        };
+    }
+    return {
+        min: minStr,
+        max: undefined,
+        maxDate: undefined,
+        helperText: 'Select a priority to see the allowed deadline range.',
+    };
+};
+
+export const getQuickPickOptions = (priority: Priority | '') => {
+    if (priority === 'High') {
+        return [
+            { label: '+1 Day (24h)', hours: 24 },
+            { label: '+2 Days (48h max)', hours: 48 },
+        ];
+    }
+    if (priority === 'Medium') {
+        return [
+            { label: '+2 Days', hours: 48 },
+            { label: '+3 Days', hours: 72 },
+            { label: '+5 Days', hours: 120 },
+            { label: '+1 Week (7d max)', hours: 168 },
+        ];
+    }
+    if (priority === 'Low') {
+        return [
+            { label: '+1 Week', hours: 168 },
+            { label: '+2 Weeks', hours: 336 },
+            { label: '+1 Month (30d)', hours: 720 },
+        ];
+    }
+    return [];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -120,7 +190,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
         taskDescription: '',
         dueAt: '',
         priority: '' as Priority | '',
-        classification: -1 as number,
+        classification: 0,
         category: '',
         isConfidential: false,
     });
@@ -128,6 +198,8 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [filterDeptId, setFilterDeptId] = useState('');
+    const [filterTeamId, setFilterTeamId] = useState('');
     const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -190,6 +262,8 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                 role: emp.role ?? emp.Role ?? '',
                 department: emp.department ?? emp.Department ?? '',
                 departmentId: emp.departmentId ?? '',
+                teamId: emp.teamId ?? emp.TeamId ?? '',
+                teamName: emp.teamName ?? emp.TeamName ?? emp.team ?? '',
                 activeTaskCount: typeof emp.workload === 'number' ? emp.workload : 0,
                 availabilityStatus: emp.availabilityStatus ?? emp.AvailabilityStatus ?? 'Active',
                 isAvailable: emp.isAvailable ?? emp.IsAvailable ?? true,
@@ -258,10 +332,11 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                         teamId: t.id ?? t.teamId,
                         teamName: t.name ?? t.teamName,
                         memberCount: t.memberCount ?? t.members?.length ?? 0,
-                        memberNames: (t.members ?? []).map((m: any) => m.fullName ?? ''),
+                        memberNames: (t.members ?? []).map((m: any) => m.fullName ?? m.employeeName ?? m.name ?? ''),
+                        memberIds: (t.members ?? []).map((m: any) => m.userId ?? m.id ?? m.accountId ?? m.employeeId ?? ''),
                         isActive: t.isActive ?? true,
-                        departmentId: t.departmentId ?? '',
-                        departmentName: t.departmentName ?? '',
+                        departmentId: t.departmentId ?? t.department?.id ?? '',
+                        departmentName: t.departmentName ?? t.department?.name ?? '',
                     }));
                     setTeams(mapped.filter(t => t.isActive));
                 } else {
@@ -348,13 +423,39 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     }, [selectedDepartmentId, form.classification, isUrgent, employees, aiEnabled]);
 
     // ── Derived Data ──
+    const availableTeamsForFilter = useMemo(() => {
+        if (!filterDeptId) return teams;
+        const selectedD = departments.find(d => d.departmentId === filterDeptId);
+        return teams.filter(t => t.departmentId === filterDeptId || (selectedD && t.departmentName?.toLowerCase() === selectedD.name.toLowerCase()));
+    }, [teams, filterDeptId, departments]);
+
     const filteredEmployees = useMemo(() => {
-        const available = employees.filter(e => e.isAvailable);
-        if (!employeeSearch) return available;
-        return available.filter(e =>
-            e.employeeName.toLowerCase().includes(employeeSearch.toLowerCase())
-        );
-    }, [employees, employeeSearch]);
+        let list = employees.filter(e => e.isAvailable);
+        if (filterDeptId) {
+            const selectedD = departments.find(d => d.departmentId === filterDeptId);
+            list = list.filter(e => e.departmentId === filterDeptId || (selectedD && e.department?.toLowerCase() === selectedD.name.toLowerCase()));
+        }
+        if (filterTeamId) {
+            const selectedT = teams.find(t => t.teamId === filterTeamId);
+            list = list.filter(e =>
+                e.teamId === filterTeamId ||
+                selectedT?.memberIds?.includes(e.employeeId) ||
+                selectedT?.memberNames?.some(n => n.toLowerCase() === e.employeeName.toLowerCase())
+            );
+        }
+        if (employeeSearch) {
+            list = list.filter(e =>
+                e.employeeName.toLowerCase().includes(employeeSearch.toLowerCase())
+            );
+        }
+        return list;
+    }, [employees, filterDeptId, filterTeamId, employeeSearch, departments, teams]);
+
+    const filteredTeams = useMemo(() => {
+        if (!filterDeptId) return teams;
+        const selectedD = departments.find(d => d.departmentId === filterDeptId);
+        return teams.filter(t => t.departmentId === filterDeptId || (selectedD && t.departmentName?.toLowerCase() === selectedD.name.toLowerCase()));
+    }, [teams, filterDeptId, departments]);
 
     const selectedEmployee = useMemo(() =>
         employees.find(e => e.employeeId === selectedEmployeeId),
@@ -391,18 +492,25 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                 if (slaLocked) return '';
                 if (!value) return 'Deadline is required.';
                 const selected = new Date(String(value));
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (selected < today) return 'Deadline must not be in the past.';
+                const now = new Date();
+                if (isNaN(selected.getTime())) return 'Invalid date format.';
+                if (selected.getTime() < now.getTime() - 60000) return 'Deadline must not be in the past.';
+                
+                if (form.priority === 'High') {
+                    const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 + 300000); // 2 days + grace
+                    if (selected > maxHigh) {
+                        return 'For High priority, deadline must be 1 to 2 days only from current date.';
+                    }
+                } else if (form.priority === 'Medium') {
+                    const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 300000); // 7 days + grace
+                    if (selected > maxMed) {
+                        return 'For Medium priority, deadline must be within 1 week (7 days) from current date.';
+                    }
+                }
                 return '';
             }
             case 'priority': {
                 if (!value || value === -1) return 'Priority is required.';
-                return '';
-            }
-            case 'classification': {
-                const v = Number(value);
-                if (v !== 0 && v !== 1) return 'Classification is required.';
                 return '';
             }
             default:
@@ -412,7 +520,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
 
     const validateAll = (): boolean => {
         const newErrors: Record<string, string> = {};
-        ['taskTitle', 'taskDescription', 'dueAt', 'priority', 'classification'].forEach(key => {
+        ['taskTitle', 'taskDescription', 'dueAt', 'priority'].forEach(key => {
             const msg = validateField(key, (form as any)[key] ?? '');
             if (msg) newErrors[key] = msg;
         });
@@ -431,22 +539,18 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
         setErrors(newErrors);
 
         if (Object.keys(newErrors).length > 0) {
-            // Surface a visible alert listing what is still missing so the
-            // user knows the review was blocked. Cleared on the next attempt
-            // or when validation passes.
             const labelMap: Record<string, string> = {
                 taskTitle: 'Task Title',
                 taskDescription: 'Task Description',
                 dueAt: 'Deadline',
                 priority: 'Priority',
-                classification: 'Classification',
                 scope: 'Assignment Scope',
-                destination: 'Select Employee',
+                destination: 'Select Assignee',
             };
             const missing = Object.keys(newErrors)
                 .map(key => labelMap[key] ?? key)
                 .join(', ');
-            setFormError(`Missing required information: ${missing}. Please complete the highlighted fields.`);
+            setFormError(`Missing or invalid required information: ${missing}. Please check the highlighted fields.`);
             return false;
         }
 
@@ -896,82 +1000,118 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     </div>
 
                     {/* Priority + Due Date */}
-                    <div className="ai-field-row">
-                        <div className="ai-field">
-                            <label>Priority <span className="ai-required">*</span></label>
-                            <select
-                                value={form.priority}
-                                onChange={e => {
-                                    const val = e.target.value as Priority;
-                                    setForm(prev => ({
-                                        ...prev,
-                                        priority: val,
-                                        dueAt: val === 'Urgent' ? formatDateForInput(getSlaDeadline()) : prev.dueAt,
-                                    }));
-                                    setFormError('');
-                                    const msg = validateField('priority', val);
-                                    setErrors(prev => ({ ...prev, priority: msg || '' }));
-                                }}
-                                className={errors.priority ? 'ai-input-error' : ''}
-                            >
-                                <option value="">Select priority</option>
-                                {PRIORITY_LEVELS.map(p => (
-                                    <option key={p} value={p}>{p === 'Urgent' ? '🔴' : p === 'High' ? '🟠' : p === 'Medium' ? '🟡' : '🟢'} {p}</option>
-                                ))}
-                            </select>
-                            <FieldErr name="priority" />
-                            {form.priority && (
-                                <span className={`ai-priority-hint ai-priority-${form.priority.toLowerCase()}`}>
-                                    {form.priority === 'Urgent' && '🔴 SLA enforced — 24h deadline locked'}
-                                    {form.priority === 'High' && '🟠 Requires timely attention'}
-                                    {form.priority === 'Medium' && '🟡 Standard priority'}
-                                    {form.priority === 'Low' && '🟢 Non-critical'}
-                                </span>
-                            )}
-                        </div>
+                    {(() => {
+                        const priorityRange = getPriorityDeadlineRange(form.priority);
+                        const quickPicks = getQuickPickOptions(form.priority);
+                        return (
+                            <div className="ai-field-row">
+                                <div className="ai-field">
+                                    <label>Priority <span className="ai-required">*</span></label>
+                                    <select
+                                        value={form.priority}
+                                        onChange={e => {
+                                            const val = e.target.value as Priority;
+                                            const range = getPriorityDeadlineRange(val);
+                                            let newDueAt = form.dueAt;
+                                            if (val === 'Urgent') {
+                                                newDueAt = formatDateForInput(getSlaDeadline());
+                                            } else if (range.max && form.dueAt) {
+                                                const curD = new Date(form.dueAt);
+                                                const now = new Date();
+                                                if (curD > range.maxDate! || curD < now) {
+                                                    newDueAt = range.max;
+                                                }
+                                            } else if (!form.dueAt && val) {
+                                                newDueAt = range.max || formatDateForInput(new Date(Date.now() + 7 * 86400000));
+                                            }
+                                            setForm(prev => ({
+                                                ...prev,
+                                                priority: val,
+                                                dueAt: newDueAt,
+                                            }));
+                                            setFormError('');
+                                            const msg = validateField('priority', val);
+                                            setErrors(prev => ({ ...prev, priority: msg || '', dueAt: '' }));
+                                        }}
+                                        className={errors.priority ? 'ai-input-error' : ''}
+                                    >
+                                        <option value="">Select priority</option>
+                                        {PRIORITY_LEVELS.map(p => (
+                                            <option key={p} value={p}>{p === 'Urgent' ? '🔴' : p === 'High' ? '🟠' : p === 'Medium' ? '🟡' : '🟢'} {p}</option>
+                                        ))}
+                                    </select>
+                                    <FieldErr name="priority" />
+                                    {form.priority && (
+                                        <span className={`ai-priority-hint ai-priority-${form.priority.toLowerCase()}`}>
+                                            {form.priority === 'Urgent' && '🔴 SLA enforced — 24h deadline locked'}
+                                            {form.priority === 'High' && '🟠 High Priority — 1 to 2 days deadline only'}
+                                            {form.priority === 'Medium' && '🟡 Medium Priority — Up to 1 week (7 days)'}
+                                            {form.priority === 'Low' && '🟢 Low Priority — Any future deadline'}
+                                        </span>
+                                    )}
+                                </div>
 
-                        <div className="ai-field">
-                            <label>Deadline <span className="ai-required">*</span></label>
-                            <input
-                                type="datetime-local"
-                                value={form.dueAt}
-                                onChange={slaLocked ? undefined : setFormField('dueAt')}
-                                min={minDateTime}
-                                readOnly={slaLocked}
-                                className={`${errors.dueAt ? 'ai-input-error' : ''}${slaLocked ? 'ai-sla-locked' : ''}`}
-                                style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
-                            />
-                            <FieldErr name="dueAt" />
-                            {slaLocked && (
-                                <span className="ai-sla-badge">
-                                    <Lock size={11} /> SLA locked — 24h from creation
-                                </span>
-                            )}
-                        </div>
-                    </div>
+                                <div className="ai-field">
+                                    <label>
+                                        Deadline <span className="ai-required">*</span>
+                                        {priorityRange.max && !slaLocked && (
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal, #00A99D)', marginLeft: 6 }}>
+                                                (Max: {new Date(priorityRange.max).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})
+                                            </span>
+                                        )}
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        value={form.dueAt}
+                                        onChange={slaLocked ? undefined : setFormField('dueAt')}
+                                        min={priorityRange.min}
+                                        max={priorityRange.max}
+                                        readOnly={slaLocked}
+                                        className={`${errors.dueAt ? 'ai-input-error' : ''}${slaLocked ? 'ai-sla-locked' : ''}`}
+                                        style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
+                                    />
+                                    <FieldErr name="dueAt" />
 
-                    {/* Classification */}
-                    <div className="ai-field ai-field-full">
-                        <label>Classification <span className="ai-required">*</span></label>
-                        <div className="ai-classification-row">
-                            {CLASSIFICATION_OPTIONS.map(opt => (
-                                <label
-                                    key={opt.value}
-                                    className={`ai-class-option${form.classification === opt.value ? ' active' : ''}`}
-                                    onClick={() => {
-                                        setForm(prev => ({ ...prev, classification: opt.value }));
-                                        setErrors(prev => ({ ...prev, classification: '' }));
-                                    }}
-                                >
-                                    <input type="radio" name="classification" value={opt.value}
-                                        checked={form.classification === opt.value}
-                                        onChange={() => { }} />
-                                    {opt.label}
-                                </label>
-                            ))}
-                        </div>
-                        <FieldErr name="classification" />
-                    </div>
+                                    {/* Quick Pick Buttons */}
+                                    {!slaLocked && form.priority && quickPicks.length > 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Quick pick:</span>
+                                            {quickPicks.map(opt => (
+                                                <button
+                                                    key={opt.label}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const d = new Date(Date.now() + opt.hours * 3600000);
+                                                        setForm(prev => ({ ...prev, dueAt: formatDateForInput(d) }));
+                                                        setErrors(prev => ({ ...prev, dueAt: '' }));
+                                                    }}
+                                                    style={{
+                                                        padding: '3px 8px',
+                                                        fontSize: 11,
+                                                        fontWeight: 600,
+                                                        borderRadius: 6,
+                                                        border: '1px solid var(--border)',
+                                                        background: '#fff',
+                                                        color: 'var(--text-primary)',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s ease'
+                                                    }}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {slaLocked && (
+                                        <span className="ai-sla-badge">
+                                            <Lock size={11} /> SLA locked — 24h from creation
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Category */}
                     <div className="ai-field">
@@ -1129,6 +1269,85 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     {/* ── Single Employee Picker (Step 4) ── */}
                     {scope === 'SingleEmployee' && (
                         <div className="ai-emp-picker">
+                            {/* ── Cascading Filters: Department & Team ── */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                        Filter by Department
+                                    </label>
+                                    <select
+                                        value={filterDeptId}
+                                        onChange={e => {
+                                            const newDept = e.target.value;
+                                            setFilterDeptId(newDept);
+                                            setFilterTeamId('');
+                                            if (selectedEmployeeId) {
+                                                const emp = employees.find(x => x.employeeId === selectedEmployeeId);
+                                                if (newDept && emp && emp.departmentId !== newDept) {
+                                                    setSelectedEmployeeId('');
+                                                }
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: 8,
+                                            border: '1px solid var(--border, #e2e8f0)',
+                                            background: 'var(--bg-surface, #fff)',
+                                            color: 'var(--text-primary, #1e293b)',
+                                            fontSize: 13,
+                                            fontWeight: 500,
+                                            outline: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <option value="">All Departments ({departments.length})</option>
+                                        {departments.map(d => (
+                                            <option key={d.departmentId} value={d.departmentId}>
+                                                {d.name} ({d.employeeCount} staff)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                        Filter by Team
+                                    </label>
+                                    <select
+                                        value={filterTeamId}
+                                        onChange={e => {
+                                            const newTeam = e.target.value;
+                                            setFilterTeamId(newTeam);
+                                            if (selectedEmployeeId && newTeam) {
+                                                const teamObj = teams.find(t => t.teamId === newTeam);
+                                                const emp = employees.find(x => x.employeeId === selectedEmployeeId);
+                                                if (emp && emp.teamId !== newTeam && !teamObj?.memberIds?.includes(emp.employeeId) && !teamObj?.memberNames?.some(n => n.toLowerCase() === emp.employeeName.toLowerCase())) {
+                                                    setSelectedEmployeeId('');
+                                                }
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: 8,
+                                            border: '1px solid var(--border, #e2e8f0)',
+                                            background: 'var(--bg-surface, #fff)',
+                                            color: 'var(--text-primary, #1e293b)',
+                                            fontSize: 13,
+                                            fontWeight: 500,
+                                            outline: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <option value="">All Teams ({availableTeamsForFilter.length})</option>
+                                        {availableTeamsForFilter.map(t => (
+                                            <option key={t.teamId} value={t.teamId}>
+                                                {t.teamName} ({t.memberCount} members)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <div className="ai-emp-search" style={{ flex: 1 }}>
                                     <Search size={14} className="ai-search-icon" />
@@ -1142,7 +1361,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 </div>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: 'var(--status-active)', whiteSpace: 'nowrap' }}>
                                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--status-active)', display: 'inline-block' }} />
-                                    Live
+                                    Live ({filteredEmployees.length})
                                 </span>
                             </div>
 
@@ -1294,13 +1513,51 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     {/* ── Team Picker (Step 5) ── */}
                     {scope === 'Team' && (
                         <div className="ai-team-picker">
+                            {/* ── Filter Teams by Department ── */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12, maxWidth: 320 }}>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    Filter by Department
+                                </label>
+                                <select
+                                    value={filterDeptId}
+                                    onChange={e => {
+                                        const newDept = e.target.value;
+                                        setFilterDeptId(newDept);
+                                        if (selectedTeamId) {
+                                            const teamObj = teams.find(t => t.teamId === selectedTeamId);
+                                            if (newDept && teamObj && teamObj.departmentId !== newDept) {
+                                                setSelectedTeamId('');
+                                            }
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '8px 12px',
+                                        borderRadius: 8,
+                                        border: '1px solid var(--border, #e2e8f0)',
+                                        background: 'var(--bg-surface, #fff)',
+                                        color: 'var(--text-primary, #1e293b)',
+                                        fontSize: 13,
+                                        fontWeight: 500,
+                                        outline: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="">All Departments ({departments.length})</option>
+                                    {departments.map(d => (
+                                        <option key={d.departmentId} value={d.departmentId}>
+                                            {d.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {loadingTeams ? (
                                 <div className="ai-emp-loading">
                                     {[1, 2, 3].map(i => <div key={i} className="ai-skeleton-row" />)}
                                 </div>
-                            ) : teams.length > 0 ? (
+                            ) : availableTeamsForFilter.length > 0 ? (
                                 <div className="ai-team-grid">
-                                    {teams.map(team => {
+                                    {availableTeamsForFilter.map(team => {
                                         const disabled = !team.isActive;
                                         return (
                                             <div
@@ -1341,7 +1598,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                             ) : (
                                 <div className="ai-empty-state">
                                     <Users size={24} />
-                                    <p>None — no teams have been created yet in Team Management.</p>
+                                    <p>{filterDeptId ? 'No teams found under the selected department.' : 'None — no teams have been created yet in Team Management.'}</p>
                                 </div>
                             )}
                             <FieldErr name="destination" />

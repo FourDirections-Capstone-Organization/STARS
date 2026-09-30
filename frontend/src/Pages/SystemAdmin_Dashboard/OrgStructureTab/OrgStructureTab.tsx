@@ -194,22 +194,40 @@ function DefinedDepartmentsBanner({ onAssignClick }: { onAssignClick?: () => voi
                     Every employee account belongs to exactly one of the three defined departments.
                 </div>
             </div>
-            <div className="dept-pills-row">
-                <div className="dept-pill pill-coord">
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#00A99D' }} />
-                    Coordinator & Customer Service Team
-                </div>
-                <div className="dept-pill pill-dispatch">
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFB547' }} />
-                    Dispatch Team
-                </div>
-                <div className="dept-pill pill-forwarding">
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4318FF' }} />
-                    Forwarding Team
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginLeft: 'auto' }}>
+                <div className="dept-pills-row">
+                    <div className="dept-pill pill-coord">
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#00A99D' }} />
+                        Coordinator &amp; Customer Service Team
+                    </div>
+                    <div className="dept-pill pill-dispatch">
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFB547' }} />
+                        Dispatch Team
+                    </div>
+                    <div className="dept-pill pill-forwarding">
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4318FF' }} />
+                        Forwarding Team
+                    </div>
                 </div>
                 {onAssignClick && (
-                    <button className="btn btn-primary btn-sm" onClick={onAssignClick} style={{ marginLeft: 8 }}>
-                        <UserPlus size={13} />
+                    <button
+                        className="btn btn-cyan"
+                        onClick={onAssignClick}
+                        style={{
+                            background: '#00A99D',
+                            borderColor: '#00A99D',
+                            color: '#ffffff',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 18px',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0, 169, 157, 0.28)',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <UserPlus size={14} />
                         Assign Employee
                     </button>
                 )}
@@ -884,6 +902,15 @@ function HierarchyMappingView({
                             })
                         )}
                     </div>
+
+                    <div className="employee-select-footer">
+                        <span>Showing {filteredEmps.length} active employee{filteredEmps.length !== 1 ? 's' : ''}</span>
+                        {selectedEmp && (
+                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                Selected: #{selectedEmp.employeeNumber}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <div className="hierarchy-mapping-divider" />
@@ -1439,10 +1466,18 @@ function DepartmentsView({ departments, employees, positions, onRefresh }: {
                             </div>
 
                             <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 8 }}>
-                                <button className="btn btn-outline btn-sm" style={{ flex: 1 }} onClick={() => setViewDept(dept)}>
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    style={{ flex: 1, borderColor: '#00A99D', color: '#008177', background: '#ffffff', fontWeight: 600 }}
+                                    onClick={() => setViewDept(dept)}
+                                >
                                     <Eye size={13} /> View Roster
                                 </button>
-                                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setShowAssignModal(true)}>
+                                <button
+                                    className="btn btn-cyan btn-sm"
+                                    style={{ flex: 1, background: '#00A99D', borderColor: '#00A99D', color: '#ffffff', fontWeight: 600 }}
+                                    onClick={() => setShowAssignModal(true)}
+                                >
                                     <UserPlus size={13} /> Assign
                                 </button>
                             </div>

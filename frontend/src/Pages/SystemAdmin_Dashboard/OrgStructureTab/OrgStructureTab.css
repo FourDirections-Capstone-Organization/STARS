@@ -412,36 +412,77 @@
 }
 
 /* ── Hierarchy Mapping Tab & Form ── */
+/* ── Cyan Button Preset for Org Structure ── */
+.btn-cyan {
+  background: #00A99D !important;
+  color: #ffffff !important;
+  border: 1px solid #00A99D !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 169, 157, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-cyan:hover:not(:disabled) {
+  background: #008177 !important;
+  border-color: #008177 !important;
+  box-shadow: 0 4px 12px rgba(0, 169, 157, 0.35);
+  transform: translateY(-1px);
+}
+
+/* ── Hierarchy Mapping Tab & Form ── */
 .hierarchy-mapping-layout {
   display: grid;
   grid-template-columns: 1fr 1px 1.2fr;
   gap: 0;
-  min-height: 480px;
+  min-height: 520px;
   background: white;
   border-radius: 12px;
   border: 1px solid var(--border);
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .hierarchy-mapping-panel {
   padding: 24px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .hierarchy-mapping-panel:first-child {
   padding-right: 28px;
+  background: #ffffff;
+}
+
+.hierarchy-mapping-panel:first-child .employee-select-list {
+  flex: 1;
+  min-height: 380px;
+  max-height: 580px;
+  display: flex;
+  flex-direction: column;
 }
 
 .hierarchy-mapping-panel:last-child {
   padding-left: 28px;
-  background: #fdfdfd;
+  background: #fafbfc;
 }
 
 .hierarchy-mapping-divider {
   width: 1px;
   background: var(--border);
   align-self: stretch;
+}
+
+.employee-select-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
 }
 
 .hierarchy-mapping-title {

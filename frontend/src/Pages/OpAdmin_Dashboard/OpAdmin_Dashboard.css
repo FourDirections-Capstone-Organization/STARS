@@ -1745,10 +1745,30 @@ input.input-sla-locked {
     font-weight: 500;
 }
 
+.reports-dashboard-content {
+    padding: 24px 28px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
 .report-summary-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: var(--gap);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.report-charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+    .report-charts-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .report-perf-table th:first-child,

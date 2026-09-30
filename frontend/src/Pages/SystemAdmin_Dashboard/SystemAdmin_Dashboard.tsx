@@ -2439,6 +2439,19 @@ export default function Dashboard() {
         role: string;
         isRecommended: boolean;
         recommendationReason: string;
+        departmentId?: string;
+        department?: string;
+        teamId?: string;
+        teamName?: string;
+    }
+
+    interface ManagerTeamItem {
+        id: string;
+        name: string;
+        departmentId?: string;
+        departmentName?: string;
+        memberIds?: string[];
+        memberNames?: string[];
     }
 
     const [newTaskForm, setNewTaskForm] = useState({ title: '', description: '', priority: '', deadline: '', classification: '', isConfidential: false, assignmentScope: 'SingleEmployee', assignedDepartmentId: '', assignedTo: '', assignedUserIds: [] as string[], supportingEvidenceUrl: '' });
@@ -2450,6 +2463,11 @@ export default function Dashboard() {
     const [editSubmitting, setEditSubmitting] = useState(false);
     const [editApiError, setEditApiError] = useState('');
     const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+    const [managerTeams, setManagerTeams] = useState<ManagerTeamItem[]>([]);
+    const [newTaskFilterDeptId, setNewTaskFilterDeptId] = useState('');
+    const [newTaskFilterTeamId, setNewTaskFilterTeamId] = useState('');
+    const [editTaskFilterDeptId, setEditTaskFilterDeptId] = useState('');
+    const [editTaskFilterTeamId, setEditTaskFilterTeamId] = useState('');
     const [newTaskEligibleEmployees, setNewTaskEligibleEmployees] = useState<WorkloadInfo[]>([]);
     const [rawApiKeys, setRawApiKeys] = useState<string>('');
     const [editEligibleEmployees, setEditEligibleEmployees] = useState<WorkloadInfo[]>([]);
@@ -2466,6 +2484,57 @@ export default function Dashboard() {
     const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
     const PRIORITY_NUM_FROM_LABEL: Record<string, number> = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
     const STATUS_LABELS: Record<number, string> = { 0: 'Not Started', 1: 'In Progress', 2: 'Done/Pending Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled' };
+
+    const getPriorityDeadlineRange = (priority: string) => {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const minStr = fmt(now);
+
+        if (priority === 'Urgent') {
+            const urgentDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            return { min: fmt(urgentDate), max: fmt(urgentDate), maxLabel: '24 Hours (SLA Locked)' };
+        }
+        if (priority === 'High') {
+            const maxDate = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+            return { min: minStr, max: fmt(maxDate), maxLabel: '1–2 Days Max from today' };
+        }
+        if (priority === 'Medium') {
+            const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            return { min: minStr, max: fmt(maxDate), maxLabel: '1 Week Max (7 Days)' };
+        }
+        return { min: minStr, max: undefined, maxLabel: 'Any Future Date' };
+    };
+
+    const getQuickPickOptions = (priority: string) => {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+        if (priority === 'High') {
+            return [
+                { label: '+1 Day (24h)', value: fmt(new Date(now.getTime() + 24 * 60 * 60 * 1000)) },
+                { label: '+2 Days (48h)', value: fmt(new Date(now.getTime() + 48 * 60 * 60 * 1000)) },
+            ];
+        }
+        if (priority === 'Medium') {
+            return [
+                { label: '+2 Days', value: fmt(new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000)) },
+                { label: '+3 Days', value: fmt(new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)) },
+                { label: '+5 Days', value: fmt(new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)) },
+                { label: '+1 Week (7 Days)', value: fmt(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)) },
+            ];
+        }
+        if (priority === 'Low') {
+            return [
+                { label: '+3 Days', value: fmt(new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)) },
+                { label: '+1 Week', value: fmt(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)) },
+                { label: '+2 Weeks', value: fmt(new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)) },
+                { label: '+1 Month', value: fmt(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)) },
+            ];
+        }
+        return [];
+    };
 
     const toLocalDateTimeInput = (iso: string | null | undefined): string => {
         if (!iso) return '';
@@ -2546,6 +2615,23 @@ export default function Dashboard() {
                 }
             })
             .catch(() => {});
+
+        api.get('/api/Team?pageNumber=1&pageSize=100')
+            .then(res => {
+                const json = res.data;
+                const items = json?.data?.items ?? (Array.isArray(json.data) ? json.data : []);
+                if (json?.isSuccess && items.length > 0) {
+                    setManagerTeams(items.map((t: any) => ({
+                        id: t.id ?? t.teamId,
+                        name: t.name ?? t.teamName,
+                        departmentId: t.departmentId ?? t.department?.id,
+                        departmentName: t.departmentName ?? t.department?.name,
+                        memberIds: Array.isArray(t.members) ? t.members.map((m: any) => m.userId ?? m.id ?? m.accountId).filter(Boolean) : [],
+                        memberNames: Array.isArray(t.members) ? t.members.map((m: any) => m.fullName ?? m.name ?? m.employeeName).filter(Boolean) : [],
+                    })));
+                }
+            })
+            .catch(() => {});
     }, []);
 
     const fetchAssignableEmployees = async (setter: (list: WorkloadInfo[]) => void, setRec: (r: any) => void) => {
@@ -2568,6 +2654,10 @@ export default function Dashboard() {
                     role: emp.role ?? emp.Role ?? '',
                     isRecommended: true,
                     recommendationReason: 'Available for assignment',
+                    departmentId: emp.departmentId ?? emp.DepartmentId ?? '',
+                    department: emp.department ?? emp.Department ?? emp.departmentName ?? emp.DepartmentName ?? '',
+                    teamId: emp.teamId ?? emp.TeamId ?? '',
+                    teamName: emp.teamName ?? emp.TeamName ?? '',
                 }));
                 setter(mapped);
                 const activeEmployees = mapped.filter(e => e.isAvailable);
@@ -2728,8 +2818,31 @@ export default function Dashboard() {
         if (!d) errs.description = 'Description is required.';
         else if (d.length > 2000) errs.description = 'Description must not exceed 2,000 characters.';
         if (!newTaskForm.priority) errs.priority = 'Priority is required.';
-        if (!newTaskForm.deadline) errs.deadline = 'Deadline is required.';
-        if (!newTaskForm.classification) errs.classification = 'Classification is required.';
+
+        if (newTaskForm.priority !== 'Urgent') {
+            if (!newTaskForm.deadline) {
+                errs.deadline = 'Deadline is required.';
+            } else {
+                const selected = new Date(newTaskForm.deadline);
+                const now = new Date();
+                const todayStart = new Date(now);
+                todayStart.setMinutes(todayStart.getMinutes() - 5);
+                if (selected < todayStart) {
+                    errs.deadline = 'Deadline cannot be in the past.';
+                } else if (newTaskForm.priority === 'High') {
+                    const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 + 300000);
+                    if (selected > maxHigh) {
+                        errs.deadline = 'For High priority, deadline must be 1 to 2 days only from current date.';
+                    }
+                } else if (newTaskForm.priority === 'Medium') {
+                    const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 300000);
+                    if (selected > maxMed) {
+                        errs.deadline = 'For Medium priority, deadline must be within 1 week (7 days) from current date.';
+                    }
+                }
+            }
+        }
+
         if (!newTaskForm.assignmentScope) errs.assignmentScope = 'Assignment scope is required.';
         if (newTaskForm.assignmentScope === 'SingleEmployee' && !newTaskForm.assignedTo) errs.assignedTo = 'Please select an employee to assign.';
         if (newTaskForm.assignmentScope === 'Team' && newTaskForm.assignedUserIds.length === 0) errs.assignedUserIds = 'Please select at least one team member.';
@@ -2752,7 +2865,7 @@ export default function Dashboard() {
                 title: t,
                 description: d,
                 priorityLevel: PRIORITY_NUM_FROM_LABEL[newTaskForm.priority] ?? 1,
-                classification: newTaskForm.classification === 'special' ? 1 : 0,
+                classification: 0,
                 assignmentScope: scopeNum,
                 isConfidential: newTaskForm.isConfidential,
                 assignedUserIds: userIds.length > 0 ? userIds : undefined,
@@ -2802,8 +2915,31 @@ export default function Dashboard() {
         if (!d) errs.description = 'Description is required.';
         else if (d.length > 2000) errs.description = 'Description must not exceed 2,000 characters.';
         if (!editForm.priority) errs.priority = 'Priority is required.';
-        if (!editForm.deadline) errs.deadline = 'Deadline is required.';
-        if (!editForm.classification) errs.classification = 'Classification is required.';
+
+        if (editForm.priority !== 'Urgent' && !tmEditingTask.isSLALocked) {
+            if (!editForm.deadline) {
+                errs.deadline = 'Deadline is required.';
+            } else {
+                const selected = new Date(editForm.deadline);
+                const now = new Date();
+                const todayStart = new Date(now);
+                todayStart.setMinutes(todayStart.getMinutes() - 5);
+                if (selected < todayStart) {
+                    errs.deadline = 'Deadline cannot be in the past.';
+                } else if (editForm.priority === 'High') {
+                    const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 + 300000);
+                    if (selected > maxHigh) {
+                        errs.deadline = 'For High priority, deadline must be 1 to 2 days only from current date.';
+                    }
+                } else if (editForm.priority === 'Medium') {
+                    const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 300000);
+                    if (selected > maxMed) {
+                        errs.deadline = 'For Medium priority, deadline must be within 1 week (7 days) from current date.';
+                    }
+                }
+            }
+        }
+
         if (Object.keys(errs).length) { setEditErrors(errs); return; }
         setEditErrors({});
 
@@ -2822,7 +2958,7 @@ export default function Dashboard() {
                 title: t,
                 description: d,
                 priorityLevel: PRIORITY_NUM_FROM_LABEL[editForm.priority] ?? 1,
-                classification: editForm.classification === 'special' ? 1 : 0,
+                classification: 0,
                 assignmentScope: scopeNum,
                 isConfidential: editForm.isConfidential,
                 assignedUserIds: editUserIds.length > 0 ? editUserIds : undefined,
@@ -3839,26 +3975,7 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
-                    <div className="fm-section">
-                        <h5 className="fm-section-title">Classification</h5>
-                        <div className="fm-field">
-                            <label className="fm-label">Task Classification <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                            <select
-                                className="fm-input"
-                                value={newTaskForm.classification}
-                                onChange={e => setNewTaskForm(p => ({ ...p, classification: e.target.value }))}
-                            >
-                                <option value="">Select classification</option>
-                                <option value="routine">Routine Daily Task</option>
-                                <option value="special">Special Task</option>
-                            </select>
-                            {newTaskErrors.classification && (
-                                <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                    <AlertCircle size={11} />{newTaskErrors.classification}
-                                </span>
-                            )}
-                        </div>
-                    </div>
+
                     <div className="fm-section">
                         <h5 className="fm-section-title">Schedule &amp; Priority</h5>
                         <div className="fm-field-grid">
@@ -3867,12 +3984,24 @@ export default function Dashboard() {
                                 <select
                                     className="fm-select"
                                     value={newTaskForm.priority}
-                                    onChange={e => setNewTaskForm(p => ({ ...p, priority: e.target.value }))}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        const range = getPriorityDeadlineRange(val);
+                                        let newDl = newTaskForm.deadline;
+                                        if (val === 'Urgent') {
+                                            newDl = range.min;
+                                        } else if (range.max && newTaskForm.deadline && new Date(newTaskForm.deadline) > new Date(range.max)) {
+                                            newDl = range.max;
+                                        } else if (!newTaskForm.deadline && val) {
+                                            newDl = range.max || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16);
+                                        }
+                                        setNewTaskForm(p => ({ ...p, priority: val, deadline: newDl }));
+                                    }}
                                 >
                                     <option value="">Select priority</option>
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
+                                    <option value="Low">🟢 Low</option>
+                                    <option value="Medium">🟡 Medium</option>
+                                    <option value="High">🟠 High</option>
                                     <option value="Urgent">🔴 Urgent</option>
                                 </select>
                                 {newTaskErrors.priority && (
@@ -3887,28 +4016,68 @@ export default function Dashboard() {
                                 )}
                             </div>
                             <div className="fm-field">
-                                <label className="fm-label">
-                                    Deadline <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                    {newTaskForm.priority === 'Urgent' && (
-                                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#7c1d1d', background: '#fef2f2', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
-                                            <Lock size={10} /> SLA LOCKED
-                                        </span>
-                                    )}
-                                </label>
-                                <input
-                                    type="datetime-local"
-                                    className="fm-input"
-                                    value={newTaskForm.deadline}
-                                    onChange={e => setNewTaskForm(p => ({ ...p, deadline: e.target.value }))}
-                                    disabled={newTaskForm.priority === 'Urgent'}
-                                    min={new Date().toISOString().slice(0, 16)}
-                                    style={newTaskForm.priority === 'Urgent' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7 } : {}}
-                                />
-                                {newTaskErrors.deadline && (
-                                    <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                        <AlertCircle size={11} />{newTaskErrors.deadline}
-                                    </span>
-                                )}
+                                {(() => {
+                                    const range = getPriorityDeadlineRange(newTaskForm.priority);
+                                    const quickPicks = getQuickPickOptions(newTaskForm.priority);
+                                    return (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <label className="fm-label" style={{ marginBottom: 0 }}>
+                                                    Deadline <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
+                                                    {newTaskForm.priority === 'Urgent' && (
+                                                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#7c1d1d', background: '#fef2f2', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+                                                            <Lock size={10} /> SLA LOCKED
+                                                        </span>
+                                                    )}
+                                                </label>
+                                                {range.maxLabel && (
+                                                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary, #0284c7)', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4 }}>
+                                                        Max: {range.maxLabel}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="datetime-local"
+                                                className="fm-input"
+                                                value={newTaskForm.deadline}
+                                                onChange={e => setNewTaskForm(p => ({ ...p, deadline: e.target.value }))}
+                                                disabled={newTaskForm.priority === 'Urgent'}
+                                                min={range.min}
+                                                max={range.max}
+                                                style={newTaskForm.priority === 'Urgent' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, marginTop: 4 } : { marginTop: 4 }}
+                                            />
+                                            {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                                                    <span style={{ fontSize: 10, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>Quick Pick:</span>
+                                                    {quickPicks.map(qp => (
+                                                        <button
+                                                            key={qp.label}
+                                                            type="button"
+                                                            onClick={() => setNewTaskForm(p => ({ ...p, deadline: qp.value }))}
+                                                            style={{
+                                                                fontSize: 10,
+                                                                fontWeight: 600,
+                                                                padding: '2px 6px',
+                                                                borderRadius: 4,
+                                                                border: '1px solid var(--border, #e2e8f0)',
+                                                                background: newTaskForm.deadline === qp.value ? 'var(--primary, #0284c7)' : 'var(--bg-surface, #fff)',
+                                                                color: newTaskForm.deadline === qp.value ? '#fff' : 'var(--text-secondary, #64748b)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {qp.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {newTaskErrors.deadline && (
+                                                <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                    <AlertCircle size={11} />{newTaskErrors.deadline}
+                                                </span>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -3917,7 +4086,6 @@ export default function Dashboard() {
                         <div className="fm-field">
                             <label className="fm-label">Scope <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
                             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                                {/* Team scope hidden until the team management feature is planned and tested. */}
                                 {['SingleEmployee', 'Department'].map(scope => (
                                     <label key={scope} onClick={() => setNewTaskForm(p => ({
                                         ...p, assignmentScope: scope, assignedDepartmentId: '',
@@ -3978,98 +4146,115 @@ export default function Dashboard() {
                                         <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{rawApiKeys}</pre>
                                     </details>
                                 )}
+
+                                {/* Cascading Filters for New Task Single Employee */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                    <div>
+                                        <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                                            Filter by Department
+                                        </label>
+                                        <select
+                                            className="fm-select"
+                                            style={{ fontSize: 12, padding: '5px 8px' }}
+                                            value={newTaskFilterDeptId}
+                                            onChange={e => {
+                                                const dId = e.target.value;
+                                                setNewTaskFilterDeptId(dId);
+                                                setNewTaskFilterTeamId('');
+                                                if (newTaskForm.assignedTo) {
+                                                    const emp = newTaskEligibleEmployees.find(x => x.accountId === newTaskForm.assignedTo);
+                                                    if (dId && emp && emp.departmentId !== dId) {
+                                                        setNewTaskForm(p => ({ ...p, assignedTo: '' }));
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <option value="">All Departments ({departments.length})</option>
+                                            {departments.map(d => (
+                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                                            Filter by Team
+                                        </label>
+                                        <select
+                                            className="fm-select"
+                                            style={{ fontSize: 12, padding: '5px 8px' }}
+                                            value={newTaskFilterTeamId}
+                                            onChange={e => {
+                                                const tId = e.target.value;
+                                                setNewTaskFilterTeamId(tId);
+                                                if (newTaskForm.assignedTo && tId) {
+                                                    const emp = newTaskEligibleEmployees.find(x => x.accountId === newTaskForm.assignedTo);
+                                                    const teamObj = managerTeams.find(t => t.id === tId);
+                                                    if (emp && emp.teamId !== tId && !teamObj?.memberIds?.includes(emp.accountId) && !teamObj?.memberNames?.some(n => n.toLowerCase() === emp.employeeName.toLowerCase())) {
+                                                        setNewTaskForm(p => ({ ...p, assignedTo: '' }));
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <option value="">All Teams</option>
+                                            {managerTeams
+                                                .filter(t => !newTaskFilterDeptId || t.departmentId === newTaskFilterDeptId)
+                                                .map(t => (
+                                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <input type="text" className="emp-picker-search" placeholder="Search employees…" value={newTaskSingleSearch}
                                     onChange={e => setNewTaskSingleSearch(e.target.value)} />
-                                {newTaskEligibleEmployees.length > 0 ? (
-                                    <div className="emp-picker-list">
-                                        {(newTaskSingleSearch ? newTaskEligibleEmployees.filter(e => (e.employeeName || '').toLowerCase().includes(newTaskSingleSearch.toLowerCase())) : newTaskEligibleEmployees).map(e => {
-                                            const isSelected = newTaskForm.assignedTo === e.accountId;
-                                            const disabled = !e.isAvailable;
-                                            const isRecommended = newTaskRecommendation?.accountId === e.accountId;
-                                            const status = e.availabilityStatus || 'Unknown';
-                                            const statusDot = e.isAvailable ? 'active' : status === 'Offline' ? 'offline' : 'leave';
-                                            return (
-                                                <div key={e.accountId}
-                                                    className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
-                                                    onClick={() => { if (disabled) return; setNewTaskForm(p => ({ ...p, assignedTo: e.accountId })); }}
-                                                >
-                                                    <input type="radio" name="newTaskAssignee" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => {}} />
-                                                    <div className="emp-picker-info">
-                                                        <span className="emp-picker-name">{e.employeeName || `ID: ${e.accountId || '?'}`}</span>
-                                                        <div className="emp-picker-meta">
-                                                            <span className={`emp-picker-dot ${statusDot}`} />
-                                                            <span>{status}</span>
-                                                            <span>{typeof e.workload === 'number' ? e.workload : 0} tasks</span>
+                                {(() => {
+                                    const filtered = newTaskEligibleEmployees.filter(e => {
+                                        if (newTaskFilterDeptId && e.departmentId !== newTaskFilterDeptId) return false;
+                                        if (newTaskFilterTeamId) {
+                                            const teamObj = managerTeams.find(t => t.id === newTaskFilterTeamId);
+                                            const matchTeam = e.teamId === newTaskFilterTeamId || teamObj?.memberIds?.includes(e.accountId) || teamObj?.memberNames?.some(n => n.toLowerCase() === e.employeeName.toLowerCase());
+                                            if (!matchTeam) return false;
+                                        }
+                                        if (newTaskSingleSearch && !(e.employeeName || '').toLowerCase().includes(newTaskSingleSearch.toLowerCase())) return false;
+                                        return true;
+                                    });
+
+                                    return filtered.length > 0 ? (
+                                        <div className="emp-picker-list">
+                                            {filtered.map(e => {
+                                                const isSelected = newTaskForm.assignedTo === e.accountId;
+                                                const disabled = !e.isAvailable;
+                                                const isRecommended = newTaskRecommendation?.accountId === e.accountId;
+                                                const status = e.availabilityStatus || 'Unknown';
+                                                const statusDot = e.isAvailable ? 'active' : status === 'Offline' ? 'offline' : 'leave';
+                                                return (
+                                                    <div key={e.accountId}
+                                                        className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
+                                                        onClick={() => { if (disabled) return; setNewTaskForm(p => ({ ...p, assignedTo: e.accountId })); }}
+                                                    >
+                                                        <input type="radio" name="newTaskAssignee" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => {}} />
+                                                        <div className="emp-picker-info">
+                                                            <span className="emp-picker-name">{e.employeeName || `ID: ${e.accountId || '?'}`}</span>
+                                                            <div className="emp-picker-meta">
+                                                                <span className={`emp-picker-dot ${statusDot}`} />
+                                                                <span>{status}</span>
+                                                                <span>{typeof e.workload === 'number' ? e.workload : 0} tasks</span>
+                                                                {e.department && <span style={{ opacity: 0.8 }}>• {e.department}</span>}
+                                                            </div>
                                                         </div>
+                                                        {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
+                                                        {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
                                                     </div>
-                                                    {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
-                                                    {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="emp-picker-empty">No eligible employees found.</div>
-                                )}
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="emp-picker-empty">No eligible employees found matching filters.</div>
+                                    );
+                                })()}
                                 {newTaskErrors.assignedTo && (
                                     <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                                         <AlertCircle size={11} />{newTaskErrors.assignedTo}
-                                    </span>
-                                )}
-                            </div>
-                        )}
-
-                        {newTaskForm.assignmentScope === 'Team' && (
-                            <div className="fm-field" style={{ marginTop: 10 }}>
-                                <label className="fm-label">Select Team Members <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                {newTaskRecommendation && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'linear-gradient(135deg, rgba(0,169,157,0.06), rgba(0,169,157,0.02))', border: '1px solid rgba(0,169,157,0.15)', borderRadius: 6, marginBottom: 8, fontSize: 12 }}>
-                                        <Lightbulb size={12} />
-                                        <span>Recommended: <strong style={{ color: 'var(--primary)' }}>{newTaskRecommendation.employeeName}</strong> — {newTaskRecommendation.reason}</span>
-                                    </div>
-                                )}
-                                <input type="text" className="emp-picker-search" placeholder="Search employees…" value={newTaskTeamSearch}
-                                    onChange={e => setNewTaskTeamSearch(e.target.value)} />
-                                {newTaskEligibleEmployees.length > 0 ? (
-                                    <div className="emp-picker-list">
-                                        {(newTaskTeamSearch ? newTaskEligibleEmployees.filter(e => (e.employeeName || '').toLowerCase().includes(newTaskTeamSearch.toLowerCase())) : newTaskEligibleEmployees).map(e => {
-                                            const selected = newTaskForm.assignedUserIds.includes(e.accountId);
-                                            const disabled = !e.isAvailable;
-                                            const status = e.availabilityStatus || 'Unknown';
-                                            const statusDot = e.isAvailable ? 'active' : status === 'Offline' ? 'offline' : 'leave';
-                                            return (
-                                                <div key={e.accountId}
-                                                    className={`emp-picker-row${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}`}
-                                                    onClick={() => {
-                                                        if (disabled) return;
-                                                        setNewTaskForm(p => ({
-                                                            ...p,
-                                                            assignedUserIds: selected ? p.assignedUserIds.filter(id => id !== e.accountId) : [...p.assignedUserIds, e.accountId],
-                                                        }));
-                                                    }}
-                                                >
-                                                    <input type="checkbox" className="emp-picker-checkbox" checked={selected} disabled={disabled} onChange={() => {}} />
-                                                    <div className="emp-picker-info">
-                                                        <span className="emp-picker-name">{e.employeeName || `ID: ${e.accountId || '?'}`}</span>
-                                                        <div className="emp-picker-meta">
-                                                            <span className={`emp-picker-dot ${statusDot}`} />
-                                                            <span>{status}</span>
-                                                            <span>{typeof e.workload === 'number' ? e.workload : 0} tasks</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="emp-picker-empty">No eligible employees found.</div>
-                                )}
-                                {newTaskForm.assignedUserIds.length > 0 && (
-                                    <span className="emp-picker-confirm"><CheckCircle2 size={12} /> {newTaskForm.assignedUserIds.length} team member(s) selected</span>
-                                )}
-                                {newTaskErrors.assignedUserIds && (
-                                    <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                        <AlertCircle size={11} />{newTaskErrors.assignedUserIds}
                                     </span>
                                 )}
                             </div>
@@ -4229,26 +4414,7 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
-                    <div className="fm-section">
-                        <h5 className="fm-section-title">Classification</h5>
-                        <div className="fm-field">
-                            <label className="fm-label">Task Classification <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                            <select
-                                className="fm-input"
-                                value={editForm.classification}
-                                onChange={e => setEditForm(p => ({ ...p, classification: e.target.value }))}
-                            >
-                                <option value="">Select classification</option>
-                                <option value="routine">Routine Daily Task</option>
-                                <option value="special">Special Task</option>
-                            </select>
-                            {editErrors.classification && (
-                                <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                    <AlertCircle size={11} />{editErrors.classification}
-                                </span>
-                            )}
-                        </div>
-                    </div>
+
                     <div className="fm-section">
                         <h5 className="fm-section-title">Schedule &amp; Priority</h5>
                         <div className="fm-field-grid">
@@ -4257,12 +4423,22 @@ export default function Dashboard() {
                                 <select
                                     className="fm-select"
                                     value={editForm.priority}
-                                    onChange={e => setEditForm(p => ({ ...p, priority: e.target.value }))}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        const range = getPriorityDeadlineRange(val);
+                                        let newDl = editForm.deadline;
+                                        if (val === 'Urgent') {
+                                            newDl = range.min;
+                                        } else if (range.max && editForm.deadline && new Date(editForm.deadline) > new Date(range.max)) {
+                                            newDl = range.max;
+                                        }
+                                        setEditForm(p => ({ ...p, priority: val, deadline: newDl }));
+                                    }}
                                 >
                                     <option value="">Select priority</option>
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
+                                    <option value="Low">🟢 Low</option>
+                                    <option value="Medium">🟡 Medium</option>
+                                    <option value="High">🟠 High</option>
                                     <option value="Urgent">🔴 Urgent</option>
                                 </select>
                                 {editErrors.priority && (
@@ -4277,28 +4453,69 @@ export default function Dashboard() {
                                 )}
                             </div>
                             <div className="fm-field">
-                                <label className="fm-label">
-                                    Deadline <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                    {(editForm.priority === 'Urgent' || tmEditingTask?.isSLALocked) && (
-                                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#7c1d1d', background: '#fef2f2', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
-                                            <Lock size={10} /> SLA LOCKED
-                                        </span>
-                                    )}
-                                </label>
-                                <input
-                                    type="datetime-local"
-                                    className="fm-input"
-                                    value={editForm.deadline}
-                                    onChange={e => setEditForm(p => ({ ...p, deadline: e.target.value }))}
-                                    disabled={editForm.priority === 'Urgent' || (tmEditingTask?.isSLALocked ?? false)}
-                                    min={new Date().toISOString().slice(0, 16)}
-                                    style={(editForm.priority === 'Urgent' || tmEditingTask?.isSLALocked) ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7 } : {}}
-                                />
-                                {editErrors.deadline && (
-                                    <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                        <AlertCircle size={11} />{editErrors.deadline}
-                                    </span>
-                                )}
+                                {(() => {
+                                    const range = getPriorityDeadlineRange(editForm.priority);
+                                    const quickPicks = getQuickPickOptions(editForm.priority);
+                                    const locked = editForm.priority === 'Urgent' || (tmEditingTask?.isSLALocked ?? false);
+                                    return (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <label className="fm-label" style={{ marginBottom: 0 }}>
+                                                    Deadline <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
+                                                    {locked && (
+                                                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#7c1d1d', background: '#fef2f2', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+                                                            <Lock size={10} /> SLA LOCKED
+                                                        </span>
+                                                    )}
+                                                </label>
+                                                {range.maxLabel && (
+                                                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary, #0284c7)', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4 }}>
+                                                        Max: {range.maxLabel}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="datetime-local"
+                                                className="fm-input"
+                                                value={editForm.deadline}
+                                                onChange={e => setEditForm(p => ({ ...p, deadline: e.target.value }))}
+                                                disabled={locked}
+                                                min={range.min}
+                                                max={range.max}
+                                                style={locked ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, marginTop: 4 } : { marginTop: 4 }}
+                                            />
+                                            {quickPicks.length > 0 && !locked && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                                                    <span style={{ fontSize: 10, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>Quick Pick:</span>
+                                                    {quickPicks.map(qp => (
+                                                        <button
+                                                            key={qp.label}
+                                                            type="button"
+                                                            onClick={() => setEditForm(p => ({ ...p, deadline: qp.value }))}
+                                                            style={{
+                                                                fontSize: 10,
+                                                                fontWeight: 600,
+                                                                padding: '2px 6px',
+                                                                borderRadius: 4,
+                                                                border: '1px solid var(--border, #e2e8f0)',
+                                                                background: editForm.deadline === qp.value ? 'var(--primary, #0284c7)' : 'var(--bg-surface, #fff)',
+                                                                color: editForm.deadline === qp.value ? '#fff' : 'var(--text-secondary, #64748b)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {qp.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {editErrors.deadline && (
+                                                <span style={{ fontSize: 11, color: 'var(--status-failed, #ee5d50)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                    <AlertCircle size={11} />{editErrors.deadline}
+                                                </span>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -4307,7 +4524,6 @@ export default function Dashboard() {
                         <div className="fm-field">
                             <label className="fm-label">Scope <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
                             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                                {/* Team scope hidden until the team management feature is planned and tested. */}
                                 {['SingleEmployee', 'Department'].map(scope => (
                                     <label key={scope} onClick={() => setEditForm(p => ({
                                         ...p, assignmentScope: scope, assignedDepartmentId: '',
@@ -4352,39 +4568,112 @@ export default function Dashboard() {
                                         <span>Recommended: <strong style={{ color: 'var(--primary)' }}>{editTaskRecommendation.employeeName}</strong> — {editTaskRecommendation.reason}</span>
                                     </div>
                                 )}
+
+                                {/* Cascading Filters for Edit Task Single Employee */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                    <div>
+                                        <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                                            Filter by Department
+                                        </label>
+                                        <select
+                                            className="fm-select"
+                                            style={{ fontSize: 12, padding: '5px 8px' }}
+                                            value={editTaskFilterDeptId}
+                                            onChange={e => {
+                                                const dId = e.target.value;
+                                                setEditTaskFilterDeptId(dId);
+                                                setEditTaskFilterTeamId('');
+                                                if (editForm.assignedTo) {
+                                                    const emp = editEligibleEmployees.find(x => x.accountId === editForm.assignedTo);
+                                                    if (dId && emp && emp.departmentId !== dId) {
+                                                        setEditForm(p => ({ ...p, assignedTo: '' }));
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <option value="">All Departments ({departments.length})</option>
+                                            {departments.map(d => (
+                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                                            Filter by Team
+                                        </label>
+                                        <select
+                                            className="fm-select"
+                                            style={{ fontSize: 12, padding: '5px 8px' }}
+                                            value={editTaskFilterTeamId}
+                                            onChange={e => {
+                                                const tId = e.target.value;
+                                                setEditTaskFilterTeamId(tId);
+                                                if (editForm.assignedTo && tId) {
+                                                    const emp = editEligibleEmployees.find(x => x.accountId === editForm.assignedTo);
+                                                    const teamObj = managerTeams.find(t => t.id === tId);
+                                                    if (emp && emp.teamId !== tId && !teamObj?.memberIds?.includes(emp.accountId) && !teamObj?.memberNames?.some(n => n.toLowerCase() === emp.employeeName.toLowerCase())) {
+                                                        setEditForm(p => ({ ...p, assignedTo: '' }));
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <option value="">All Teams</option>
+                                            {managerTeams
+                                                .filter(t => !editTaskFilterDeptId || t.departmentId === editTaskFilterDeptId)
+                                                .map(t => (
+                                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <input type="text" className="emp-picker-search" placeholder="Search employees…" value={editTaskSingleSearch}
                                     onChange={e => setEditTaskSingleSearch(e.target.value)} />
-                                {editEligibleEmployees.length > 0 ? (
-                                    <div className="emp-picker-list">
-                                        {(editTaskSingleSearch ? editEligibleEmployees.filter(e => (e.employeeName || '').toLowerCase().includes(editTaskSingleSearch.toLowerCase())) : editEligibleEmployees).map(e => {
-                                            const isSelected = editForm.assignedTo === e.accountId;
-                                            const disabled = !e.isAvailable;
-                                            const isRecommended = editTaskRecommendation?.accountId === e.accountId;
-                                            const status = e.availabilityStatus || 'Unknown';
-                                            const statusDot = e.isAvailable ? 'active' : status === 'Offline' ? 'offline' : 'leave';
-                                            return (
-                                                <div key={e.accountId}
-                                                    className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
-                                                    onClick={() => { if (disabled) return; setEditForm(p => ({ ...p, assignedTo: e.accountId })); }}
-                                                >
-                                                    <input type="radio" name="editTaskAssignee" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => {}} />
-                                                    <div className="emp-picker-info">
-                                                        <span className="emp-picker-name">{e.employeeName || `ID: ${e.accountId || '?'}`}</span>
-                                                        <div className="emp-picker-meta">
-                                                            <span className={`emp-picker-dot ${statusDot}`} />
-                                                            <span>{status}</span>
-                                                            <span>{typeof e.workload === 'number' ? e.workload : 0} tasks</span>
+                                {(() => {
+                                    const filtered = editEligibleEmployees.filter(e => {
+                                        if (editTaskFilterDeptId && e.departmentId !== editTaskFilterDeptId) return false;
+                                        if (editTaskFilterTeamId) {
+                                            const teamObj = managerTeams.find(t => t.id === editTaskFilterTeamId);
+                                            const matchTeam = e.teamId === editTaskFilterTeamId || teamObj?.memberIds?.includes(e.accountId) || teamObj?.memberNames?.some(n => n.toLowerCase() === e.employeeName.toLowerCase());
+                                            if (!matchTeam) return false;
+                                        }
+                                        if (editTaskSingleSearch && !(e.employeeName || '').toLowerCase().includes(editTaskSingleSearch.toLowerCase())) return false;
+                                        return true;
+                                    });
+
+                                    return filtered.length > 0 ? (
+                                        <div className="emp-picker-list">
+                                            {filtered.map(e => {
+                                                const isSelected = editForm.assignedTo === e.accountId;
+                                                const disabled = !e.isAvailable;
+                                                const isRecommended = editTaskRecommendation?.accountId === e.accountId;
+                                                const status = e.availabilityStatus || 'Unknown';
+                                                const statusDot = e.isAvailable ? 'active' : status === 'Offline' ? 'offline' : 'leave';
+                                                return (
+                                                    <div key={e.accountId}
+                                                        className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
+                                                        onClick={() => { if (disabled) return; setEditForm(p => ({ ...p, assignedTo: e.accountId })); }}
+                                                    >
+                                                        <input type="radio" name="editTaskAssignee" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => {}} />
+                                                        <div className="emp-picker-info">
+                                                            <span className="emp-picker-name">{e.employeeName || `ID: ${e.accountId || '?'}`}</span>
+                                                            <div className="emp-picker-meta">
+                                                                <span className={`emp-picker-dot ${statusDot}`} />
+                                                                <span>{status}</span>
+                                                                <span>{typeof e.workload === 'number' ? e.workload : 0} tasks</span>
+                                                                {e.department && <span style={{ opacity: 0.8 }}>• {e.department}</span>}
+                                                            </div>
                                                         </div>
+                                                        {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
+                                                        {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
                                                     </div>
-                                                    {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
-                                                    {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="emp-picker-empty">No eligible employees found.</div>
-                                )}
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="emp-picker-empty">No eligible employees found matching filters.</div>
+                                    );
+                                })()}
                             </div>
                         )}
 

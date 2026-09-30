@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical } from 'lucide-react';
+import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import StatusCard from '../StatusCard/StatusCard';
@@ -474,10 +474,26 @@ export default function TaskManager({
             </div>
 
             {viewMode === 'board' && tab !== 'bin' ? (
-                <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
-                    {/* Header & Controls for Board View */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div className="card table-card">
+                    {/* ── Tabs ── */}
+                    <div className="table-card-tabs">
+                        {[
+                            { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
+                            { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
+                            { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
+                        ].map(({ key, label, icon, badge }) => (
+                            <button key={key} onClick={() => handleTabChange(key)} className={`table-card-tab-btn${tab === key ? ' active' : ''}`}>
+                                {icon}<span>{label}</span>
+                                {badge !== undefined && typeof badge === 'number' && badge > 0 && <span className={`table-card-tab-badge${tab === key ? ' active' : ''}`}>{badge}</span>}
+                                {badge !== undefined && typeof badge === 'string' && badge !== '0' && badge !== '' && <span className={`table-card-tab-badge${tab === key ? ' active' : ''}`}>{badge}</span>}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* ── Header: Title on Left, View Toggle & New Task on Right ── */}
+                    <div className="table-card-header">
+                        <h3 className="table-card-title">Task Manager</h3>
+                        <div className="table-card-header-right">
                             <div className="tm-view-toggle-group">
                                 <button
                                     type="button"
@@ -496,56 +512,64 @@ export default function TaskManager({
                                     <Kanban size={13} /> Board
                                 </button>
                             </div>
-
-                            <input
-                                type="text"
-                                placeholder="Search tasks, assignees…"
-                                value={search}
-                                onChange={e => handleSearch(e.target.value)}
-                                style={{ height: 36, width: 220, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 12, outline: 'none' }}
-                            />
-
-                            <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                                <option value="">All Priorities</option>
-                                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-
-                            <select value={filterClassification} onChange={e => handleClassificationChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
-                                <option value="">All Classifications</option>
-                                <option value="routine">Routine Daily</option>
-                                <option value="special">Special Task</option>
-                            </select>
-
-                            <SearchableSelect
-                                value={filterAssignee}
-                                onChange={handleAssigneeChange}
-                                options={assigneeOptions}
-                                placeholder="All Assignees"
-                                searchPlaceholder="Search assignees..."
-                                width={160}
-                            />
+                            {tab === 'active' && (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={onNewTask}
+                                    style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 8 }}
+                                >
+                                    <Plus size={14} /> New Task
+                                </button>
+                            )}
                         </div>
+                    </div>
 
-                        {tab === 'active' && (
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={onNewTask}
-                                style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 8 }}
-                            >
-                                <Plus size={14} /> New Task
-                            </button>
-                        )}
+                    {/* ── Toolbar: Search & Filters ── */}
+                    <div style={{ padding: '16px 20px 0' }}>
+                        <div className="dt-toolbar">
+                            <div className="dt-toolbar-left">
+                                <div className="table-card-search-input-wrap">
+                                    <Search size={14} className="table-card-search-icon" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search tasks, assignees…"
+                                        value={search}
+                                        onChange={e => handleSearch(e.target.value)}
+                                        className="table-card-search-input"
+                                    />
+                                </div>
+                                <select value={filterPrio} onChange={e => handlePrioChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <option value="">All Priorities</option>
+                                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                                <select value={filterClassification} onChange={e => handleClassificationChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <option value="">All Classifications</option>
+                                    <option value="routine">Routine Daily</option>
+                                    <option value="special">Special Task</option>
+                                </select>
+                                <SearchableSelect
+                                    value={filterAssignee}
+                                    onChange={handleAssigneeChange}
+                                    options={assigneeOptions}
+                                    placeholder="All Assignees"
+                                    searchPlaceholder="Search assignees..."
+                                    width={160}
+                                />
+                            </div>
+                        </div>
                     </div>
 
                     {/* Board Content */}
-                    <TMKanbanBoard
-                        tasks={filtered}
-                        onView={onView}
-                        onEdit={onEdit}
-                        onMarkDone={onMarkDone}
-                        onArchive={onArchive}
-                    />
+                    <div style={{ padding: '0 20px 20px' }}>
+                        <TMKanbanBoard
+                            tasks={filtered}
+                            onView={onView}
+                            onEdit={onEdit}
+                            onMarkDone={onMarkDone}
+                            onArchive={onArchive}
+                        />
+                    </div>
                 </div>
             ) : (
                 <DataTable
@@ -557,28 +581,42 @@ export default function TaskManager({
                     activeTab={tab}
                     onTabChange={handleTabChange}
                     title="Task Manager"
+                    headerRight={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div className="tm-view-toggle-group">
+                                <button
+                                    type="button"
+                                    className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                    onClick={() => setViewMode('table')}
+                                    title="Table View"
+                                >
+                                    <LayoutList size={13} /> Table
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                                    onClick={() => setViewMode('board')}
+                                    title="Board View"
+                                >
+                                    <Kanban size={13} /> Board
+                                </button>
+                            </div>
+                            {tab === 'active' && (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={onNewTask}
+                                    style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 8 }}
+                                >
+                                    <Plus size={14} /> New Task
+                                </button>
+                            )}
+                        </div>
+                    }
                     searchQuery={search}
                     onSearchChange={handleSearch}
                     searchPlaceholder="Search by task, assignee, project…"
                     filterElements={tab !== 'bin' ? <>
-                        <div className="tm-view-toggle-group">
-                            <button
-                                type="button"
-                                className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-                                onClick={() => setViewMode('table')}
-                                title="Table View"
-                            >
-                                <LayoutList size={13} /> Table
-                            </button>
-                            <button
-                                type="button"
-                                className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
-                                onClick={() => setViewMode('board')}
-                                title="Board View"
-                            >
-                                <Kanban size={13} /> Board
-                            </button>
-                        </div>
                         <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
                             <option value="">All Statuses</option>
                             {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
@@ -620,7 +658,6 @@ export default function TaskManager({
                             width={160}
                         />
                     </> : undefined}
-                    actionButton={tab === 'active' ? { label: 'New Task', icon: <Plus size={14} />, onClick: onNewTask } : undefined}
                     headers={['', '#', 'Task', 'Assignee', 'Priority', 'Due Date', 'Status', '']}
                     loading={false}
                     emptyMessage="No tasks found."

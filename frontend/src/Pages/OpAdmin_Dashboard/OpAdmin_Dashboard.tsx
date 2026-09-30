@@ -45,6 +45,10 @@ import {
     Bell,
     Info,
     DollarSign,
+    Flame,
+    ArrowLeft,
+    TrendingUp,
+    UserCheck,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -723,23 +727,16 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
 
 // --- Modal: New / Edit Task ---------------------------------------------------
 
-interface WorkloadInfo {
-    employeeName: string;
+interface TaskModalWorkloadInfo {
     accountId: string;
+    employeeName: string;
+    workload: number;
+    department?: string;
+    departmentId?: string;
+    teamId?: string;
+    teamName?: string;
     availabilityStatus: string;
     isAvailable: boolean;
-    workload: number;
-    role: string;
-    isRecommended: boolean;
-    recommendationReason: string;
-}
-
-interface Recommendation {
-    employeeName: string;
-    accountId: string;
-    availabilityStatus: string;
-    workload: number;
-    reason: string;
 }
 
 interface TaskModalProps {
@@ -747,258 +744,318 @@ interface TaskModalProps {
     initial?: Partial<Task>;
     teamMembers: TeamMember[];
     tasks: Task[];
-    onSave: (data: CreateTaskDTO | UpdateTaskDTO) => Promise<void>;
+    onSave: (data: CreateTaskDTO | UpdateTaskDTO) => Promise<void> | void;
     onClose: () => void;
     onDelete?: () => void;
     showSuccess?: (msg: string) => void;
     onFileChange?: (files: File[]) => void;
 }
 
-const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, tasks, onSave, onClose, onDelete, showSuccess, onFileChange }) => {
-    const resolvedAssignedTo =
-        initial.assignedTo ||
-        teamMembers.find(m => m.employeeName === initial.assignedEmployee)?.accountId ||
-        '';
+const formatDateForInput = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
-    const CLASSIFICATION_OPTIONS: { label: string; value: number }[] = [
-        { label: 'Routine Daily Task', value: 0 },
-        { label: 'Special Task', value: 1 },
-    ];
+const getPriorityDeadlineRange = (priority: Priority | ''): { min: string; max?: string; maxDate?: Date; helperText: string } => {
+    const now = new Date();
+    const minStr = formatDateForInput(now);
 
-    const isSLAEditLock = mode === 'edit' && initial.isSLALocked;
-    const existingTitles = useMemo(() => (tasks || []).map(t => t.taskTitle || ''), [tasks]);
+    if (priority === 'Urgent') {
+        const d = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🔴 Urgent SLA: Locked to 24 hours from creation.',
+        };
+    }
+    if (priority === 'High') {
+        const d = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🟠 High: Deadline must be 1 to 2 days only from current date.',
+        };
+    }
+    if (priority === 'Medium') {
+        const d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        return {
+            min: minStr,
+            max: formatDateForInput(d),
+            maxDate: d,
+            helperText: '🟡 Medium: Deadline must be within 1 week (7 days) from current date.',
+        };
+    }
+    if (priority === 'Low') {
+        return {
+            min: minStr,
+            max: undefined,
+            maxDate: undefined,
+            helperText: '🟢 Low: Any future date can be selected.',
+        };
+    }
+    return {
+        min: minStr,
+        max: undefined,
+        maxDate: undefined,
+        helperText: 'Select a priority to see the allowed deadline range.',
+    };
+};
+
+const getQuickPickOptions = (priority: Priority | '') => {
+    if (priority === 'High') {
+        return [
+            { label: '+1 Day (24h)', hours: 24 },
+            { label: '+2 Days (48h max)', hours: 48 },
+        ];
+    }
+    if (priority === 'Medium') {
+        return [
+            { label: '+2 Days', hours: 48 },
+            { label: '+3 Days', hours: 72 },
+            { label: '+5 Days', hours: 120 },
+            { label: '+1 Week (7d max)', hours: 168 },
+        ];
+    }
+    if (priority === 'Low') {
+        return [
+            { label: '+1 Week', hours: 168 },
+            { label: '+2 Weeks', hours: 336 },
+            { label: '+1 Month (30d)', hours: 720 },
+        ];
+    }
+    return [];
+};
+
+const TaskModal: React.FC<TaskModalProps> = ({
+    mode,
+    initial = {},
+    teamMembers,
+    tasks,
+    onSave,
+    onClose,
+    onDelete,
+    showSuccess,
+    onFileChange,
+}) => {
+    const existingTitles = useMemo(() => tasks.map(t => t.taskTitle).filter(Boolean), [tasks]);
+    const [submitting, setSubmitting] = useState(false);
+    const [formError, setFormError] = useState('');
+    const [supportingEvidenceFiles, setSupportingEvidenceFiles] = useState<File[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
-        dueAt: (initial.isSLALocked && initial.dueAt) ? initial.dueAt.substring(0, 16) : (initial.dueAt ?? ''),
-        priority: initial.priority ?? '' as Priority,
-        assignedTo: resolvedAssignedTo,
-        classification: initial.classification ?? -1,
         taskCategory: initial.taskCategory ?? '',
-        taskRemarks: initial.taskRemarks ?? '',
+        priority: (initial.priority ?? 'Medium') as Priority,
+        dueAt: initial.dueAt ? initial.dueAt.slice(0, 16) : '',
         isConfidential: initial.isConfidential ?? false,
-        assignmentScope: 'SingleEmployee' as 'SingleEmployee' | 'Team' | 'Department',
+        assignmentScope: (initial.assignees && initial.assignees.length > 1 ? 'Team' : 'SingleEmployee') as 'SingleEmployee' | 'Team' | 'Department',
+        assignedTo: initial.assignedTo ?? '',
         assignedDepartmentId: '',
+        taskRemarks: initial.taskRemarks ?? '',
     });
-    const [selectedTeamId, setSelectedTeamId] = useState('');
-    const [teamsForTask, setTeamsForTask] = useState<{ id: string; name: string; memberCount: number }[]>([]);
-    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
-    const [supportingEvidenceFiles, setSupportingEvidenceFiles] = useState<File[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-    const [submitting, setSubmitting] = useState(false);
-    const [formError, setFormError] = useState('');
-    const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
-    const [eligibleEmployees, setEligibleEmployees] = useState<WorkloadInfo[]>([]);
-    const [recommendationAccepted, setRecommendationAccepted] = useState(true);
-    const [singleSearch, setSingleSearch] = useState('');
 
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
+    const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
+    const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string } | null>(null);
+    const [selectedTeamId, setSelectedTeamId] = useState('');
+    const [singleSearch, setSingleSearch] = useState('');
+    const [filterDeptId, setFilterDeptId] = useState('');
+    const [filterTeamId, setFilterTeamId] = useState('');
+
+    const slaLocked = form.priority === 'Urgent';
+    const deadlineRange = getPriorityDeadlineRange(form.priority);
+    const quickPicks = getQuickPickOptions(form.priority);
+
+    // Fetch assignable employees, teams, and departments
     useEffect(() => {
-        const fetchRecommendations = async () => {
+        const fetchMeta = async () => {
             try {
-                const res = await api.get('/api/Task/assignable-users?pageNumber=1&pageSize=50');
-                const json = res.data;
-                const list: any[] = json.isSuccess && Array.isArray(json.data?.items) ? json.data.items : (json.isSuccess && Array.isArray(json.data) ? json.data : (Array.isArray(json.data?.data) ? json.data.data : []));
-                if (list.length > 0) {
-                    const sample = list[0];
-                    console.debug('[TaskForm] ALL KEYS of first item:', Object.keys(sample));
-                    console.debug('[TaskForm] Raw first item:', JSON.stringify(sample, null, 2));
-                    const mapped: WorkloadInfo[] = list.map((emp: any) => ({
-                        employeeName: emp.fullName ?? emp.FullName ?? emp.employeeName ?? '',
-                        accountId: emp.userId ?? emp.UserId ?? emp.id ?? '',
-                        availabilityStatus: emp.availabilityStatus ?? emp.AvailabilityStatus ?? emp.status ?? 'Active',
-                        isAvailable: emp.isAvailable ?? emp.IsAvailable ?? emp.available ?? true,
-                        workload: typeof emp.workload === 'number' ? emp.workload : 0,
-                        role: emp.role ?? emp.Role ?? '',
-                        isRecommended: true,
-                        recommendationReason: 'Available for assignment',
+                const [empRes, teamRes, deptRes] = await Promise.allSettled([
+                    api.get('/api/Task/assignable-users'),
+                    api.get('/api/Team?pageNumber=1&pageSize=100'),
+                    api.get('/api/Department'),
+                ]);
+
+                if (empRes.status === 'fulfilled' && empRes.value?.data) {
+                    const rawList: any[] = empRes.value.data?.data ?? empRes.value.data ?? [];
+                    const mapped: TaskModalWorkloadInfo[] = rawList.map((e: any) => ({
+                        accountId: e.id ?? e.accountId ?? e.userId ?? '',
+                        employeeName: e.fullName ?? e.employeeName ?? e.name ?? 'Unknown',
+                        workload: e.workload ?? e.activeTaskCount ?? 0,
+                        department: e.departmentName ?? e.department ?? '',
+                        departmentId: e.departmentId ? String(e.departmentId) : '',
+                        teamId: e.teamId ? String(e.teamId) : '',
+                        teamName: e.teamName ?? '',
+                        availabilityStatus: typeof e.availabilityStatus === 'object'
+                            ? (e.availabilityStatus?.status ?? (e.availabilityStatus?.isAvailable ? 'Available' : 'Unavailable'))
+                            : (e.availabilityStatus ?? (e.isAvailable ? 'Available' : 'Unavailable')),
+                        isAvailable: typeof e.availabilityStatus === 'object'
+                            ? Boolean(e.availabilityStatus?.isAvailable)
+                            : (e.isAvailable !== false && e.availabilityStatus !== 'Offline' && e.availabilityStatus !== 'On Leave'),
                     }));
                     setEligibleEmployees(mapped);
-                    const activeEmployees = mapped.filter(e => e.isAvailable);
-                    if (activeEmployees.length > 0) {
-                        const best = activeEmployees.reduce((a, b) => a.workload <= b.workload ? a : b);
+                    if (mapped.length > 0) {
+                        const available = mapped.filter(e => e.isAvailable);
+                        const pool = available.length > 0 ? available : mapped;
+                        const best = pool.reduce((acc, curr) => (curr.workload < acc.workload ? curr : acc), pool[0]);
                         setRecommendation({
-                            employeeName: best.employeeName || 'Recommended Employee',
                             accountId: best.accountId,
-                            availabilityStatus: best.availabilityStatus,
-                            workload: best.workload,
-                            reason: 'Available for assignment',
+                            employeeName: best.employeeName,
+                            reason: `Lowest active workload (${best.workload} tasks)`,
                         });
                     }
                 }
-            } catch (err) {
-                console.warn('[TaskForm] fetchRecommendations error:', err);
-            }
-        };
-        const fetchDepartments = async () => {
-            try {
-                const res = await api.get('/api/Department');
-                const json = res.data;
-                if (json.isSuccess && json.data?.items) {
-                    setDepartments(json.data.items.map((d: any) => ({ id: d.id ?? d.departmentId, name: d.name ?? d.departmentName })));
-                }
-            } catch {
-            }
-        };
-        const fetchTeams = async () => {
-            try {
-                const res = await api.get('/api/Team?pageNumber=1&pageSize=100');
-                const json = res.data;
-                if (json.isSuccess && json.data?.items) {
-                    setTeamsForTask(json.data.items.map((t: any) => ({
+
+                if (teamRes.status === 'fulfilled' && teamRes.value?.data) {
+                    const tList: any[] = teamRes.value.data?.data?.items ?? teamRes.value.data?.data ?? teamRes.value.data ?? [];
+                    setTeamsForTask(tList.map((t: any) => ({
                         id: t.id ?? t.teamId,
                         name: t.name ?? t.teamName,
                         memberCount: t.memberCount ?? t.members?.length ?? 0,
+                        departmentId: t.departmentId ? String(t.departmentId) : '',
+                        departmentName: t.departmentName ?? '',
+                        memberIds: t.members?.map((m: any) => m.userId ?? m.id) ?? [],
+                    })));
+                }
+
+                if (deptRes.status === 'fulfilled' && deptRes.value?.data) {
+                    const dList: any[] = deptRes.value.data?.data ?? deptRes.value.data ?? [];
+                    setDepartments(dList.map((d: any) => ({
+                        id: String(d.departmentId ?? d.id),
+                        name: d.name ?? d.departmentName ?? '',
                     })));
                 }
             } catch {
+                // fallback gracefully
             }
         };
-        fetchRecommendations();
-        fetchDepartments();
-        fetchTeams();
-
-        // FR-065: Periodic refresh of availability status
-        const interval = setInterval(fetchRecommendations, 30000);
-        return () => clearInterval(interval);
+        fetchMeta();
     }, []);
 
-    // -- Per-field live validator ------------------------------------------
-    const validateField = (key: string, value: string): string => {
-        switch (key) {
-            case 'taskTitle': {
-                const v = value.trim();
-                if (!v) return 'Task title is required.';
-                if (v.length < 3) return 'Title must be at least 3 characters.';
-                if (v.length > 150) return 'Title must not exceed 150 characters.';
-                return '';
-            }
-            case 'taskDescription': {
-                const v = value.trim();
-                if (!v) return 'Task description is required.';
-                if (v.length > 2000) return 'Description must not exceed 2,000 characters.';
-                return '';
-            }
-            case 'dueAt': {
-                if (slaLocked) return '';
-                if (!value) return 'Deadline is required.';
-                const selected = new Date(value);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (selected < today) return 'Deadline must not be in the past.';
-                return '';
-            }
-            case 'assignedTo': {
-                return '';
-            }
-            case 'assignmentScope': {
-                if (!value) return 'Assignment scope is required.';
-                return '';
-            }
-            case 'assignedDepartmentId': {
-                if (form.assignmentScope === 'Department' && !value) return 'Department is required for Department scope.';
-                return '';
-            }
-            case 'classification': {
-                const v = Number(value);
-                if (v !== 0 && v !== 1) return 'Classification is required.';
-                return '';
-            }
-            case 'priority': {
-                if (!value) return 'Priority is required.';
-                if (!['Urgent', 'High', 'Medium', 'Low'].includes(value)) return 'Please select a valid priority.';
-                return '';
-            }
-            default:
-                return '';
+    // Filtered teams based on department
+    const availableTeams = useMemo(() => {
+        if (!filterDeptId) return teamsForTask;
+        return teamsForTask.filter(t => t.departmentId === filterDeptId);
+    }, [teamsForTask, filterDeptId]);
+
+    // Filtered employees based on department and team
+    const filteredEmployees = useMemo(() => {
+        let list = eligibleEmployees;
+        if (filterDeptId) {
+            list = list.filter(e => e.departmentId === filterDeptId);
         }
+        if (filterTeamId) {
+            const team = teamsForTask.find(t => t.id === filterTeamId);
+            list = list.filter(e => e.teamId === filterTeamId || (team?.memberIds && team.memberIds.includes(e.accountId)));
+        }
+        if (singleSearch.trim()) {
+            const q = singleSearch.toLowerCase();
+            list = list.filter(e =>
+                e.employeeName.toLowerCase().includes(q) ||
+                (e.department && e.department.toLowerCase().includes(q)) ||
+                (e.teamName && e.teamName.toLowerCase().includes(q))
+            );
+        }
+        return list;
+    }, [eligibleEmployees, filterDeptId, filterTeamId, singleSearch, teamsForTask]);
+
+    const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const val = e.target.value;
+        setForm(prev => ({ ...prev, [k]: val }));
+        setFormError('');
+        const msg = validateField(k, val);
+        setErrors(prev => ({ ...prev, [k]: msg || '' }));
     };
 
-    // -- Validate all fields on submit -------------------------------------
+    const validateField = (name: string, val: any): string => {
+        if (name === 'taskTitle') {
+            if (!val || !val.trim()) return 'Task title is required.';
+            if (val.trim().length < 3) return 'Task title must be at least 3 characters.';
+            if (val.trim().length > 150) return 'Task title cannot exceed 150 characters.';
+        }
+        if (name === 'taskDescription') {
+            if (!val || !val.trim()) return 'Task description is required.';
+            if (val.trim().length < 5) return 'Task description must be at least 5 characters.';
+            if (val.trim().length > 2000) return 'Task description cannot exceed 2000 characters.';
+        }
+        if (name === 'dueAt') {
+            if (!val) return 'Due date is required.';
+            const d = new Date(val);
+            if (isNaN(d.getTime())) return 'Invalid due date.';
+            const now = new Date();
+            if (d < now) return 'Due date cannot be in the past.';
+            if (form.priority === 'High') {
+                const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+                if (d > maxHigh) return 'High priority deadline must be within 1 to 2 days only from current date.';
+            } else if (form.priority === 'Medium') {
+                const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                if (d > maxMed) return 'Medium priority deadline must be within 1 week (7 days) from current date.';
+            }
+        }
+        if (name === 'priority') {
+            if (!val) return 'Priority is required.';
+        }
+        if (name === 'assignedTo' && form.assignmentScope === 'SingleEmployee') {
+            if (!val) return 'Please select an employee.';
+        }
+        if (name === 'assignedTo' && form.assignmentScope === 'Team') {
+            if (!selectedTeamId) return 'Please select a team.';
+        }
+        if (name === 'assignedDepartmentId' && form.assignmentScope === 'Department') {
+            if (!val) return 'Please select a department.';
+        }
+        return '';
+    };
+
     const validateAll = (): boolean => {
-        const newErrors: Record<string, string> = {};
-        (['taskTitle', 'taskDescription', 'dueAt', 'priority', 'classification'] as const).forEach(key => {
-            const msg = validateField(key, String(form[key] ?? ''));
-            if (msg) newErrors[key] = msg;
-        });
-        if (form.assignmentScope === 'SingleEmployee' && !form.assignedTo) {
-            newErrors.assignedTo = 'Task must be assigned to at least one employee.';
-        }
-        if (form.assignmentScope === 'Team' && !selectedTeamId) {
-            newErrors.assignedTo = 'Select a team to assign the task to.';
-        }
-        if (form.assignmentScope === 'Department' && !form.assignedDepartmentId) {
-            newErrors.assignedDepartmentId = 'Select a department.';
-        }
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    // -- Live change handler -----------------------------------------------
-    const set = (key: keyof typeof form) =>
-        (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-            const value = e.target.value;
-            setForm(prev => ({ ...prev, [key]: value }));
-            setFormError('');
-            const msg = validateField(key, value);
-            setErrors(prev => ({ ...prev, [key]: msg || '' }));
+        const errs: Record<string, string> = {
+            taskTitle: validateField('taskTitle', form.taskTitle),
+            taskDescription: validateField('taskDescription', form.taskDescription),
+            dueAt: validateField('dueAt', form.dueAt),
+            priority: validateField('priority', form.priority),
         };
-
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const minDateTime = todayStart.toISOString().slice(0, 16);
-
-    const PRIORITY_MAP: Record<string, number> = { Urgent: 3, High: 2, Medium: 1, Low: 0 };
-    const SCOPE_MAP: Record<string, number> = { SingleEmployee: 0, Team: 1, Department: 2 };
-    const isUrgent = form.priority === 'Urgent';
-    const slaLocked = isUrgent || isSLAEditLock;
-    const getSlaDeadline = () => {
-        const d = new Date();
-        d.setHours(d.getHours() + 24);
-        return d;
+        if (form.assignmentScope === 'SingleEmployee') {
+            errs.assignedTo = validateField('assignedTo', form.assignedTo);
+        } else if (form.assignmentScope === 'Team') {
+            errs.assignedTo = validateField('assignedTo', selectedTeamId);
+        } else if (form.assignmentScope === 'Department') {
+            errs.assignedDepartmentId = validateField('assignedDepartmentId', form.assignedDepartmentId);
+        }
+        const cleaned = Object.fromEntries(Object.entries(errs).filter(([, v]) => !!v));
+        setErrors(cleaned);
+        return Object.keys(cleaned).length === 0;
     };
 
     const handleSave = async () => {
-        if (!validateAll()) return;
-
-        // FR-065: Pre-submit availability validation
-        if (form.assignmentScope === 'SingleEmployee' && form.assignedTo) {
-            const emp = eligibleEmployees.find(e => e.accountId === form.assignedTo);
-            if (emp && !emp.isAvailable) {
-                setFormError(`${emp.employeeName} is currently ${emp.availabilityStatus} and cannot be assigned.`);
-                return;
-            }
+        if (!validateAll()) {
+            setFormError('Please resolve the highlighted validation errors before saving.');
+            return;
         }
-        if (form.assignmentScope === 'Team' && selectedTeamId) {
-            // Assignees are resolved server-side from the team's members.
-        }
-
         setSubmitting(true);
-        const scopeNum = SCOPE_MAP[form.assignmentScope] ?? 0;
-        let assignedUserIds: string[] | undefined;
-        let assignedDepartmentId: string | undefined;
+        setFormError('');
 
-        if (form.assignmentScope === 'SingleEmployee') {
-            assignedUserIds = form.assignedTo ? [form.assignedTo] : undefined;
-        } else if (form.assignmentScope === 'Team') {
-            // Assignees are resolved server-side from the team's members.
-            assignedUserIds = undefined;
-        } else if (form.assignmentScope === 'Department') {
-            assignedDepartmentId = form.assignedDepartmentId || undefined;
-        }
+        const scopeMap = { SingleEmployee: 0, Team: 1, Department: 2 };
+        const prioMap = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
 
-        const payload: CreateTaskDTO = {
+        const payload: any = {
             title: form.taskTitle.trim(),
             description: form.taskDescription.trim(),
-            priorityLevel: PRIORITY_MAP[form.priority] ?? 1,
-            classification: form.classification,
-            assignmentScope: scopeNum,
+            priorityLevel: prioMap[form.priority] ?? 1,
+            classification: 0,
+            assignmentScope: scopeMap[form.assignmentScope] ?? 0,
             deadline: form.dueAt ? new Date(form.dueAt).toISOString() : null,
-            assignedUserIds,
-            assignedDepartmentId,
-            teamId: form.assignmentScope === 'Team' ? selectedTeamId || undefined : undefined,
             isConfidential: form.isConfidential,
+            assignedUserIds: form.assignmentScope === 'SingleEmployee' && form.assignedTo ? [form.assignedTo] : [],
+            teamId: form.assignmentScope === 'Team' ? selectedTeamId || undefined : undefined,
+            assignedDepartmentId: form.assignmentScope === 'Department' ? form.assignedDepartmentId || undefined : undefined,
         };
+
         if (supportingEvidenceFiles.length > 0) {
             onFileChange?.(supportingEvidenceFiles);
         }
@@ -1094,31 +1151,56 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                         <div className="field">
                             <label>
                                 Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
+                                {deadlineRange.maxDate && (
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                        Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                )}
                             </label>
                             <input
                                 type="datetime-local"
                                 value={form.dueAt}
                                 onChange={slaLocked ? undefined : set('dueAt')}
-                                min={minDateTime}
+                                min={deadlineRange.min}
+                                max={deadlineRange.max}
                                 readOnly={slaLocked}
                                 className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${slaLocked ? ' input-sla-locked' : ''}`}
                                 style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
                             />
                             <FieldErr name="dueAt" />
-                            {slaLocked && (
-                                <span style={{ fontSize: 11, color: '#7c1d1d', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <Lock size={11} /> SLA enforced — deadline locked to 24 hours from creation
+                            {deadlineRange.helperText && (
+                                <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
+                                    {deadlineRange.helperText}
                                 </span>
                             )}
-                            {!slaLocked && !errors.dueAt && form.dueAt && (
-                                <span style={{ fontSize: 11, color: 'var(--status-active)', marginTop: 3, display: 'block' }}>
-                                    ✓ {new Date(form.dueAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                            )}
-                            {!slaLocked && !form.dueAt && !errors.dueAt && (
-                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
-                                    Cannot be in the past.
-                                </span>
+                            {quickPicks.length > 0 && !slaLocked && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
+                                    {quickPicks.map(qp => (
+                                        <button
+                                            key={qp.label}
+                                            type="button"
+                                            onClick={() => {
+                                                const target = new Date(Date.now() + qp.hours * 60 * 60 * 1000);
+                                                const formatted = formatDateForInput(target);
+                                                setForm(p => ({ ...p, dueAt: formatted }));
+                                                setErrors(p => ({ ...p, dueAt: '' }));
+                                            }}
+                                            style={{
+                                                fontSize: 10.5,
+                                                padding: '2px 7px',
+                                                borderRadius: 4,
+                                                border: '1px solid #cbd5e1',
+                                                background: '#f8fafc',
+                                                color: '#334155',
+                                                cursor: 'pointer',
+                                                fontWeight: 500
+                                            }}
+                                        >
+                                            {qp.label}
+                                        </button>
+                                    ))}
+                                </div>
                             )}
                         </div>
                         <div className="field">
@@ -1128,19 +1210,30 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                             <select
                                 value={form.priority}
                                 onChange={e => {
-                                    const val = e.target.value;
-                                    setForm(prev => ({ ...prev, priority: val as Priority, dueAt: val === 'Urgent' ? getSlaDeadline().toISOString().slice(0, 16) : prev.dueAt }));
+                                    const val = e.target.value as Priority;
+                                    const range = getPriorityDeadlineRange(val);
+                                    let newDueAt = form.dueAt;
+                                    if (val === 'Urgent') {
+                                        const sla = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                                        newDueAt = formatDateForInput(sla);
+                                    } else if (range.maxDate && form.dueAt) {
+                                        const curr = new Date(form.dueAt);
+                                        if (curr > range.maxDate) {
+                                            newDueAt = formatDateForInput(range.maxDate);
+                                        }
+                                    }
+                                    setForm(prev => ({ ...prev, priority: val, dueAt: newDueAt }));
                                     setFormError('');
                                     const msg = validateField('priority', val);
-                                    setErrors(prev => ({ ...prev, priority: msg || '' }));
+                                    setErrors(prev => ({ ...prev, priority: msg || '', dueAt: '' }));
                                 }}
                                 className={errors.priority ? 'input-error' : ''}
                             >
                                 <option value="">Select priority</option>
                                 <option value="Urgent">🔴 Urgent</option>
-                                <option value="High">🟠 High</option>
-                                <option value="Medium">🟡 Medium</option>
-                                <option value="Low">🟢 Low</option>
+                                <option value="High">🟠 High (1-2 days)</option>
+                                <option value="Medium">🟡 Medium (within 1 week)</option>
+                                <option value="Low">🟢 Low (any future date)</option>
                             </select>
                             <FieldErr name="priority" />
                             {!errors.priority && form.priority && (
@@ -1148,41 +1241,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                     fontSize: 11, marginTop: 3, display: 'block',
                                     color: form.priority === 'Urgent' ? '#7c1d1d' : form.priority === 'High' ? 'var(--status-failed)' : form.priority === 'Medium' ? 'var(--status-pending)' : 'var(--status-active)',
                                 }}>
-                                    {form.priority === 'Urgent' && '🔴 Urgent — requires immediate attention'}
-                                    {form.priority === 'High' && '🟠 High priority — will be flagged for urgent attention'}
-                                    {form.priority === 'Medium' && '🟡 Medium priority selected'}
-                                    {form.priority === 'Low' && '🟢 Low priority selected'}
+                                    {form.priority === 'Urgent' && '🔴 Urgent — 24h SLA enforced'}
+                                    {form.priority === 'High' && '🟠 High — Deadline restricted to 1–2 days'}
+                                    {form.priority === 'Medium' && '🟡 Medium — Deadline restricted to 1 week'}
+                                    {form.priority === 'Low' && '🟢 Low — Any future deadline allowed'}
                                 </span>
                             )}
                         </div>
-                    </div>
-
-                    {/* -- Classification -- */}
-                    <div className="field">
-                        <label>Classification <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            {CLASSIFICATION_OPTIONS.map(opt => (
-                                <label
-                                    key={opt.value}
-                                    onClick={() => { setForm(prev => ({ ...prev, classification: opt.value })); setErrors(prev => ({ ...prev, classification: '' })); }}
-                                    style={{
-                                        flex: 1, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
-                                        fontSize: '0.85rem', fontWeight: 600,
-                                        border: `1.5px solid ${form.classification === opt.value ? 'var(--primary)' : 'var(--border)'}`,
-                                        background: form.classification === opt.value ? 'var(--teal-bg, rgba(0,169,157,0.06))' : 'var(--bg-main)',
-                                        color: form.classification === opt.value ? 'var(--primary)' : 'var(--text-secondary)',
-                                        transition: 'border-color 0.15s, background 0.15s, color 0.15s',
-                                        fontFamily: 'inherit',
-                                    }}
-                                >
-                                    <input type="radio" name="classification" value={opt.value}
-                                        checked={form.classification === opt.value}
-                                        onChange={() => { }} style={{ display: 'none' }} />
-                                    {opt.label}
-                                </label>
-                            ))}
-                        </div>
-                        <FieldErr name="classification" />
                     </div>
 
                     {/* -- Task Category -- */}
@@ -1332,7 +1397,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                         <div className="sr-header">
                             <div className="sr-title-row">
                                 <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
-                                    Assignment
+                                    Assignment Scope &amp; Target
                                 </span>
                             </div>
                         </div>
@@ -1366,6 +1431,37 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                         <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
                                     </div>
                                 )}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                    <div>
+                                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
+                                        <select
+                                            value={filterDeptId}
+                                            onChange={e => {
+                                                setFilterDeptId(e.target.value);
+                                                setFilterTeamId('');
+                                            }}
+                                            style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                        >
+                                            <option value="">All Departments</option>
+                                            {departments.map(d => (
+                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Team Filter</label>
+                                        <select
+                                            value={filterTeamId}
+                                            onChange={e => setFilterTeamId(e.target.value)}
+                                            style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                        >
+                                            <option value="">All Teams {filterDeptId ? 'in Department' : ''}</option>
+                                            {availableTeams.map(t => (
+                                                <option key={t.id} value={t.id}>{t.name} ({t.memberCount})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                                 <input
                                     type="text"
                                     className="emp-picker-search"
@@ -1373,13 +1469,9 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                     value={singleSearch}
                                     onChange={e => setSingleSearch(e.target.value)}
                                 />
-                                {eligibleEmployees.length > 0 ? (
+                                {filteredEmployees.length > 0 ? (
                                     <div className="emp-picker-list">
-                                        {(singleSearch
-                                            ? eligibleEmployees.filter(e =>
-                                                e.employeeName.toLowerCase().includes(singleSearch.toLowerCase()))
-                                            : eligibleEmployees
-                                        ).map(e => {
+                                        {filteredEmployees.map(e => {
                                             const isSelected = form.assignedTo === e.accountId;
                                             const isRecommended = recommendation?.accountId === e.accountId;
                                             const disabled = !e.isAvailable;
@@ -1395,6 +1487,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                                             <span className={`emp-picker-dot ${e.isAvailable ? 'active' : e.availabilityStatus === 'Offline' ? 'offline' : 'leave'}`} />
                                                             <span>{e.availabilityStatus}</span>
                                                             <span>{e.workload} tasks</span>
+                                                            {e.department && <span style={{ color: '#64748b' }}>• {e.department}</span>}
+                                                            {e.teamName && <span style={{ color: '#0284c7' }}>• {e.teamName}</span>}
                                                         </div>
                                                     </div>
                                                     {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
@@ -1404,7 +1498,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="emp-picker-empty">No eligible employees found for assignment.</div>
+                                    <div className="emp-picker-empty">No eligible employees found for assignment matching filters.</div>
                                 )}
                                 <FieldErr name="assignedTo" />
                                 {!errors.assignedTo && form.assignedTo && (
@@ -1416,6 +1510,22 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                         {/* -- Team: pick a team from Team Management -- */}
                         {form.assignmentScope === 'Team' && (
                             <div className="field" style={{ marginBottom: 0 }}>
+                                <div style={{ marginBottom: 8 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
+                                    <select
+                                        value={filterDeptId}
+                                        onChange={e => {
+                                            setFilterDeptId(e.target.value);
+                                            setSelectedTeamId('');
+                                        }}
+                                        style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                    >
+                                        <option value="">All Departments</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <label>Team <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
                                 <select
                                     value={selectedTeamId}
@@ -1423,13 +1533,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ mode, initial = {}, teamMembers, 
                                     className={errors.assignedTo ? 'input-error' : ''}
                                 >
                                     <option value="">Select team</option>
-                                    {teamsForTask.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name} ({t.memberCount} member{t.memberCount !== 1 ? 's' : ''})</option>
+                                    {availableTeams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name} ({t.memberCount} member{t.memberCount !== 1 ? 's' : ''}){t.departmentName ? ` — ${t.departmentName}` : ''}</option>
                                     ))}
                                 </select>
-                                {teamsForTask.length === 0 && (
+                                {availableTeams.length === 0 && (
                                     <div style={{ fontSize: 11, color: 'var(--status-warn, #d97706)', marginTop: 4 }}>
-                                        None — no teams have been created yet in Team Management.
+                                        None — no teams {filterDeptId ? 'under selected department' : 'created yet'}.
                                     </div>
                                 )}
                                 <FieldErr name="assignedTo" />
@@ -3861,13 +3971,14 @@ const DateRangeEngineField: React.FC<{
     dateRangeEnd: string;
     onChange: (start: string, end: string) => void;
     label?: string;
-}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range Engine' }) => {
+    showFiscalYear?: boolean;
+}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range Engine', showFiscalYear = false }) => {
     const [activeChunk, setActiveChunk] = useState<TimeChunk>('Monthly');
     const [activeYearType, setActiveYearType] = useState<YearType>('Calendar');
 
     const handleChunkChange = (chunk: TimeChunk) => {
         setActiveChunk(chunk);
-        const { start, end } = computeDateRange(chunk, activeYearType);
+        const { start, end } = computeDateRange(chunk, showFiscalYear ? activeYearType : 'Calendar');
         onChange(start, end);
     };
 
@@ -3879,17 +3990,17 @@ const DateRangeEngineField: React.FC<{
 
     return (
         <div className="field" style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{label}</span>
+            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontWeight: 600 }}>{label}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                    Pick 1: Time Chunk • Pick 2: Year Type
+                    {showFiscalYear ? 'Pick Preset Period • Year Type' : 'Pick Preset Period'}
                 </span>
             </label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
                 <button
                     type="button"
                     className={`filter-pill${activeChunk === 'Monthly' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
                     onClick={() => handleChunkChange('Monthly')}
                 >
                     Monthly
@@ -3897,7 +4008,7 @@ const DateRangeEngineField: React.FC<{
                 <button
                     type="button"
                     className={`filter-pill${activeChunk === 'Quarterly' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
                     onClick={() => handleChunkChange('Quarterly')}
                 >
                     Quarterly
@@ -3905,44 +4016,48 @@ const DateRangeEngineField: React.FC<{
                 <button
                     type="button"
                     className={`filter-pill${activeChunk === 'Annual' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
                     onClick={() => handleChunkChange('Annual')}
                 >
                     Annual
                 </button>
-                <span style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px', alignSelf: 'center' }} />
-                <button
-                    type="button"
-                    className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '6px 14px' }}
-                    onClick={() => handleYearTypeChange('Calendar')}
-                    title="Calendar Year (Jan 1 - Dec 31)"
-                >
-                    Calendar Year
-                </button>
-                <button
-                    type="button"
-                    className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '6px 14px' }}
-                    onClick={() => handleYearTypeChange('Fiscal')}
-                    title="Speedex Accounting Year: Oct 1 - Sep 30"
-                >
-                    Fiscal Year (Oct-Sep)
-                </button>
+                {showFiscalYear && (
+                    <>
+                        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 4px', alignSelf: 'center' }} />
+                        <button
+                            type="button"
+                            className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
+                            onClick={() => handleYearTypeChange('Calendar')}
+                            title="Calendar Year (Jan 1 - Dec 31)"
+                        >
+                            Calendar Year
+                        </button>
+                        <button
+                            type="button"
+                            className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
+                            onClick={() => handleYearTypeChange('Fiscal')}
+                            title="Speedex Accounting Year: Oct 1 - Sep 30"
+                        >
+                            Fiscal Year (Oct-Sep)
+                        </button>
+                    </>
+                )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ flex: 1, padding: '6px 10px', fontSize: 13 }}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 13, borderRadius: 6 }}
                     value={dateRangeStart}
                     onChange={e => onChange(e.target.value, dateRangeEnd)}
                 />
-                <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>to</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>to</span>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ flex: 1, padding: '6px 10px', fontSize: 13 }}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 13, borderRadius: 6 }}
                     value={dateRangeEnd}
                     onChange={e => onChange(dateRangeStart, e.target.value)}
                 />
@@ -4266,14 +4381,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
-    const tcChartData = tcReport
-        ? [
-            { name: 'Completed', value: tcReport.totalTasksCompleted, fill: 'var(--status-active)' },
-            { name: 'In Progress', value: tcReport.totalTasksInProgress, fill: 'var(--status-pending)' },
-            { name: 'Pending Review', value: tcReport.totalTasksPendingReview, fill: 'var(--primary)' },
-            { name: 'Overdue', value: tcReport.totalOverdueTasks, fill: 'var(--status-failed)' },
-        ].filter(d => d.value > 0) : [];
-
     // --- Operational Summary State (Part 1 & 2: SLA & Workload Balance) ---
     const initialOpDates = useMemo(() => computeDateRange('Monthly'), []);
     const [opFilter, setOpFilter] = useState<OperationalFilter>({
@@ -4490,10 +4597,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             );
             success('FOMS task records exported successfully.');
         } catch (err: any) {
-            const msg = await readBlobError(err, 'FOMS export failed. Please try again.');
-            error(msg);
+            error(err?.response?.data?.message || err?.message || 'Failed to export FOMS data.');
         } finally {
-            setFinancialExporting(false);
+            setLoading(false);
         }
     };
 
@@ -4547,35 +4653,110 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     }, [financialReport?.invoices, financialPage]);
     const totalFinancialPages = Math.ceil((financialReport?.invoices?.length || 0) / REPORT_PAGE_SIZE);
 
+    // Auto-load initial report data on mount or tab change
+    useEffect(() => {
+        if (reportSubTab === 'kpi-tracking' && !kpiData && !kpiLoading && !kpiError) {
+            handleKpiGenerate();
+        } else if (reportSubTab === 'task-completion' && !tcReport && !tcLoading && !tcError) {
+            handleTcGenerate();
+        } else if (reportSubTab === 'operational-summary' && !opReport && !opLoading && !opError) {
+            handleOpGenerate();
+        } else if (reportSubTab === 'performance-report' && !prData && !prLoading && !prError) {
+            handlePrGenerate();
+        } else if (reportSubTab === 'foms-export' && !financialReport && !financialLoading && !financialError) {
+            handleFinancialGenerate();
+        }
+    }, [reportSubTab]);
+
+    // Chart Data Helpers
+    const [selectedPrEmpId, setSelectedPrEmpId] = useState<string>('');
+
+    const formatReportDateTime = (d?: string | Date | null) => {
+        if (!d) return '—';
+        try {
+            const dt = new Date(d);
+            if (isNaN(dt.getTime())) return '—';
+            return dt.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        } catch {
+            return '—';
+        }
+    };
+
+    const selectedPrEmp = useMemo(() => {
+        const targetId = selectedPrEmpId || prFilter.employeeId;
+        if (!targetId) return null;
+        return prData?.employeeBreakdown?.find((e: any) => String(e.employeeId) === targetId) || null;
+    }, [selectedPrEmpId, prFilter.employeeId, prData?.employeeBreakdown]);
+
+    const tcChartData = useMemo(() => {
+        if (!tcReport) return [];
+        return [
+            { name: 'Completed', value: tcReport.totalTasksCompleted || 0, fill: '#05cd99' },
+            { name: 'In Progress', value: tcReport.totalTasksInProgress || 0, fill: '#ffb547' },
+            { name: 'Pending Review', value: tcReport.totalTasksPendingReview || 0, fill: '#4318ff' },
+            { name: 'Overdue', value: tcReport.totalOverdueTasks || 0, fill: '#ee5d50' },
+        ].filter(d => d.value > 0);
+    }, [tcReport]);
+
+    const tcPriorityChartData = useMemo(() => {
+        if (!tcReport?.tasks) return [];
+        const counts: Record<string, number> = { Urgent: 0, High: 0, Medium: 0, Low: 0 };
+        for (const t of tcReport.tasks) {
+            const p = t.priority || 'Medium';
+            counts[p] = (counts[p] || 0) + 1;
+        }
+        return [
+            { name: 'Urgent', count: counts['Urgent'], fill: '#ee5d50' },
+            { name: 'High', count: counts['High'], fill: '#ffb547' },
+            { name: 'Medium', count: counts['Medium'], fill: '#4318ff' },
+            { name: 'Low', count: counts['Low'], fill: '#05cd99' },
+        ];
+    }, [tcReport?.tasks]);
+
     return (
-        <div className="dashboard-content" style={{ padding: 0 }}>
+        <div className="dashboard-content reports-dashboard-content">
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
                     { key: 'task-completion', label: 'Task Completion Report', icon: <FileText size={14} /> },
-                    { key: 'operational-summary', label: 'Operational Report', icon: <BarChart3 size={14} /> },
-                    { key: 'performance-report', label: 'Performance Report', icon: <BarChart3 size={14} /> },
+                    { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
+                    { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
                     { key: 'foms-export', label: 'Financial Report (FOMS)', icon: <DollarSign size={14} /> },
                 ]}
                 activeTab={reportSubTab}
-                onTabChange={key => setReportSubTab(key as 'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary')}
+                onTabChange={key => {
+                    setSelectedPrEmpId('');
+                    setReportSubTab(key as 'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary');
+                }}
             />
 
             {/* 1. KPI Tracking */}
             {reportSubTab === 'kpi-tracking' && (
                 <>
                     <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>KPI Tracking</h3>
+                        <div style={{ marginBottom: 14 }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                📊 KPI Tracking &amp; SLA Performance
+                            </h3>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Track on-time task delivery rates, identify overdue trends, and evaluate employee SLA compliance.
+                            </p>
                         </div>
                         <div className="report-filter-grid">
                             <DateRangeEngineField
                                 dateRangeStart={kpiFilter.dateRangeStart}
                                 dateRangeEnd={kpiFilter.dateRangeEnd}
                                 onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                showFiscalYear={false}
                             />
                             <div className="field">
-                                <label>Employee</label>
+                                <label>Employee Filter</label>
                                 <SearchableSelect
                                     value={kpiFilter.employeeId}
                                     onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
@@ -4586,8 +4767,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 />
                             </div>
                             <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handleKpiGenerate} disabled={kpiLoading}>
-                                    {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
+                                <button className="btn btn-primary" onClick={handleKpiGenerate} disabled={kpiLoading} style={{ width: '100%', height: 38 }}>
+                                    {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
                         </div>
@@ -4616,16 +4797,73 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="stats-row" style={{ marginTop: 16 }}>
                                 {[
                                     { label: 'Total Completed', value: kpiData.totalCompletedTasks, icon: <CheckCircle2 size={18} />, variant: 'teal', subtext: 'Completed tasks' },
-                                    { label: 'On-Time', value: kpiData.totalOnTimeTasks, icon: <CheckCircle2 size={18} />, variant: 'success', subtext: `${kpiData.overallOnTimeRate}% rate` },
-                                    { label: 'Late', value: kpiData.totalLateTasks, icon: <AlertCircle size={18} />, variant: 'danger', subtext: `${kpiData.overallLateRate}% rate` },
+                                    { label: 'On-Time Tasks', value: kpiData.totalOnTimeTasks, icon: <CheckCircle2 size={18} />, variant: 'success', subtext: `${kpiData.overallOnTimeRate}% on-time rate` },
+                                    { label: 'Late Tasks', value: kpiData.totalLateTasks, icon: <AlertCircle size={18} />, variant: 'danger', subtext: `${kpiData.overallLateRate}% late rate` },
                                 ].map(s => (
                                     <StatusCard key={s.label} icon={s.icon} variant={s.variant as any} label={s.label} value={s.value} subtext={s.subtext} />
                                 ))}
                             </div>
 
+                            {/* Visual Graphs for KPI Tracking */}
+                            <div className="report-charts-grid">
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>On-Time vs. Late Breakdown</h4>
+                                        <span className="badge badge-teal">Overall Compliance</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={[
+                                                        { name: 'On-Time Tasks', value: kpiData.totalOnTimeTasks || 0 },
+                                                        { name: 'Late Tasks', value: kpiData.totalLateTasks || 0 },
+                                                    ]}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={55}
+                                                    outerRadius={80}
+                                                    paddingAngle={4}
+                                                    dataKey="value"
+                                                >
+                                                    <Cell fill="#05cd99" />
+                                                    <Cell fill="#ee5d50" />
+                                                </Pie>
+                                                <Tooltip formatter={(val: any) => [`${val} tasks`, 'Count']} />
+                                                <Legend verticalAlign="bottom" height={36} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Completion Breakdown</h4>
+                                        <span className="badge badge-blue">Top Contributors</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={kpiData.employeeKpis?.slice(0, 7).map((e: any) => ({
+                                                name: e.employeeName.split(' ')[0],
+                                                'On-Time': e.onTimeCount || 0,
+                                                'Late': e.lateCount || 0,
+                                            })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="On-Time" fill="#05cd99" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="Late" fill="#ee5d50" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
-                                    <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Per-Employee Breakdown</h3>
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Per-Employee Breakdown</h4>
                                     {kpiData.employeeKpis && <span className="badge badge-blue">{kpiData.employeeKpis.length} employees</span>}
                                 </div>
                                 {kpiData.employeeKpis && kpiData.employeeKpis.length > 0 ? (
@@ -4693,21 +4931,27 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {/* 2. Task Completion Report (Part 1: Granular Task Logs + Multi-format Export) */}
+            {/* 2. Task Completion Report */}
             {reportSubTab === 'task-completion' && (
                 <>
                     <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Task Completion Reports</h3>
+                        <div style={{ marginBottom: 14 }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                📋 Task Completion Reports &amp; Logs
+                            </h3>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Audit granular task completion logs, individual performance metrics, and export data.
+                            </p>
                         </div>
                         <div className="report-filter-grid">
                             <DateRangeEngineField
                                 dateRangeStart={tcFilter.dateRangeStart}
                                 dateRangeEnd={tcFilter.dateRangeEnd}
                                 onChange={(start, end) => setTcFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                                showFiscalYear={false}
                             />
                             <div className="field">
-                                <label>Employee</label>
+                                <label>Employee Filter</label>
                                 <SearchableSelect
                                     value={tcFilter.employeeId}
                                     onChange={val => setTcFilter(p => ({ ...p, employeeId: val }))}
@@ -4771,79 +5015,151 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="IN PROGRESS" value={String(tcReport.totalTasksInProgress)} subtext="Ongoing" />
                                 <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant='teal' label="PENDING REVIEW" value={String(tcReport.totalTasksPendingReview)} subtext="Awaiting review" />
                                 <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={String(tcReport.totalOverdueTasks)} subtext="Past deadline" />
-                                <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${tcReport.taskCompletionRate}%`} subtext="Part 2 KPI" />
-                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${tcReport.overallOnTimeRate ?? 0}%`} subtext="Part 2 KPI" />
-                                <StatusCard icon={<Calendar size={20} strokeWidth={2.3} />} variant="warning" label="AVG TIME" value={`${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}h`} subtext="Per task" />
+                                <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${tcReport.taskCompletionRate}%`} subtext="Completion rate" />
+                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${tcReport.overallOnTimeRate ?? 0}%`} subtext="On-time delivery" />
+                                <StatusCard icon={<Calendar size={20} strokeWidth={2.3} />} variant="warning" label="AVG TIME" value={`${(tcReport.averageTaskCompletionTimeHours ?? 0).toFixed(1)}h`} subtext="Per task avg" />
                             </div>
 
-                            {/* Part 1: Granular Task Logs ("Who did it, when, was it late") */}
+                            {/* Visual Charts for Task Completion */}
+                            <div className="report-charts-grid">
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Task Status Distribution</h4>
+                                        <span className="badge badge-teal">Status Breakdown</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        {tcChartData.length === 0 ? (
+                                            <div className="report-empty-state"><p>No status data available.</p></div>
+                                        ) : (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={tcChartData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={50}
+                                                        outerRadius={75}
+                                                        paddingAngle={3}
+                                                        dataKey="value"
+                                                    >
+                                                        {tcChartData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Tasks by Priority</h4>
+                                        <span className="badge badge-blue">Priority Distribution</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={tcPriorityChartData} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} />
+                                                <Tooltip />
+                                                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                                                    {tcPriorityChartData.map((entry, idx) => (
+                                                        <Cell key={`prio-${idx}`} fill={entry.fill} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Granular Task Logs */}
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
-                                    <h3>Task Logs & Granular Completion ({tcReport.tasks?.length || 0} tasks)</h3>
-                                    <span className="badge badge-blue">Part 1 Logs</span>
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Granular Task Execution Logs ({tcReport.tasks?.length || 0} tasks)</h4>
+                                    <span className="badge badge-blue">Who did it • When updated • Timeliness</span>
                                 </div>
                                 {tcReport.tasks && tcReport.tasks.length > 0 ? (
                                     <>
                                         <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th>Task Title</th>
-                                                <th>Assigned To</th>
-                                                <th>Department</th>
-                                                <th style={{ textAlign: 'center' }}>Priority</th>
-                                                <th>Deadline</th>
-                                                <th>Completed At</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time Status</th>
-                                                <th style={{ textAlign: 'center' }}>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {pagedTcTasks.map((task) => (
-                                                <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>
-                                                        <div>{task.title}</div>
-                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Ref: {task.taskReferenceNumber}</div>
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px' }}>{task.assignedEmployee || 'Unassigned'}</td>
-                                                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{task.department || 'N/A'}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                        <span className={`badge ${task.priority === 'Urgent' ? 'badge-red' : task.priority === 'High' ? 'badge-amber' : 'badge-blue'}`}>
-                                                            {task.priority}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
-                                                        {task.deadline ? new Date(task.deadline).toLocaleDateString() : 'N/A'}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
-                                                        {task.completedAt ? new Date(task.completedAt).toLocaleDateString() : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                        <span style={{
-                                                            display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                            fontSize: 12, fontWeight: 700,
-                                                            background: task.isOnTime ? 'rgba(5,205,153,0.12)' : 'rgba(238,93,80,0.12)',
-                                                            color: task.isOnTime ? 'var(--status-active)' : 'var(--status-failed)',
-                                                        }}>
-                                                            {task.isOnTime ? 'On-Time' : `Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
-                                                        <span className="badge badge-teal">{task.status}</span>
-                                                    </td>
+                                            <thead>
+                                                <tr>
+                                                    <th>Task Ref &amp; Title</th>
+                                                    <th>Assigned / Completed By</th>
+                                                    <th>Department</th>
+                                                    <th style={{ textAlign: 'center' }}>Priority</th>
+                                                    <th>Deadline</th>
+                                                    <th>Last Updated / Completed</th>
+                                                    <th style={{ textAlign: 'center' }}>Timeliness Status</th>
+                                                    <th style={{ textAlign: 'center' }}>Current Status</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                            Showing {Math.min((tcLogsPage - 1) * REPORT_PAGE_SIZE + 1, tcReport.tasks.length)}–{Math.min(tcLogsPage * REPORT_PAGE_SIZE, tcReport.tasks.length)} of {tcReport.tasks.length} records
-                                        </span>
-                                        <Pagination
-                                            currentPage={tcLogsPage}
-                                            totalPages={totalTcLogPages}
-                                            onPageChange={setTcLogsPage}
-                                        />
-                                    </div>
+                                            </thead>
+                                            <tbody>
+                                                {pagedTcTasks.map((task) => {
+                                                    const isCompleted = task.status === 'Completed';
+                                                    const isOverdue = !isCompleted && !task.isOnTime;
+                                                    return (
+                                                        <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                                                                <div>{task.title}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>Ref: {task.taskReferenceNumber}</div>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                                                                    <User size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                                                    <span>{task.assignedEmployee || 'Unassigned'}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{task.department || 'N/A'}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <span className={`badge ${task.priority === 'Urgent' ? 'badge-red' : task.priority === 'High' ? 'badge-amber' : 'badge-blue'}`}>
+                                                                    {task.priority}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                                {formatReportDateTime(task.deadline)}
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                                {formatReportDateTime(task.completedAt || (task as any).updatedAt)}
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block', padding: '3px 10px', borderRadius: 999,
+                                                                    fontSize: 12, fontWeight: 700,
+                                                                    background: isCompleted
+                                                                        ? (task.isOnTime ? 'rgba(5,205,153,0.12)' : 'rgba(238,93,80,0.12)')
+                                                                        : (isOverdue ? 'rgba(238,93,80,0.12)' : 'rgba(255,181,71,0.12)'),
+                                                                    color: isCompleted
+                                                                        ? (task.isOnTime ? 'var(--status-active)' : 'var(--status-failed)')
+                                                                        : (isOverdue ? 'var(--status-failed)' : 'var(--status-pending)'),
+                                                                }}>
+                                                                    {isCompleted
+                                                                        ? (task.isOnTime ? '✅ On-Time' : `⏰ Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`)
+                                                                        : (isOverdue ? `⚠️ Overdue ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}` : '⏳ In Progress')}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
+                                                                <span className="badge badge-teal">{task.status}</span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                Showing {Math.min((tcLogsPage - 1) * REPORT_PAGE_SIZE + 1, tcReport.tasks.length)}–{Math.min(tcLogsPage * REPORT_PAGE_SIZE, tcReport.tasks.length)} of {tcReport.tasks.length} records
+                                            </span>
+                                            <Pagination
+                                                currentPage={tcLogsPage}
+                                                totalPages={totalTcLogPages}
+                                                onPageChange={setTcLogsPage}
+                                            />
+                                        </div>
                                     </>
                                 ) : (
                                     <div className="empty-state" style={{ padding: '32px 0' }}>
@@ -4874,26 +5190,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </DataTable>
                             </div>
 
-                            <div className="card" style={{ marginTop: 16 }}>
-                                <div className="card-header-layout"><h3>Task Status Distribution</h3></div>
-                                {tcChartData.length === 0 ? (
-                                    <div className="report-empty-state" style={{ padding: '20px 0' }}><p>No status data available.</p></div>
-                                ) : (
-                                    <ResponsiveContainer width="100%" height={220}>
-                                        <BarChart data={tcChartData} margin={{ top: 8, right: 8, left: -8, bottom: 4 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#e9edf7" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
-                                            <Tooltip />
-                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                                {tcChartData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                )}
-                            </div>
-
                             <div className="report-export-row">
                                 <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {tcGeneratedAt}</span>
                                 <div style={{ display: 'flex', gap: 8 }}>
@@ -4913,18 +5209,24 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {/* 3. Operational Summary Report (Part 1 & 2: SLA Breach & Workload Balance) */}
+            {/* 3. Operational Summary Report */}
             {reportSubTab === 'operational-summary' && (
                 <>
                     <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3><BarChart3 size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />Operational Report</h3>
+                        <div style={{ marginBottom: 14 }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                📈 Operational Summary &amp; SLA Compliance
+                            </h3>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Department workload balance, capacity utilization, and operational SLA breach indicators.
+                            </p>
                         </div>
                         <div className="report-filter-grid">
                             <DateRangeEngineField
                                 dateRangeStart={opFilter.dateRangeStart}
                                 dateRangeEnd={opFilter.dateRangeEnd}
                                 onChange={(start, end) => setOpFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                                showFiscalYear={false}
                             />
                             <div className="field">
                                 <label>Department</label>
@@ -4938,7 +5240,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </select>
                             </div>
                             <div className="field">
-                                <label>Employee</label>
+                                <label>Employee Filter</label>
                                 <SearchableSelect
                                     value={opFilter.employeeId}
                                     onChange={val => setOpFilter(p => ({ ...p, employeeId: val }))}
@@ -4973,35 +5275,94 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {opReport && (
                         <>
-                            <div className="report-summary-grid stats-grid-5">
+                            <div className="report-summary-grid">
                                 <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant='teal' label="TOTAL TASKS" value={String(opReport.totalTasks)} subtext="All tasks" />
                                 <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETED" value={String(opReport.completedTasks)} subtext="Tasks finished" />
                                 <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="PENDING" value={String(opReport.pendingTasks)} subtext="Not yet completed" />
                                 <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={String(opReport.overdueTasks)} subtext="Past deadline" />
                                 <StatusCard icon={<BarChart3 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETION RATE" value={`${opReport.taskCompletionRate.toFixed(1)}%`} subtext="Overall rate" />
-                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${(opReport.overallOnTimeRate ?? 0).toFixed(1)}%`} subtext="Part 2 KPI" />
-                                <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="SLA BREACH RATE" value={`${(opReport.overallSlaBreachRate ?? 0).toFixed(1)}%`} subtext="Part 2 KPI" />
+                                <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="ON-TIME RATE" value={`${(opReport.overallOnTimeRate ?? 0).toFixed(1)}%`} subtext="On-time delivery" />
+                                <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="SLA BREACH RATE" value={`${(opReport.overallSlaBreachRate ?? 0).toFixed(1)}%`} subtext="Missed SLA" />
                             </div>
 
-                            {/* Part 1 & 2: Department SLA Breach & Workload Balance Table */}
+                            {/* Visual Charts for Operational Report */}
+                            <div className="report-charts-grid">
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Department Task Volume &amp; SLA Breaches</h4>
+                                        <span className="badge badge-teal">By Department</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={opReport.departmentSummaries?.slice(0, 6).map(d => ({
+                                                name: d.departmentName.split(' ')[0],
+                                                Total: d.totalTasks,
+                                                Completed: d.completedTasks,
+                                                'SLA Breached': d.slaBreachedTasks,
+                                            })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="Total" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="Completed" fill="#05cd99" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="SLA Breached" fill="#ee5d50" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Workload by Priority</h4>
+                                        <span className="badge badge-blue">Distribution</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        {opReport.workloadByPriority && opReport.workloadByPriority.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={opReport.workloadByPriority.map(w => ({
+                                                    name: w.categoryName,
+                                                    Tasks: w.taskCount,
+                                                }))} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                    <YAxis tick={{ fontSize: 11 }} />
+                                                    <Tooltip />
+                                                    <Bar dataKey="Tasks" fill="#4318ff" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div className="report-empty-state"><p>No priority breakdown data.</p></div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Department SLA Breach & Workload Balance Table */}
                             {opReport.departmentSummaries && opReport.departmentSummaries.length > 0 && (
                                 <div className="card" style={{ marginTop: 16 }}>
                                     <div className="card-header-layout">
-                                        <h3>Department SLA Breach & Workload Balance</h3>
-                                        <span className="badge badge-blue">{opReport.departmentSummaries.length} Departments</span>
+                                        <div>
+                                            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Department / Team Workload &amp; SLA Breach Risk</h4>
+                                            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                Monitor department SLA hits, team capacity, and active bottlenecks.
+                                            </p>
+                                        </div>
+                                        <span className="badge badge-blue">{opReport.departmentSummaries.length} Teams</span>
                                     </div>
                                     <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>
                                             <tr>
-                                                <th>Department</th>
+                                                <th>Department / Team</th>
                                                 <th style={{ textAlign: 'center' }}>Total Tasks</th>
                                                 <th style={{ textAlign: 'center' }}>Completed</th>
-                                                <th style={{ textAlign: 'center' }}>Active Tasks</th>
+                                                <th style={{ textAlign: 'center' }}>Active</th>
                                                 <th style={{ textAlign: 'center' }}>SLA Breached</th>
+                                                <th style={{ textAlign: 'center' }}>SLA Hit Risk</th>
                                                 <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
                                                 <th style={{ textAlign: 'center' }}>Tasks / Member</th>
-                                                <th style={{ textAlign: 'center' }}>Workload Balance</th>
+                                                <th style={{ textAlign: 'center' }}>Team Capacity Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -5009,20 +5370,43 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 const status = dept.workloadBalanceStatus || 'Balanced';
                                                 const isBalanced = status === 'Balanced';
                                                 const isModerate = status === 'Moderate';
+                                                const hasBreach = (dept.slaBreachedTasks || 0) > 0;
+                                                const isHighBreach = (dept.slaBreachRate || 0) >= 15;
                                                 return (
                                                     <tr key={dept.departmentName} style={{ borderBottom: '1px solid var(--border)' }}>
                                                         <td style={{ padding: '10px 12px', fontWeight: 600 }}>{dept.departmentName}</td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.totalTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.completedTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.activeTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: dept.slaBreachedTasks > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{dept.completedTasks}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{dept.activeTasks}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: hasBreach ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
                                                             {dept.slaBreachedTasks}
+                                                        </td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            {hasBreach || isHighBreach ? (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(238,93,80,0.12)', color: 'var(--status-failed)'
+                                                                }}>
+                                                                    🚨 {dept.slaBreachedTasks > 0 ? `${dept.slaBreachedTasks} SLA Breached` : `${dept.slaBreachRate.toFixed(1)}% Breach Risk`}
+                                                                </span>
+                                                            ) : dept.slaBreachRate > 0 ? (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(255,181,71,0.12)', color: '#d97706'
+                                                                }}>
+                                                                    ⚠️ {dept.slaBreachRate.toFixed(1)}% Watch
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(5,205,153,0.12)', color: 'var(--status-active)'
+                                                                }}>
+                                                                    ✅ SLA Healthy
+                                                                </span>
+                                                            )}
                                                         </td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
                                                             {dept.onTimeRate.toFixed(1)}%
-                                                        </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: dept.slaBreachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
-                                                            {dept.slaBreachRate.toFixed(1)}%
                                                         </td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>
                                                             {dept.tasksPerMember.toFixed(1)}
@@ -5034,7 +5418,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                                 background: isBalanced ? 'rgba(5,205,153,0.12)' : isModerate ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
                                                                 color: isBalanced ? 'var(--status-active)' : isModerate ? 'var(--status-pending)' : 'var(--status-failed)',
                                                             }}>
-                                                                {status}
+                                                                {isBalanced ? '🌿 ' : isModerate ? '⚠️ ' : '🔥 '}{status}
                                                             </span>
                                                         </td>
                                                     </tr>
@@ -5055,77 +5439,67 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                             )}
 
+                            {/* Employee Workload & Overload Watchlist */}
                             <div className="card" style={{ marginTop: 16 }}>
-                                <DataTable title="Employee Performance Summary"
-                                    headers={['Employee', 'Assigned', 'Completed', 'Overdue', 'Completion Rate']}
+                                <div className="card-header-layout">
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Workload &amp; Overload Watchlist</h4>
+                                        <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            Identify employees who are overloaded or at risk of SLA delays.
+                                        </p>
+                                    </div>
+                                    <span className="badge badge-teal">{opReport.employeePerformanceSummary?.length || 0} Members</span>
+                                </div>
+                                <DataTable title=""
+                                    headers={['Employee', 'Assigned Load', 'Completed', 'Overdue / At Risk', 'Completion Rate', 'Workload & Capacity Status']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
                                     totalRecords={opReport.employeePerformanceSummary.length}
                                     currentPage={opEmpPage}
                                     totalPages={totalOpEmpPages}
                                     onPageChange={setOpEmpPage}
                                     pageSize={REPORT_PAGE_SIZE}>
-                                    {pagedOpEmp.map(ep => (
-                                        <tr key={ep.employeeName}>
-                                            <td style={{ fontWeight: 600 }}>{ep.employeeName}</td>
-                                            <td>{ep.assigned}</td>
-                                            <td>{ep.completed}</td>
-                                            <td>{ep.overdue}</td>
-                                            <td>{ep.completionRate.toFixed(1)}%</td>
-                                        </tr>
-                                    ))}
+                                    {pagedOpEmp.map(ep => {
+                                        const isOverloaded = (ep.assigned || 0) >= 6;
+                                        const isModerate = (ep.assigned || 0) >= 3;
+                                        const hasOverdue = (ep.overdue || 0) > 0;
+                                        return (
+                                            <tr key={ep.employeeName}>
+                                                <td style={{ fontWeight: 600 }}>{ep.employeeName}</td>
+                                                <td style={{ textAlign: 'center', fontWeight: 700 }}>{ep.assigned}</td>
+                                                <td style={{ textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{ep.completed}</td>
+                                                <td style={{ textAlign: 'center', color: hasOverdue ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                                                    {ep.overdue}
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 600 }}>{ep.completionRate.toFixed(1)}%</td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    {isOverloaded ? (
+                                                        <span style={{
+                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                            fontSize: 11, fontWeight: 700, background: 'rgba(238,93,80,0.14)', color: 'var(--status-failed)'
+                                                        }}>
+                                                            <Flame size={12} /> Overloaded ({ep.assigned} tasks)
+                                                        </span>
+                                                    ) : isModerate ? (
+                                                        <span style={{
+                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                            fontSize: 11, fontWeight: 700, background: 'rgba(255,181,71,0.14)', color: '#d97706'
+                                                        }}>
+                                                            ⚠️ Moderate ({ep.assigned} tasks)
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{
+                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
+                                                            fontSize: 11, fontWeight: 700, background: 'rgba(5,205,153,0.14)', color: 'var(--status-active)'
+                                                        }}>
+                                                            🌿 Balanced ({ep.assigned} tasks)
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </DataTable>
                             </div>
-
-                            {opReport.workloadByCategory.length > 0 && (
-                                <div className="card" style={{ marginTop: 16 }}>
-                                    <div className="card-header-layout"><h3>Workload by Category</h3></div>
-                                    <DataTable headers={['Category', 'Task Count', 'Percentage']}
-                                        loading={false} emptyMessage="No data."
-                                        totalRecords={opReport.workloadByCategory.length}>
-                                        {opReport.workloadByCategory.map(w => (
-                                            <tr key={w.categoryName}>
-                                                <td style={{ fontWeight: 600 }}>{w.categoryName}</td>
-                                                <td>{w.taskCount}</td>
-                                                <td>{w.percentage.toFixed(1)}%</td>
-                                            </tr>
-                                        ))}
-                                    </DataTable>
-                                </div>
-                            )}
-
-                            {opReport.workloadByDepartment.length > 0 && (
-                                <div className="card" style={{ marginTop: 16 }}>
-                                    <div className="card-header-layout"><h3>Workload by Department</h3></div>
-                                    <DataTable headers={['Department', 'Task Count', 'Percentage']}
-                                        loading={false} emptyMessage="No data."
-                                        totalRecords={opReport.workloadByDepartment.length}>
-                                        {opReport.workloadByDepartment.map(w => (
-                                            <tr key={w.categoryName}>
-                                                <td style={{ fontWeight: 600 }}>{w.categoryName}</td>
-                                                <td>{w.taskCount}</td>
-                                                <td>{w.percentage.toFixed(1)}%</td>
-                                            </tr>
-                                        ))}
-                                    </DataTable>
-                                </div>
-                            )}
-
-                            {opReport.workloadByPriority.length > 0 && (
-                                <div className="card" style={{ marginTop: 16 }}>
-                                    <div className="card-header-layout"><h3>Workload by Priority</h3></div>
-                                    <DataTable headers={['Priority', 'Task Count', 'Percentage']}
-                                        loading={false} emptyMessage="No data."
-                                        totalRecords={opReport.workloadByPriority.length}>
-                                        {opReport.workloadByPriority.map(w => (
-                                            <tr key={w.categoryName}>
-                                                <td style={{ fontWeight: 600 }}>{w.categoryName}</td>
-                                                <td>{w.taskCount}</td>
-                                                <td>{w.percentage.toFixed(1)}%</td>
-                                            </tr>
-                                        ))}
-                                    </DataTable>
-                                </div>
-                            )}
 
                             <div className="report-export-row">
                                 <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {opGeneratedAt}</span>
@@ -5146,18 +5520,24 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {/* 4. Performance Report (Part 1 & 2: The 5 KPIs) */}
+            {/* 4. Performance Report */}
             {reportSubTab === 'performance-report' && (
                 <>
                     <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Performance Report</h3>
+                        <div style={{ marginBottom: 14 }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                🎯 Performance &amp; Quality Indicators (5 Core KPIs)
+                            </h3>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Holistic assessment of Completion Rate, On-Time Delivery, SLA Breach Rate, Rework Rate, and Output Volume.
+                            </p>
                         </div>
                         <div className="report-filter-grid">
                             <DateRangeEngineField
                                 dateRangeStart={prFilter.dateRangeStart}
                                 dateRangeEnd={prFilter.dateRangeEnd}
                                 onChange={(start, end) => setPrFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                showFiscalYear={false}
                             />
                             <div className="field">
                                 <label>Period *</label>
@@ -5169,7 +5549,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </select>
                             </div>
                             <div className="field">
-                                <label>Employee</label>
+                                <label>Employee Filter</label>
                                 <SearchableSelect
                                     value={prFilter.employeeId}
                                     onChange={val => setPrFilter(prev => ({ ...prev, employeeId: val }))}
@@ -5191,8 +5571,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 />
                             </div>
                             <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading}>
-                                    {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
+                                <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading} style={{ width: '100%', height: 38 }}>
+                                    {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
                         </div>
@@ -5218,48 +5598,255 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {prData && !prError && !prNoRecords && (
                         <>
-                            {/* Part 2: The 5 KPIs Row */}
-                            <div className="stats-row" style={{ marginTop: 16 }}>
-                                <StatusCard
-                                    icon={<BarChart3 size={18} />}
-                                    variant="teal"
-                                    label="1. COMPLETION RATE"
-                                    value={`${prData.overallCompletionRate ?? prData.overallOnTimeRate ?? 0}%`}
-                                    subtext="Completed vs assigned"
-                                />
-                                <StatusCard
-                                    icon={<CheckCircle2 size={18} />}
-                                    variant="success"
-                                    label="2. ON-TIME RATE"
-                                    value={`${prData.overallOnTimeRate ?? 0}%`}
-                                    subtext="Delivered by deadline"
-                                />
-                                <StatusCard
-                                    icon={<AlertCircle size={18} />}
-                                    variant="danger"
-                                    label="3. SLA BREACH RATE"
-                                    value={`${prData.overallSlaBreachRate ?? 0}%`}
-                                    subtext="Missed SLA window"
-                                />
-                                <StatusCard
-                                    icon={<RotateCcw size={18} />}
-                                    variant="warning"
-                                    label="4. REWORK RATE"
-                                    value={`${prData.overallReworkRate ?? 0}%`}
-                                    subtext="Push-back / revised"
-                                />
-                                <StatusCard
-                                    icon={<ClipboardList size={18} />}
-                                    variant="teal"
-                                    label="TOTAL COMPLETED"
-                                    value={prData.totalCompletedTasks}
-                                    subtext="Finished tasks"
-                                />
-                            </div>
+                            {/* Part 2: The 5 KPIs Row or Single Employee Focus */}
+                            {selectedPrEmp ? (
+                                <div className="card" style={{ marginTop: 16, borderLeft: '4px solid #4318ff' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <button
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => setSelectedPrEmpId('')}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                            >
+                                                <ArrowLeft size={14} /> All Employees Overview
+                                            </button>
+                                            <div>
+                                                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    👤 {selectedPrEmp.employeeName}
+                                                    <span className="badge badge-teal">{selectedPrEmp.role || 'Member'}</span>
+                                                    <span className="badge badge-blue">{selectedPrEmp.department}</span>
+                                                </h3>
+                                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                    Single Employee Performance History over {prData.period} Period ({prData.dateRangeStart?.split('T')[0]} to {prData.dateRangeEnd?.split('T')[0]})
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            {selectedPrEmp.completionRate >= 90 && selectedPrEmp.onTimeRate >= 90 ? (
+                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(5,205,153,0.15)', color: 'var(--status-active)', fontWeight: 700, fontSize: 13 }}>
+                                                    🌟 Top Performer (Exceeding SLA)
+                                                </span>
+                                            ) : selectedPrEmp.slaBreachRate > 15 ? (
+                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(238,93,80,0.15)', color: 'var(--status-failed)', fontWeight: 700, fontSize: 13 }}>
+                                                    ⚠️ High SLA Breach Risk (Needs Coaching)
+                                                </span>
+                                            ) : (
+                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(67,24,255,0.12)', color: '#4318ff', fontWeight: 700, fontSize: 13 }}>
+                                                    👍 Reliable &amp; Consistent Output
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
 
+                                    {/* Individual 5 KPIs */}
+                                    <div className="stats-row">
+                                        <StatusCard
+                                            icon={<BarChart3 size={18} />}
+                                            variant="teal"
+                                            label="1. COMPLETION RATE"
+                                            value={`${selectedPrEmp.completionRate ?? 0}%`}
+                                            subtext={`${selectedPrEmp.totalCompleted} of ${selectedPrEmp.totalAssigned} assigned`}
+                                        />
+                                        <StatusCard
+                                            icon={<CheckCircle2 size={18} />}
+                                            variant="success"
+                                            label="2. ON-TIME RATE"
+                                            value={`${selectedPrEmp.onTimeRate ?? 0}%`}
+                                            subtext="Delivered within SLA"
+                                        />
+                                        <StatusCard
+                                            icon={<AlertCircle size={18} />}
+                                            variant="danger"
+                                            label="3. SLA BREACH RATE"
+                                            value={`${selectedPrEmp.slaBreachRate ?? 0}%`}
+                                            subtext="Tasks missed deadline"
+                                        />
+                                        <StatusCard
+                                            icon={<RotateCcw size={18} />}
+                                            variant="warning"
+                                            label="4. REWORK RATE"
+                                            value={`${selectedPrEmp.reworkRate ?? 0}%`}
+                                            subtext="Tasks revised"
+                                        />
+                                        <StatusCard
+                                            icon={<ClipboardList size={18} />}
+                                            variant="teal"
+                                            label="5. TOTAL OUTPUT"
+                                            value={selectedPrEmp.totalCompleted}
+                                            subtext="Completed tasks"
+                                        />
+                                    </div>
+
+                                    {/* Visual Chart for this Employee */}
+                                    <div className="report-charts-grid" style={{ marginTop: 16 }}>
+                                        <div className="card" style={{ background: 'var(--bg-secondary, #fafbfc)' }}>
+                                            <div className="card-header-layout">
+                                                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Individual Quality &amp; Efficiency Breakdown</h4>
+                                                <span className="badge badge-teal">5 Core KPI Benchmark</span>
+                                            </div>
+                                            <div style={{ height: 210, marginTop: 8 }}>
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={[
+                                                        { name: 'Completion', rate: selectedPrEmp.completionRate || 0, fill: '#05cd99' },
+                                                        { name: 'On-Time', rate: selectedPrEmp.onTimeRate || 0, fill: '#0284c7' },
+                                                        { name: 'SLA Breach', rate: selectedPrEmp.slaBreachRate || 0, fill: '#ee5d50' },
+                                                        { name: 'Rework', rate: selectedPrEmp.reworkRate || 0, fill: '#ffb547' },
+                                                    ]} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                                                        <Tooltip formatter={(val: any) => [`${val}%`, 'Score']} />
+                                                        <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                                                            {[
+                                                                <Cell key="ic0" fill="#05cd99" />,
+                                                                <Cell key="ic1" fill="#0284c7" />,
+                                                                <Cell key="ic2" fill="#ee5d50" />,
+                                                                <Cell key="ic3" fill="#ffb547" />
+                                                            ]}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+
+                                        <div className="card" style={{ background: 'var(--bg-secondary, #fafbfc)' }}>
+                                            <div className="card-header-layout">
+                                                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Workload &amp; Delivery Ratio</h4>
+                                                <span className="badge badge-blue">Volume Breakdown</span>
+                                            </div>
+                                            <div style={{ height: 210, marginTop: 8 }}>
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={[
+                                                        { name: 'Assigned', count: selectedPrEmp.totalAssigned || 0, fill: '#4318ff' },
+                                                        { name: 'Completed', count: selectedPrEmp.totalCompleted || 0, fill: '#05cd99' },
+                                                        { name: 'Remaining / Active', count: Math.max(0, (selectedPrEmp.totalAssigned || 0) - (selectedPrEmp.totalCompleted || 0)), fill: '#ffb547' },
+                                                    ]} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                        <YAxis tick={{ fontSize: 11 }} />
+                                                        <Tooltip formatter={(val: any) => [`${val} tasks`, 'Count']} />
+                                                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                                                            {[
+                                                                <Cell key="wb0" fill="#4318ff" />,
+                                                                <Cell key="wb1" fill="#05cd99" />,
+                                                                <Cell key="wb2" fill="#ffb547" />
+                                                            ]}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Overall Team 5 KPIs Row */}
+                                    <div className="stats-row" style={{ marginTop: 16 }}>
+                                        <StatusCard
+                                            icon={<BarChart3 size={18} />}
+                                            variant="teal"
+                                            label="1. COMPLETION RATE"
+                                            value={`${prData.overallCompletionRate ?? prData.overallOnTimeRate ?? 0}%`}
+                                            subtext="Completed vs assigned"
+                                        />
+                                        <StatusCard
+                                            icon={<CheckCircle2 size={18} />}
+                                            variant="success"
+                                            label="2. ON-TIME RATE"
+                                            value={`${prData.overallOnTimeRate ?? 0}%`}
+                                            subtext="Delivered by deadline"
+                                        />
+                                        <StatusCard
+                                            icon={<AlertCircle size={18} />}
+                                            variant="danger"
+                                            label="3. SLA BREACH RATE"
+                                            value={`${prData.overallSlaBreachRate ?? 0}%`}
+                                            subtext="Missed SLA window"
+                                        />
+                                        <StatusCard
+                                            icon={<RotateCcw size={18} />}
+                                            variant="warning"
+                                            label="4. REWORK RATE"
+                                            value={`${prData.overallReworkRate ?? 0}%`}
+                                            subtext="Push-back / revised"
+                                        />
+                                        <StatusCard
+                                            icon={<ClipboardList size={18} />}
+                                            variant="teal"
+                                            label="5. TOTAL COMPLETED"
+                                            value={prData.totalCompletedTasks}
+                                            subtext="Finished output"
+                                        />
+                                    </div>
+
+                                    {/* Visual Charts for Performance Report */}
+                                    <div className="report-charts-grid">
+                                        <div className="card">
+                                            <div className="card-header-layout">
+                                                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Core 5 KPIs Summary (%)</h4>
+                                                <span className="badge badge-teal">KPI Index</span>
+                                            </div>
+                                            <div style={{ height: 230, marginTop: 8 }}>
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={[
+                                                        { name: 'Completion', rate: prData.overallCompletionRate ?? prData.overallOnTimeRate ?? 0, fill: '#05cd99' },
+                                                        { name: 'On-Time', rate: prData.overallOnTimeRate ?? 0, fill: '#0284c7' },
+                                                        { name: 'SLA Breach', rate: prData.overallSlaBreachRate ?? 0, fill: '#ee5d50' },
+                                                        { name: 'Rework', rate: prData.overallReworkRate ?? 0, fill: '#ffb547' },
+                                                    ]} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                                                        <Tooltip formatter={(val: any) => [`${val}%`, 'Rate']} />
+                                                        <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                                                            {[
+                                                                <Cell key="c0" fill="#05cd99" />,
+                                                                <Cell key="c1" fill="#0284c7" />,
+                                                                <Cell key="c2" fill="#ee5d50" />,
+                                                                <Cell key="c3" fill="#ffb547" />
+                                                            ]}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+
+                                        <div className="card">
+                                            <div className="card-header-layout">
+                                                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Performance Comparison</h4>
+                                                <span className="badge badge-blue">On-Time vs Completion</span>
+                                            </div>
+                                            <div style={{ height: 230, marginTop: 8 }}>
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={prData.employeeBreakdown?.slice(0, 6).map((e: any) => ({
+                                                        name: e.employeeName.split(' ')[0],
+                                                        'Completion %': e.completionRate || 0,
+                                                        'On-Time %': e.onTimeRate || 0,
+                                                    })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                                                        <Tooltip formatter={(val: any) => [`${val}%`, 'Rate']} />
+                                                        <Legend />
+                                                        <Bar dataKey="Completion %" fill="#05cd99" radius={[4, 4, 0, 0]} />
+                                                        <Bar dataKey="On-Time %" fill="#4318ff" radius={[4, 4, 0, 0]} />
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* All Employees Breakdown Table */}
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
-                                    <h3>Employee Breakdown & 5 KPIs ({prData.period})</h3>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Breakdown &amp; 5 KPIs ({prData.period})</h4>
+                                        <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            Click any employee to view their individual progress over time.
+                                        </p>
+                                    </div>
                                     <span className="badge badge-blue">{prData.employeeBreakdown?.length || 0} employees</span>
                                 </div>
                                 {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
@@ -5276,21 +5863,31 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                     <th style={{ textAlign: 'center' }}>On-Time Rate</th>
                                                     <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
                                                     <th style={{ textAlign: 'center' }}>Rework Rate</th>
+                                                    <th style={{ textAlign: 'center' }}>Individual Deep-Dive</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {pagedPrEmp.map((kpi: any) => {
+                                                    const isSelected = selectedPrEmpId === kpi.employeeId;
                                                     const completionRate = kpi.completionRate ?? 0;
                                                     const onTimeRate = kpi.onTimeRate ?? 0;
                                                     const breachRate = kpi.slaBreachRate ?? 0;
                                                     const reworkRate = kpi.reworkRate ?? 0;
                                                     return (
-                                                        <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                        <tr key={kpi.employeeId} style={{
+                                                            borderBottom: '1px solid var(--border)',
+                                                            backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.05)' : undefined
+                                                        }}>
+                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                                    <UserCheck size={14} style={{ color: isSelected ? '#4318ff' : 'var(--text-secondary)' }} />
+                                                                    {kpi.employeeName}
+                                                                </span>
+                                                            </td>
                                                             <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
                                                             <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalAssigned}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{kpi.totalAssigned}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{kpi.totalCompleted}</td>
                                                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                                                 <span style={{
                                                                     display: 'inline-block', padding: '2px 8px', borderRadius: 999,
@@ -5312,6 +5909,19 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                             </td>
                                                             <td style={{ padding: '10px 12px', textAlign: 'center', color: reworkRate > 0 ? 'var(--status-pending)' : 'var(--text-secondary)', fontWeight: 600 }}>
                                                                 {reworkRate}%
+                                                            </td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                                <button
+                                                                    className="btn btn-secondary btn-sm"
+                                                                    style={{
+                                                                        padding: '4px 10px', fontSize: 12,
+                                                                        background: isSelected ? 'var(--primary, #4318ff)' : undefined,
+                                                                        color: isSelected ? '#fff' : undefined
+                                                                    }}
+                                                                    onClick={() => setSelectedPrEmpId(isSelected ? '' : kpi.employeeId)}
+                                                                >
+                                                                    {isSelected ? '✓ Viewing' : '🔍 View History'}
+                                                                </button>
                                                             </td>
                                                         </tr>
                                                     );
@@ -5357,22 +5967,27 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {/* 5. Financial Report (FOMS) (Part 1: Realistic Billing & Financial Ledger) */}
+            {/* 5. Financial Report (FOMS) */}
             {reportSubTab === 'foms-export' && (
                 <>
                     <div className="card report-filter-card">
-                        <div className="card-header-layout">
-                            <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Financial Report (FOMS)</h3>
-                            <span className="badge badge-blue">FOMS Financial Ledger</span>
+                        <div style={{ marginBottom: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                    💰 Financial Report &amp; FOMS Ledger
+                                </h3>
+                                <span className="badge badge-blue">FOMS Financial Ledger</span>
+                            </div>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Speedex Operations &amp; Field Operations Management System (FOMS) ledger. Track billed charges, collections, outstanding balances, and invoice settlements.
+                            </p>
                         </div>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, padding: '0 24px' }}>
-                            Speedex Operations & Field Operations Management System (FOMS) Financial Report. Track billed charges, collections, outstanding balances, and invoice settlements.
-                        </p>
                         <div className="report-filter-grid">
                             <DateRangeEngineField
                                 dateRangeStart={fomsFilter.dateRangeStart}
                                 dateRangeEnd={fomsFilter.dateRangeEnd}
                                 onChange={(start, end) => setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                showFiscalYear={true}
                             />
                             <div className="field">
                                 <label>Department</label>
@@ -5397,8 +6012,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </select>
                             </div>
                             <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handleFinancialGenerate} disabled={financialLoading}>
-                                    {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <>Generate Report</>}
+                                <button className="btn btn-primary" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ width: '100%', height: 38 }}>
+                                    {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
                         </div>
@@ -5462,9 +6077,72 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 />
                             </div>
 
+                            {/* Visual Charts for Financial Report */}
+                            <div className="report-charts-grid">
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Revenue &amp; Collection Overview</h4>
+                                        <span className="badge badge-teal">Financial Volume</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={[
+                                                { name: 'Billed', amount: financialReport.totalBilled || 0, fill: '#0284c7' },
+                                                { name: 'Collected', amount: financialReport.totalCollected || 0, fill: '#05cd99' },
+                                                { name: 'Outstanding', amount: financialReport.totalOutstanding || 0, fill: '#ffb547' },
+                                            ]} margin={{ top: 10, right: 10, left: -5, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₱${(v/1000).toFixed(0)}k`} />
+                                                <Tooltip formatter={(val: any) => [`₱${Number(val).toLocaleString()}`, 'Amount']} />
+                                                <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                                                    {[
+                                                        <Cell key="b0" fill="#0284c7" />,
+                                                        <Cell key="b1" fill="#05cd99" />,
+                                                        <Cell key="b2" fill="#ffb547" />
+                                                    ]}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <div className="card-header-layout">
+                                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Invoice Payment Status</h4>
+                                        <span className="badge badge-blue">Settlement Status</span>
+                                    </div>
+                                    <div style={{ height: 230, marginTop: 8 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={[
+                                                        { name: 'Paid', value: financialReport.paidInvoicesCount || (financialReport.invoices?.filter(i => i.paymentStatus === 'Paid').length) || 0 },
+                                                        { name: 'Pending', value: financialReport.pendingInvoicesCount || (financialReport.invoices?.filter(i => i.paymentStatus === 'Pending').length) || 0 },
+                                                        { name: 'Overdue', value: financialReport.overdueInvoicesCount || 0 },
+                                                    ].filter(d => d.value > 0)}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={50}
+                                                    outerRadius={75}
+                                                    paddingAngle={3}
+                                                    dataKey="value"
+                                                >
+                                                    <Cell fill="#05cd99" />
+                                                    <Cell fill="#ffb547" />
+                                                    <Cell fill="#ee5d50" />
+                                                </Pie>
+                                                <Tooltip formatter={(val: any) => [`${val} invoices`, 'Count']} />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
-                                    <h3>Speedex Financial Invoices & FOMS Ledger</h3>
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Speedex Financial Invoices &amp; FOMS Ledger</h4>
                                     <span className="badge badge-blue">{financialReport.invoices?.length || 0} Invoices</span>
                                 </div>
                                 {financialReport.invoices && financialReport.invoices.length > 0 ? (
@@ -5517,6 +6195,23 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                     </tr>
                                                 ))}
                                             </tbody>
+                                            <tfoot>
+                                                <tr style={{ background: 'var(--bg-secondary, #fafbfc)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                                                    <td colSpan={6} style={{ padding: '10px 12px', textAlign: 'right' }}>Total ({financialReport.invoices.length} Invoices):</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--primary)' }}>
+                                                        ₱{(financialReport.totalBilled || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                        ₱{(financialReport.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (financialReport.totalOutstanding || 0) > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                        ₱{(financialReport.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td colSpan={2} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                        {financialReport.collectionRate?.toFixed(1)}% Collected
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
                                         </table>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

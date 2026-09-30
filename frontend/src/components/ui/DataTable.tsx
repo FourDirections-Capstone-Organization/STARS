@@ -61,6 +61,7 @@ interface DataTableProps<T> {
     // Header / Title
     title?: string;
     headerAction?: { label: string; onClick: () => void };
+    headerRight?: React.ReactNode;
 
     // Search
     searchQuery?: string;
@@ -204,7 +205,7 @@ export default function DataTable<T extends Record<string, any>>({
     columns, data, onRowClick, className = '',
     headers, children: rowChildren,
     tabs, activeTab, onTabChange,
-    title, headerAction,
+    title, headerAction, headerRight,
     searchQuery, onSearchChange, setSearchQuery, searchPlaceholder = 'Search…',
     filterElements,
     actionButton,
@@ -512,11 +513,17 @@ export default function DataTable<T extends Record<string, any>>({
                 </div>
             )}
 
-            {/* ── Title + Header Action ── */}
-            {title && (
+            {/* ── Title + Header Action / Header Right ── */}
+            {(title || headerAction || headerRight) && (
                 <div className="table-card-header">
-                    <h3 className="table-card-title">{title}</h3>
-                    {headerAction && <button className="table-card-header-action" onClick={headerAction.onClick}>{headerAction.label}</button>}
+                    {title ? <h3 className="table-card-title">{title}</h3> : <div />}
+                    {headerRight ? (
+                        <div className="table-card-header-right">
+                            {headerRight}
+                        </div>
+                    ) : headerAction ? (
+                        <button className="table-card-header-action" onClick={headerAction.onClick}>{headerAction.label}</button>
+                    ) : null}
                 </div>
             )}
 
