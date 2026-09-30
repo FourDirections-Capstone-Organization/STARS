@@ -57,10 +57,16 @@ body {
 
 /* ─── Dashboard Header ───────────────────────────────────────────────────── */
 .dashboard-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    padding: 20px 28px 0;
+    padding: 16px 28px;
+    background: var(--bg-main, #f4f7fe);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
 }
 
     .dashboard-header h2 {

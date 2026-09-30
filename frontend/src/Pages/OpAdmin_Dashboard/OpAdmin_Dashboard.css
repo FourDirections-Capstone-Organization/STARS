@@ -49,11 +49,16 @@
 
 /* ─── Header ─────────────────────────────────────────────────────────────── */
 .dashboard-header {
-    padding: 24px var(--content-padding);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 16px var(--content-padding);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-main);
+    background: var(--bg-main, #f4f7fe);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
 }
 
     .dashboard-header h2 {
@@ -183,7 +188,7 @@
 .stats-row-6,
 .stats-grid-6 {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 16px;
     width: 100%;
@@ -192,7 +197,7 @@
 .stats-row-5,
 .stats-grid-5 {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 16px;
     width: 100%;
@@ -201,7 +206,7 @@
 .stats-row-4,
 .stats-grid-4 {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 16px;
     width: 100%;
@@ -210,8 +215,16 @@
 .stats-row-3,
 .stats-grid-3 {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.report-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
     margin-bottom: 16px;
     width: 100%;
 }
@@ -222,25 +235,20 @@
     box-sizing: border-box;
 }
 
-@media (max-width: 1380px) {
-    .stats-row,
+@media (max-width: 1280px) {
     .stats-row-6,
-    .stats-grid-6,
-    .stats-row-5,
-    .stats-grid-5 {
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    .stats-grid-6 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 1024px) {
-    .stats-row,
-    .stats-row-6,
-    .stats-grid-6,
     .stats-row-5,
     .stats-grid-5,
     .stats-row-4,
-    .stats-grid-4 {
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    .stats-grid-4,
+    .report-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -253,7 +261,8 @@
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
-    .stats-grid-3 {
+    .stats-grid-3,
+    .report-summary-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
@@ -268,7 +277,8 @@
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
-    .stats-grid-3 {
+    .stats-grid-3,
+    .report-summary-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -2393,6 +2403,58 @@ input.emp-picker-checkbox {
 
 .table-card-data-table tbody tr:hover {
     background: rgba(0, 169, 157, 0.03);
+}
+
+/* ─── Financial Report Fiscal Year Toggle Button ────────────────────────── */
+.fiscal-toggle-field {
+    margin-left: auto;
+    align-self: flex-end;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.fiscal-toggle-pill-group {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-main, #f1f5f9);
+    padding: 3px;
+    border-radius: 9px;
+    border: 1.5px solid var(--border);
+    gap: 3px;
+    height: 36px;
+    box-sizing: border-box;
+}
+
+.fiscal-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 14px;
+    height: 28px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.18s ease-in-out;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.fiscal-toggle-btn:hover:not(.active) {
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.fiscal-toggle-btn.active {
+    background: var(--teal, #00A99D);
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(0, 169, 157, 0.28);
 }
 
 

@@ -3972,18 +3972,43 @@ const DateRangeEngineField: React.FC<{
     onChange: (start: string, end: string) => void;
     label?: string;
     showFiscalYear?: boolean;
-}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range', showFiscalYear = false }) => {
-    const [activeChunk, setActiveChunk] = useState<TimeChunk>('Monthly');
-    const [activeYearType, setActiveYearType] = useState<YearType>('Calendar');
+    activeChunk?: TimeChunk;
+    onChunkChange?: (chunk: TimeChunk) => void;
+    yearType?: YearType;
+    onYearTypeChange?: (yt: YearType) => void;
+}> = ({
+    dateRangeStart,
+    dateRangeEnd,
+    onChange,
+    label = 'Date Range',
+    showFiscalYear = false,
+    activeChunk: externalChunk,
+    onChunkChange: externalOnChunkChange,
+    yearType: externalYearType,
+    onYearTypeChange: externalOnYearTypeChange,
+}) => {
+    const [internalChunk, setInternalChunk] = useState<TimeChunk>('Monthly');
+    const [internalYearType, setInternalYearType] = useState<YearType>('Calendar');
+
+    const activeChunk = externalChunk !== undefined ? externalChunk : internalChunk;
+    const activeYearType = externalYearType !== undefined ? externalYearType : internalYearType;
 
     const handleChunkChange = (chunk: TimeChunk) => {
-        setActiveChunk(chunk);
-        const { start, end } = computeDateRange(chunk, showFiscalYear ? activeYearType : 'Calendar');
+        if (externalOnChunkChange) {
+            externalOnChunkChange(chunk);
+        } else {
+            setInternalChunk(chunk);
+        }
+        const { start, end } = computeDateRange(chunk, showFiscalYear || externalYearType !== undefined ? activeYearType : 'Calendar');
         onChange(start, end);
     };
 
     const handleYearTypeChange = (yt: YearType) => {
-        setActiveYearType(yt);
+        if (externalOnYearTypeChange) {
+            externalOnYearTypeChange(yt);
+        } else {
+            setInternalYearType(yt);
+        }
         const { start, end } = computeDateRange(activeChunk, yt);
         onChange(start, end);
     };
@@ -4495,7 +4520,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     };
 
     // --- Financial Report (FOMS) State (Part 1: Realistic Financial Ledger) ---
-    const initialFomsDates = useMemo(() => computeDateRange('Monthly'), []);
+    const [fomsYearType, setFomsYearType] = useState<YearType>('Calendar');
+    const [fomsChunk, setFomsChunk] = useState<TimeChunk>('Monthly');
+    const initialFomsDates = useMemo(() => computeDateRange('Monthly', 'Calendar'), []);
     const [fomsFilter, setFomsFilter] = useState<{
         dateRangeStart: string;
         dateRangeEnd: string;
@@ -4507,6 +4534,18 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         departmentId: '',
         status: 'All',
     });
+
+    const handleFomsYearTypeChange = (yt: YearType) => {
+        setFomsYearType(yt);
+        const { start, end } = computeDateRange(fomsChunk, yt);
+        setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }));
+    };
+
+    const handleFomsChunkChange = (chunk: TimeChunk) => {
+        setFomsChunk(chunk);
+        const { start, end } = computeDateRange(chunk, fomsYearType);
+        setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }));
+    };
     const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null);
     const [financialLoading, setFinancialLoading] = useState(false);
     const [financialExporting, setFinancialExporting] = useState(false);
@@ -5952,7 +5991,11 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     dateRangeStart={fomsFilter.dateRangeStart}
                                     dateRangeEnd={fomsFilter.dateRangeEnd}
                                     onChange={(start, end) => setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
-                                    showFiscalYear={true}
+                                    showFiscalYear={false}
+                                    activeChunk={fomsChunk}
+                                    onChunkChange={handleFomsChunkChange}
+                                    yearType={fomsYearType}
+                                    onYearTypeChange={handleFomsYearTypeChange}
                                 />
                                 <div className="field" style={{ width: 170 }}>
                                     <label>Department</label>
@@ -5975,6 +6018,31 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <option value="Pending">Pending</option>
                                         <option value="Overdue">Overdue</option>
                                     </select>
+                                </div>
+                                <div className="field fiscal-toggle-field" style={{ marginLeft: 'auto', alignSelf: 'flex-end' }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                                        Accounting Cycle
+                                    </label>
+                                    <div className="fiscal-toggle-pill-group">
+                                        <button
+                                            type="button"
+                                            className={`fiscal-toggle-btn${fomsYearType === 'Calendar' ? ' active' : ''}`}
+                                            onClick={() => handleFomsYearTypeChange('Calendar')}
+                                            title="Standard Calendar: Jan 1 – Dec 31"
+                                        >
+                                            <Calendar size={15} />
+                                            <span>Calendar Year</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`fiscal-toggle-btn${fomsYearType === 'Fiscal' ? ' active' : ''}`}
+                                            onClick={() => handleFomsYearTypeChange('Fiscal')}
+                                            title="Speedex Accounting Year: Oct 1 – Sep 30"
+                                        >
+                                            <Building size={15} />
+                                            <span>Fiscal Year (Speedex)</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="report-filter-actions-right">
