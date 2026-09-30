@@ -95,18 +95,12 @@
     background: var(--primary, #00A99D);
 }
 
-/* ─── 2-Column Creation Layout ──────────────────────────────────────────── */
+/* ─── Task Creation Layout ──────────────────────────────────────────────── */
 .ai-creation-layout {
-    display: grid;
-    grid-template-columns: 1fr 340px;
+    display: flex;
+    flex-direction: column;
     gap: 20px;
-    align-items: flex-start;
-}
-
-@media (max-width: 1024px) {
-    .ai-creation-layout {
-        grid-template-columns: 1fr;
-    }
+    width: 100%;
 }
 
 .ai-creation-main {
@@ -114,12 +108,7 @@
     flex-direction: column;
     gap: 16px;
     min-width: 0;
-}
-
-.ai-creation-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    width: 100%;
 }
 
 .ai-side-summary-card {

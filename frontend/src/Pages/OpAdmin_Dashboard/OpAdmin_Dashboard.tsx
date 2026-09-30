@@ -4824,7 +4824,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {kpiData && !kpiError && !kpiNoRecords && (
                         <>
-                            <div className="stats-row" style={{ marginTop: 16 }}>
+                            <div className="stats-row stats-row-3" style={{ marginTop: 16 }}>
                                 {[
                                     { label: 'Total Completed', value: kpiData.totalCompletedTasks, icon: <CheckCircle2 size={18} />, variant: 'teal', subtext: 'Completed tasks' },
                                     { label: 'On-Time Tasks', value: kpiData.totalOnTimeTasks, icon: <CheckCircle2 size={18} />, variant: 'success', subtext: `${kpiData.overallOnTimeRate}% on-time rate` },
@@ -4898,16 +4898,16 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {kpiData.employeeKpis && kpiData.employeeKpis.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                             <thead>
                                                 <tr>
-                                                    <th>Employee</th>
-                                                    <th>Department</th>
-                                                    <th style={{ textAlign: 'center' }}>Completed</th>
-                                                    <th style={{ textAlign: 'center' }}>On-Time</th>
-                                                    <th style={{ textAlign: 'center' }}>Late</th>
-                                                    <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                    <th style={{ textAlign: 'center' }}>Late Rate</th>
+                                                    <th style={{ width: '22%' }}>Employee</th>
+                                                    <th style={{ width: '18%' }}>Department</th>
+                                                    <th style={{ width: '12%', textAlign: 'center' }}>Completed</th>
+                                                    <th style={{ width: '12%', textAlign: 'center' }}>On-Time</th>
+                                                    <th style={{ width: '12%', textAlign: 'center' }}>Late</th>
+                                                    <th style={{ width: '12%', textAlign: 'center' }}>On-Time Rate</th>
+                                                    <th style={{ width: '12%', textAlign: 'center' }}>Late Rate</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -5124,17 +5124,17 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {tcReport.tasks && tcReport.tasks.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                             <thead>
                                                 <tr>
-                                                    <th>Task Ref &amp; Title</th>
-                                                    <th>Assigned / Completed By</th>
-                                                    <th>Department</th>
-                                                    <th style={{ textAlign: 'center' }}>Priority</th>
-                                                    <th>Deadline</th>
-                                                    <th>Last Updated / Completed</th>
-                                                    <th style={{ textAlign: 'center' }}>Timeliness Status</th>
-                                                    <th style={{ textAlign: 'center' }}>Current Status</th>
+                                                    <th style={{ width: '22%' }}>Task Ref &amp; Title</th>
+                                                    <th style={{ width: '16%' }}>Assigned / Completed By</th>
+                                                    <th style={{ width: '11%' }}>Department</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>Priority</th>
+                                                    <th style={{ width: '12%' }}>Deadline</th>
+                                                    <th style={{ width: '12%' }}>Last Updated</th>
+                                                    <th style={{ width: '10%', textAlign: 'center' }}>Timeliness Status</th>
+                                                    <th style={{ width: '8%', textAlign: 'center' }}>Current Status</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -5373,18 +5373,18 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </div>
                                         <span className="report-pill blue">{opReport.departmentSummaries.length} Teams</span>
                                     </div>
-                                    <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                         <thead>
                                             <tr>
-                                                <th>Department / Team</th>
-                                                <th style={{ textAlign: 'center' }}>Total Tasks</th>
-                                                <th style={{ textAlign: 'center' }}>Completed</th>
-                                                <th style={{ textAlign: 'center' }}>Active</th>
-                                                <th style={{ textAlign: 'center' }}>SLA Breached</th>
-                                                <th style={{ textAlign: 'center' }}>SLA Hit Risk</th>
-                                                <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                <th style={{ textAlign: 'center' }}>Tasks / Member</th>
-                                                <th style={{ textAlign: 'center' }}>Team Capacity Status</th>
+                                                <th style={{ width: '20%' }}>Department / Team</th>
+                                                <th style={{ width: '9%', textAlign: 'center' }}>Total Tasks</th>
+                                                <th style={{ width: '9%', textAlign: 'center' }}>Completed</th>
+                                                <th style={{ width: '8%', textAlign: 'center' }}>Active</th>
+                                                <th style={{ width: '10%', textAlign: 'center' }}>SLA Breached</th>
+                                                <th style={{ width: '14%', textAlign: 'center' }}>SLA Hit Risk</th>
+                                                <th style={{ width: '10%', textAlign: 'center' }}>On-Time Rate</th>
+                                                <th style={{ width: '10%', textAlign: 'center' }}>Tasks / Member</th>
+                                                <th style={{ width: '10%', textAlign: 'center' }}>Team Capacity Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -5620,7 +5620,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     </div>
 
                                     {/* Individual 5 KPIs */}
-                                    <div className="stats-row">
+                                    <div className="stats-row stats-row-5">
                                         <StatusCard
                                             icon={<BarChart3 size={18} />}
                                             variant="teal"
@@ -5722,7 +5722,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             ) : (
                                 <>
                                     {/* Overall Team 5 KPIs Row */}
-                                    <div className="stats-row" style={{ marginTop: 16 }}>
+                                    <div className="stats-row stats-row-5" style={{ marginTop: 16 }}>
                                         <StatusCard
                                             icon={<BarChart3 size={18} />}
                                             variant="teal"
@@ -5832,19 +5832,19 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                             <thead>
                                                 <tr>
-                                                    <th>Employee</th>
-                                                    <th>Department</th>
-                                                    <th>Role</th>
-                                                    <th style={{ textAlign: 'center' }}>Assigned</th>
-                                                    <th style={{ textAlign: 'center' }}>Completed</th>
-                                                    <th style={{ textAlign: 'center' }}>Completion Rate</th>
-                                                    <th style={{ textAlign: 'center' }}>On-Time Rate</th>
-                                                    <th style={{ textAlign: 'center' }}>SLA Breach Rate</th>
-                                                    <th style={{ textAlign: 'center' }}>Rework Rate</th>
-                                                    <th style={{ textAlign: 'center' }}>Individual Deep-Dive</th>
+                                                    <th style={{ width: '16%' }}>Employee</th>
+                                                    <th style={{ width: '12%' }}>Department</th>
+                                                    <th style={{ width: '10%' }}>Role</th>
+                                                    <th style={{ width: '7%', textAlign: 'center' }}>Assigned</th>
+                                                    <th style={{ width: '7%', textAlign: 'center' }}>Completed</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>Completion Rate</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>On-Time Rate</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>SLA Breach Rate</th>
+                                                    <th style={{ width: '8%', textAlign: 'center' }}>Rework Rate</th>
+                                                    <th style={{ width: '13%', textAlign: 'center' }}>Individual Deep-Dive</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -6021,7 +6021,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {financialReport && (
                         <>
-                            <div className="stats-row" style={{ marginTop: 16 }}>
+                            <div className="stats-row stats-row-5" style={{ marginTop: 16 }}>
                                 <StatusCard
                                     icon={<DollarSign size={18} />}
                                     variant="teal"
@@ -6129,20 +6129,20 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {financialReport.invoices && financialReport.invoices.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                                             <thead>
                                                 <tr>
-                                                    <th>Invoice #</th>
-                                                    <th>FOMS Ref</th>
-                                                    <th>Client Account</th>
-                                                    <th>Department</th>
-                                                    <th>Billing Date</th>
-                                                    <th>Due Date</th>
-                                                    <th style={{ textAlign: 'right' }}>Amount Billed</th>
-                                                    <th style={{ textAlign: 'right' }}>Amount Paid</th>
-                                                    <th style={{ textAlign: 'right' }}>Balance</th>
-                                                    <th style={{ textAlign: 'center' }}>Status</th>
-                                                    <th>Method</th>
+                                                    <th style={{ width: '10%' }}>Invoice #</th>
+                                                    <th style={{ width: '10%' }}>FOMS Ref</th>
+                                                    <th style={{ width: '13%' }}>Client Account</th>
+                                                    <th style={{ width: '9%' }}>Department</th>
+                                                    <th style={{ width: '8%' }}>Billing Date</th>
+                                                    <th style={{ width: '8%' }}>Due Date</th>
+                                                    <th style={{ width: '10%', textAlign: 'right' }}>Amount Billed</th>
+                                                    <th style={{ width: '10%', textAlign: 'right' }}>Amount Paid</th>
+                                                    <th style={{ width: '10%', textAlign: 'right' }}>Balance</th>
+                                                    <th style={{ width: '6%', textAlign: 'center' }}>Status</th>
+                                                    <th style={{ width: '6%' }}>Method</th>
                                                 </tr>
                                             </thead>
                                             <tbody>

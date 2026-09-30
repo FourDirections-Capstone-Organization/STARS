@@ -1033,44 +1033,6 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 Review all task parameters, destination availability, SLA compliance, and notification previews before assigning.
                             </span>
                         </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <button
-                                type="button"
-                                className="btn"
-                                onClick={() => {
-                                    setStep('form');
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, padding: '8px 16px', fontSize: 13 }}
-                            >
-                                <ChevronLeft size={14} /> Back & Edit
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={handleSubmit}
-                                disabled={submitting}
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    background: 'var(--ok, #059669)',
-                                    borderColor: 'var(--ok, #059669)',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    padding: '8px 20px',
-                                    fontSize: 13,
-                                    boxShadow: '0 4px 14px rgba(5, 150, 105, 0.3)'
-                                }}
-                            >
-                                {submitting ? (
-                                    <><Loader2 size={15} className="ai-spin" /> Confirming & Assigning...</>
-                                ) : (
-                                    <><Save size={15} /> Confirm & Assign Task</>
-                                )}
-                            </button>
-                        </div>
                     </div>
 
                     {/* Form Error if any during submit */}
@@ -1806,92 +1768,24 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* ── RIGHT COLUMN: Sticky Side Summary & Review Action ── */}
-                <div className="ai-creation-sidebar">
-                    <div className="ai-side-summary-card">
-                        <div className="ai-side-header">
-                            <h4><Activity size={16} color="var(--primary, #00A99D)" /> Assignment Summary</h4>
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: 'rgba(0, 169, 157, 0.12)', color: 'var(--teal, #00A99D)' }}>
-                                Live Preview
-                            </span>
-                        </div>
-
-                        {/* Summary Live Preview Items */}
-                        <div className="ai-side-preview-list">
-                            <div className="ai-side-preview-item">
-                                <span className="ai-side-preview-label">Scope & Destination</span>
-                                <span className="ai-side-preview-val" style={{ color: 'var(--teal, #00A99D)', fontWeight: 700 }}>
-                                    {scope === 'SingleEmployee' ? <UserCircle2 size={13} /> : scope === 'Team' ? <Users size={13} /> : <Building size={13} />}
-                                    {targetDisplayName}
-                                </span>
-                            </div>
-
-                            <div className="ai-side-preview-item">
-                                <span className="ai-side-preview-label">Priority & SLA Tier</span>
-                                <span className="ai-side-preview-val">
-                                    {form.priority ? (
-                                        <span>
-                                            {form.priority === 'Urgent' ? '🔴 Urgent (24h Locked)' : form.priority === 'High' ? '🟠 High (1-2 Days)' : form.priority === 'Medium' ? '🟡 Medium (Up to 7 Days)' : '🟢 Low'}
-                                        </span>
-                                    ) : (
-                                        <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Not selected</span>
-                                    )}
-                                </span>
-                            </div>
-
-                            <div className="ai-side-preview-item">
-                                <span className="ai-side-preview-label">Target Deadline</span>
-                                <span className="ai-side-preview-val">
-                                    {form.dueAt ? (
-                                        <span><Calendar size={12} style={{ display: 'inline', marginRight: 4 }} />{new Date(form.dueAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                    ) : (
-                                        <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Required</span>
-                                    )}
-                                </span>
-                            </div>
-
-                            <div className="ai-side-preview-item">
-                                <span className="ai-side-preview-label">Supporting Files</span>
-                                <span className="ai-side-preview-val">
-                                    {supportingFiles.length > 0 ? `${supportingFiles.length} file(s) attached` : 'None'}
-                                </span>
-                            </div>
-
-                            <div className="ai-side-preview-item">
-                                <span className="ai-side-preview-label">Confidentiality</span>
-                                <span className="ai-side-preview-val">
-                                    {form.isConfidential ? '🔒 Restricted (Coordinators only)' : 'Standard Visibility'}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Error Banner */}
+                    {/* Bottom Action Bar: Review & Validate Assignment Button placed at bottom right */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, marginTop: 8, marginBottom: 12 }}>
                         {formError && (
-                            <div className="ai-error-banner" style={{ margin: 0, padding: '8px 10px', fontSize: 12 }}>
-                                <AlertCircle size={13} />
+                            <div className="ai-error-banner" style={{ margin: 0, padding: '10px 14px', fontSize: 13, width: '100%', boxSizing: 'border-box' }}>
+                                <AlertCircle size={15} />
                                 <span>{formError}</span>
                             </div>
                         )}
-
-                        <div className="ai-validate-note" style={{ margin: 0, padding: '8px 10px', fontSize: 11.5 }}>
-                            <Shield size={13} />
-                            <span>Destination and workload are validated before final submission.</span>
-                        </div>
-
-                        {/* Prominent Review Button */}
                         <button
                             type="button"
                             className="btn btn-primary"
                             onClick={handleReview}
                             style={{
-                                width: '100%',
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
                                 gap: 8,
-                                padding: '12px 18px',
+                                padding: '12px 26px',
                                 fontSize: 14,
                                 fontWeight: 700,
                                 background: 'var(--teal, #00A99D)',
