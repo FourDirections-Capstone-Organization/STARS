@@ -3906,7 +3906,7 @@ async function readBlobError(err: any, fallback: string): Promise<string> {
     return err?.response?.data?.message || err?.message || fallback;
 }
 
-const REPORT_PAGE_SIZE = 20;
+const REPORT_PAGE_SIZE = 10;
 
 type TimeChunk = 'Monthly' | 'Quarterly' | 'Annual';
 type YearType = 'Calendar' | 'Fiscal';
@@ -3972,7 +3972,7 @@ const DateRangeEngineField: React.FC<{
     onChange: (start: string, end: string) => void;
     label?: string;
     showFiscalYear?: boolean;
-}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range Engine', showFiscalYear = false }) => {
+}> = ({ dateRangeStart, dateRangeEnd, onChange, label = 'Date Range', showFiscalYear = false }) => {
     const [activeChunk, setActiveChunk] = useState<TimeChunk>('Monthly');
     const [activeYearType, setActiveYearType] = useState<YearType>('Calendar');
 
@@ -3989,75 +3989,74 @@ const DateRangeEngineField: React.FC<{
     };
 
     return (
-        <div className="field" style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontWeight: 600 }}>{label}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                    {showFiscalYear ? 'Pick Preset Period • Year Type' : 'Pick Preset Period'}
-                </span>
-            </label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
-                <button
-                    type="button"
-                    className={`filter-pill${activeChunk === 'Monthly' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
-                    onClick={() => handleChunkChange('Monthly')}
-                >
-                    Monthly
-                </button>
-                <button
-                    type="button"
-                    className={`filter-pill${activeChunk === 'Quarterly' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
-                    onClick={() => handleChunkChange('Quarterly')}
-                >
-                    Quarterly
-                </button>
-                <button
-                    type="button"
-                    className={`filter-pill${activeChunk === 'Annual' ? ' active' : ''}`}
-                    style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
-                    onClick={() => handleChunkChange('Annual')}
-                >
-                    Annual
-                </button>
-                {showFiscalYear && (
-                    <>
-                        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 4px', alignSelf: 'center' }} />
-                        <button
-                            type="button"
-                            className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
-                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
-                            onClick={() => handleYearTypeChange('Calendar')}
-                            title="Calendar Year (Jan 1 - Dec 31)"
-                        >
-                            Calendar Year
-                        </button>
-                        <button
-                            type="button"
-                            className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
-                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6 }}
-                            onClick={() => handleYearTypeChange('Fiscal')}
-                            title="Speedex Accounting Year: Oct 1 - Sep 30"
-                        >
-                            Fiscal Year (Oct-Sep)
-                        </button>
-                    </>
-                )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                    {label}
+                </label>
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                    <button
+                        type="button"
+                        className={`filter-pill${activeChunk === 'Monthly' ? ' active' : ''}`}
+                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
+                        onClick={() => handleChunkChange('Monthly')}
+                    >
+                        Monthly
+                    </button>
+                    <button
+                        type="button"
+                        className={`filter-pill${activeChunk === 'Quarterly' ? ' active' : ''}`}
+                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
+                        onClick={() => handleChunkChange('Quarterly')}
+                    >
+                        Quarterly
+                    </button>
+                    <button
+                        type="button"
+                        className={`filter-pill${activeChunk === 'Annual' ? ' active' : ''}`}
+                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
+                        onClick={() => handleChunkChange('Annual')}
+                    >
+                        Annual
+                    </button>
+                    {showFiscalYear && (
+                        <>
+                            <span style={{ width: 1, height: 12, background: 'var(--border)', margin: '0 2px' }} />
+                            <button
+                                type="button"
+                                className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
+                                style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
+                                onClick={() => handleYearTypeChange('Calendar')}
+                                title="Calendar Year (Jan 1 - Dec 31)"
+                            >
+                                Calendar
+                            </button>
+                            <button
+                                type="button"
+                                className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
+                                style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
+                                onClick={() => handleYearTypeChange('Fiscal')}
+                                title="Speedex Accounting Year: Oct 1 - Sep 30"
+                            >
+                                Fiscal
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ flex: 1, padding: '7px 10px', fontSize: 13, borderRadius: 6 }}
+                    style={{ width: 128, padding: '5px 8px', fontSize: 11.5, borderRadius: 6, height: 34 }}
                     value={dateRangeStart}
                     onChange={e => onChange(e.target.value, dateRangeEnd)}
                 />
-                <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>to</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>to</span>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ flex: 1, padding: '7px 10px', fontSize: 13, borderRadius: 6 }}
+                    style={{ width: 128, padding: '5px 8px', fontSize: 11.5, borderRadius: 6, height: 34 }}
                     value={dateRangeEnd}
                     onChange={e => onChange(dateRangeStart, e.target.value)}
                 />
@@ -4172,6 +4171,30 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         } finally {
             setKpiLoading(false);
         }
+    };
+
+    const handleKpiExport = () => {
+        if (!kpiData?.employeeKpis || kpiData.employeeKpis.length === 0) {
+            error('No KPI data to export. Generate a report first.');
+            return;
+        }
+        const headers = ['Employee Name', 'Department', 'Total Completed', 'On-Time Tasks', 'Late Tasks', 'On-Time Rate (%)', 'Late Rate (%)'];
+        const rows = kpiData.employeeKpis.map((e: any) => [
+            `"${e.employeeName || ''}"`,
+            `"${e.department || ''}"`,
+            e.totalCompleted ?? 0,
+            e.onTimeCount ?? 0,
+            e.lateCount ?? 0,
+            `${e.onTimeRate ?? 0}%`,
+            `${e.lateRate ?? 0}%`
+        ]);
+        const csvContent = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
+        downloadBlob(
+            csvContent,
+            `KPI_Tracking_Report_${kpiFilter.dateRangeStart}_${kpiFilter.dateRangeEnd}.csv`,
+            'text/csv;charset=utf-8;'
+        );
+        success('KPI Tracking CSV exported successfully.');
     };
 
     // --- Performance Report State (Part 2: 5 KPIs) ---
@@ -4740,7 +4763,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             {reportSubTab === 'kpi-tracking' && (
                 <>
                     <div className="card report-filter-card">
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 12 }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                 📊 KPI Tracking &amp; SLA Performance
                             </h3>
@@ -4748,26 +4771,33 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 Track on-time task delivery rates, identify overdue trends, and evaluate employee SLA compliance.
                             </p>
                         </div>
-                        <div className="report-filter-grid">
-                            <DateRangeEngineField
-                                dateRangeStart={kpiFilter.dateRangeStart}
-                                dateRangeEnd={kpiFilter.dateRangeEnd}
-                                onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
-                                showFiscalYear={false}
-                            />
-                            <div className="field">
-                                <label>Employee Filter</label>
-                                <SearchableSelect
-                                    value={kpiFilter.employeeId}
-                                    onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
-                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
-                                    placeholder="All Employees"
-                                    searchPlaceholder="Search employees..."
-                                    width="100%"
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields">
+                                <DateRangeEngineField
+                                    dateRangeStart={kpiFilter.dateRangeStart}
+                                    dateRangeEnd={kpiFilter.dateRangeEnd}
+                                    onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                    showFiscalYear={false}
                                 />
+                                <div className="field" style={{ minWidth: 200 }}>
+                                    <label>Employee Filter</label>
+                                    <SearchableSelect
+                                        value={kpiFilter.employeeId}
+                                        onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
+                                        options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                        placeholder="All Employees"
+                                        searchPlaceholder="Search employees..."
+                                        width="100%"
+                                    />
+                                </div>
                             </div>
-                            <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handleKpiGenerate} disabled={kpiLoading} style={{ width: '100%', height: 38 }}>
+                            <div className="report-filter-actions-right">
+                                {kpiData && (
+                                    <button className="btn" onClick={handleKpiExport} title="Export KPI CSV">
+                                        <Download size={14} /> Export CSV
+                                    </button>
+                                )}
+                                <button className="btn btn-teal" onClick={handleKpiGenerate} disabled={kpiLoading} style={{ height: 34 }}>
                                     {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
@@ -4809,7 +4839,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>On-Time vs. Late Breakdown</h4>
-                                        <span className="badge badge-teal">Overall Compliance</span>
+                                        <span className="report-pill teal">Overall Compliance</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -4839,7 +4869,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Completion Breakdown</h4>
-                                        <span className="badge badge-blue">Top Contributors</span>
+                                        <span className="report-pill blue">Top Contributors</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -4864,7 +4894,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
                                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Per-Employee Breakdown</h4>
-                                    {kpiData.employeeKpis && <span className="badge badge-blue">{kpiData.employeeKpis.length} employees</span>}
+                                    {kpiData.employeeKpis && <span className="report-pill blue">{kpiData.employeeKpis.length} employees</span>}
                                 </div>
                                 {kpiData.employeeKpis && kpiData.employeeKpis.length > 0 ? (
                                     <>
@@ -4887,29 +4917,24 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                     const isWarning = onTimeRate >= 50 && onTimeRate < 80;
                                                     return (
                                                         <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>{kpi.employeeName}</td>
-                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                                <span style={{
-                                                                    display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                                    fontSize: 12, fontWeight: 700,
-                                                                    background: isGood ? 'rgba(5,205,153,0.12)' : isWarning ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                    color: isGood ? 'var(--status-active)' : isWarning ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                                }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{kpi.department}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${isGood ? 'success' : isWarning ? 'warning' : 'danger'}`}>
                                                                     {onTimeRate}%
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
                                                         </tr>
                                                     );
                                                 })}
                                             </tbody>
                                         </table>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((kpiPage - 1) * REPORT_PAGE_SIZE + 1, kpiData.employeeKpis.length)}–{Math.min(kpiPage * REPORT_PAGE_SIZE, kpiData.employeeKpis.length)} of {kpiData.employeeKpis.length} records
                                             </span>
                                             <Pagination
@@ -4935,7 +4960,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             {reportSubTab === 'task-completion' && (
                 <>
                     <div className="card report-filter-card">
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 12 }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                 📋 Task Completion Reports &amp; Logs
                             </h3>
@@ -4943,64 +4968,79 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 Audit granular task completion logs, individual performance metrics, and export data.
                             </p>
                         </div>
-                        <div className="report-filter-grid">
-                            <DateRangeEngineField
-                                dateRangeStart={tcFilter.dateRangeStart}
-                                dateRangeEnd={tcFilter.dateRangeEnd}
-                                onChange={(start, end) => setTcFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
-                                showFiscalYear={false}
-                            />
-                            <div className="field">
-                                <label>Employee Filter</label>
-                                <SearchableSelect
-                                    value={tcFilter.employeeId}
-                                    onChange={val => setTcFilter(p => ({ ...p, employeeId: val }))}
-                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
-                                    placeholder="All Employees"
-                                    searchPlaceholder="Search employees..."
-                                    width="100%"
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields">
+                                <DateRangeEngineField
+                                    dateRangeStart={tcFilter.dateRangeStart}
+                                    dateRangeEnd={tcFilter.dateRangeEnd}
+                                    onChange={(start, end) => setTcFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                                    showFiscalYear={false}
                                 />
+                                <div className="field" style={{ minWidth: 170 }}>
+                                    <label>Employee Filter</label>
+                                    <SearchableSelect
+                                        value={tcFilter.employeeId}
+                                        onChange={val => setTcFilter(p => ({ ...p, employeeId: val }))}
+                                        options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                        placeholder="All Employees"
+                                        searchPlaceholder="Search employees..."
+                                        width="100%"
+                                    />
+                                </div>
+                                <div className="field" style={{ width: 130 }}>
+                                    <label>Priority</label>
+                                    <select className="report-select"
+                                        value={tcFilter.taskPriorityLevel}
+                                        onChange={e => setTcFilter(p => ({ ...p, taskPriorityLevel: e.target.value }))}>
+                                        <option value="">All Priorities</option>
+                                        {PRIORITY_LEVELS.map(p => (
+                                            <option key={p} value={p}>{p}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="field" style={{ width: 130 }}>
+                                    <label>Status</label>
+                                    <select className="report-select"
+                                        value={tcFilter.taskStatus}
+                                        onChange={e => setTcFilter(p => ({ ...p, taskStatus: e.target.value }))}>
+                                        <option value="">All Statuses</option>
+                                        {TASK_STATUSES_FILTER.map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="field" style={{ width: 140 }}>
+                                    <label>Category</label>
+                                    <select className="report-select"
+                                        value={tcFilter.taskCategory}
+                                        onChange={e => setTcFilter(p => ({ ...p, taskCategory: e.target.value }))}>
+                                        <option value="">All Categories</option>
+                                        {TASK_CATEGORIES.map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
-                            <div className="field">
-                                <label>Priority</label>
-                                <select className="report-select"
-                                    value={tcFilter.taskPriorityLevel}
-                                    onChange={e => setTcFilter(p => ({ ...p, taskPriorityLevel: e.target.value }))}>
-                                    <option value="">All Priorities</option>
-                                    {PRIORITY_LEVELS.map(p => (
-                                        <option key={p} value={p}>{p}</option>
-                                    ))}
-                                </select>
+                            <div className="report-filter-actions-right">
+                                <button className="btn" onClick={handleTcReset} title="Reset Filters"><RotateCcw size={14} /> Reset</button>
+                                {tcReport && (
+                                    <>
+                                        <button className="btn" onClick={() => handleTcExport('Csv')} disabled={tcExporting} title="Export CSV">
+                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
+                                        </button>
+                                        <button className="btn" onClick={() => handleTcExport('Excel')} disabled={tcExporting} title="Export Excel">
+                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                        </button>
+                                        <button className="btn" onClick={() => handleTcExport('Pdf')} disabled={tcExporting} title="Export PDF">
+                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
+                                        </button>
+                                    </>
+                                )}
+                                <button className="btn btn-teal" onClick={handleTcGenerate} disabled={tcLoading} style={{ height: 34 }}>
+                                    {tcLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
+                                    {' '}{tcLoading ? 'Generating...' : 'Generate Report'}
+                                </button>
                             </div>
-                            <div className="field">
-                                <label>Status</label>
-                                <select className="report-select"
-                                    value={tcFilter.taskStatus}
-                                    onChange={e => setTcFilter(p => ({ ...p, taskStatus: e.target.value }))}>
-                                    <option value="">All Statuses</option>
-                                    {TASK_STATUSES_FILTER.map(s => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Category</label>
-                                <select className="report-select"
-                                    value={tcFilter.taskCategory}
-                                    onChange={e => setTcFilter(p => ({ ...p, taskCategory: e.target.value }))}>
-                                    <option value="">All Categories</option>
-                                    {TASK_CATEGORIES.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                        <div className="report-filter-actions">
-                            <button className="btn" onClick={handleTcReset}><RotateCcw size={14} /> Reset</button>
-                            <button className="btn btn-primary" onClick={handleTcGenerate} disabled={tcLoading}>
-                                {tcLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
-                                {' '}{tcLoading ? 'Generating...' : 'Generate Report'}
-                            </button>
                         </div>
                     </div>
 
@@ -5025,7 +5065,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Task Status Distribution</h4>
-                                        <span className="badge badge-teal">Status Breakdown</span>
+                                        <span className="report-pill teal">Status Breakdown</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         {tcChartData.length === 0 ? (
@@ -5057,7 +5097,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Tasks by Priority</h4>
-                                        <span className="badge badge-blue">Priority Distribution</span>
+                                        <span className="report-pill blue">Priority Distribution</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -5081,7 +5121,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
                                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Granular Task Execution Logs ({tcReport.tasks?.length || 0} tasks)</h4>
-                                    <span className="badge badge-blue">Who did it • When updated • Timeliness</span>
                                 </div>
                                 {tcReport.tasks && tcReport.tasks.length > 0 ? (
                                     <>
@@ -5104,54 +5143,47 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                     const isOverdue = !isCompleted && !task.isOnTime;
                                                     return (
                                                         <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>
                                                                 <div>{task.title}</div>
                                                                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>Ref: {task.taskReferenceNumber}</div>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px' }}>
+                                                            <td style={{ padding: '8px 10px' }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
                                                                     <User size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                                                                     <span>{task.assignedEmployee || 'Unassigned'}</span>
                                                                 </div>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{task.department || 'N/A'}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                                <span className={`badge ${task.priority === 'Urgent' ? 'badge-red' : task.priority === 'High' ? 'badge-amber' : 'badge-blue'}`}>
+                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{task.department || 'N/A'}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${task.priority === 'Urgent' ? 'danger' : task.priority === 'High' ? 'warning' : 'blue'}`}>
                                                                     {task.priority}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
                                                                 {formatReportDateTime(task.deadline)}
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
                                                                 {formatReportDateTime(task.completedAt || (task as any).updatedAt)}
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                                <span style={{
-                                                                    display: 'inline-block', padding: '3px 10px', borderRadius: 999,
-                                                                    fontSize: 12, fontWeight: 700,
-                                                                    background: isCompleted
-                                                                        ? (task.isOnTime ? 'rgba(5,205,153,0.12)' : 'rgba(238,93,80,0.12)')
-                                                                        : (isOverdue ? 'rgba(238,93,80,0.12)' : 'rgba(255,181,71,0.12)'),
-                                                                    color: isCompleted
-                                                                        ? (task.isOnTime ? 'var(--status-active)' : 'var(--status-failed)')
-                                                                        : (isOverdue ? 'var(--status-failed)' : 'var(--status-pending)'),
-                                                                }}>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${isCompleted
+                                                                    ? (task.isOnTime ? 'success' : 'danger')
+                                                                    : (isOverdue ? 'danger' : 'warning')}`}>
                                                                     {isCompleted
                                                                         ? (task.isOnTime ? '✅ On-Time' : `⏰ Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`)
                                                                         : (isOverdue ? `⚠️ Overdue ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}` : '⏳ In Progress')}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
-                                                                <span className="badge badge-teal">{task.status}</span>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className="report-pill teal">{task.status}</span>
                                                             </td>
                                                         </tr>
                                                     );
                                                 })}
                                             </tbody>
                                         </table>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((tcLogsPage - 1) * REPORT_PAGE_SIZE + 1, tcReport.tasks.length)}–{Math.min(tcLogsPage * REPORT_PAGE_SIZE, tcReport.tasks.length)} of {tcReport.tasks.length} records
                                             </span>
                                             <Pagination
@@ -5189,21 +5221,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     ))}
                                 </DataTable>
                             </div>
-
-                            <div className="report-export-row">
-                                <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {tcGeneratedAt}</span>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    <button className="btn btn-primary" onClick={() => handleTcExport('Csv')} disabled={tcExporting}>
-                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
-                                    </button>
-                                    <button className="btn btn-primary" onClick={() => handleTcExport('Excel')} disabled={tcExporting}>
-                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
-                                    </button>
-                                    <button className="btn btn-primary" onClick={() => handleTcExport('Pdf')} disabled={tcExporting}>
-                                        {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
-                                    </button>
-                                </div>
-                            </div>
                         </>
                     )}
                 </>
@@ -5213,7 +5230,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             {reportSubTab === 'operational-summary' && (
                 <>
                     <div className="card report-filter-card">
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 12 }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                 📈 Operational Summary &amp; SLA Compliance
                             </h3>
@@ -5221,52 +5238,57 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 Department workload balance, capacity utilization, and operational SLA breach indicators.
                             </p>
                         </div>
-                        <div className="report-filter-grid">
-                            <DateRangeEngineField
-                                dateRangeStart={opFilter.dateRangeStart}
-                                dateRangeEnd={opFilter.dateRangeEnd}
-                                onChange={(start, end) => setOpFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
-                                showFiscalYear={false}
-                            />
-                            <div className="field">
-                                <label>Department</label>
-                                <select className="report-select"
-                                    value={opFilter.departmentId}
-                                    onChange={e => setOpFilter(p => ({ ...p, departmentId: e.target.value }))}>
-                                    <option value="">All Departments</option>
-                                    {departments.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Employee Filter</label>
-                                <SearchableSelect
-                                    value={opFilter.employeeId}
-                                    onChange={val => setOpFilter(p => ({ ...p, employeeId: val }))}
-                                    options={allEmployeeOptions.map(e => ({ value: e.accountId, label: e.employeeName }))}
-                                    placeholder="All Employees"
-                                    searchPlaceholder="Search employees..."
-                                    width="100%"
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields">
+                                <DateRangeEngineField
+                                    dateRangeStart={opFilter.dateRangeStart}
+                                    dateRangeEnd={opFilter.dateRangeEnd}
+                                    onChange={(start, end) => setOpFilter(p => ({ ...p, dateRangeStart: start, dateRangeEnd: end }))}
+                                    showFiscalYear={false}
                                 />
+                                <div className="field" style={{ width: 170 }}>
+                                    <label>Department</label>
+                                    <select className="report-select"
+                                        value={opFilter.departmentId}
+                                        onChange={e => setOpFilter(p => ({ ...p, departmentId: e.target.value }))}>
+                                        <option value="">All Departments</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="field" style={{ minWidth: 180 }}>
+                                    <label>Employee Filter</label>
+                                    <SearchableSelect
+                                        value={opFilter.employeeId}
+                                        onChange={val => setOpFilter(p => ({ ...p, employeeId: val }))}
+                                        options={allEmployeeOptions.map(e => ({ value: e.accountId, label: e.employeeName }))}
+                                        placeholder="All Employees"
+                                        searchPlaceholder="Search employees..."
+                                        width="100%"
+                                    />
+                                </div>
                             </div>
-                            <div className="field">
-                                <label>Default Export Format</label>
-                                <select className="report-select"
-                                    value={opFilter.reportFormat}
-                                    onChange={e => setOpFilter(p => ({ ...p, reportFormat: e.target.value }))}>
-                                    <option value="PDF">PDF</option>
-                                    <option value="EXCEL">Excel</option>
-                                    <option value="CSV">CSV</option>
-                                </select>
+                            <div className="report-filter-actions-right">
+                                <button className="btn" onClick={handleOpReset} title="Reset Filters"><RotateCcw size={14} /> Reset</button>
+                                {opReport && (
+                                    <>
+                                        <button className="btn" onClick={() => handleOpDownload('PDF')} disabled={opDownloading} title="Download PDF">
+                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
+                                        </button>
+                                        <button className="btn" onClick={() => handleOpDownload('EXCEL')} disabled={opDownloading} title="Download Excel">
+                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                        </button>
+                                        <button className="btn" onClick={() => handleOpDownload('CSV')} disabled={opDownloading} title="Download CSV">
+                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
+                                        </button>
+                                    </>
+                                )}
+                                <button className="btn btn-teal" onClick={handleOpGenerate} disabled={opLoading} style={{ height: 34 }}>
+                                    {opLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
+                                    {' '}{opLoading ? 'Generating...' : 'Generate Report'}
+                                </button>
                             </div>
-                        </div>
-                        <div className="report-filter-actions">
-                            <button className="btn" onClick={handleOpReset}><RotateCcw size={14} /> Reset</button>
-                            <button className="btn btn-primary" onClick={handleOpGenerate} disabled={opLoading}>
-                                {opLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
-                                {' '}{opLoading ? 'Generating...' : 'Generate Report'}
-                            </button>
                         </div>
                     </div>
 
@@ -5290,7 +5312,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Department Task Volume &amp; SLA Breaches</h4>
-                                        <span className="badge badge-teal">By Department</span>
+                                        <span className="report-pill teal">By Department</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -5316,7 +5338,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Workload by Priority</h4>
-                                        <span className="badge badge-blue">Distribution</span>
+                                        <span className="report-pill blue">Distribution</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         {opReport.workloadByPriority && opReport.workloadByPriority.length > 0 ? (
@@ -5349,7 +5371,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 Monitor department SLA hits, team capacity, and active bottlenecks.
                                             </p>
                                         </div>
-                                        <span className="badge badge-blue">{opReport.departmentSummaries.length} Teams</span>
+                                        <span className="report-pill blue">{opReport.departmentSummaries.length} Teams</span>
                                     </div>
                                     <table className="table-card-data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>
@@ -5374,50 +5396,28 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 const isHighBreach = (dept.slaBreachRate || 0) >= 15;
                                                 return (
                                                     <tr key={dept.departmentName} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{dept.departmentName}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>{dept.totalTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{dept.completedTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{dept.activeTasks}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: hasBreach ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 600 }}>{dept.departmentName}</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>{dept.totalTasks}</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{dept.completedTasks}</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{dept.activeTasks}</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: hasBreach ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
                                                             {dept.slaBreachedTasks}
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            {hasBreach || isHighBreach ? (
-                                                                <span style={{
-                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(238,93,80,0.12)', color: 'var(--status-failed)'
-                                                                }}>
-                                                                    🚨 {dept.slaBreachedTasks > 0 ? `${dept.slaBreachedTasks} SLA Breached` : `${dept.slaBreachRate.toFixed(1)}% Breach Risk`}
-                                                                </span>
-                                                            ) : dept.slaBreachRate > 0 ? (
-                                                                <span style={{
-                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(255,181,71,0.12)', color: '#d97706'
-                                                                }}>
-                                                                    ⚠️ {dept.slaBreachRate.toFixed(1)}% Watch
-                                                                </span>
-                                                            ) : (
-                                                                <span style={{
-                                                                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                                    fontSize: 11, fontWeight: 700, background: 'rgba(5,205,153,0.12)', color: 'var(--status-active)'
-                                                                }}>
-                                                                    ✅ SLA Healthy
-                                                                </span>
-                                                            )}
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                            <span className={`report-pill ${hasBreach || isHighBreach ? 'danger' : dept.slaBreachRate > 0 ? 'warning' : 'success'}`}>
+                                                                {hasBreach || isHighBreach
+                                                                    ? (dept.slaBreachedTasks > 0 ? `🚨 ${dept.slaBreachedTasks} SLA Breached` : `🚨 ${dept.slaBreachRate.toFixed(1)}% Breach Risk`)
+                                                                    : dept.slaBreachRate > 0 ? `⚠️ ${dept.slaBreachRate.toFixed(1)}% Watch` : '✅ SLA Healthy'}
+                                                            </span>
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
                                                             {dept.onTimeRate.toFixed(1)}%
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>
                                                             {dept.tasksPerMember.toFixed(1)}
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '3px 12px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: isBalanced ? 'rgba(5,205,153,0.12)' : isModerate ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                color: isBalanced ? 'var(--status-active)' : isModerate ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                            }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                            <span className={`report-pill ${isBalanced ? 'success' : isModerate ? 'warning' : 'danger'}`}>
                                                                 {isBalanced ? '🌿 ' : isModerate ? '⚠️ ' : '🔥 '}{status}
                                                             </span>
                                                         </td>
@@ -5426,8 +5426,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             })}
                                         </tbody>
                                     </table>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                             Showing {Math.min((opDeptPage - 1) * REPORT_PAGE_SIZE + 1, opReport.departmentSummaries.length)}–{Math.min(opDeptPage * REPORT_PAGE_SIZE, opReport.departmentSummaries.length)} of {opReport.departmentSummaries.length} records
                                         </span>
                                         <Pagination
@@ -5448,7 +5448,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             Identify employees who are overloaded or at risk of SLA delays.
                                         </p>
                                     </div>
-                                    <span className="badge badge-teal">{opReport.employeePerformanceSummary?.length || 0} Members</span>
+                                    <span className="report-pill teal">{opReport.employeePerformanceSummary?.length || 0} Members</span>
                                 </div>
                                 <DataTable title=""
                                     headers={['Employee', 'Assigned Load', 'Completed', 'Overdue / At Risk', 'Completion Rate', 'Workload & Capacity Status']}
@@ -5472,48 +5472,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 </td>
                                                 <td style={{ textAlign: 'center', fontWeight: 600 }}>{ep.completionRate.toFixed(1)}%</td>
                                                 <td style={{ textAlign: 'center' }}>
-                                                    {isOverloaded ? (
-                                                        <span style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                            fontSize: 11, fontWeight: 700, background: 'rgba(238,93,80,0.14)', color: 'var(--status-failed)'
-                                                        }}>
-                                                            <Flame size={12} /> Overloaded ({ep.assigned} tasks)
-                                                        </span>
-                                                    ) : isModerate ? (
-                                                        <span style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                            fontSize: 11, fontWeight: 700, background: 'rgba(255,181,71,0.14)', color: '#d97706'
-                                                        }}>
-                                                            ⚠️ Moderate ({ep.assigned} tasks)
-                                                        </span>
-                                                    ) : (
-                                                        <span style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999,
-                                                            fontSize: 11, fontWeight: 700, background: 'rgba(5,205,153,0.14)', color: 'var(--status-active)'
-                                                        }}>
-                                                            🌿 Balanced ({ep.assigned} tasks)
-                                                        </span>
-                                                    )}
+                                                    <span className={`report-pill ${isOverloaded ? 'danger' : isModerate ? 'warning' : 'success'}`}>
+                                                        {isOverloaded ? <><Flame size={12} /> Overloaded ({ep.assigned})</> : isModerate ? `⚠️ Moderate (${ep.assigned})` : `🌿 Balanced (${ep.assigned})`}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         );
                                     })}
                                 </DataTable>
-                            </div>
-
-                            <div className="report-export-row">
-                                <span className="report-generated-badge"><Calendar size={12} /> Report generated at: {opGeneratedAt}</span>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    <button className="btn btn-primary" onClick={() => handleOpDownload('PDF')} disabled={opDownloading}>
-                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download PDF
-                                    </button>
-                                    <button className="btn btn-primary" onClick={() => handleOpDownload('EXCEL')} disabled={opDownloading}>
-                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download Excel
-                                    </button>
-                                    <button className="btn btn-primary" onClick={() => handleOpDownload('CSV')} disabled={opDownloading}>
-                                        {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download CSV
-                                    </button>
-                                </div>
                             </div>
                         </>
                     )}
@@ -5524,7 +5490,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             {reportSubTab === 'performance-report' && (
                 <>
                     <div className="card report-filter-card">
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 12 }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                 🎯 Performance &amp; Quality Indicators (5 Core KPIs)
                             </h3>
@@ -5532,46 +5498,61 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 Holistic assessment of Completion Rate, On-Time Delivery, SLA Breach Rate, Rework Rate, and Output Volume.
                             </p>
                         </div>
-                        <div className="report-filter-grid">
-                            <DateRangeEngineField
-                                dateRangeStart={prFilter.dateRangeStart}
-                                dateRangeEnd={prFilter.dateRangeEnd}
-                                onChange={(start, end) => setPrFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
-                                showFiscalYear={false}
-                            />
-                            <div className="field">
-                                <label>Period *</label>
-                                <select value={prFilter.period} onChange={e => setPrFilter(prev => ({ ...prev, period: e.target.value as any }))}>
-                                    <option value="Weekly">Weekly</option>
-                                    <option value="Monthly">Monthly</option>
-                                    <option value="Quarterly">Quarterly</option>
-                                    <option value="Annual">Annual</option>
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Employee Filter</label>
-                                <SearchableSelect
-                                    value={prFilter.employeeId}
-                                    onChange={val => setPrFilter(prev => ({ ...prev, employeeId: val }))}
-                                    options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
-                                    placeholder="All Employees"
-                                    searchPlaceholder="Search employees..."
-                                    width="100%"
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields">
+                                <DateRangeEngineField
+                                    dateRangeStart={prFilter.dateRangeStart}
+                                    dateRangeEnd={prFilter.dateRangeEnd}
+                                    onChange={(start, end) => setPrFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                    showFiscalYear={false}
                                 />
+                                <div className="field" style={{ width: 120 }}>
+                                    <label>Period *</label>
+                                    <select className="report-select" value={prFilter.period} onChange={e => setPrFilter(prev => ({ ...prev, period: e.target.value as any }))}>
+                                        <option value="Weekly">Weekly</option>
+                                        <option value="Monthly">Monthly</option>
+                                        <option value="Quarterly">Quarterly</option>
+                                        <option value="Annual">Annual</option>
+                                    </select>
+                                </div>
+                                <div className="field" style={{ minWidth: 170 }}>
+                                    <label>Employee Filter</label>
+                                    <SearchableSelect
+                                        value={prFilter.employeeId}
+                                        onChange={val => setPrFilter(prev => ({ ...prev, employeeId: val }))}
+                                        options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                        placeholder="All Employees"
+                                        searchPlaceholder="Search employees..."
+                                        width="100%"
+                                    />
+                                </div>
+                                <div className="field" style={{ minWidth: 170 }}>
+                                    <label>Department</label>
+                                    <SearchableSelect
+                                        value={prFilter.departmentId}
+                                        onChange={val => setPrFilter(prev => ({ ...prev, departmentId: val }))}
+                                        options={departments.map(d => ({ value: d.id, label: d.name }))}
+                                        placeholder="All Departments"
+                                        searchPlaceholder="Search departments..."
+                                        width="100%"
+                                    />
+                                </div>
                             </div>
-                            <div className="field">
-                                <label>Department</label>
-                                <SearchableSelect
-                                    value={prFilter.departmentId}
-                                    onChange={val => setPrFilter(prev => ({ ...prev, departmentId: val }))}
-                                    options={departments.map(d => ({ value: d.id, label: d.name }))}
-                                    placeholder="All Departments"
-                                    searchPlaceholder="Search departments..."
-                                    width="100%"
-                                />
-                            </div>
-                            <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handlePrGenerate} disabled={prLoading} style={{ width: '100%', height: 38 }}>
+                            <div className="report-filter-actions-right">
+                                {prData && (
+                                    <>
+                                        <button className="btn" onClick={() => handlePrExport('Excel')} disabled={prExporting} title="Export Excel">
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                        </button>
+                                        <button className="btn" onClick={() => handlePrExport('Pdf')} disabled={prExporting} title="Export PDF">
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
+                                        </button>
+                                        <button className="btn" onClick={() => handlePrExport('Csv')} disabled={prExporting} title="Export CSV">
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
+                                        </button>
+                                    </>
+                                )}
+                                <button className="btn btn-teal" onClick={handlePrGenerate} disabled={prLoading} style={{ height: 34 }}>
                                     {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
@@ -5613,8 +5594,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             <div>
                                                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                                                     👤 {selectedPrEmp.employeeName}
-                                                    <span className="badge badge-teal">{selectedPrEmp.role || 'Member'}</span>
-                                                    <span className="badge badge-blue">{selectedPrEmp.department}</span>
+                                                    <span className="report-pill teal">{selectedPrEmp.role || 'Member'}</span>
+                                                    <span className="report-pill blue">{selectedPrEmp.department}</span>
                                                 </h3>
                                                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                     Single Employee Performance History over {prData.period} Period ({prData.dateRangeStart?.split('T')[0]} to {prData.dateRangeEnd?.split('T')[0]})
@@ -5623,15 +5604,15 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </div>
                                         <div>
                                             {selectedPrEmp.completionRate >= 90 && selectedPrEmp.onTimeRate >= 90 ? (
-                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(5,205,153,0.15)', color: 'var(--status-active)', fontWeight: 700, fontSize: 13 }}>
+                                                <span className="report-pill success" style={{ padding: '5px 12px', fontSize: 12 }}>
                                                     🌟 Top Performer (Exceeding SLA)
                                                 </span>
                                             ) : selectedPrEmp.slaBreachRate > 15 ? (
-                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(238,93,80,0.15)', color: 'var(--status-failed)', fontWeight: 700, fontSize: 13 }}>
+                                                <span className="report-pill danger" style={{ padding: '5px 12px', fontSize: 12 }}>
                                                     ⚠️ High SLA Breach Risk (Needs Coaching)
                                                 </span>
                                             ) : (
-                                                <span style={{ padding: '6px 14px', borderRadius: 999, background: 'rgba(67,24,255,0.12)', color: '#4318ff', fontWeight: 700, fontSize: 13 }}>
+                                                <span className="report-pill blue" style={{ padding: '5px 12px', fontSize: 12 }}>
                                                     👍 Reliable &amp; Consistent Output
                                                 </span>
                                             )}
@@ -5682,7 +5663,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <div className="card" style={{ background: 'var(--bg-secondary, #fafbfc)' }}>
                                             <div className="card-header-layout">
                                                 <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Individual Quality &amp; Efficiency Breakdown</h4>
-                                                <span className="badge badge-teal">5 Core KPI Benchmark</span>
+                                                <span className="report-pill teal">5 Core KPI Benchmark</span>
                                             </div>
                                             <div style={{ height: 210, marginTop: 8 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
@@ -5712,7 +5693,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <div className="card" style={{ background: 'var(--bg-secondary, #fafbfc)' }}>
                                             <div className="card-header-layout">
                                                 <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Workload &amp; Delivery Ratio</h4>
-                                                <span className="badge badge-blue">Volume Breakdown</span>
+                                                <span className="report-pill blue">Volume Breakdown</span>
                                             </div>
                                             <div style={{ height: 210, marginTop: 8 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
@@ -5784,7 +5765,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <div className="card">
                                             <div className="card-header-layout">
                                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Core 5 KPIs Summary (%)</h4>
-                                                <span className="badge badge-teal">KPI Index</span>
+                                                <span className="report-pill teal">KPI Index</span>
                                             </div>
                                             <div style={{ height: 230, marginTop: 8 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
@@ -5814,7 +5795,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <div className="card">
                                             <div className="card-header-layout">
                                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Performance Comparison</h4>
-                                                <span className="badge badge-blue">On-Time vs Completion</span>
+                                                <span className="report-pill blue">On-Time vs Completion</span>
                                             </div>
                                             <div style={{ height: 230, marginTop: 8 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
@@ -5847,7 +5828,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             Click any employee to view their individual progress over time.
                                         </p>
                                     </div>
-                                    <span className="badge badge-blue">{prData.employeeBreakdown?.length || 0} employees</span>
+                                    <span className="report-pill blue">{prData.employeeBreakdown?.length || 0} employees</span>
                                 </div>
                                 {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
                                     <>
@@ -5878,49 +5859,48 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                             borderBottom: '1px solid var(--border)',
                                                             backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.05)' : undefined
                                                         }}>
-                                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>
                                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                                     <UserCheck size={14} style={{ color: isSelected ? '#4318ff' : 'var(--text-secondary)' }} />
                                                                     {kpi.employeeName}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{kpi.department}</td>
-                                                            <td style={{ padding: '10px 12px', fontSize: 13 }}>{kpi.role}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{kpi.totalAssigned}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{kpi.totalCompleted}</td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                                <span style={{
-                                                                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                                                                    fontSize: 12, fontWeight: 700,
-                                                                    background: completionRate >= 80 ? 'rgba(5,205,153,0.12)' : 'rgba(255,181,71,0.12)',
-                                                                    color: completionRate >= 80 ? 'var(--status-active)' : 'var(--status-pending)',
-                                                                }}>{completionRate}%</span>
+                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{kpi.department}</td>
+                                                            <td style={{ padding: '8px 10px', fontSize: 12 }}>{kpi.role}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{kpi.totalAssigned}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{kpi.totalCompleted}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${completionRate >= 80 ? 'success' : 'warning'}`}>
+                                                                    {completionRate}%
+                                                                </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                                <span style={{
-                                                                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                                                                    fontSize: 12, fontWeight: 700,
-                                                                    background: onTimeRate >= 80 ? 'rgba(5,205,153,0.12)' : onTimeRate >= 50 ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                    color: onTimeRate >= 80 ? 'var(--status-active)' : onTimeRate >= 50 ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                                }}>{onTimeRate}%</span>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${onTimeRate >= 80 ? 'success' : onTimeRate >= 50 ? 'warning' : 'danger'}`}>
+                                                                    {onTimeRate}%
+                                                                </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: breachRate > 0 ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                                                                {breachRate}%
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${breachRate > 0 ? 'danger' : 'neutral'}`}>
+                                                                    {breachRate}%
+                                                                </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center', color: reworkRate > 0 ? 'var(--status-pending)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                                                                {reworkRate}%
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${reworkRate > 0 ? 'warning' : 'neutral'}`}>
+                                                                    {reworkRate}%
+                                                                </span>
                                                             </td>
-                                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                                                                 <button
                                                                     className="btn btn-secondary btn-sm"
                                                                     style={{
-                                                                        padding: '4px 10px', fontSize: 12,
-                                                                        background: isSelected ? 'var(--primary, #4318ff)' : undefined,
+                                                                        padding: '3px 8px', fontSize: 11,
+                                                                        background: isSelected ? 'var(--teal, #00A99D)' : undefined,
+                                                                        borderColor: isSelected ? 'var(--teal, #00A99D)' : undefined,
                                                                         color: isSelected ? '#fff' : undefined
                                                                     }}
                                                                     onClick={() => setSelectedPrEmpId(isSelected ? '' : kpi.employeeId)}
                                                                 >
-                                                                    {isSelected ? '✓ Viewing' : '🔍 View History'}
+                                                                    {isSelected ? '✓ Viewing' : '🔍 Deep-Dive'}
                                                                 </button>
                                                             </td>
                                                         </tr>
@@ -5928,8 +5908,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 })}
                                             </tbody>
                                         </table>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((prEmpPage - 1) * REPORT_PAGE_SIZE + 1, prData.employeeBreakdown.length)}–{Math.min(prEmpPage * REPORT_PAGE_SIZE, prData.employeeBreakdown.length)} of {prData.employeeBreakdown.length} records
                                             </span>
                                             <Pagination
@@ -5945,22 +5925,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <p>No completed tasks found for the selected criteria.</p>
                                     </div>
                                 )}
-                                <div className="report-export-row">
-                                    <span className="report-generated-badge">
-                                        <Calendar size={12} /> {prData.dateRangeStart?.split('T')[0]} to {prData.dateRangeEnd?.split('T')[0]}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                        <button className="btn btn-primary" onClick={() => handlePrExport('Excel')} disabled={prExporting}>
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => handlePrExport('Pdf')} disabled={prExporting}>
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => handlePrExport('Csv')} disabled={prExporting}>
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
                         </>
                     )}
@@ -5971,48 +5935,66 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             {reportSubTab === 'foms-export' && (
                 <>
                     <div className="card report-filter-card">
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 12 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                     💰 Financial Report &amp; FOMS Ledger
                                 </h3>
-                                <span className="badge badge-blue">FOMS Financial Ledger</span>
+                                <span className="report-pill blue">FOMS Financial Ledger</span>
                             </div>
                             <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
                                 Speedex Operations &amp; Field Operations Management System (FOMS) ledger. Track billed charges, collections, outstanding balances, and invoice settlements.
                             </p>
                         </div>
-                        <div className="report-filter-grid">
-                            <DateRangeEngineField
-                                dateRangeStart={fomsFilter.dateRangeStart}
-                                dateRangeEnd={fomsFilter.dateRangeEnd}
-                                onChange={(start, end) => setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
-                                showFiscalYear={true}
-                            />
-                            <div className="field">
-                                <label>Department</label>
-                                <select className="report-select"
-                                    value={fomsFilter.departmentId}
-                                    onChange={e => setFomsFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
-                                    <option value="">All Departments</option>
-                                    {departments.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields">
+                                <DateRangeEngineField
+                                    dateRangeStart={fomsFilter.dateRangeStart}
+                                    dateRangeEnd={fomsFilter.dateRangeEnd}
+                                    onChange={(start, end) => setFomsFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                    showFiscalYear={true}
+                                />
+                                <div className="field" style={{ width: 170 }}>
+                                    <label>Department</label>
+                                    <select className="report-select"
+                                        value={fomsFilter.departmentId}
+                                        onChange={e => setFomsFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
+                                        <option value="">All Departments</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="field" style={{ width: 150 }}>
+                                    <label>Invoice Status</label>
+                                    <select className="report-select"
+                                        value={fomsFilter.status}
+                                        onChange={e => setFomsFilter(prev => ({ ...prev, status: e.target.value }))}>
+                                        <option value="All">All Invoices</option>
+                                        <option value="Paid">Paid</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Overdue">Overdue</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div className="field">
-                                <label>Invoice Status</label>
-                                <select className="report-select"
-                                    value={fomsFilter.status}
-                                    onChange={e => setFomsFilter(prev => ({ ...prev, status: e.target.value }))}>
-                                    <option value="All">All Invoices</option>
-                                    <option value="Paid">Paid</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Overdue">Overdue</option>
-                                </select>
-                            </div>
-                            <div className="field" style={{ alignSelf: 'flex-end' }}>
-                                <button className="btn btn-primary" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ width: '100%', height: 38 }}>
+                            <div className="report-filter-actions-right">
+                                {financialReport && (
+                                    <>
+                                        <button className="btn" onClick={() => handleFinancialExport('Excel')} disabled={financialExporting} title="Export Excel">
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                        </button>
+                                        <button className="btn" onClick={() => handleFinancialExport('Pdf')} disabled={financialExporting} title="Export PDF">
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
+                                        </button>
+                                        <button className="btn" onClick={() => handleFinancialExport('Csv')} disabled={financialExporting} title="Export CSV">
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
+                                        </button>
+                                        <button className="btn" onClick={handleLegacyFomsTaskExport} disabled={financialExporting} title="Export task records for Field Operations">
+                                            <FileText size={14} /> Tasks CSV
+                                        </button>
+                                    </>
+                                )}
+                                <button className="btn btn-teal" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ height: 34 }}>
                                     {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
@@ -6082,7 +6064,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Revenue &amp; Collection Overview</h4>
-                                        <span className="badge badge-teal">Financial Volume</span>
+                                        <span className="report-pill teal">Financial Volume</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -6110,7 +6092,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 <div className="card">
                                     <div className="card-header-layout">
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Invoice Payment Status</h4>
-                                        <span className="badge badge-blue">Settlement Status</span>
+                                        <span className="report-pill blue">Settlement Status</span>
                                     </div>
                                     <div style={{ height: 230, marginTop: 8 }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -6143,7 +6125,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="card" style={{ marginTop: 16 }}>
                                 <div className="card-header-layout">
                                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Speedex Financial Invoices &amp; FOMS Ledger</h4>
-                                    <span className="badge badge-blue">{financialReport.invoices?.length || 0} Invoices</span>
+                                    <span className="report-pill blue">{financialReport.invoices?.length || 0} Invoices</span>
                                 </div>
                                 {financialReport.invoices && financialReport.invoices.length > 0 ? (
                                     <>
@@ -6166,55 +6148,50 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             <tbody>
                                                 {pagedInvoices.map((inv) => (
                                                     <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '10px 12px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
-                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.fomsReference}</td>
-                                                        <td style={{ padding: '10px 12px' }}>{inv.clientAccount}</td>
-                                                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{inv.department}</td>
-                                                        <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.billingDate}</td>
-                                                        <td style={{ padding: '10px 12px', fontSize: 12 }}>{inv.dueDate}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
+                                                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 11.5 }}>{inv.fomsReference}</td>
+                                                        <td style={{ padding: '8px 10px' }}>{inv.clientAccount}</td>
+                                                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.department}</td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.billingDate}</td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.dueDate}</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600 }}>
                                                             ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--status-active)' }}>
                                                             ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
                                                             ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                            <span style={{
-                                                                display: 'inline-block', padding: '2px 10px', borderRadius: 999,
-                                                                fontSize: 12, fontWeight: 700,
-                                                                background: inv.paymentStatus === 'Paid' ? 'rgba(5,205,153,0.12)' : inv.paymentStatus === 'Pending' ? 'rgba(255,181,71,0.12)' : 'rgba(238,93,80,0.12)',
-                                                                color: inv.paymentStatus === 'Paid' ? 'var(--status-active)' : inv.paymentStatus === 'Pending' ? 'var(--status-pending)' : 'var(--status-failed)',
-                                                            }}>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                            <span className={`report-pill ${inv.paymentStatus === 'Paid' ? 'success' : inv.paymentStatus === 'Pending' ? 'warning' : 'danger'}`}>
                                                                 {inv.paymentStatus}
                                                             </span>
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 11.5, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                             <tfoot>
                                                 <tr style={{ background: 'var(--bg-secondary, #fafbfc)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                                                    <td colSpan={6} style={{ padding: '10px 12px', textAlign: 'right' }}>Total ({financialReport.invoices.length} Invoices):</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--primary)' }}>
+                                                    <td colSpan={6} style={{ padding: '8px 10px', textAlign: 'right' }}>Total ({financialReport.invoices.length} Invoices):</td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--primary)' }}>
                                                         ₱{(financialReport.totalBilled || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--status-active)' }}>
                                                         ₱{(financialReport.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (financialReport.totalOutstanding || 0) > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: (financialReport.totalOutstanding || 0) > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
                                                         ₱{(financialReport.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
-                                                    <td colSpan={2} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                    <td colSpan={2} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11.5, color: 'var(--text-secondary)' }}>
                                                         {financialReport.collectionRate?.toFixed(1)}% Collected
                                                     </td>
                                                 </tr>
                                             </tfoot>
                                         </table>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((financialPage - 1) * REPORT_PAGE_SIZE + 1, financialReport.invoices.length)}–{Math.min(financialPage * REPORT_PAGE_SIZE, financialReport.invoices.length)} of {financialReport.invoices.length} records
                                             </span>
                                             <Pagination
@@ -6230,25 +6207,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <p>No invoice records for selected criteria.</p>
                                     </div>
                                 )}
-                                <div className="report-export-row">
-                                    <span className="report-generated-badge">
-                                        <Calendar size={12} /> {financialGeneratedAt || `${fomsFilter.dateRangeStart} to ${fomsFilter.dateRangeEnd}`}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Excel')} disabled={financialExporting}>
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export Excel
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Pdf')} disabled={financialExporting}>
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export PDF
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => handleFinancialExport('Csv')} disabled={financialExporting}>
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Export CSV
-                                        </button>
-                                        <button className="btn" onClick={handleLegacyFomsTaskExport} disabled={financialExporting} title="Export task records for Field Operations">
-                                            <FileText size={14} /> Export Tasks CSV
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
                         </>
                     )}
@@ -8541,7 +8499,7 @@ export default function OpsAdminDashboard() {
                     />
                 )}
                 {activeTab === 'activity_logs' && (
-                    <div className="dashboard-content">
+                    <div className="dashboard-content" style={{ padding: '24px 28px' }}>
                         <DataTable
                             title="Activity & Audit Logs"
                             headers={['Date & Time', 'User / Role', 'Action', 'Activity Description', 'Affected Record', 'Changes (Old → New)']}
@@ -8554,7 +8512,7 @@ export default function OpsAdminDashboard() {
                                     <select
                                         value={activityLogType}
                                         onChange={e => { setActivityLogType(e.target.value); }}
-                                        style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}
+                                        style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 12px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}
                                         aria-label="Filter by action type"
                                     >
                                         <option value="">All Action Types</option>
@@ -8562,20 +8520,20 @@ export default function OpsAdminDashboard() {
                                             <option key={value} value={value}>{label}</option>
                                         ))}
                                     </select>
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                         <input
                                             type="date"
                                             value={activityLogDate}
                                             onChange={e => setActivityLogDate(e.target.value)}
                                             title="Filter by date"
-                                            style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 8px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: activityLogDate ? '#0f172a' : '#64748b' }}
+                                            style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer', color: activityLogDate ? '#0f172a' : '#64748b' }}
                                         />
                                         {activityLogDate && (
                                             <button
                                                 type="button"
                                                 onClick={() => setActivityLogDate('')}
                                                 title="Clear date filter"
-                                                style={{ height: 36, padding: '0 8px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
+                                                style={{ height: 36, padding: '0 10px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#64748b', cursor: 'pointer' }}
                                             >
                                                 Clear
                                             </button>
@@ -8589,7 +8547,7 @@ export default function OpsAdminDashboard() {
                                                 setActivityLogType('');
                                                 setActivityLogDate('');
                                             }}
-                                            style={{ height: 36, padding: '0 10px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#dc2626', cursor: 'pointer' }}
+                                            style={{ height: 36, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 12, color: '#dc2626', cursor: 'pointer' }}
                                         >
                                             Reset Filters
                                         </button>
@@ -8608,38 +8566,38 @@ export default function OpsAdminDashboard() {
                                 const activityDesc = getActivityDescription(log);
                                 return (
                                     <tr key={log.id || `${log.timestamp}-${log.actionType}-${Math.random()}`}>
-                                        <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                        <td style={{ padding: '14px 16px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                                                 {fmtDate(log.timestamp || log.createdAt)}
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                                                 {log.timestamp || log.createdAt ? new Date(log.timestamp || log.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                                             </div>
                                         </td>
-                                        <td style={{ fontSize: 13 }}>
+                                        <td style={{ padding: '14px 16px', fontSize: 13, verticalAlign: 'middle' }}>
                                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                                                 {log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : 'System')}
                                             </div>
                                             {log.actorRole && (
-                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                                                     {log.actorRole}
                                                 </div>
                                             )}
                                         </td>
-                                        <td>
+                                        <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
                                             <span style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
+                                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 12px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
                                                 background: badge.background, color: badge.color,
                                             }}>
                                                 {formatActionType(log.actionType)}
                                             </span>
                                         </td>
-                                        <td style={{ fontSize: 13, color: 'var(--text-primary)', maxWidth: 300 }}>
-                                            <div style={{ fontWeight: 500, lineHeight: 1.4 }}>
+                                        <td style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-primary)', maxWidth: 300, verticalAlign: 'middle' }}>
+                                            <div style={{ fontWeight: 500, lineHeight: 1.45 }}>
                                                 {activityDesc}
                                             </div>
                                         </td>
-                                        <td style={{ fontSize: 13 }}>
+                                        <td style={{ padding: '14px 16px', fontSize: 13, verticalAlign: 'middle' }}>
                                             {log.targetEntity ? (
                                                 <>
                                                     <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
@@ -8655,7 +8613,7 @@ export default function OpsAdminDashboard() {
                                                 <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ color: 'var(--text-primary)' }}>{renderChanges(log.oldValue, log.newValue)}</td>
+                                        <td style={{ padding: '14px 16px', color: 'var(--text-primary)', verticalAlign: 'middle' }}>{renderChanges(log.oldValue, log.newValue)}</td>
                                     </tr>
                                 );
                             })}

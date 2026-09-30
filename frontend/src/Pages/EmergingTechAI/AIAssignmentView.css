@@ -2,7 +2,336 @@
 .ai-container {
     display: flex;
     flex-direction: column;
+    gap: 18px;
+    padding: 2px 0 24px;
+}
+
+/* ─── Stepper Header ────────────────────────────────────────────────────── */
+.ai-stepper-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card, #ffffff);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 12px 20px;
+    gap: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.ai-stepper-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    opacity: 0.55;
+    transition: all 0.2s ease;
+}
+
+.ai-stepper-step.active {
+    opacity: 1;
+}
+
+.ai-stepper-step.completed {
+    opacity: 0.9;
+}
+
+.ai-step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--border, #e2e8f0);
+    color: var(--text-secondary, #64748b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.ai-stepper-step.active .ai-step-num {
+    background: var(--primary, #00A99D);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 169, 157, 0.35);
+}
+
+.ai-stepper-step.completed .ai-step-num {
+    background: rgba(5, 205, 153, 0.15);
+    color: var(--status-active, #05cd99);
+    border: 1px solid var(--status-active, #05cd99);
+}
+
+.ai-step-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ai-step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary, #1e293b);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-step-sub {
+    font-size: 11px;
+    color: var(--text-secondary, #64748b);
+    white-space: nowrap;
+}
+
+.ai-stepper-divider {
+    height: 2px;
+    background: var(--border, #e2e8f0);
+    flex: 0.4;
+    margin: 0 4px;
+}
+
+.ai-stepper-divider.completed {
+    background: var(--primary, #00A99D);
+}
+
+/* ─── 2-Column Creation Layout ──────────────────────────────────────────── */
+.ai-creation-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+@media (max-width: 1024px) {
+    .ai-creation-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ai-creation-main {
+    display: flex;
+    flex-direction: column;
     gap: 16px;
+    min-width: 0;
+}
+
+.ai-creation-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ai-side-summary-card {
+    position: sticky;
+    top: 20px;
+    background: var(--bg-card, #ffffff);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.ai-side-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+.ai-side-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary, #1e293b);
+}
+
+.ai-side-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ai-side-preview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: var(--bg-main, #f8fafc);
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border, #e2e8f0);
+}
+
+.ai-side-preview-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary, #64748b);
+}
+
+.ai-side-preview-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    word-break: break-word;
+}
+
+/* ─── Cascading Assignment Sections ─────────────────────────────────────── */
+.ai-cascade-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ai-cascade-card {
+    background: var(--bg-main, #f8fafc);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.ai-cascade-card.active {
+    background: #ffffff;
+    border-color: rgba(0, 169, 157, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 169, 157, 0.06);
+}
+
+.ai-cascade-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ai-cascade-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-primary, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ─── Dedicated Full-Page Summary Review ─────────────────────────────────── */
+.ai-full-summary-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    animation: ai-fade-in 0.25s ease;
+}
+
+@keyframes ai-fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-summary-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card, #ffffff);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 16px 20px;
+    gap: 16px;
+    flex-wrap: wrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.ai-summary-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+}
+
+.ai-review-card {
+    background: var(--bg-card, #ffffff);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.ai-review-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+.ai-review-card-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-review-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ai-review-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border, #f1f5f9);
+}
+
+.ai-review-row:last-child {
+    border-bottom: none;
+}
+
+.ai-review-row-label {
+    color: var(--text-secondary, #64748b);
+    font-weight: 500;
+    font-size: 12px;
+}
+
+.ai-review-row-val {
+    color: var(--text-primary, #1e293b);
+    font-weight: 600;
+    text-align: right;
+}
+
+.ai-summary-footer-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card, #ffffff);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 16px 20px;
+    gap: 16px;
+    flex-wrap: wrap;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
 }
 
 /* ─── Card ──────────────────────────────────────────────────────────────── */

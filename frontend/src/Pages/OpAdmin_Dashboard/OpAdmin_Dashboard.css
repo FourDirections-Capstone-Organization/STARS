@@ -1693,12 +1693,42 @@ input.input-sla-locked {
 /* ─── Report Module ──────────────────────────────────────────────────────── */
 .report-filter-card {
     margin-bottom: 0;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+}
+
+.report-filter-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.report-filter-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.report-filter-actions-right {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .report-filter-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .report-filter-actions {
@@ -1714,15 +1744,16 @@ input.input-sla-locked {
 .report-input,
 .report-select {
     width: 100%;
-    padding: 9px 12px;
-    font-size: 0.85rem;
+    padding: 7px 10px;
+    font-size: 0.8rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--bg-main);
     color: var(--text-primary);
     font-family: inherit;
     transition: border-color 0.15s;
     outline: none;
+    height: 34px;
 }
 
 .report-input:focus,
@@ -1743,6 +1774,90 @@ input.input-sla-locked {
     color: var(--status-failed);
     margin-top: 3px;
     font-weight: 500;
+}
+
+/* ─── Compact Single-View Report Tables ──────────────────────────────────── */
+.table-card-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    table-layout: auto;
+}
+
+.table-card-data-table th {
+    padding: 8px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+    background: var(--bg-secondary, #fafbfc);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+
+.table-card-data-table td {
+    padding: 7px 8px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    white-space: normal;
+    word-break: break-word;
+}
+
+/* ─── Consistent Text Pills ─────────────────────────────────────────────── */
+.report-pill,
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.report-pill.active-pill,
+.report-pill.success {
+    background: rgba(5, 205, 153, 0.12) !important;
+    color: var(--status-active, #05cd99) !important;
+    border-color: rgba(5, 205, 153, 0.3) !important;
+}
+
+.report-pill.warning {
+    background: rgba(255, 181, 71, 0.14) !important;
+    color: #d97706 !important;
+    border-color: rgba(255, 181, 71, 0.3) !important;
+}
+
+.report-pill.danger {
+    background: rgba(238, 93, 80, 0.12) !important;
+    color: var(--status-failed, #ee5d50) !important;
+    border-color: rgba(238, 93, 80, 0.3) !important;
+}
+
+.report-pill.info,
+.report-pill.blue {
+    background: rgba(2, 132, 199, 0.1) !important;
+    color: var(--primary, #0284c7) !important;
+    border-color: rgba(2, 132, 199, 0.25) !important;
+}
+
+.report-pill.teal {
+    background: rgba(0, 169, 157, 0.12) !important;
+    color: var(--teal, #00A99D) !important;
+    border-color: rgba(0, 169, 157, 0.25) !important;
+}
+
+.report-pill.neutral {
+    background: var(--bg-main, #f8fafc) !important;
+    color: var(--text-secondary, #64748b) !important;
+    border-color: var(--border, #e2e8f0) !important;
 }
 
 .reports-dashboard-content {
@@ -2121,5 +2236,158 @@ input.emp-picker-checkbox {
     background: var(--border);
     margin-left: 8px;
 }
+
+/* ─── Reports Tab Unified UI Styles ────────────────────────────────────────── */
+.report-filter-card {
+    padding: 16px 20px;
+    border-radius: var(--r-md, 12px);
+}
+
+.report-filter-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.report-filter-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.report-filter-fields .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 0;
+}
+
+.report-filter-fields .field label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+}
+
+.report-filter-actions-right {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-teal {
+    background: var(--teal, #00A99D) !important;
+    border: 1px solid var(--teal, #00A99D) !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: var(--r-sm, 8px);
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-teal:hover {
+    background: #008f85 !important;
+    border-color: #008f85 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 169, 157, 0.25);
+}
+
+.btn-teal:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.report-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+}
+
+.report-pill.success {
+    background: rgba(5, 205, 153, 0.12);
+    color: var(--status-active, #05cd99);
+    border: 1px solid rgba(5, 205, 153, 0.28);
+}
+
+.report-pill.warning {
+    background: rgba(255, 181, 71, 0.15);
+    color: #d97706;
+    border: 1px solid rgba(255, 181, 71, 0.35);
+}
+
+.report-pill.danger {
+    background: rgba(238, 93, 80, 0.12);
+    color: var(--status-failed, #ee5d50);
+    border: 1px solid rgba(238, 93, 80, 0.28);
+}
+
+.report-pill.blue {
+    background: rgba(67, 24, 255, 0.1);
+    color: #4318ff;
+    border: 1px solid rgba(67, 24, 255, 0.22);
+}
+
+.report-pill.teal {
+    background: rgba(0, 169, 157, 0.12);
+    color: var(--teal, #00A99D);
+    border: 1px solid rgba(0, 169, 157, 0.28);
+}
+
+.report-pill.neutral {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    border: 1px solid rgba(107, 114, 128, 0.22);
+}
+
+.table-card-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+
+.table-card-data-table th {
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border);
+    background: var(--bg-main, #f8fafc);
+    white-space: nowrap;
+}
+
+.table-card-data-table td {
+    padding: 7px 10px;
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.table-card-data-table tbody tr:hover {
+    background: rgba(0, 169, 157, 0.03);
+}
+
 
 
