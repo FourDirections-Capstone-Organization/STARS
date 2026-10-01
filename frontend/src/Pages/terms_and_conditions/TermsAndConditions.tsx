@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import api from '../../api';
+import { getStoredRedirectUri, redirectToExternalPortal } from '../../components/Auth/authRedirect';
 
 export const CURRENT_TERMS_VERSION = 'v1.0';
 
@@ -44,6 +45,25 @@ const TermsAndConditions: React.FC = () => {
             if (res.data?.isSuccess) {
                 localStorage.setItem('hasAcceptedTerms', 'true');
                 localStorage.setItem('termsVersionAccepted', CURRENT_TERMS_VERSION);
+
+                const storedRedirect = getStoredRedirectUri();
+                if (storedRedirect) {
+                    const token = localStorage.getItem('authToken') || '';
+                    const refreshToken = localStorage.getItem('refreshToken') || '';
+                    const role = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
+                    const employeeId = localStorage.getItem('employeeId') || '';
+                    const employeeName = localStorage.getItem('employeeName') || '';
+
+                    redirectToExternalPortal(storedRedirect, {
+                        token,
+                        refreshToken,
+                        role,
+                        employeeId,
+                        employeeName,
+                    });
+                    return;
+                }
+
                 navigate(getDashboardRoute(), { replace: true });
             } else {
                 setErrorMsg(res.data?.message || 'Failed to accept terms. Please try again.');

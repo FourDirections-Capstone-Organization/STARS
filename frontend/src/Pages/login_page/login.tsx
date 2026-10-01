@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useToast } from '../../components/Toast/Toast';
 import api from '../../api';
+import { captureRedirectUriFromQuery, getStoredRedirectUri, redirectToExternalPortal, bootstrapIncomingAuthHash } from '../../components/Auth/authRedirect';
 import './login.css';
 
 /* ── Types ── */
@@ -71,17 +72,30 @@ export default function Login() {
     useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
+        // Check if user arrives with an auth hash from speedex-system
+        const bootstrapped = bootstrapIncomingAuthHash();
+        if (bootstrapped.authenticated && bootstrapped.role) {
+            const normalizedRole = normalizeRole(bootstrapped.role);
+            const target = normalizedRole ? dashboardRoutes[normalizedRole] : '';
+            if (target) {
+                navigate(target, { replace: true });
+                return;
+            }
+        }
+
         ['authToken', 'refreshToken', 'employeeId', 'employeeName',
             'firstName', 'middleName', 'lastName', 'suffix',
             'contactNumber', 'email', 'role', 'isPasswordChanged', 'userRole',
             'hasAcceptedTerms', 'termsVersionAccepted']
             .forEach(k => localStorage.removeItem(k));
 
+        captureRedirectUriFromQuery();
+
         const params = new URLSearchParams(window.location.search);
         if (params.get('reason') === 'inactivity') {
             updateStatus('You were logged out due to 15 minutes of inactivity.', 'info');
         }
-    }, []);
+    }, [navigate]);
 
     const updateStatus = (message: string, type: StatusType) => {
         setStatusMessage(message);
@@ -216,6 +230,19 @@ export default function Login() {
 
             if (!d.hasAcceptedTerms || d.termsVersionAccepted !== 'v1.0') {
                 navigate('/terms-and-conditions', { replace: true });
+                return;
+            }
+
+            const storedRedirect = getStoredRedirectUri();
+            if (storedRedirect) {
+                const fullName = localStorage.getItem('employeeName') || d.fullName || d.employeeName || '';
+                redirectToExternalPortal(storedRedirect, {
+                    token: d.accessToken,
+                    refreshToken: d.refreshToken,
+                    role: normalizedRole,
+                    employeeId: d.employeeNumber ?? employeeId.trim(),
+                    employeeName: fullName,
+                });
                 return;
             }
 

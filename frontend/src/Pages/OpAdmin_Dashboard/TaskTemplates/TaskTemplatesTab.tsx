@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-    Plus, 
-    Search, 
-    X, 
-    LayoutGrid, 
-    List, 
-    Copy, 
-    CheckCircle2, 
-    Repeat, 
-    AlertTriangle, 
-    Layers, 
-    Clock, 
+import {
+    Plus,
+    Search,
+    X,
+    LayoutGrid,
+    List,
+    Copy,
+    CheckCircle2,
+    Repeat,
+    AlertTriangle,
+    Layers,
+    Clock,
     RotateCcw,
     Pencil,
     Play,
@@ -101,13 +101,13 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
         try {
             const res = await api.get('/api/TaskTemplate?pageNumber=1&pageSize=100');
             const body = res.data;
-            const list: any[] = body.isSuccess && Array.isArray(body.data?.items) 
-                ? body.data.items 
+            const list: any[] = body.isSuccess && Array.isArray(body.data?.items)
+                ? body.data.items
                 : (Array.isArray(body.data) ? body.data : (Array.isArray(body.data?.data) ? body.data.data : []));
 
             const mapped: TaskTemplateItem[] = list.map((t: any) => {
                 const rawPriority = t.defaultPriorityLevel ?? t.priorityLevel;
-                const priorityStr = typeof rawPriority === 'number' 
+                const priorityStr = typeof rawPriority === 'number'
                     ? (['Low', 'Medium', 'High', 'Urgent'][rawPriority] ?? 'Medium')
                     : (rawPriority || 'Medium');
 
@@ -169,8 +169,8 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
         try {
             const res = await api.get('/api/Task/assignable-users?pageNumber=1&pageSize=100');
             const body = res.data;
-            const rawList: any[] = Array.isArray(body) 
-                ? body 
+            const rawList: any[] = Array.isArray(body)
+                ? body
                 : (Array.isArray(body?.data?.items) ? body.data.items : (Array.isArray(body?.data?.data) ? body.data.data : (Array.isArray(body?.data) ? body.data : [])));
 
             if (rawList.length > 0) {
@@ -257,7 +257,7 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
             const PRIO_TO_NUM: Record<string, number> = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
             const RECUR_TO_NUM: Record<string, number> = { Daily: 0, Weekly: 1, Monthly: 2 };
 
-            const startDateStr = data.recurrenceStartDate 
+            const startDateStr = data.recurrenceStartDate
                 ? (data.recurrenceStartDate.includes('T') ? data.recurrenceStartDate : `${data.recurrenceStartDate}T00:00:00.000Z`)
                 : new Date().toISOString();
 
@@ -366,8 +366,8 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
         return templates.filter(t => {
             // Search matching
             const q = searchQuery.trim().toLowerCase();
-            const matchesSearch = !q || 
-                t.templateName.toLowerCase().includes(q) || 
+            const matchesSearch = !q ||
+                t.templateName.toLowerCase().includes(q) ||
                 t.defaultDescription.toLowerCase().includes(q) ||
                 (t.defaultAssigneeName && t.defaultAssigneeName.toLowerCase().includes(q));
 
@@ -457,9 +457,9 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                         <AlertTriangle size={16} />
                         <span>{apiError}</span>
                     </div>
-                    <button 
-                        type="button" 
-                        onClick={fetchTemplates} 
+                    <button
+                        type="button"
+                        onClick={fetchTemplates}
                         style={{
                             background: 'none', border: '1px solid currentColor',
                             borderRadius: 6, padding: '4px 10px', fontSize: 12,
@@ -559,8 +559,8 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                     </div>
                     <h3 className="tt-empty-title">No templates match</h3>
                     <p className="tt-empty-hint">
-                        {searchQuery || activeFilter !== 'All' 
-                            ? 'Try adjusting your search keywords or resetting active filter chips.' 
+                        {searchQuery || activeFilter !== 'All'
+                            ? 'Try adjusting your search keywords or resetting active filter chips.'
                             : 'No task templates created yet. Get started by creating your first template.'}
                     </p>
                     <button

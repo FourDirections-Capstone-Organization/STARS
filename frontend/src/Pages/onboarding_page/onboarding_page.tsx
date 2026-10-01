@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import { CheckCircle2, AlertCircle, Loader2, ArrowRight, User, Lock, Phone, Sparkles, ShieldCheck, Eye, EyeOff, Check, X } from 'lucide-react';
+import { getStoredRedirectUri, redirectToExternalPortal } from '../../components/Auth/authRedirect';
 
 type Step = 'profile' | 'password' | 'done';
 
@@ -269,6 +270,23 @@ export default function OnboardingPage() {
             if (!hasTerms || termsVer !== 'v1.0') {
                 navigate('/terms-and-conditions', { replace: true });
             } else {
+                const storedRedirect = getStoredRedirectUri();
+                if (storedRedirect) {
+                    const token = localStorage.getItem('authToken') || '';
+                    const refreshToken = localStorage.getItem('refreshToken') || '';
+                    const role = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
+                    const employeeId = localStorage.getItem('employeeId') || '';
+                    const employeeName = localStorage.getItem('employeeName') || '';
+
+                    redirectToExternalPortal(storedRedirect, {
+                        token,
+                        refreshToken,
+                        role,
+                        employeeId,
+                        employeeName,
+                    });
+                    return;
+                }
                 navigate(getDashboardRoute(), { replace: true });
             }
         } catch (err: any) {

@@ -122,6 +122,10 @@ import SessionTimeoutWatcher from './components/Auth/SessionTimeoutWatcher'
 import { appNavigate } from './components/Auth/useAppNavigate'
 import OnboardingPage from './Pages/onboarding_page/onboarding_page'
 import TermsAndConditions, { CURRENT_TERMS_VERSION } from './Pages/terms_and_conditions/TermsAndConditions'
+import { bootstrapIncomingAuthHash } from './components/Auth/authRedirect'
+
+// Bootstrap any auth hash returned when entering STARS from speedex-system
+bootstrapIncomingAuthHash();
 
 function PasswordChangedGuard() {
     const hasToken = !!localStorage.getItem('authToken');

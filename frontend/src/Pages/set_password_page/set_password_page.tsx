@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { getStoredRedirectUri, redirectToExternalPortal } from '../../components/Auth/authRedirect';
 
 export default function SetPasswordPage() {
     const navigate = useNavigate();
@@ -59,6 +60,20 @@ export default function SetPasswordPage() {
                 if (!hasTerms || termsVer !== 'v1.0') {
                     navigate('/terms-and-conditions', { replace: true });
                 } else {
+                    const storedRedirect = getStoredRedirectUri();
+                    if (storedRedirect) {
+                        const token = localStorage.getItem('authToken') || '';
+                        const refreshToken = localStorage.getItem('refreshToken') || '';
+                        const employeeName = localStorage.getItem('employeeName') || '';
+                        redirectToExternalPortal(storedRedirect, {
+                            token,
+                            refreshToken,
+                            role: role || '',
+                            employeeId: employeeId || '',
+                            employeeName,
+                        });
+                        return;
+                    }
                     navigate('/SystemAdmin_Dashboard', { replace: true });
                 }
             } else {
