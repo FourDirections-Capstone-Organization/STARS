@@ -264,7 +264,13 @@ export default function OnboardingPage() {
             });
             if (!res.data?.isSuccess) throw new Error(res.data?.message || 'Failed to set password.');
             localStorage.setItem('isPasswordChanged', 'true');
-            navigate(getDashboardRoute(), { replace: true });
+            const hasTerms = localStorage.getItem('hasAcceptedTerms') === 'true';
+            const termsVer = localStorage.getItem('termsVersionAccepted');
+            if (!hasTerms || termsVer !== 'v1.0') {
+                navigate('/terms-and-conditions', { replace: true });
+            } else {
+                navigate(getDashboardRoute(), { replace: true });
+            }
         } catch (err: any) {
             setApiError(err?.response?.data?.message || err?.message || 'Something went wrong.');
         } finally { setSaving(false); }

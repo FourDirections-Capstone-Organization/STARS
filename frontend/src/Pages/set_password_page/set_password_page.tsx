@@ -53,10 +53,16 @@ export default function SetPasswordPage() {
             localStorage.setItem('isPasswordChanged', 'true');
             const employeeId = localStorage.getItem('employeeId');
             const role = localStorage.getItem('userRole');
+            const hasTerms = localStorage.getItem('hasAcceptedTerms') === 'true';
+            const termsVer = localStorage.getItem('termsVersionAccepted');
             if (employeeId === '0000' && role === 'Manager') {
-                navigate('/SystemAdmin_Dashboard');
+                if (!hasTerms || termsVer !== 'v1.0') {
+                    navigate('/terms-and-conditions', { replace: true });
+                } else {
+                    navigate('/SystemAdmin_Dashboard', { replace: true });
+                }
             } else {
-                navigate('/onboarding?fresh=true');
+                navigate('/onboarding?fresh=true', { replace: true });
             }
         } catch (err: unknown) {
             if (axios.isAxiosError(err) && err.response?.data) {
