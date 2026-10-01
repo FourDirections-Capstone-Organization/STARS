@@ -184,16 +184,17 @@
 }
 
 /* ─── Stats ──────────────────────────────────────────────────────────────── */
-.stats-row,
 .stats-row-6,
-.stats-grid-6 {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 14px;
+.stats-grid-6,
+.coordinator-stats-row-6 {
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 12px;
     margin-bottom: 16px;
     width: 100%;
 }
 
+.stats-row,
 .stats-row-5,
 .stats-grid-5 {
     display: grid;
@@ -221,6 +222,50 @@
     width: 100%;
 }
 
+.coordinator-stats-row-6 .kpi,
+.stats-row-6 .kpi {
+    padding: 14px 12px !important;
+    min-height: 98px !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.coordinator-stats-row-6 .kpi-top,
+.stats-row-6 .kpi-top {
+    gap: 8px !important;
+}
+
+.coordinator-stats-row-6 .kpi-label,
+.stats-row-6 .kpi-label {
+    font-size: 10.5px !important;
+    letter-spacing: 0.5px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.coordinator-stats-row-6 .kpi-val,
+.stats-row-6 .kpi-val {
+    font-size: clamp(18px, 1.6vw, 24px) !important;
+}
+
+.coordinator-stats-row-6 .kpi-subtext,
+.stats-row-6 .kpi-subtext {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.coordinator-stats-row-6 .kpi-icon-box,
+.stats-row-6 .kpi-icon-box {
+    width: 30px !important;
+    height: 30px !important;
+    flex-shrink: 0 !important;
+}
+
 .report-summary-grid {
     display: flex;
     flex-wrap: wrap;
@@ -242,14 +287,13 @@
     box-sizing: border-box;
 }
 
-@media (max-width: 1280px) {
-    .stats-row-6,
-    .stats-grid-6 {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-}
-
 @media (max-width: 1024px) {
+    .stats-row-6,
+    .stats-grid-6,
+    .coordinator-stats-row-6 {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
     .stats-row-5,
     .stats-grid-5,
     .stats-row-4,
@@ -262,13 +306,14 @@
     .stats-row,
     .stats-row-6,
     .stats-grid-6,
+    .coordinator-stats-row-6,
     .stats-row-5,
     .stats-grid-5,
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
     .stats-grid-3 {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, 1fr) !important;
         gap: 10px;
     }
 }
@@ -277,13 +322,14 @@
     .stats-row,
     .stats-row-6,
     .stats-grid-6,
+    .coordinator-stats-row-6,
     .stats-row-5,
     .stats-grid-5,
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
     .stats-grid-3 {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
     }
 }
 

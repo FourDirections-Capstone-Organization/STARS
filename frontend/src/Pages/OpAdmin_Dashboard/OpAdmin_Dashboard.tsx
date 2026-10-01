@@ -2093,7 +2093,7 @@ const DashboardTab: React.FC<{
                         </button>
                     </div>
                     {td ? (
-                        <div className="stats-row stats-row-6">
+                        <div className="coordinator-stats-row-6 stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
                             <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="ACTIVE / IN PROGRESS" value={totalActive} subtext={inProgress > 0 ? `${inProgress} in progress` : 'None in progress'} />
                             <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="PENDING REVIEW" value={pendingReview} subtext={pendingReview > 0 ? 'Awaiting review' : 'All reviewed'} />
@@ -2102,7 +2102,7 @@ const DashboardTab: React.FC<{
                             <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={overdue} subtext={overdue > 0 ? `${overdue} past deadline` : 'No overdue tasks'} />
                         </div>
                     ) : (
-                        <div className="stats-row stats-row-6">
+                        <div className="coordinator-stats-row-6 stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={0} subtext="No data" />
                             <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="ACTIVE / IN PROGRESS" value={0} subtext="No data" />
                             <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="PENDING REVIEW" value={0} subtext="No data" />
