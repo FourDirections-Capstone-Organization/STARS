@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, ArrowLeft, Globe } from 'lucide-react';
+import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useToast } from '../../components/Toast/Toast';
 import api from '../../api';
+import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import { captureRedirectUriFromQuery, getStoredRedirectUri, redirectToExternalPortal, bootstrapIncomingAuth, normalizeRole, dashboardRoutes, getDashboardRoute, getPublicWebsiteUrl } from '../../components/Auth/authRedirect';
 import './login.css';
 
@@ -265,25 +266,20 @@ export default function Login() {
 
     return (
         <div className={`login-page-container${mounted ? ' mounted' : ''}`}>
-            {/* ── SPEEDEX SYSTEM HEADER ── */}
+            {/* ── SPEEDEX PUBLIC WEBSITE HEADER ── */}
             <header className="speedex-system-header">
                 <div className="speedex-header-inner">
-                    <a href={publicWebsiteUrl} className="speedex-header-brand" title="Speedex Public Website">
-                        <div className="speedex-header-logo">
-                            <Package size={18} />
-                        </div>
-                        <div className="speedex-header-title-group">
-                            <span className="speedex-header-title">Speedex</span>
-                            <span className="speedex-header-badge">CENTRAL PORTAL</span>
-                        </div>
+                    <a href={`${publicWebsiteUrl}/`} className="speedex-header-brand" title="Speedex Courier & Forwarder, Inc.">
+                        <img src={SpeedexLogo} alt="Speedex Courier & Forwarder, Inc." className="speedex-nav-logo" />
                     </a>
 
-                    <div className="speedex-header-actions">
-                        <a href={publicWebsiteUrl} className="back-to-public-btn" id="btn-back-to-public">
-                            <ArrowLeft size={16} />
-                            <span>Back to Public Website</span>
-                        </a>
-                    </div>
+                    <nav className="speedex-nav-links" aria-label="Speedex Public Website Navigation">
+                        <a href={`${publicWebsiteUrl}/`} className="speedex-nav-link">Home</a>
+                        <a href={`${publicWebsiteUrl}/#advisories`} className="speedex-nav-link">Advisories</a>
+                        <a href={`${publicWebsiteUrl}/#track`} className="speedex-nav-link">Track</a>
+                        <a href={`${publicWebsiteUrl}/#about`} className="speedex-nav-link">About Us</a>
+                        <a href={`${publicWebsiteUrl}/#contact`} className="speedex-nav-link">Contact</a>
+                    </nav>
                 </div>
             </header>
 

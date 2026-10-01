@@ -11,22 +11,22 @@
 
 .speedex-system-header {
     width: 100%;
-    height: 56px;
-    background: #0B1437; /* matches var(--sidebar-bg) */
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    height: 70px;
+    background: #0f1936; /* Exact dark navy tone */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.22);
 }
 
 .speedex-header-inner {
     width: 100%;
     max-width: 1440px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 40px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -35,87 +35,42 @@
 .speedex-header-brand {
     display: flex;
     align-items: center;
-    gap: 12px;
     text-decoration: none;
-    color: white;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .speedex-header-brand:hover {
-    opacity: 0.9;
+    opacity: 0.92;
+    transform: translateY(-1px);
 }
 
-.speedex-header-logo {
-    width: 32px;
-    height: 32px;
+.speedex-nav-logo {
+    height: 44px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+}
+
+.speedex-nav-links {
     display: flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    background: rgba(34, 211, 238, 0.16);
-    color: #22d3ee;
-    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25);
+    gap: 40px;
 }
 
-.speedex-header-title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.speedex-header-title {
-    font-size: 1.1rem;
-    font-weight: 800;
-    letter-spacing: 0.5px;
+.speedex-nav-link {
     color: #FFFFFF;
-}
-
-.speedex-header-badge {
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: rgba(0, 169, 157, 0.18);
-    color: #22d3ee;
-    border: 1px solid rgba(0, 169, 157, 0.3);
-}
-
-.speedex-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.back-to-public-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 15px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #FFFFFF;
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-weight: 500;
     text-decoration: none;
-    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+    transition: color 0.2s ease, opacity 0.2s ease;
+    white-space: nowrap;
+    opacity: 0.92;
 }
 
-.back-to-public-btn:hover {
-    background: rgba(34, 211, 238, 0.15);
-    border-color: rgba(34, 211, 238, 0.45);
+.speedex-nav-link:hover {
     color: #22d3ee;
-    transform: translateX(-2px);
-}
-
-.back-to-public-btn svg {
-    transition: transform 0.2s ease;
-}
-
-.back-to-public-btn:hover svg {
-    transform: translateX(-3px);
+    opacity: 1;
 }
 
 /* ─────────────────────────────────────────
@@ -124,7 +79,7 @@
 .login-page {
     display: flex;
     flex: 1;
-    min-height: calc(100vh - 56px);
+    min-height: calc(100vh - 70px);
     opacity: 0;
     transition: opacity 0.3s ease;
     font-family: 'Montserrat', sans-serif !important;
@@ -133,6 +88,50 @@
 .login-page-container.mounted .login-page,
 .login-page.mounted {
     opacity: 1;
+}
+
+@media (max-width: 900px) {
+    .speedex-header-inner {
+        padding: 0 20px;
+    }
+
+    .speedex-nav-links {
+        gap: 24px;
+    }
+
+    .speedex-nav-link {
+        font-size: 0.88rem;
+    }
+}
+
+@media (max-width: 680px) {
+    .speedex-system-header {
+        height: auto;
+        padding: 12px 0;
+    }
+
+    .speedex-header-inner {
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .speedex-nav-logo {
+        height: 36px;
+    }
+
+    .speedex-nav-links {
+        gap: 16px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .speedex-nav-link {
+        font-size: 0.82rem;
+    }
+
+    .login-page {
+        min-height: calc(100vh - 100px);
+    }
 }
 
 /* ─────────────────────────────────────────
