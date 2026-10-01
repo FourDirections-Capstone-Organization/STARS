@@ -1881,101 +1881,217 @@ input.input-sla-locked {
     gap: 18px;
 }
 
-/* ─── Reports Tab Stat Cards (Flexible Auto-Expanding Grid & Space Maximization) ─── */
-.report-summary-grid,
+/* ─── Reports Tab Stat Cards & Summary Layout ─── */
 .reports-dashboard-content .stats-row,
-.reports-dashboard-content .stats-row-3,
-.reports-dashboard-content .stats-row-4,
-.reports-dashboard-content .stats-row-5,
 .reports-dashboard-content .stats-row-6,
-.reports-dashboard-content .stats-grid-3,
-.reports-dashboard-content .stats-grid-4,
-.reports-dashboard-content .stats-grid-5,
 .reports-dashboard-content .stats-grid-6 {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 12px !important;
-    margin-bottom: 16px;
-    width: 100% !important;
-    align-items: stretch;
-}
-
-.report-summary-grid > *,
-.reports-dashboard-content .stats-row > *,
-.reports-dashboard-content .stats-row-3 > *,
-.reports-dashboard-content .stats-row-4 > *,
-.reports-dashboard-content .stats-row-5 > *,
-.reports-dashboard-content .stats-row-6 > *,
-.reports-dashboard-content .stats-grid-3 > *,
-.reports-dashboard-content .stats-grid-4 > *,
-.reports-dashboard-content .stats-grid-5 > *,
-.reports-dashboard-content .stats-grid-6 > * {
-    flex: 1 1 200px !important;
-    min-width: 180px !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-}
-
-.report-summary-grid .kpi,
-.reports-dashboard-content .stats-row .kpi,
-.reports-dashboard-content .stats-row-3 .kpi,
-.reports-dashboard-content .stats-row-4 .kpi,
-.reports-dashboard-content .stats-row-5 .kpi,
-.reports-dashboard-content .stats-row-6 .kpi,
-.reports-dashboard-content .status-card {
-    height: 100% !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-}
-
-@media (max-width: 640px) {
-    .report-summary-grid > *,
-    .reports-dashboard-content .stats-row > *,
-    .reports-dashboard-content .stats-row-3 > *,
-    .reports-dashboard-content .stats-row-4 > *,
-    .reports-dashboard-content .stats-row-5 > *,
-    .reports-dashboard-content .stats-row-6 > *,
-    .reports-dashboard-content .stats-grid-3 > *,
-    .reports-dashboard-content .stats-grid-4 > *,
-    .reports-dashboard-content .stats-grid-5 > *,
-    .reports-dashboard-content .stats-grid-6 > * {
-        flex: 1 1 140px !important;
-        min-width: 130px !important;
-    }
-}
-
-@media (max-width: 440px) {
-    .report-summary-grid > *,
-    .reports-dashboard-content .stats-row > *,
-    .reports-dashboard-content .stats-row-3 > *,
-    .reports-dashboard-content .stats-row-4 > *,
-    .reports-dashboard-content .stats-row-5 > *,
-    .reports-dashboard-content .stats-row-6 > *,
-    .reports-dashboard-content .stats-grid-3 > *,
-    .reports-dashboard-content .stats-grid-4 > *,
-    .reports-dashboard-content .stats-grid-5 > *,
-    .reports-dashboard-content .stats-grid-6 > * {
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
-    }
-}
-
-.report-charts-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-top: 16px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.reports-dashboard-content .stats-row-5,
+.reports-dashboard-content .stats-grid-5 {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.reports-dashboard-content .stats-row-4,
+.reports-dashboard-content .stats-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.reports-dashboard-content .stats-row-3,
+.reports-dashboard-content .stats-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.report-summary-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.report-summary-grid > * {
+    flex: 1 1 calc(25% - 12px);
+    min-width: 170px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Retain standard compact status card height */
+.reports-dashboard-content .kpi,
+.report-summary-grid .kpi {
+    padding: 16px 18px !important;
+    gap: 8px !important;
+    min-height: 108px !important;
+    box-sizing: border-box !important;
+}
+
+.reports-dashboard-content .kpi .kpi-val,
+.report-summary-grid .kpi .kpi-val {
+    font-size: clamp(17px, 1.6vw, 22px) !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.reports-dashboard-content .kpi .kpi-label,
+.report-summary-grid .kpi .kpi-label {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.reports-dashboard-content .kpi .kpi-top,
+.report-summary-grid .kpi .kpi-top {
+    gap: 8px !important;
+}
+
+/* ─── Visual Graphs Grid (Recharts Responsive Containers) ─── */
+.report-charts-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 16px !important;
+    width: 100% !important;
+}
+
+.report-charts-grid > .card {
+    min-width: 0 !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+}
+
+.report-chart-box {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 230px !important;
+    min-height: 230px !important;
+    margin-top: 8px !important;
+    position: relative !important;
+}
+
+/* ─── Sidewards Horizontal Scrolling for Report Tables ─── */
+.report-table-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    border-radius: var(--r-sm, 6px);
+}
+
+.report-table-scroll-wrapper::-webkit-scrollbar {
+    height: 7px;
+}
+
+.report-table-scroll-wrapper::-webkit-scrollbar-track {
+    background: var(--bg-main, #f1f5f9);
+    border-radius: 4px;
+}
+
+.report-table-scroll-wrapper::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.report-table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.report-data-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+}
+
+.report-data-table th,
+.report-data-table td {
+    white-space: nowrap !important;
+    padding: 9px 12px !important;
+}
+
+@media (max-width: 1280px) {
+    .reports-dashboard-content .stats-row-6,
+    .reports-dashboard-content .stats-grid-6 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
+    .reports-dashboard-content .stats-row-5,
+    .reports-dashboard-content .stats-grid-5 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 1024px) {
     .report-charts-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .reports-dashboard-content .stats-row-4,
+    .reports-dashboard-content .stats-grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .report-summary-grid > * {
+        flex: 1 1 calc(50% - 12px);
     }
 }
 
-.report-perf-table th:first-child,
-.report-perf-table td:first-child {
-    min-width: 180px;
+@media (max-width: 768px) {
+    .reports-dashboard-content .stats-row,
+    .reports-dashboard-content .stats-row-6,
+    .reports-dashboard-content .stats-grid-6,
+    .reports-dashboard-content .stats-row-5,
+    .reports-dashboard-content .stats-grid-5,
+    .reports-dashboard-content .stats-row-4,
+    .reports-dashboard-content .stats-grid-4,
+    .reports-dashboard-content .stats-row-3,
+    .reports-dashboard-content .stats-grid-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .report-summary-grid > * {
+        flex: 1 1 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .reports-dashboard-content .stats-row,
+    .reports-dashboard-content .stats-row-6,
+    .reports-dashboard-content .stats-grid-6,
+    .reports-dashboard-content .stats-row-5,
+    .reports-dashboard-content .stats-grid-5,
+    .reports-dashboard-content .stats-row-4,
+    .reports-dashboard-content .stats-grid-4,
+    .reports-dashboard-content .stats-row-3,
+    .reports-dashboard-content .stats-grid-3 {
+        grid-template-columns: 1fr;
+    }
 }
 
 .report-empty-state {

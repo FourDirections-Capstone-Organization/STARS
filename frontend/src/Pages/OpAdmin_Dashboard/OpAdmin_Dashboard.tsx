@@ -4486,7 +4486,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>On-Time vs. Late Breakdown</h4>
                                         <span className="report-pill teal">Overall Compliance</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
                                                 <Pie
@@ -4516,7 +4516,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Completion Breakdown</h4>
                                         <span className="report-pill blue">Top Contributors</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={kpiData.employeeKpis?.slice(0, 7).map((e: any) => ({
                                                 name: e.employeeName.split(' ')[0],
@@ -4543,41 +4543,43 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {kpiData.employeeKpis && kpiData.employeeKpis.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: '22%' }}>Employee</th>
-                                                    <th style={{ width: '18%' }}>Department</th>
-                                                    <th style={{ width: '12%', textAlign: 'center' }}>Completed</th>
-                                                    <th style={{ width: '12%', textAlign: 'center' }}>On-Time</th>
-                                                    <th style={{ width: '12%', textAlign: 'center' }}>Late</th>
-                                                    <th style={{ width: '12%', textAlign: 'center' }}>On-Time Rate</th>
-                                                    <th style={{ width: '12%', textAlign: 'center' }}>Late Rate</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pagedEmployeeKpis.map((kpi: any) => {
-                                                    const onTimeRate = kpi.onTimeRate ?? 0;
-                                                    const isGood = onTimeRate >= 80;
-                                                    const isWarning = onTimeRate >= 50 && onTimeRate < 80;
-                                                    return (
-                                                        <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>{kpi.employeeName}</td>
-                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{kpi.department}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${isGood ? 'success' : isWarning ? 'warning' : 'danger'}`}>
-                                                                    {onTimeRate}%
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                        <div className="report-table-scroll-wrapper">
+                                            <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 800 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '22%' }}>Employee</th>
+                                                        <th style={{ width: '18%' }}>Department</th>
+                                                        <th style={{ width: '12%', textAlign: 'center' }}>Completed</th>
+                                                        <th style={{ width: '12%', textAlign: 'center' }}>On-Time</th>
+                                                        <th style={{ width: '12%', textAlign: 'center' }}>Late</th>
+                                                        <th style={{ width: '12%', textAlign: 'center' }}>On-Time Rate</th>
+                                                        <th style={{ width: '12%', textAlign: 'center' }}>Late Rate</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {pagedEmployeeKpis.map((kpi: any) => {
+                                                        const onTimeRate = kpi.onTimeRate ?? 0;
+                                                        const isGood = onTimeRate >= 80;
+                                                        const isWarning = onTimeRate >= 50 && onTimeRate < 80;
+                                                        return (
+                                                            <tr key={kpi.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                                <td style={{ padding: '8px 10px', fontWeight: 600 }}>{kpi.employeeName}</td>
+                                                                <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{kpi.department}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>{kpi.totalCompleted}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)' }}>{kpi.onTimeCount}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-failed)' }}>{kpi.lateCount}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${isGood ? 'success' : isWarning ? 'warning' : 'danger'}`}>
+                                                                        {onTimeRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>{kpi.lateRate}%</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((kpiPage - 1) * REPORT_PAGE_SIZE + 1, kpiData.employeeKpis.length)}–{Math.min(kpiPage * REPORT_PAGE_SIZE, kpiData.employeeKpis.length)} of {kpiData.employeeKpis.length} records
@@ -4712,7 +4714,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Task Status Distribution</h4>
                                         <span className="report-pill teal">Status Breakdown</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         {tcChartData.length === 0 ? (
                                             <div className="report-empty-state"><p>No status data available.</p></div>
                                         ) : (
@@ -4744,7 +4746,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Tasks by Priority</h4>
                                         <span className="report-pill blue">Priority Distribution</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={tcPriorityChartData} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -4769,64 +4771,66 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {tcReport.tasks && tcReport.tasks.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: '22%' }}>Task Ref &amp; Title</th>
-                                                    <th style={{ width: '16%' }}>Assigned / Completed By</th>
-                                                    <th style={{ width: '11%' }}>Department</th>
-                                                    <th style={{ width: '9%', textAlign: 'center' }}>Priority</th>
-                                                    <th style={{ width: '12%' }}>Deadline</th>
-                                                    <th style={{ width: '12%' }}>Last Updated</th>
-                                                    <th style={{ width: '10%', textAlign: 'center' }}>Timeliness Status</th>
-                                                    <th style={{ width: '8%', textAlign: 'center' }}>Current Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pagedTcTasks.map((task) => {
-                                                    const isCompleted = task.status === 'Completed';
-                                                    const isOverdue = !isCompleted && !task.isOnTime;
-                                                    return (
-                                                        <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>
-                                                                <div>{task.title}</div>
-                                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>Ref: {task.taskReferenceNumber}</div>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
-                                                                    <User size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                                                                    <span>{task.assignedEmployee || 'Unassigned'}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{task.department || 'N/A'}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${task.priority === 'Urgent' ? 'danger' : task.priority === 'High' ? 'warning' : 'blue'}`}>
-                                                                    {task.priority}
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
-                                                                {formatReportDateTime(task.deadline)}
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
-                                                                {formatReportDateTime(task.completedAt || (task as any).updatedAt)}
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${isCompleted
-                                                                    ? (task.isOnTime ? 'success' : 'danger')
-                                                                    : (isOverdue ? 'danger' : 'warning')}`}>
-                                                                    {isCompleted
-                                                                        ? (task.isOnTime ? '✅ On-Time' : `⏰ Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`)
-                                                                        : (isOverdue ? `⚠️ Overdue ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}` : '⏳ In Progress')}
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className="report-pill teal">{task.status}</span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                        <div className="report-table-scroll-wrapper">
+                                            <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 980 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '22%' }}>Task Ref &amp; Title</th>
+                                                        <th style={{ width: '16%' }}>Assigned / Completed By</th>
+                                                        <th style={{ width: '11%' }}>Department</th>
+                                                        <th style={{ width: '9%', textAlign: 'center' }}>Priority</th>
+                                                        <th style={{ width: '12%' }}>Deadline</th>
+                                                        <th style={{ width: '12%' }}>Last Updated</th>
+                                                        <th style={{ width: '10%', textAlign: 'center' }}>Timeliness Status</th>
+                                                        <th style={{ width: '8%', textAlign: 'center' }}>Current Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {pagedTcTasks.map((task) => {
+                                                        const isCompleted = task.status === 'Completed';
+                                                        const isOverdue = !isCompleted && !task.isOnTime;
+                                                        return (
+                                                            <tr key={task.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                                <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                                                                    <div>{task.title}</div>
+                                                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>Ref: {task.taskReferenceNumber}</div>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                                                                        <User size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                                                        <span>{task.assignedEmployee || 'Unassigned'}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{task.department || 'N/A'}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${task.priority === 'Urgent' ? 'danger' : task.priority === 'High' ? 'warning' : 'blue'}`}>
+                                                                        {task.priority}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
+                                                                    {formatReportDateTime(task.deadline)}
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', fontSize: 11.5 }}>
+                                                                    {formatReportDateTime(task.completedAt || (task as any).updatedAt)}
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${isCompleted
+                                                                        ? (task.isOnTime ? 'success' : 'danger')
+                                                                        : (isOverdue ? 'danger' : 'warning')}`}>
+                                                                        {isCompleted
+                                                                            ? (task.isOnTime ? '✅ On-Time' : `⏰ Late ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}`)
+                                                                            : (isOverdue ? `⚠️ Overdue ${task.overdueHours > 0 ? `(+${task.overdueHours.toFixed(1)}h)` : ''}` : '⏳ In Progress')}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className="report-pill teal">{task.status}</span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((tcLogsPage - 1) * REPORT_PAGE_SIZE + 1, tcReport.tasks.length)}–{Math.min(tcLogsPage * REPORT_PAGE_SIZE, tcReport.tasks.length)} of {tcReport.tasks.length} records
@@ -4959,14 +4963,14 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Department Task Volume &amp; SLA Breaches</h4>
                                         <span className="report-pill teal">By Department</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={opReport.departmentSummaries?.slice(0, 6).map(d => ({
                                                 name: d.departmentName.split(' ')[0],
                                                 Total: d.totalTasks,
                                                 Completed: d.completedTasks,
                                                 'SLA Breached': d.slaBreachedTasks,
-                                            })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
+                                             })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                                                 <YAxis tick={{ fontSize: 11 }} />
@@ -4985,7 +4989,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Workload by Priority</h4>
                                         <span className="report-pill blue">Distribution</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         {opReport.workloadByPriority && opReport.workloadByPriority.length > 0 ? (
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart data={opReport.workloadByPriority.map(w => ({
@@ -5018,59 +5022,61 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </div>
                                         <span className="report-pill blue">{opReport.departmentSummaries.length} Teams</span>
                                     </div>
-                                    <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ width: '20%' }}>Department / Team</th>
-                                                <th style={{ width: '9%', textAlign: 'center' }}>Total Tasks</th>
-                                                <th style={{ width: '9%', textAlign: 'center' }}>Completed</th>
-                                                <th style={{ width: '8%', textAlign: 'center' }}>Active</th>
-                                                <th style={{ width: '10%', textAlign: 'center' }}>SLA Breached</th>
-                                                <th style={{ width: '14%', textAlign: 'center' }}>SLA Hit Risk</th>
-                                                <th style={{ width: '10%', textAlign: 'center' }}>On-Time Rate</th>
-                                                <th style={{ width: '10%', textAlign: 'center' }}>Tasks / Member</th>
-                                                <th style={{ width: '10%', textAlign: 'center' }}>Team Capacity Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {pagedOpDept.map((dept) => {
-                                                const status = dept.workloadBalanceStatus || 'Balanced';
-                                                const isBalanced = status === 'Balanced';
-                                                const isModerate = status === 'Moderate';
-                                                const hasBreach = (dept.slaBreachedTasks || 0) > 0;
-                                                const isHighBreach = (dept.slaBreachRate || 0) >= 15;
-                                                return (
-                                                    <tr key={dept.departmentName} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '8px 10px', fontWeight: 600 }}>{dept.departmentName}</td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>{dept.totalTasks}</td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{dept.completedTasks}</td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{dept.activeTasks}</td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: hasBreach ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
-                                                            {dept.slaBreachedTasks}
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                            <span className={`report-pill ${hasBreach || isHighBreach ? 'danger' : dept.slaBreachRate > 0 ? 'warning' : 'success'}`}>
-                                                                {hasBreach || isHighBreach
-                                                                    ? (dept.slaBreachedTasks > 0 ? `🚨 ${dept.slaBreachedTasks} SLA Breached` : `🚨 ${dept.slaBreachRate.toFixed(1)}% Breach Risk`)
-                                                                    : dept.slaBreachRate > 0 ? `⚠️ ${dept.slaBreachRate.toFixed(1)}% Watch` : '✅ SLA Healthy'}
-                                                            </span>
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
-                                                            {dept.onTimeRate.toFixed(1)}%
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>
-                                                            {dept.tasksPerMember.toFixed(1)}
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                            <span className={`report-pill ${isBalanced ? 'success' : isModerate ? 'warning' : 'danger'}`}>
-                                                                {isBalanced ? '🌿 ' : isModerate ? '⚠️ ' : '🔥 '}{status}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                    <div className="report-table-scroll-wrapper">
+                                        <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 1020 }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ width: '20%' }}>Department / Team</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>Total Tasks</th>
+                                                    <th style={{ width: '9%', textAlign: 'center' }}>Completed</th>
+                                                    <th style={{ width: '8%', textAlign: 'center' }}>Active</th>
+                                                    <th style={{ width: '10%', textAlign: 'center' }}>SLA Breached</th>
+                                                    <th style={{ width: '14%', textAlign: 'center' }}>SLA Hit Risk</th>
+                                                    <th style={{ width: '10%', textAlign: 'center' }}>On-Time Rate</th>
+                                                    <th style={{ width: '10%', textAlign: 'center' }}>Tasks / Member</th>
+                                                    <th style={{ width: '10%', textAlign: 'center' }}>Team Capacity Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pagedOpDept.map((dept) => {
+                                                    const status = dept.workloadBalanceStatus || 'Balanced';
+                                                    const isBalanced = status === 'Balanced';
+                                                    const isModerate = status === 'Moderate';
+                                                    const hasBreach = (dept.slaBreachedTasks || 0) > 0;
+                                                    const isHighBreach = (dept.slaBreachRate || 0) >= 15;
+                                                    return (
+                                                        <tr key={dept.departmentName} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>{dept.departmentName}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>{dept.totalTasks}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{dept.completedTasks}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{dept.activeTasks}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: hasBreach ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                                                                {dept.slaBreachedTasks}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${hasBreach || isHighBreach ? 'danger' : dept.slaBreachRate > 0 ? 'warning' : 'success'}`}>
+                                                                    {hasBreach || isHighBreach
+                                                                        ? (dept.slaBreachedTasks > 0 ? `🚨 ${dept.slaBreachedTasks} SLA Breached` : `🚨 ${dept.slaBreachRate.toFixed(1)}% Breach Risk`)
+                                                                        : dept.slaBreachRate > 0 ? `⚠️ ${dept.slaBreachRate.toFixed(1)}% Watch` : '✅ SLA Healthy'}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>
+                                                                {dept.onTimeRate.toFixed(1)}%
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>
+                                                                {dept.tasksPerMember.toFixed(1)}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${isBalanced ? 'success' : isModerate ? 'warning' : 'danger'}`}>
+                                                                    {isBalanced ? '🌿 ' : isModerate ? '⚠️ ' : '🔥 '}{status}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                             Showing {Math.min((opDeptPage - 1) * REPORT_PAGE_SIZE + 1, opReport.departmentSummaries.length)}–{Math.min(opDeptPage * REPORT_PAGE_SIZE, opReport.departmentSummaries.length)} of {opReport.departmentSummaries.length} records
@@ -5310,7 +5316,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Individual Quality &amp; Efficiency Breakdown</h4>
                                                 <span className="report-pill teal">5 Core KPI Benchmark</span>
                                             </div>
-                                            <div style={{ height: 210, marginTop: 8 }}>
+                                            <div className="report-chart-box" style={{ height: 210, minHeight: 210 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={[
                                                         { name: 'Completion', rate: selectedPrEmp.completionRate || 0, fill: '#05cd99' },
@@ -5340,7 +5346,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Workload &amp; Delivery Ratio</h4>
                                                 <span className="report-pill blue">Volume Breakdown</span>
                                             </div>
-                                            <div style={{ height: 210, marginTop: 8 }}>
+                                            <div className="report-chart-box" style={{ height: 210, minHeight: 210 }}>
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={[
                                                         { name: 'Assigned', count: selectedPrEmp.totalAssigned || 0, fill: '#4318ff' },
@@ -5412,7 +5418,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Core 5 KPIs Summary (%)</h4>
                                                 <span className="report-pill teal">KPI Index</span>
                                             </div>
-                                            <div style={{ height: 230, marginTop: 8 }}>
+                                            <div className="report-chart-box">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={[
                                                         { name: 'Completion', rate: prData.overallCompletionRate ?? prData.overallOnTimeRate ?? 0, fill: '#05cd99' },
@@ -5442,7 +5448,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Employee Performance Comparison</h4>
                                                 <span className="report-pill blue">On-Time vs Completion</span>
                                             </div>
-                                            <div style={{ height: 230, marginTop: 8 }}>
+                                            <div className="report-chart-box">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={prData.employeeBreakdown?.slice(0, 6).map((e: any) => ({
                                                         name: e.employeeName.split(' ')[0],
@@ -5477,82 +5483,84 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {prData.employeeBreakdown && prData.employeeBreakdown.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: '16%' }}>Employee</th>
-                                                    <th style={{ width: '12%' }}>Department</th>
-                                                    <th style={{ width: '10%' }}>Role</th>
-                                                    <th style={{ width: '7%', textAlign: 'center' }}>Assigned</th>
-                                                    <th style={{ width: '7%', textAlign: 'center' }}>Completed</th>
-                                                    <th style={{ width: '9%', textAlign: 'center' }}>Completion Rate</th>
-                                                    <th style={{ width: '9%', textAlign: 'center' }}>On-Time Rate</th>
-                                                    <th style={{ width: '9%', textAlign: 'center' }}>SLA Breach Rate</th>
-                                                    <th style={{ width: '8%', textAlign: 'center' }}>Rework Rate</th>
-                                                    <th style={{ width: '13%', textAlign: 'center' }}>Individual Deep-Dive</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pagedPrEmp.map((kpi: any) => {
-                                                    const isSelected = selectedPrEmpId === kpi.employeeId;
-                                                    const completionRate = kpi.completionRate ?? 0;
-                                                    const onTimeRate = kpi.onTimeRate ?? 0;
-                                                    const breachRate = kpi.slaBreachRate ?? 0;
-                                                    const reworkRate = kpi.reworkRate ?? 0;
-                                                    return (
-                                                        <tr key={kpi.employeeId} style={{
-                                                            borderBottom: '1px solid var(--border)',
-                                                            backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.05)' : undefined
-                                                        }}>
-                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>
-                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                                    <UserCheck size={14} style={{ color: isSelected ? '#4318ff' : 'var(--text-secondary)' }} />
-                                                                    {kpi.employeeName}
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{kpi.department}</td>
-                                                            <td style={{ padding: '8px 10px', fontSize: 12 }}>{kpi.role}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{kpi.totalAssigned}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{kpi.totalCompleted}</td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${completionRate >= 80 ? 'success' : 'warning'}`}>
-                                                                    {completionRate}%
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${onTimeRate >= 80 ? 'success' : onTimeRate >= 50 ? 'warning' : 'danger'}`}>
-                                                                    {onTimeRate}%
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${breachRate > 0 ? 'danger' : 'neutral'}`}>
-                                                                    {breachRate}%
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <span className={`report-pill ${reworkRate > 0 ? 'warning' : 'neutral'}`}>
-                                                                    {reworkRate}%
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                <button
-                                                                    className="btn btn-secondary btn-sm"
-                                                                    style={{
-                                                                        padding: '3px 8px', fontSize: 11,
-                                                                        background: isSelected ? 'var(--teal, #00A99D)' : undefined,
-                                                                        borderColor: isSelected ? 'var(--teal, #00A99D)' : undefined,
-                                                                        color: isSelected ? '#fff' : undefined
-                                                                    }}
-                                                                    onClick={() => setSelectedPrEmpId(isSelected ? '' : kpi.employeeId)}
-                                                                >
-                                                                    {isSelected ? '✓ Viewing' : '🔍 Deep-Dive'}
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                        <div className="report-table-scroll-wrapper">
+                                            <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 980 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '16%' }}>Employee</th>
+                                                        <th style={{ width: '12%' }}>Department</th>
+                                                        <th style={{ width: '10%' }}>Role</th>
+                                                        <th style={{ width: '7%', textAlign: 'center' }}>Assigned</th>
+                                                        <th style={{ width: '7%', textAlign: 'center' }}>Completed</th>
+                                                        <th style={{ width: '9%', textAlign: 'center' }}>Completion Rate</th>
+                                                        <th style={{ width: '9%', textAlign: 'center' }}>On-Time Rate</th>
+                                                        <th style={{ width: '9%', textAlign: 'center' }}>SLA Breach Rate</th>
+                                                        <th style={{ width: '8%', textAlign: 'center' }}>Rework Rate</th>
+                                                        <th style={{ width: '13%', textAlign: 'center' }}>Individual Deep-Dive</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {pagedPrEmp.map((kpi: any) => {
+                                                        const isSelected = selectedPrEmpId === kpi.employeeId;
+                                                        const completionRate = kpi.completionRate ?? 0;
+                                                        const onTimeRate = kpi.onTimeRate ?? 0;
+                                                        const breachRate = kpi.slaBreachRate ?? 0;
+                                                        const reworkRate = kpi.reworkRate ?? 0;
+                                                        return (
+                                                            <tr key={kpi.employeeId} style={{
+                                                                borderBottom: '1px solid var(--border)',
+                                                                backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.05)' : undefined
+                                                            }}>
+                                                                <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                                        <UserCheck size={14} style={{ color: isSelected ? '#4318ff' : 'var(--text-secondary)' }} />
+                                                                        {kpi.employeeName}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{kpi.department}</td>
+                                                                <td style={{ padding: '8px 10px', fontSize: 12 }}>{kpi.role}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{kpi.totalAssigned}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{kpi.totalCompleted}</td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${completionRate >= 80 ? 'success' : 'warning'}`}>
+                                                                        {completionRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${onTimeRate >= 80 ? 'success' : onTimeRate >= 50 ? 'warning' : 'danger'}`}>
+                                                                        {onTimeRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${breachRate > 0 ? 'danger' : 'neutral'}`}>
+                                                                        {breachRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <span className={`report-pill ${reworkRate > 0 ? 'warning' : 'neutral'}`}>
+                                                                        {reworkRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                    <button
+                                                                        className="btn btn-secondary btn-sm"
+                                                                        style={{
+                                                                            padding: '3px 8px', fontSize: 11,
+                                                                            background: isSelected ? 'var(--teal, #00A99D)' : undefined,
+                                                                            borderColor: isSelected ? 'var(--teal, #00A99D)' : undefined,
+                                                                            color: isSelected ? '#fff' : undefined
+                                                                        }}
+                                                                        onClick={() => setSelectedPrEmpId(isSelected ? '' : kpi.employeeId)}
+                                                                    >
+                                                                        {isSelected ? '✓ Viewing' : '🔍 Deep-Dive'}
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((prEmpPage - 1) * REPORT_PAGE_SIZE + 1, prData.employeeBreakdown.length)}–{Math.min(prEmpPage * REPORT_PAGE_SIZE, prData.employeeBreakdown.length)} of {prData.employeeBreakdown.length} records
@@ -5740,7 +5748,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Revenue &amp; Collection Overview</h4>
                                         <span className="report-pill teal">Financial Volume</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={[
                                                 { name: 'Billed', amount: financialReport.totalBilled || 0, fill: '#0284c7' },
@@ -5768,7 +5776,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Invoice Payment Status</h4>
                                         <span className="report-pill blue">Settlement Status</span>
                                     </div>
-                                    <div style={{ height: 230, marginTop: 8 }}>
+                                    <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
                                                 <Pie
@@ -5803,67 +5811,69 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 </div>
                                 {financialReport.invoices && financialReport.invoices.length > 0 ? (
                                     <>
-                                        <table className="table-card-data-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: '10%' }}>Invoice #</th>
-                                                    <th style={{ width: '10%' }}>FOMS Ref</th>
-                                                    <th style={{ width: '13%' }}>Client Account</th>
-                                                    <th style={{ width: '9%' }}>Department</th>
-                                                    <th style={{ width: '8%' }}>Billing Date</th>
-                                                    <th style={{ width: '8%' }}>Due Date</th>
-                                                    <th style={{ width: '10%', textAlign: 'right' }}>Amount Billed</th>
-                                                    <th style={{ width: '10%', textAlign: 'right' }}>Amount Paid</th>
-                                                    <th style={{ width: '10%', textAlign: 'right' }}>Balance</th>
-                                                    <th style={{ width: '6%', textAlign: 'center' }}>Status</th>
-                                                    <th style={{ width: '6%' }}>Method</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pagedInvoices.map((inv) => (
-                                                    <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                        <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
-                                                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 11.5 }}>{inv.fomsReference}</td>
-                                                        <td style={{ padding: '8px 10px' }}>{inv.clientAccount}</td>
-                                                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.department}</td>
-                                                        <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.billingDate}</td>
-                                                        <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.dueDate}</td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600 }}>
-                                                            ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        <div className="report-table-scroll-wrapper">
+                                            <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '10%' }}>Invoice #</th>
+                                                        <th style={{ width: '10%' }}>FOMS Ref</th>
+                                                        <th style={{ width: '13%' }}>Client Account</th>
+                                                        <th style={{ width: '9%' }}>Department</th>
+                                                        <th style={{ width: '8%' }}>Billing Date</th>
+                                                        <th style={{ width: '8%' }}>Due Date</th>
+                                                        <th style={{ width: '10%', textAlign: 'right' }}>Amount Billed</th>
+                                                        <th style={{ width: '10%', textAlign: 'right' }}>Amount Paid</th>
+                                                        <th style={{ width: '10%', textAlign: 'right' }}>Balance</th>
+                                                        <th style={{ width: '6%', textAlign: 'center' }}>Status</th>
+                                                        <th style={{ width: '6%' }}>Method</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {pagedInvoices.map((inv) => (
+                                                        <tr key={inv.invoiceNumber} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'monospace' }}>{inv.invoiceNumber}</td>
+                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 11.5 }}>{inv.fomsReference}</td>
+                                                            <td style={{ padding: '8px 10px' }}>{inv.clientAccount}</td>
+                                                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontSize: 12 }}>{inv.department}</td>
+                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.billingDate}</td>
+                                                            <td style={{ padding: '8px 10px', fontSize: 11.5 }}>{inv.dueDate}</td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600 }}>
+                                                                ₱{inv.amountBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--status-active)' }}>
+                                                                ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                                ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <span className={`report-pill ${inv.paymentStatus === 'Paid' ? 'success' : inv.paymentStatus === 'Pending' ? 'warning' : 'danger'}`}>
+                                                                    {inv.paymentStatus}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', fontSize: 11.5, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr style={{ background: 'var(--bg-secondary, #fafbfc)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                                                        <td colSpan={6} style={{ padding: '8px 10px', textAlign: 'right' }}>Total ({financialReport.invoices.length} Invoices):</td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--primary)' }}>
+                                                            ₱{(financialReport.totalBilled || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
                                                         <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--status-active)' }}>
-                                                            ₱{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            ₱{(financialReport.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'right', color: inv.outstandingBalance > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
-                                                            ₱{inv.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right', color: (financialReport.totalOutstanding || 0) > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
+                                                            ₱{(financialReport.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
-                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                            <span className={`report-pill ${inv.paymentStatus === 'Paid' ? 'success' : inv.paymentStatus === 'Pending' ? 'warning' : 'danger'}`}>
-                                                                {inv.paymentStatus}
-                                                            </span>
+                                                        <td colSpan={2} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                                                            {financialReport.collectionRate?.toFixed(1)}% Collected
                                                         </td>
-                                                        <td style={{ padding: '8px 10px', fontSize: 11.5, color: 'var(--text-secondary)' }}>{inv.paymentMethod}</td>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                            <tfoot>
-                                                <tr style={{ background: 'var(--bg-secondary, #fafbfc)', borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                                                    <td colSpan={6} style={{ padding: '8px 10px', textAlign: 'right' }}>Total ({financialReport.invoices.length} Invoices):</td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--primary)' }}>
-                                                        ₱{(financialReport.totalBilled || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--status-active)' }}>
-                                                        ₱{(financialReport.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: (financialReport.totalOutstanding || 0) > 0 ? 'var(--status-failed)' : 'var(--text-secondary)' }}>
-                                                        ₱{(financialReport.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td colSpan={2} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11.5, color: 'var(--text-secondary)' }}>
-                                                        {financialReport.collectionRate?.toFixed(1)}% Collected
-                                                    </td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
+                                                </tfoot>
+                                            </table>
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
                                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                                 Showing {Math.min((financialPage - 1) * REPORT_PAGE_SIZE + 1, financialReport.invoices.length)}–{Math.min(financialPage * REPORT_PAGE_SIZE, financialReport.invoices.length)} of {financialReport.invoices.length} records
