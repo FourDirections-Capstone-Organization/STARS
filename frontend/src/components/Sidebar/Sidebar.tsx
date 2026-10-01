@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from '../Toast/Toast';
+import { navigateToSystemPortal } from '../Auth/authRedirect';
 import "./Sidebar.css";
 
 export interface NavSubItem {
@@ -369,6 +370,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button className="dropdown-option" onClick={() => { setShowProfileMenu(false); onProfileClick?.(); }}>
                 <i className="ti ti-user" />
                 <span>My Profile</span>
+              </button>
+              <button className="dropdown-option" onClick={() => { setShowProfileMenu(false); navigateToSystemPortal(); }}>
+                <i className="ti ti-layout-grid" />
+                <span>System Portal</span>
               </button>
               <div className="dropdown-divider" />
               <button className="dropdown-option logout" onClick={() => { setShowProfileMenu(false); onLogout?.(); }}>

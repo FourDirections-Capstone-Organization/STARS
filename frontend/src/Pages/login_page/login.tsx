@@ -275,10 +275,6 @@ export default function Login() {
 
                     <nav className="speedex-nav-links" aria-label="Speedex Public Website Navigation">
                         <a href={`${publicWebsiteUrl}/`} className="speedex-nav-link">Home</a>
-                        <a href={`${publicWebsiteUrl}/#advisories`} className="speedex-nav-link">Advisories</a>
-                        <a href={`${publicWebsiteUrl}/#track`} className="speedex-nav-link">Track</a>
-                        <a href={`${publicWebsiteUrl}/#about`} className="speedex-nav-link">About Us</a>
-                        <a href={`${publicWebsiteUrl}/#contact`} className="speedex-nav-link">Contact</a>
                     </nav>
                 </div>
             </header>

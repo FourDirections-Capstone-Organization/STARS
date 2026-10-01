@@ -9,16 +9,18 @@ import {
   Settings, 
   LogOut, 
   User, 
-  ChevronRight,
-  Clock,
-  Calendar,
-  Truck,
-  DollarSign,
-  Menu
+  ChevronRight, 
+  Clock, 
+  Calendar, 
+  Truck, 
+  DollarSign, 
+  Menu,
+  LayoutGrid
 } from 'lucide-react';
 import ConfirmModal from '../ConfirmModal/ConfirmModal';
 import type { NotificationItem } from '../notificationTypes';
 import api from '../../api';
+import { navigateToSystemPortal } from '../Auth/authRedirect';
 import './GlobalHeader.css';
 
 export type { NotificationItem };
@@ -644,6 +646,18 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                   >
                     <User size={15} strokeWidth={2} className="option-icon" />
                     <span>My Profile</span>
+                  </button>
+
+                  <button 
+                    className="profile-dropdown-option"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      navigateToSystemPortal();
+                    }}
+                  >
+                    <LayoutGrid size={15} strokeWidth={2} className="option-icon" />
+                    <span>System Portal</span>
                   </button>
                   
                   <button 

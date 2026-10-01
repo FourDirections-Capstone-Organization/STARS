@@ -91,6 +91,52 @@ export function getPublicWebsiteUrl(): string {
     return 'https://speedex-system.vercel.app';
 }
 
+/**
+ * Resolves the Speedex Central Portal URL from stored redirect_uri or default portal URL.
+ */
+export function getSystemPortalUrl(): string {
+    const stored = getStoredRedirectUri();
+    if (stored) {
+        try {
+            const u = new URL(stored);
+            if (u.pathname && (u.pathname.includes('portal') || u.pathname.length > 1)) {
+                return stored;
+            }
+            return `${u.origin}/portal`;
+        } catch {
+            return stored;
+        }
+    }
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        return 'http://localhost:5173/portal';
+    }
+    return 'https://speedex-system.vercel.app/portal';
+}
+
+/**
+ * Navigates back to the Speedex Central Portal with current authentication payload so the user can reselect a subsystem.
+ */
+export function navigateToSystemPortal(): void {
+    const portalUrl = getSystemPortalUrl();
+    const token = localStorage.getItem('authToken') || '';
+    const refreshToken = localStorage.getItem('refreshToken') || '';
+    const role = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
+    const employeeId = localStorage.getItem('employeeId') || '';
+    const employeeName = localStorage.getItem('employeeName') || '';
+
+    if (token) {
+        redirectToExternalPortal(portalUrl, {
+            token,
+            refreshToken,
+            role,
+            employeeId,
+            employeeName,
+        });
+    } else {
+        window.location.href = portalUrl;
+    }
+}
+
 export interface AuthHandoffPayload {
     token: string;
     refreshToken?: string;
