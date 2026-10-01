@@ -20,6 +20,7 @@ import {
     User,
     Users
 } from 'lucide-react';
+import StatusCard from '../../../components/StatusCard/StatusCard';
 import { useToast } from '../../../components/Toast/Toast';
 import api from '../../../api';
 import { TaskTemplateCard } from './TaskTemplateCard';
@@ -413,50 +414,35 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
     return (
         <div className="tt-container">
             {/* ── Summary Cards on Top ── */}
-            <div className="tt-summary-grid">
-                <div className="tt-summary-card">
-                    <div className="tt-summary-icon" style={{ background: 'rgba(0, 169, 157, 0.12)', color: 'var(--primary, #00A99D)' }}>
-                        <Copy size={22} />
-                    </div>
-                    <div className="tt-summary-info">
-                        <span className="tt-summary-label">Total Templates</span>
-                        <span className="tt-summary-value">{stats.total}</span>
-                        <span className="tt-summary-sub">Configured blueprints</span>
-                    </div>
-                </div>
-
-                <div className="tt-summary-card">
-                    <div className="tt-summary-icon" style={{ background: 'rgba(5, 150, 105, 0.12)', color: '#059669' }}>
-                        <CheckCircle2 size={22} />
-                    </div>
-                    <div className="tt-summary-info">
-                        <span className="tt-summary-label">Active Templates</span>
-                        <span className="tt-summary-value">{stats.active}</span>
-                        <span className="tt-summary-sub">Auto-generating on schedule</span>
-                    </div>
-                </div>
-
-                <div className="tt-summary-card">
-                    <div className="tt-summary-icon" style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#4F46E5' }}>
-                        <Repeat size={22} />
-                    </div>
-                    <div className="tt-summary-info">
-                        <span className="tt-summary-label">Auto-assigned (30d)</span>
-                        <span className="tt-summary-value">{stats.autoAssigned30d}</span>
-                        <span className="tt-summary-sub">Round-robin balanced</span>
-                    </div>
-                </div>
-
-                <div className="tt-summary-card">
-                    <div className="tt-summary-icon" style={{ background: 'rgba(217, 119, 6, 0.12)', color: '#D97706' }}>
-                        <AlertTriangle size={22} />
-                    </div>
-                    <div className="tt-summary-info">
-                        <span className="tt-summary-label">Left Unassigned</span>
-                        <span className="tt-summary-value">{stats.unassigned}</span>
-                        <span className="tt-summary-sub">Coordinator routed</span>
-                    </div>
-                </div>
+            <div className="stats-row stats-row-4">
+                <StatusCard
+                    icon={<Copy size={20} strokeWidth={2.3} />}
+                    variant="teal"
+                    label="TOTAL TEMPLATES"
+                    value={stats.total}
+                    subtext="Configured blueprints"
+                />
+                <StatusCard
+                    icon={<CheckCircle2 size={20} strokeWidth={2.3} />}
+                    variant="success"
+                    label="ACTIVE TEMPLATES"
+                    value={stats.active}
+                    subtext="Auto-generating on schedule"
+                />
+                <StatusCard
+                    icon={<Repeat size={20} strokeWidth={2.3} />}
+                    variant="info"
+                    label="AUTO-ASSIGNED (30D)"
+                    value={stats.autoAssigned30d}
+                    subtext="Round-robin balanced"
+                />
+                <StatusCard
+                    icon={<AlertTriangle size={20} strokeWidth={2.3} />}
+                    variant="warning"
+                    label="LEFT UNASSIGNED"
+                    value={stats.unassigned}
+                    subtext="Coordinator routed"
+                />
             </div>
 
             {/* ── Error Banner ── */}

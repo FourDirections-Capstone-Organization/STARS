@@ -2094,21 +2094,21 @@ const DashboardTab: React.FC<{
                     </div>
                     {td ? (
                         <div className="stats-row stats-row-6">
-                            <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="Total Tasks" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
-                            <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="Active / In Progress" value={totalActive} subtext={inProgress > 0 ? `${inProgress} in progress` : 'None in progress'} />
-                            <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="Pending Review" value={pendingReview} subtext={pendingReview > 0 ? 'Awaiting admin review' : 'All reviewed'} />
-                            <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="Completed Today" value={completedToday} subtext={completedToday > 0 ? `Out of ${total} total` : 'No completions yet'} />
-                            <StatusCard icon={<Clock size={20} strokeWidth={2.3} />} variant="new" label="On Hold" value={onHold} subtext={onHold > 0 ? `${onHold} paused` : 'None on hold'} />
-                            <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="Overdue" value={overdue} subtext={overdue > 0 ? `${overdue} past deadline` : 'No overdue tasks'} />
+                            <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
+                            <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="ACTIVE / IN PROGRESS" value={totalActive} subtext={inProgress > 0 ? `${inProgress} in progress` : 'None in progress'} />
+                            <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="PENDING REVIEW" value={pendingReview} subtext={pendingReview > 0 ? 'Awaiting review' : 'All reviewed'} />
+                            <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETED TODAY" value={completedToday} subtext={completedToday > 0 ? `Out of ${total} total` : 'No completions yet'} />
+                            <StatusCard icon={<Clock size={20} strokeWidth={2.3} />} variant="new" label="ON HOLD" value={onHold} subtext={onHold > 0 ? `${onHold} paused` : 'None on hold'} />
+                            <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={overdue} subtext={overdue > 0 ? `${overdue} past deadline` : 'No overdue tasks'} />
                         </div>
                     ) : (
                         <div className="stats-row stats-row-6">
-                            <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="Total Tasks" value={0} subtext="No data" />
-                            <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="Active / In Progress" value={0} subtext="No data" />
-                            <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="Pending Review" value={0} subtext="No data" />
-                            <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="Completed Today" value={0} subtext="No data" />
-                            <StatusCard icon={<Clock size={20} strokeWidth={2.3} />} variant="new" label="On Hold" value={0} subtext="No data" />
-                            <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="Overdue" value={0} subtext="No data" />
+                            <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={0} subtext="No data" />
+                            <StatusCard icon={<Loader2 size={20} strokeWidth={2.3} />} variant="warning" label="ACTIVE / IN PROGRESS" value={0} subtext="No data" />
+                            <StatusCard icon={<Eye size={20} strokeWidth={2.3} />} variant="info" label="PENDING REVIEW" value={0} subtext="No data" />
+                            <StatusCard icon={<CheckCircle2 size={20} strokeWidth={2.3} />} variant="success" label="COMPLETED TODAY" value={0} subtext="No data" />
+                            <StatusCard icon={<Clock size={20} strokeWidth={2.3} />} variant="new" label="ON HOLD" value={0} subtext="No data" />
+                            <StatusCard icon={<AlertCircle size={20} strokeWidth={2.3} />} variant="danger" label="OVERDUE" value={0} subtext="No data" />
                         </div>
                     )}
 
