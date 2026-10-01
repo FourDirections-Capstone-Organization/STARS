@@ -1,37 +1,38 @@
-﻿import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
+import { normalizeRole } from './authRedirect';
 
 interface ProtectedRouteProps {
     allowedRoles?: string[];
 }
 
 function getStoredRole(): string {
-    const stored = localStorage.getItem('userRole');
-    if (stored) return stored;
+    const stored = localStorage.getItem('userRole') || localStorage.getItem('role');
+    if (stored) return normalizeRole(stored) || stored;
     try {
         const token = localStorage.getItem('authToken');
         if (!token) return '';
-        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '');
-        const payload = JSON.parse(atob(b64));
-        const claim = payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
-        const map: Record<string, string> = {
-            Manager: 'Manager', Coordinator: 'Coordinator',
-            Dispatcher: 'Dispatcher', Encoder: 'Encoder', Courier: 'Courier', Accountant: 'Accountant'
-        };
-        return map[claim] || claim || '';
+        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+        const payload = JSON.parse(atob(padded));
+        const claim = payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || payload.role || payload.roles;
+        return normalizeRole(claim) || claim || '';
     } catch {
         return '';
     }
 }
 
 function isTokenValid(): boolean {
+    const token = localStorage.getItem('authToken');
+    if (!token) return false;
     try {
-        const token = localStorage.getItem('authToken');
-        if (!token) return false;
-        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '');
-        JSON.parse(atob(b64));
+        if (token.includes('.')) {
+            const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+            JSON.parse(atob(padded));
+        }
         return true;
     } catch {
-        return false;
+        return !!token;
     }
 }
 

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, ArrowLeft, Globe } from 'lucide-react';
 import { useToast } from '../../components/Toast/Toast';
 import api from '../../api';
-import { captureRedirectUriFromQuery, getStoredRedirectUri, redirectToExternalPortal, bootstrapIncomingAuthHash } from '../../components/Auth/authRedirect';
+import { captureRedirectUriFromQuery, getStoredRedirectUri, redirectToExternalPortal, bootstrapIncomingAuth, normalizeRole, dashboardRoutes, getDashboardRoute, getPublicWebsiteUrl } from '../../components/Auth/authRedirect';
 import './login.css';
 
 /* ── Types ── */
@@ -28,28 +28,6 @@ interface LoginResponse {
     termsVersionAccepted?: string;
 }
 
-/* ── Role helpers ── */
-const normalizeRole = (role: string): UserRole | '' => {
-    const map: Record<string, UserRole> = {
-        manager: 'Manager',
-        coordinator: 'Coordinator',
-        dispatcher: 'Dispatcher',
-        encoder: 'Encoder',
-        courier: 'Courier',
-        accountant: 'Accountant',
-    };
-    return map[role.toLowerCase()] ?? '';
-};
-
-const dashboardRoutes: Record<UserRole, string> = {
-    Manager: '/SystemAdmin_Dashboard',
-    Coordinator: '/OpAdmin_Dashboard',
-    Dispatcher: '/OpEmployee_Dashboard',
-    Encoder: '/OpEmployee_Dashboard',
-    Courier: '/OpEmployee_Dashboard',
-    Accountant: '/OpEmployee_Dashboard',
-};
-
 /* ══════════════════════════════════════════
    LOGIN PAGE
 ══════════════════════════════════════════ */
@@ -72,28 +50,40 @@ export default function Login() {
     useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
-        // Check if user arrives with an auth hash from speedex-system
-        const bootstrapped = bootstrapIncomingAuthHash();
-        if (bootstrapped.authenticated && bootstrapped.role) {
-            const normalizedRole = normalizeRole(bootstrapped.role);
-            const target = normalizedRole ? dashboardRoutes[normalizedRole] : '';
+        // 1. Incoming SSO Handshake (From Speedex Portal into STARS):
+        // Check if authentication credentials are present in the URL (search or hash)
+        const bootstrapped = bootstrapIncomingAuth();
+        if (bootstrapped.authenticated) {
+            const target = bootstrapped.targetRoute || getDashboardRoute(bootstrapped.role);
             if (target) {
                 navigate(target, { replace: true });
                 return;
             }
         }
 
-        ['authToken', 'refreshToken', 'employeeId', 'employeeName',
-            'firstName', 'middleName', 'lastName', 'suffix',
-            'contactNumber', 'email', 'role', 'isPasswordChanged', 'userRole',
-            'hasAcceptedTerms', 'termsVersionAccepted']
-            .forEach(k => localStorage.removeItem(k));
-
-        captureRedirectUriFromQuery();
+        // 2. Check if a redirect_uri is specified in query parameters
+        const redirectParam = captureRedirectUriFromQuery();
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('reason') === 'inactivity') {
             updateStatus('You were logged out due to 15 minutes of inactivity.', 'info');
+        }
+
+        // If redirect_uri is specified, stay on login page to authenticate
+        if (redirectParam) {
+            return;
+        }
+
+        // 3. Fallback & Protected Routes:
+        // If no redirect_uri and valid token already exists in localStorage, automatically direct to dashboard
+        const storedToken = localStorage.getItem('authToken');
+        const storedRole = localStorage.getItem('userRole') || localStorage.getItem('role');
+        if (storedToken && storedRole) {
+            const target = getDashboardRoute(storedRole);
+            if (target && target !== '/') {
+                navigate(target, { replace: true });
+                return;
+            }
         }
     }, [navigate]);
 
@@ -246,8 +236,8 @@ export default function Login() {
                 return;
             }
 
-            const target = dashboardRoutes[normalizedRole];
-            if (target) {
+            const target = getDashboardRoute(normalizedRole);
+            if (target && target !== '/') {
                 navigate(target, { replace: true });
             }
 
@@ -271,202 +261,228 @@ export default function Login() {
         }
     };
 
+    const publicWebsiteUrl = getPublicWebsiteUrl();
+
     return (
-        <div className={`login-page${mounted ? ' mounted' : ''}`}>
-
-            {/* ── LEFT PANEL ── */}
-            <aside className="login-left">
-                <div className="login-left-content">
-
-                    {/* Brand */}
-                    <div className="login-brand">
-                        <div className="brand-icon">
-                            <Package size={22} />
+        <div className={`login-page-container${mounted ? ' mounted' : ''}`}>
+            {/* ── SPEEDEX SYSTEM HEADER ── */}
+            <header className="speedex-system-header">
+                <div className="speedex-header-inner">
+                    <a href={publicWebsiteUrl} className="speedex-header-brand" title="Speedex Public Website">
+                        <div className="speedex-header-logo">
+                            <Package size={18} />
                         </div>
-                        <div>
-                            <h1 className="brand-name">Speedex</h1>
-                            <p className="brand-sub">COURIER & FORWARDER, INC.</p>
+                        <div className="speedex-header-title-group">
+                            <span className="speedex-header-title">Speedex</span>
+                            <span className="speedex-header-badge">CENTRAL PORTAL</span>
                         </div>
-                    </div>
+                    </a>
 
-                    {/* Headline */}
-                    <div className="login-headline">
-                        <h2>
-                            Fast deliveries,<br />
-                            <span className="headline-accent">smarter logistics.</span>
-                        </h2>
-                        <p className="headline-body">
-                            Manage shipments, monitor deliveries, and access your
-                            operational dashboard — all in one place.
-                        </p>
-                    </div>
-
-                    {/* Features */}
-                    <div className="feature-list">
-                        <FeatureItem
-                            title="Real-Time Delivery Management System"
-                            description="Live shipment visibility and updates"
-                        />
-                        <FeatureItem
-                            title="SPEEDEX Automated Tracking System"
-                            description="Personalized and organized task workflow experience"
-                        />
-                        <FeatureItem
-                            title="Financial Management System"
-                            description="Track and manage financial transactions"
-                        />
+                    <div className="speedex-header-actions">
+                        <a href={publicWebsiteUrl} className="back-to-public-btn" id="btn-back-to-public">
+                            <ArrowLeft size={16} />
+                            <span>Back to Public Website</span>
+                        </a>
                     </div>
                 </div>
-            </aside>
+            </header>
 
-            {/* ── RIGHT PANEL ── */}
-            <main className="login-right">
-                <div className="login-card">
+            <div className="login-page">
 
-                    {/* Card header */}
-                    <div className="card-header">
-                        <span className="header-badge">LOGIN PORTAL</span>
-                        <h1 className="card-title">Welcome!</h1>
-                        <p className="card-subtitle">
-                            Sign in to continue to your workspace.
+                {/* ── LEFT PANEL ── */}
+                <aside className="login-left">
+                    <div className="login-left-content">
+
+                        {/* Brand */}
+                        <div className="login-brand">
+                            <div className="brand-icon">
+                                <Package size={22} />
+                            </div>
+                            <div>
+                                <h1 className="brand-name">Speedex</h1>
+                                <p className="brand-sub">COURIER & FORWARDER, INC.</p>
+                            </div>
+                        </div>
+
+                        {/* Headline */}
+                        <div className="login-headline">
+                            <h2>
+                                Fast deliveries,<br />
+                                <span className="headline-accent">smarter logistics.</span>
+                            </h2>
+                            <p className="headline-body">
+                                Manage shipments, monitor deliveries, and access your
+                                operational dashboard — all in one place.
+                            </p>
+                        </div>
+
+                        {/* Features */}
+                        <div className="feature-list">
+                            <FeatureItem
+                                title="Real-Time Delivery Management System"
+                                description="Live shipment visibility and updates"
+                            />
+                            <FeatureItem
+                                title="SPEEDEX Automated Tracking System"
+                                description="Personalized and organized task workflow experience"
+                            />
+                            <FeatureItem
+                                title="Financial Management System"
+                                description="Track and manage financial transactions"
+                            />
+                        </div>
+                    </div>
+                </aside>
+
+                {/* ── RIGHT PANEL ── */}
+                <main className="login-right">
+                    <div className="login-card">
+
+                        {/* Card header */}
+                        <div className="card-header">
+                            <span className="header-badge">LOGIN PORTAL</span>
+                            <h1 className="card-title">Welcome!</h1>
+                            <p className="card-subtitle">
+                                Sign in to continue to your workspace.
+                            </p>
+                        </div>
+
+                        {/* Status message */}
+                        {statusMessage && (
+                            <div className={`status-bar ${statusType}`} role="alert">
+                                <StatusIcon type={statusType} />
+                                {statusMessage}
+                            </div>
+                        )}
+                        {pendingVerification && (
+                            <button
+                                type="button"
+                                className="resend-btn"
+                                onClick={handleResendVerification}
+                                disabled={resending}
+                                style={{
+                                    display: 'block', margin: '8px auto 0', padding: '8px 20px',
+                                    fontSize: 13, fontWeight: 600, borderRadius: 8,
+                                    border: '1px solid var(--primary)', background: 'transparent',
+                                    color: 'var(--primary)', cursor: 'pointer', fontFamily: 'inherit',
+                                }}
+                            >
+                                {resending ? <Loader2 size={14} className="spin" style={{ marginRight: 6 }} /> : null}
+                                {resending ? 'Sending...' : 'Resend Verification Email'}
+                            </button>
+                        )}
+
+                        {/* Form */}
+                        <form className="login-form" onSubmit={handleSubmit} noValidate>
+
+                            {/* Employee ID */}
+                            <div className="field-group">
+                                <label htmlFor="employeeId" className="field-label">
+                                    Employee ID <span style={{ color: 'var(--status-failed, #E31A1A)' }}>*</span>
+                                </label>
+                                <div className={`field-wrapper${employeeIdError ? ' field-error' : employeeId && !employeeIdError ? ' field-success' : ''}`}>
+                                    <span className="field-icon">
+                                        <User size={16} />
+                                    </span>
+                                    <input
+                                        id="employeeId"
+                                        type="text"
+                                        className="field-input"
+                                        placeholder="e.g. 0001"
+                                        value={employeeId}
+                                        onChange={(e) => {
+                                            setEmployeeId(e.target.value);
+                                            setEmployeeIdError(validateEmployeeId(e.target.value));
+                                        }}
+                                        disabled={isLoading}
+                                        autoComplete="username"
+                                        autoFocus
+                                        maxLength={254}
+                                        required
+                                    />
+                                </div>
+                                {employeeIdError && (
+                                    <span className="field-err-msg">{employeeIdError}</span>
+                                )}
+                            </div>
+
+                            {/* Password */}
+                            <div className="field-group">
+                                <label htmlFor="password" className="field-label">
+                                    Password <span style={{ color: 'var(--status-failed, #E31A1A)' }}>*</span>
+                                </label>
+                                <div className={`field-wrapper${passwordError ? ' field-error' : password && !passwordError ? ' field-success' : ''}`}>
+                                    <span className="field-icon">
+                                        <Lock size={16} />
+                                    </span>
+                                    <input
+                                        id="password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        className="field-input"
+                                        placeholder="Enter your password"
+                                        value={password}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            setPasswordError(validatePassword(e.target.value));
+                                        }}
+                                        disabled={isLoading}
+                                        autoComplete="current-password"
+                                        maxLength={100}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="toggle-pw"
+                                        onClick={() => setShowPassword((v) => !v)}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {passwordError && (
+                                    <span className="field-err-msg">{passwordError}</span>
+                                )}
+                            </div>
+
+                            {/* Remember me / Forgot password */}
+                            <div className="form-options">
+                                <label className="remember-label">
+                                    <input type="checkbox" />
+                                    Remember me
+                                </label>
+                                <Link to="/forgotpassword_page" className="forgot-link">
+                                    Forgot password?
+                                </Link>
+                            </div>
+
+                            {/* Submit */}
+                            <button
+                                type="submit"
+                                className={`submit-btn${isLoading ? ' loading' : ''}`}
+                                disabled={isLoading}
+                            >
+                                {isLoading
+                                    ? <Loader2 size={18} className="spin" />
+                                    : 'LOGIN'
+                                }
+                            </button>
+
+                        </form>
+
+                        {/* ── Applicant portal divider ── */}
+                        <div className="login-terms">
+                            By using this service, you understand and agree to the Speedex Services{' '}
+                            <a href="#" className="terms-link">Terms of Use</a> and{' '}
+                            <a href="#" className="terms-link">Privacy Statement</a>.
+                        </div>
+
+                        <p className="right-footer">
+                            © 2026 Speedex Courier &amp; Forwarder, Inc. All rights reserved.
                         </p>
                     </div>
-
-                    {/* Status message */}
-                    {statusMessage && (
-                        <div className={`status-bar ${statusType}`} role="alert">
-                            <StatusIcon type={statusType} />
-                            {statusMessage}
-                        </div>
-                    )}
-                    {pendingVerification && (
-                        <button
-                            type="button"
-                            className="resend-btn"
-                            onClick={handleResendVerification}
-                            disabled={resending}
-                            style={{
-                                display: 'block', margin: '8px auto 0', padding: '8px 20px',
-                                fontSize: 13, fontWeight: 600, borderRadius: 8,
-                                border: '1px solid var(--primary)', background: 'transparent',
-                                color: 'var(--primary)', cursor: 'pointer', fontFamily: 'inherit',
-                            }}
-                        >
-                            {resending ? <Loader2 size={14} className="spin" style={{ marginRight: 6 }} /> : null}
-                            {resending ? 'Sending...' : 'Resend Verification Email'}
-                        </button>
-                    )}
-
-                    {/* Form */}
-                    <form className="login-form" onSubmit={handleSubmit} noValidate>
-
-                        {/* Employee ID */}
-                        <div className="field-group">
-                            <label htmlFor="employeeId" className="field-label">
-                                Employee ID <span style={{ color: 'var(--status-failed, #E31A1A)' }}>*</span>
-                            </label>
-                            <div className={`field-wrapper${employeeIdError ? ' field-error' : employeeId && !employeeIdError ? ' field-success' : ''}`}>
-                                <span className="field-icon">
-                                    <User size={16} />
-                                </span>
-                                <input
-                                    id="employeeId"
-                                    type="text"
-                                    className="field-input"
-                                    placeholder="e.g. 0001"
-                                    value={employeeId}
-                                    onChange={(e) => {
-                                        setEmployeeId(e.target.value);
-                                        setEmployeeIdError(validateEmployeeId(e.target.value));
-                                    }}
-                                    disabled={isLoading}
-                                    autoComplete="username"
-                                    autoFocus
-                                    maxLength={254}
-                                    required
-                                />
-                            </div>
-                            {employeeIdError && (
-                                <span className="field-err-msg">{employeeIdError}</span>
-                            )}
-                        </div>
-
-                        {/* Password */}
-                        <div className="field-group">
-                            <label htmlFor="password" className="field-label">
-                                Password <span style={{ color: 'var(--status-failed, #E31A1A)' }}>*</span>
-                            </label>
-                            <div className={`field-wrapper${passwordError ? ' field-error' : password && !passwordError ? ' field-success' : ''}`}>
-                                <span className="field-icon">
-                                    <Lock size={16} />
-                                </span>
-                                <input
-                                    id="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    className="field-input"
-                                    placeholder="Enter your password"
-                                    value={password}
-                                    onChange={(e) => {
-                                        setPassword(e.target.value);
-                                        setPasswordError(validatePassword(e.target.value));
-                                    }}
-                                    disabled={isLoading}
-                                    autoComplete="current-password"
-                                    maxLength={100}
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    className="toggle-pw"
-                                    onClick={() => setShowPassword((v) => !v)}
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                    tabIndex={-1}
-                                >
-                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </button>
-                            </div>
-                            {passwordError && (
-                                <span className="field-err-msg">{passwordError}</span>
-                            )}
-                        </div>
-
-                        {/* Remember me / Forgot password */}
-                        <div className="form-options">
-                            <label className="remember-label">
-                                <input type="checkbox" />
-                                Remember me
-                            </label>
-                            <Link to="/forgotpassword_page" className="forgot-link">
-                                Forgot password?
-                            </Link>
-                        </div>
-
-                        {/* Submit */}
-                        <button
-                            type="submit"
-                            className={`submit-btn${isLoading ? ' loading' : ''}`}
-                            disabled={isLoading}
-                        >
-                            {isLoading
-                                ? <Loader2 size={18} className="spin" />
-                                : 'LOGIN'
-                            }
-                        </button>
-
-                    </form>
-
-                    {/* ── Applicant portal divider ── */}
-                    <div className="login-terms">
-                        By using this service, you understand and agree to the PUP Online Services{' '}
-                        <a href="#" className="terms-link">Terms of Use</a> and{' '}
-                        <a href="#" className="terms-link">Privacy Statement</a>.
-                    </div>
-
-                    <p className="right-footer">
-                        © 2026 Speedex Courier &amp; Forwarder, Inc. All rights reserved.
-                    </p>
-                </div>
-            </main>
+                </main>
+            </div>
         </div>
     );
 }

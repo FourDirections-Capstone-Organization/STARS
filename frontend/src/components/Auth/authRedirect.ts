@@ -1,5 +1,5 @@
 /**
- * Utility to manage redirection and token handoff between STARS and external portals (e.g. speedex-system.vercel.app).
+ * Utility to manage redirection and token handoff between STARS and external portals (e.g. speedex-system.vercel.app / Speedex Central Portal).
  */
 
 const REDIRECT_STORAGE_KEY = 'speedex_redirect_uri';
@@ -18,9 +18,12 @@ export function isValidRedirectUrl(url: string | null): boolean {
     if (!url) return false;
     try {
         const parsed = new URL(url);
-        // Allow http for localhost only, otherwise require https
-        if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+        // Allow http for localhost/127.0.0.1 and speedex origins
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
             return false;
+        }
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+            return true;
         }
         return ALLOWED_HOSTNAMES.some(allowed => parsed.hostname === allowed || parsed.hostname.endsWith(`.${allowed}`));
     } catch {
@@ -44,10 +47,16 @@ export function captureRedirectUriFromQuery(): string | null {
 }
 
 /**
- * Retrieves any stored redirect URL from sessionStorage.
+ * Retrieves any stored redirect URL from URL search query or sessionStorage.
  */
 export function getStoredRedirectUri(): string | null {
     if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('redirect_uri') || params.get('redirect_url') || params.get('return_to') || params.get('returnUrl');
+    if (fromQuery && isValidRedirectUrl(fromQuery)) {
+        return fromQuery;
+    }
+
     const stored = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
     if (stored && isValidRedirectUrl(stored)) {
         return stored;
@@ -63,6 +72,25 @@ export function clearStoredRedirectUri(): void {
     sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
 }
 
+/**
+ * Resolves the public website URL from stored redirect_uri or default domain.
+ */
+export function getPublicWebsiteUrl(): string {
+    const stored = getStoredRedirectUri();
+    if (stored) {
+        try {
+            const u = new URL(stored);
+            return u.origin;
+        } catch {
+            return stored;
+        }
+    }
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        return 'http://localhost:5173';
+    }
+    return 'https://speedex-system.vercel.app';
+}
+
 export interface AuthHandoffPayload {
     token: string;
     refreshToken?: string;
@@ -72,23 +100,56 @@ export interface AuthHandoffPayload {
 }
 
 /**
- * Redirects the browser to the external portal with authentication parameters passed via hash fragment.
+ * Redirects the browser to the external portal with authentication parameters passed via hash fragment:
+ * `${redirect_uri}#token=${token}&refreshToken=${refreshToken}&role=${role}&employeeId=${employeeId}&employeeName=${encodeURIComponent(employeeName)}`
  */
 export function redirectToExternalPortal(targetUrl: string, authData: AuthHandoffPayload): void {
     clearStoredRedirectUri();
     
-    // Construct clean URL and append hash fragment
-    const url = new URL(targetUrl);
-    const hashParams = new URLSearchParams();
-    
-    hashParams.set('token', authData.token);
-    if (authData.refreshToken) hashParams.set('refreshToken', authData.refreshToken);
-    if (authData.role) hashParams.set('role', authData.role);
-    if (authData.employeeId) hashParams.set('employeeId', authData.employeeId);
-    if (authData.employeeName) hashParams.set('employeeName', authData.employeeName);
+    const token = authData.token || '';
+    const refreshToken = authData.refreshToken || '';
+    const role = authData.role || '';
+    const employeeId = authData.employeeId || '';
+    const employeeName = authData.employeeName || '';
 
-    url.hash = hashParams.toString();
-    window.location.href = url.toString();
+    // Strip existing hash fragment if any
+    const baseTarget = targetUrl.split('#')[0];
+    const hashFragment = `token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}&role=${encodeURIComponent(role)}&employeeId=${encodeURIComponent(employeeId)}&employeeName=${encodeURIComponent(employeeName)}`;
+
+    window.location.href = `${baseTarget}#${hashFragment}`;
+}
+
+export type NormalizedUserRole =
+    | 'Manager'
+    | 'Coordinator'
+    | 'Dispatcher'
+    | 'Encoder'
+    | 'Courier'
+    | 'Accountant';
+
+/**
+ * Normalizes role variations to canonical STARS roles.
+ */
+export function normalizeRole(role: string): NormalizedUserRole | '' {
+    if (!role) return '';
+    const clean = role.toLowerCase().trim().replace(/[\s_-]+/g, '');
+    const map: Record<string, NormalizedUserRole> = {
+        manager: 'Manager',
+        admin: 'Manager',
+        systemadmin: 'Manager',
+        sysadmin: 'Manager',
+        coordinator: 'Coordinator',
+        opadmin: 'Coordinator',
+        operationsadmin: 'Coordinator',
+        dispatcher: 'Dispatcher',
+        encoder: 'Encoder',
+        courier: 'Courier',
+        driver: 'Courier',
+        rider: 'Courier',
+        accountant: 'Accountant',
+        finance: 'Accountant',
+    };
+    return map[clean] ?? (role as NormalizedUserRole);
 }
 
 /**
@@ -100,41 +161,118 @@ export const dashboardRoutes: Record<string, string> = {
     Dispatcher: '/OpEmployee_Dashboard',
     Encoder: '/OpEmployee_Dashboard',
     Courier: '/OpEmployee_Dashboard',
+    Driver: '/OpEmployee_Dashboard',
+    Rider: '/OpEmployee_Dashboard',
     Accountant: '/OpEmployee_Dashboard',
 };
 
 /**
- * Inspects incoming URL hash to see if authentication was handed back from speedex-system
- * (e.g. when clicking the STARS subsystem card).
- * Populates localStorage and wipes the hash if tokens are found.
+ * Resolves the destination dashboard URL for a given role.
  */
-export function bootstrapIncomingAuthHash(): { authenticated: boolean; role?: string } {
+export function getDashboardRoute(role?: string): string {
+    if (!role) return '/';
+    const normalized = normalizeRole(role);
+    return (normalized && dashboardRoutes[normalized]) || dashboardRoutes[role] || '/OpEmployee_Dashboard';
+}
+
+export interface IncomingAuthResult {
+    authenticated: boolean;
+    token?: string;
+    refreshToken?: string;
+    role?: string;
+    employeeId?: string;
+    employeeName?: string;
+    targetRoute?: string;
+}
+
+/**
+ * Inspects incoming URL (search query parameters and hash fragment) to see if authentication
+ * credentials were provided during SSO handshake from Speedex Central Portal.
+ *
+ * If credentials are present:
+ * - Saves token, refreshToken, role, employeeId, and employeeName into localStorage
+ * - Cleans the URL query/hash from the address bar using `window.history.replaceState(null, '', window.location.pathname)`
+ * - Returns authenticated status and target role-based route.
+ */
+export function bootstrapIncomingAuth(): IncomingAuthResult {
     if (typeof window === 'undefined') return { authenticated: false };
 
+    const searchParams = new URLSearchParams(window.location.search);
     const hash = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
-    if (!hash) return { authenticated: false };
+    const hashParams = new URLSearchParams(hash);
 
-    const params = new URLSearchParams(hash);
-    const token = params.get('token') || params.get('accessToken');
+    const getParam = (...keys: string[]): string | null => {
+        for (const k of keys) {
+            const val = hashParams.get(k) ?? searchParams.get(k);
+            if (val !== null && val !== undefined && val !== '') return val;
+        }
+        return null;
+    };
 
+    const token = getParam('token', 'authToken', 'accessToken', 'access_token');
     if (!token) return { authenticated: false };
 
-    const refreshToken = params.get('refreshToken');
-    const role = params.get('role');
-    const employeeId = params.get('employeeId');
-    const employeeName = params.get('employeeName');
+    const refreshToken = getParam('refreshToken', 'refresh_token') || '';
+    let role = getParam('role', 'userRole', 'roles') || '';
+    const employeeId = getParam('employeeId', 'employeeNumber', 'userId', 'id') || '';
+    const employeeNameRaw = getParam('employeeName', 'name', 'fullName', 'userName') || '';
 
+    // If role wasn't explicitly provided, attempt decoding from JWT payload
+    if (!role && token.includes('.')) {
+        try {
+            const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+            const payload = JSON.parse(atob(padded));
+            role = payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || payload.role || payload.roles || '';
+        } catch {
+            // ignore decoding error
+        }
+    }
+
+    const normalizedRole = normalizeRole(role) || role;
+    let employeeName = employeeNameRaw;
+    try {
+        employeeName = decodeURIComponent(employeeNameRaw);
+    } catch {
+        // Keep raw if already decoded or malformed
+    }
+
+    // Save credentials into localStorage
     localStorage.setItem('authToken', token);
-    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-    if (role) localStorage.setItem('userRole', role);
-    if (employeeId) localStorage.setItem('employeeId', employeeId);
-    if (employeeName) localStorage.setItem('employeeName', decodeURIComponent(employeeName));
+    if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+    }
+    if (normalizedRole) {
+        localStorage.setItem('userRole', normalizedRole);
+        localStorage.setItem('role', normalizedRole);
+    }
+    if (employeeId) {
+        localStorage.setItem('employeeId', employeeId);
+    }
+    if (employeeName) {
+        localStorage.setItem('employeeName', employeeName);
+    }
     localStorage.setItem('isPasswordChanged', 'true');
     localStorage.setItem('hasAcceptedTerms', 'true');
     localStorage.setItem('termsVersionAccepted', 'v1.0');
 
-    // Clean hash from URL for a clean browser address bar
-    window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+    // Clean the URL query/hash from the address bar as required
+    window.history.replaceState(null, '', window.location.pathname);
 
-    return { authenticated: true, role: role || undefined };
+    const targetRoute = getDashboardRoute(normalizedRole);
+
+    return {
+        authenticated: true,
+        token,
+        refreshToken,
+        role: normalizedRole,
+        employeeId,
+        employeeName,
+        targetRoute,
+    };
 }
+
+/**
+ * Backward compatibility alias for bootstrapIncomingAuth
+ */
+export const bootstrapIncomingAuthHash = bootstrapIncomingAuth;
