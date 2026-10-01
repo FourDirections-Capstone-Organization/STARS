@@ -73,6 +73,7 @@ import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import api from '../../api';
+import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
@@ -3389,9 +3390,7 @@ export default function Dashboard() {
     const doLogout = async () => {
         setLogoutLoading(true);
         try {
-            await api.post('/api/Auth/logout').catch(() => { });
-            ['employeeId', 'refreshToken', 'authToken', 'employeeName', 'firstName', 'middleName', 'lastName', 'suffix', 'contactNumber', 'role'].forEach(k => localStorage.removeItem(k));
-            navigate('/');
+            await performLogout();
         } finally {
             setLogoutLoading(false);
             setLogoutConfirm(false);

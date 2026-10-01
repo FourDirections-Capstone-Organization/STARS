@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import api from '../../api';
-import { getStoredRedirectUri, redirectToExternalPortal } from '../../components/Auth/authRedirect';
+import { getStoredRedirectUri, redirectToExternalPortal, performLogout } from '../../components/Auth/authRedirect';
 
 export const CURRENT_TERMS_VERSION = 'v1.0';
 
@@ -76,9 +75,8 @@ const TermsAndConditions: React.FC = () => {
         }
     };
 
-    const handleLogout = () => {
-        localStorage.clear();
-        navigate('/', { replace: true });
+    const handleLogout = async () => {
+        await performLogout();
     };
 
     return (

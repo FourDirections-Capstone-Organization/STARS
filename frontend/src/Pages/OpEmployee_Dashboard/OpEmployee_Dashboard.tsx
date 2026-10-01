@@ -56,6 +56,7 @@ import Pagination from '../../components/ui/Pagination';
 import TaskComments from '../../components/TaskComments/TaskComments';
 import TaskRecommendations from '../../components/TaskRecommendations/TaskRecommendations';
 import api from '../../api';
+import { performLogout } from '../../components/Auth/authRedirect';
 import axios from 'axios';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
@@ -2316,13 +2317,7 @@ export default function EmployeeDashboard() {
     };
 
     const handleLogout = async () => {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            await api.post('/api/Auth/logout').catch(() => { });
-        }
-        ['employeeId', 'refreshToken', 'authToken', 'employeeName', 'contactNumber', 'role']
-            .forEach(k => localStorage.removeItem(k));
-        navigate('/');
+        await performLogout();
     };
 
     const fetchTasks = async () => {

@@ -72,6 +72,7 @@ import SubTabNav from '../../components/ui/SubTabNav';
 import SearchableSelect from '../../components/ui/SearchableSelect';
 import TaskManager, { TMTask } from '../../components/TaskManager/TaskManager';
 import api from '../../api';
+import { performLogout } from '../../components/Auth/authRedirect';
 import axios from 'axios';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
@@ -7949,16 +7950,7 @@ export default function OpsAdminDashboard() {
     };
 
     const handleLogout = async () => {
-        const token = localStorage.getItem('authToken');
-
-        if (token) {
-            await api.post('/api/Auth/logout', {}).catch(() => { }); // non-fatal — clear localStorage regardless
-        }
-
-        ['employeeId', 'refreshToken', 'authToken', 'employeeName',
-            'firstName', 'middleName', 'lastName', 'contactNumber', 'role']
-            .forEach(k => localStorage.removeItem(k));
-        navigate('/');
+        await performLogout();
     };
 
     const pageTitles: Record<NavTab, string> = {

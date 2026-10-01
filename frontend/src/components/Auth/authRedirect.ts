@@ -1,3 +1,5 @@
+import api from '../../api';
+
 /**
  * Utility to manage redirection and token handoff between STARS and external portals (e.g. speedex-system.vercel.app / Speedex Central Portal).
  */
@@ -134,6 +136,42 @@ export function navigateToSystemPortal(): void {
         });
     } else {
         window.location.href = portalUrl;
+    }
+}
+
+/**
+ * Performs a complete logout across STARS and initiates Single Logout (SLO) with Speedex Central Portal.
+ */
+export async function performLogout(options?: { redirectToPortal?: boolean; fallbackUrl?: string }): Promise<void> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+
+    if (token) {
+        try {
+            await api.post('/api/Auth/logout', {}).catch(() => {});
+        } catch {
+            // non-fatal
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        const portalUrl = getSystemPortalUrl();
+        
+        // Clear all session and authentication storage
+        [
+            'authToken', 'refreshToken', 'employeeId', 'employeeName',
+            'firstName', 'middleName', 'lastName', 'suffix',
+            'contactNumber', 'email', 'role', 'userRole',
+            'isPasswordChanged', 'hasAcceptedTerms', 'termsVersionAccepted'
+        ].forEach(k => localStorage.removeItem(k));
+        clearStoredRedirectUri();
+
+        if (options?.redirectToPortal !== false) {
+            // Direct to the speedex-system portal with action=logout in both query and hash for universal SLO support
+            const basePortal = portalUrl.split('#')[0].split('?')[0];
+            window.location.href = `${basePortal}?action=logout#action=logout&logout=true`;
+        } else {
+            window.location.href = options?.fallbackUrl || '/';
+        }
     }
 }
 
