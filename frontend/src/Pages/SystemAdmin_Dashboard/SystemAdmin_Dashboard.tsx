@@ -2376,7 +2376,7 @@ export default function Dashboard() {
         { label: 'Role Management', onClick: () => handleNavChange('roles'), active: activeTab === 'roles' },
         { label: 'Org Structure', onClick: () => handleNavChange('org-structure'), active: activeTab === 'org-structure' },
         { label: 'Activity Logs', onClick: () => handleNavChange('activity_logs'), active: activeTab === 'activity_logs' },
-        ...(AI_ANALYTICS_ENABLED ? [{ label: 'Biomarker Scan', onClick: () => handleNavChange('biomarker'), active: activeTab === 'biomarker' }] : []),
+        { label: 'Biomarker Scan', onClick: () => handleNavChange('biomarker'), active: activeTab === 'biomarker' },
         ],
         },
         {
@@ -3519,7 +3519,7 @@ export default function Dashboard() {
                 {activeTab === 'roles' && <RoleManagementTab />}
 
                 {activeTab === 'org-structure' && <OrgStructureTab />}
-                {activeTab === 'biomarker' && AI_ANALYTICS_ENABLED && <BiomarkerDashboard />}
+                {activeTab === 'biomarker' && <BiomarkerDashboard />}
 
                 {activeTab === 'announcements' && <AnnouncementsTab canCreate={true} />}
 

@@ -17,4 +17,4 @@ const readFlag = (value: string | boolean | undefined, fallback = false): boolea
  * prediction, stream analytics). Turned off for the meantime; the code and the
  * corresponding components remain in the repo, they are simply not surfaced.
  */
-export const AI_ANALYTICS_ENABLED = readFlag(import.meta.env.VITE_AI_ANALYTICS_ENABLED, false);
+export const AI_ANALYTICS_ENABLED = readFlag(import.meta.env.VITE_AI_ANALYTICS_ENABLED, true);
