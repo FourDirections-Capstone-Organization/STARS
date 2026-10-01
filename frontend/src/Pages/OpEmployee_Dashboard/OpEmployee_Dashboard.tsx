@@ -1304,22 +1304,22 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                 </div>
 
                 {/* View Switcher: Board vs Grid */}
-                <div className="kanban-view-toggle">
+                <div className="tm-view-toggle-group">
                     <button
                         type="button"
-                        className={`kanban-toggle-btn${viewMode === 'board' ? ' active' : ''}`}
+                        className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
                         onClick={() => setViewMode('board')}
-                        title="Kanban Board View"
+                        title="Board View"
                     >
-                        <Kanban size={13} /> Board View
+                        <Kanban size={13} /> Board
                     </button>
                     <button
                         type="button"
-                        className={`kanban-toggle-btn${viewMode === 'grid' ? ' active' : ''}`}
+                        className={`tm-view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
                         onClick={() => setViewMode('grid')}
-                        title="Grid / List View"
+                        title="Grid View"
                     >
-                        <LayoutGrid size={13} /> Grid View
+                        <LayoutGrid size={13} /> Grid
                     </button>
                 </div>
             </div>
