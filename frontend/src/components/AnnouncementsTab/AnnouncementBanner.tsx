@@ -1,11 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import { Megaphone, AlertTriangle, AlertCircle, ChevronRight, CheckCircle2, Paperclip, ThumbsUp, Loader2, Eye } from 'lucide-react';
+import { Megaphone, AlertTriangle, AlertCircle, ChevronRight, CheckCircle2, Paperclip, ThumbsUp, Loader2, Eye, X } from 'lucide-react';
 import api from '../../api';
 import AnnouncementDetailModal, { AnnouncementItem } from './AnnouncementDetailModal';
 
 interface AnnouncementBannerProps {
     onNavigateToAnnouncements?: () => void;
 }
+
+const getUserId = (): string => {
+    try {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '')));
+            const id = payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || payload.sub || payload.nameid;
+            if (id) return String(id);
+        }
+    } catch {}
+    return localStorage.getItem('employeeId') || localStorage.getItem('userId') || 'default_user';
+};
+
+const getViewedStorageKey = () => `viewed_announcements_${getUserId()}`;
+
+const getViewedAnnouncementIds = (): string[] => {
+    try {
+        const raw = localStorage.getItem(getViewedStorageKey());
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const markAnnouncementViewed = (id: string) => {
+    try {
+        const key = getViewedStorageKey();
+        const existing = getViewedAnnouncementIds();
+        if (!existing.includes(id)) {
+            const updated = [...existing, id];
+            localStorage.setItem(key, JSON.stringify(updated));
+        }
+    } catch {}
+};
 
 export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNavigateToAnnouncements }) => {
     const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -17,7 +53,11 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
         try {
             const res = await api.get('/api/Announcement/active');
             if (res.data?.isSuccess && Array.isArray(res.data?.data)) {
-                setAnnouncements(res.data.data);
+                const viewedIds = getViewedAnnouncementIds();
+                const unviewed = (res.data.data as AnnouncementItem[]).filter(
+                    a => !viewedIds.includes(a.id)
+                );
+                setAnnouncements(unviewed);
             }
         } catch {
             // Non-blocking
@@ -30,14 +70,25 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
         fetchActive();
     }, []);
 
+    const handleViewAnnouncement = (a: AnnouncementItem) => {
+        markAnnouncementViewed(a.id);
+        setSelectedAnnouncement(a);
+        setAnnouncements(prev => prev.filter(item => item.id !== a.id));
+    };
+
+    const handleDismiss = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        markAnnouncementViewed(id);
+        setAnnouncements(prev => prev.filter(item => item.id !== id));
+    };
+
     const handleAcknowledge = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setAcknowledging(prev => ({ ...prev, [id]: true }));
+        markAnnouncementViewed(id);
         try {
             await api.post(`/api/Announcement/${id}/acknowledge`);
-            setAnnouncements(prev =>
-                prev.map(a => (a.id === id ? { ...a, isAcknowledged: true, acknowledgmentCount: a.acknowledgmentCount + 1 } : a))
-            );
+            setAnnouncements(prev => prev.filter(a => a.id !== id));
         } catch {
             // Ignore error
         } finally {
@@ -47,7 +98,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
 
     if (loading || announcements.length === 0) return null;
 
-    // Show top active announcements (up to 3 latest/urgent)
+    // Show top active unviewed announcements (up to 3 latest/urgent)
     const displayList = announcements.slice(0, 3);
 
     return (
@@ -72,7 +123,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                     <div
                         key={a.id}
                         className="card"
-                        onClick={() => setSelectedAnnouncement(a)}
+                        onClick={() => handleViewAnnouncement(a)}
                         style={{
                             margin: 0,
                             padding: '14px 18px',
@@ -153,7 +204,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
 
                             <button
                                 className="btn btn-sm btn-primary"
-                                onClick={() => setSelectedAnnouncement(a)}
+                                onClick={() => handleViewAnnouncement(a)}
                                 style={{ fontSize: 12, padding: '5px 10px', height: 32, display: 'flex', alignItems: 'center', gap: 4 }}
                             >
                                 <Eye size={13} /> View
@@ -168,6 +219,16 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                                     Board <ChevronRight size={13} />
                                 </button>
                             )}
+
+                            <button
+                                className="btn btn-sm btn-outline"
+                                onClick={(e) => handleDismiss(a.id, e)}
+                                style={{ fontSize: 12, padding: '5px 8px', height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}
+                                title="Dismiss from dashboard"
+                                aria-label="Dismiss announcement"
+                            >
+                                <X size={14} />
+                            </button>
                         </div>
                     </div>
                 );
