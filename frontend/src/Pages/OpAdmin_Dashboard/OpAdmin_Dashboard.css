@@ -222,11 +222,18 @@
 }
 
 .report-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 16px;
     width: 100%;
+}
+
+.report-summary-grid > * {
+    flex: 1 1 200px;
+    min-width: 180px;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .status-card {
@@ -246,8 +253,7 @@
     .stats-row-5,
     .stats-grid-5,
     .stats-row-4,
-    .stats-grid-4,
-    .report-summary-grid {
+    .stats-grid-4 {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -261,8 +267,7 @@
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
-    .stats-grid-3,
-    .report-summary-grid {
+    .stats-grid-3 {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
@@ -277,8 +282,7 @@
     .stats-row-4,
     .stats-grid-4,
     .stats-row-3,
-    .stats-grid-3,
-    .report-summary-grid {
+    .stats-grid-3 {
         grid-template-columns: 1fr;
     }
 }
@@ -1877,10 +1881,83 @@ input.input-sla-locked {
     gap: 18px;
 }
 
-.report-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+/* ─── Reports Tab Stat Cards (Flexible Auto-Expanding Grid & Space Maximization) ─── */
+.report-summary-grid,
+.reports-dashboard-content .stats-row,
+.reports-dashboard-content .stats-row-3,
+.reports-dashboard-content .stats-row-4,
+.reports-dashboard-content .stats-row-5,
+.reports-dashboard-content .stats-row-6,
+.reports-dashboard-content .stats-grid-3,
+.reports-dashboard-content .stats-grid-4,
+.reports-dashboard-content .stats-grid-5,
+.reports-dashboard-content .stats-grid-6 {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+    margin-bottom: 16px;
+    width: 100% !important;
+    align-items: stretch;
+}
+
+.report-summary-grid > *,
+.reports-dashboard-content .stats-row > *,
+.reports-dashboard-content .stats-row-3 > *,
+.reports-dashboard-content .stats-row-4 > *,
+.reports-dashboard-content .stats-row-5 > *,
+.reports-dashboard-content .stats-row-6 > *,
+.reports-dashboard-content .stats-grid-3 > *,
+.reports-dashboard-content .stats-grid-4 > *,
+.reports-dashboard-content .stats-grid-5 > *,
+.reports-dashboard-content .stats-grid-6 > * {
+    flex: 1 1 200px !important;
+    min-width: 180px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.report-summary-grid .kpi,
+.reports-dashboard-content .stats-row .kpi,
+.reports-dashboard-content .stats-row-3 .kpi,
+.reports-dashboard-content .stats-row-4 .kpi,
+.reports-dashboard-content .stats-row-5 .kpi,
+.reports-dashboard-content .stats-row-6 .kpi,
+.reports-dashboard-content .status-card {
+    height: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+@media (max-width: 640px) {
+    .report-summary-grid > *,
+    .reports-dashboard-content .stats-row > *,
+    .reports-dashboard-content .stats-row-3 > *,
+    .reports-dashboard-content .stats-row-4 > *,
+    .reports-dashboard-content .stats-row-5 > *,
+    .reports-dashboard-content .stats-row-6 > *,
+    .reports-dashboard-content .stats-grid-3 > *,
+    .reports-dashboard-content .stats-grid-4 > *,
+    .reports-dashboard-content .stats-grid-5 > *,
+    .reports-dashboard-content .stats-grid-6 > * {
+        flex: 1 1 140px !important;
+        min-width: 130px !important;
+    }
+}
+
+@media (max-width: 440px) {
+    .report-summary-grid > *,
+    .reports-dashboard-content .stats-row > *,
+    .reports-dashboard-content .stats-row-3 > *,
+    .reports-dashboard-content .stats-row-4 > *,
+    .reports-dashboard-content .stats-row-5 > *,
+    .reports-dashboard-content .stats-row-6 > *,
+    .reports-dashboard-content .stats-grid-3 > *,
+    .reports-dashboard-content .stats-grid-4 > *,
+    .reports-dashboard-content .stats-grid-5 > *,
+    .reports-dashboard-content .stats-grid-6 > * {
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
 }
 
 .report-charts-grid {
@@ -1964,10 +2041,6 @@ input.input-sla-locked {
     .dashboard-header {
         padding: 16px 20px;
     }
-
-    .report-summary-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
 }
 
 @media (max-width: 768px) {
@@ -1993,11 +2066,6 @@ input.input-sla-locked {
 
     .report-filter-grid {
         grid-template-columns: 1fr;
-        gap: 10px;
-    }
-
-    .report-summary-grid {
-        grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
 
@@ -2042,10 +2110,6 @@ input.input-sla-locked {
 
     .dashboard-header p {
         font-size: 0.78rem;
-    }
-
-    .report-summary-grid {
-        grid-template-columns: 1fr;
     }
 
     .modal-card,
