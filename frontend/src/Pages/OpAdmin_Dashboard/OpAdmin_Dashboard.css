@@ -2024,12 +2024,36 @@ input.input-sla-locked {
 .report-data-table {
     border-collapse: collapse !important;
     width: 100% !important;
+    table-layout: auto !important;
 }
 
 .report-data-table th,
 .report-data-table td {
     white-space: nowrap !important;
-    padding: 9px 12px !important;
+    padding: 10px 14px !important;
+    text-align: left;
+    vertical-align: middle !important;
+    box-sizing: border-box;
+}
+
+.report-data-table th {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: var(--text-secondary) !important;
+    background: var(--bg-secondary, #fafbfc) !important;
+    border-bottom: 2px solid var(--border) !important;
+}
+
+.report-data-table td {
+    font-size: 12px !important;
+    color: var(--text-primary) !important;
+    border-bottom: 1px solid var(--border) !important;
+}
+
+.report-data-table tbody tr:hover {
+    background: rgba(0, 169, 157, 0.04) !important;
 }
 
 @media (max-width: 1280px) {
@@ -2552,33 +2576,30 @@ input.emp-picker-checkbox {
 
 .table-card-data-table {
     width: 100%;
-    table-layout: fixed;
+    table-layout: auto;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 11.5px;
 }
 
 .table-card-data-table th {
-    padding: 8px 6px;
-    font-size: 10.5px;
+    padding: 8px 10px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--text-secondary);
     border-bottom: 2px solid var(--border);
     background: var(--bg-main, #f8fafc);
-    white-space: normal;
-    word-break: break-word;
+    white-space: nowrap;
     vertical-align: middle;
 }
 
 .table-card-data-table td {
-    padding: 7px 6px;
-    font-size: 11px;
+    padding: 8px 10px;
+    font-size: 11.5px;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
-    white-space: normal;
-    word-break: break-word;
-    overflow-wrap: break-word;
+    white-space: nowrap;
 }
 
 .table-card-data-table tbody tr:hover {
