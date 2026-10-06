@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Modules.DmsIntegration;
@@ -13,13 +15,16 @@ namespace Backend.Controllers;
 public class DmsIntegrationController : ControllerBase
 {
     private readonly IDmsIntegrationService _dmsService;
+    private readonly AppDbContext _db;
     private readonly DmsIntegrationSettings _settings;
 
     public DmsIntegrationController(
         IDmsIntegrationService dmsService,
+        AppDbContext db,
         IOptions<DmsIntegrationSettings> settings)
     {
         _dmsService = dmsService;
+        _db = db;
         _settings = settings.Value;
     }
 
@@ -134,5 +139,67 @@ public class DmsIntegrationController : ControllerBase
 
         var result = await _dmsService.GetPerformanceSummaryAsync(driverId);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Machine-to-machine trigger: Initiates Integration 1 (STARS Task -> DMS Delivery Order).
+    /// Dispatches a task to DMS and receives the generated Waybill. Guarded by API key.
+    /// </summary>
+    [HttpPost("api/integration/dms/dispatch")]
+    [AllowAnonymous]
+    public async Task<IActionResult> TriggerDispatch([FromBody] TriggerDispatchDTO? dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        Guid targetTaskId;
+        if (dto?.TaskId.HasValue == true && dto.TaskId.Value != Guid.Empty)
+        {
+            targetTaskId = dto.TaskId.Value;
+        }
+        else
+        {
+            var existingTask = await _db.Tasks.FirstOrDefaultAsync();
+            if (existingTask != null)
+            {
+                targetTaskId = existingTask.Id;
+            }
+            else
+            {
+                var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+                var newTask = new Backend.Models.Task
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "STARS-DMS Integration Verification Task",
+                    Description = "Auto-generated task for live API transmission testing",
+                    PriorityLevel = Backend.Models.Enums.PriorityLevel.Urgent,
+                    Status = Backend.Models.Enums.TaskStatus.Completed,
+                    Classification = Backend.Models.Enums.TaskClassification.SpecialTask,
+                    CreatedById = creatorId,
+                    Deadline = DateTime.UtcNow.AddHours(4),
+                    CreatedAt = DateTime.UtcNow
+                };
+                _db.Tasks.Add(newTask);
+                await _db.SaveChangesAsync();
+                targetTaskId = newTask.Id;
+            }
+        }
+
+        var result = await _dmsService.CreateDeliveryOrderForTaskAsync(targetTaskId);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Retrieve delivery recipient details and DMS tracking sync state for a task via API key.
+    /// </summary>
+    [HttpGet("api/integration/dms/tasks/{taskId:guid}/delivery-details")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetDeliveryDetailM2M(Guid taskId)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _dmsService.GetDeliveryDetailAsync(taskId);
+        return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 }

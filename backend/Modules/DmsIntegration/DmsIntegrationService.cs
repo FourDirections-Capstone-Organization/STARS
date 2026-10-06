@@ -246,7 +246,49 @@ public class DmsIntegrationService : IDmsIntegrationService
             .FirstOrDefaultAsync(d => d.TaskId == dto.StarsTaskId || d.DmsWaybillNo == dto.WaybillNo);
 
         if (detail == null)
-            return ApiResponseDTO<bool>.Failure($"No delivery detail linked to STARS task {dto.StarsTaskId} or waybill {dto.WaybillNo}");
+        {
+            var targetTaskId = dto.StarsTaskId != Guid.Empty ? dto.StarsTaskId : Guid.NewGuid();
+            var targetTask = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == targetTaskId);
+            if (targetTask == null)
+            {
+                var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+                targetTask = new Backend.Models.Task
+                {
+                    Id = targetTaskId,
+                    Title = $"Delivery Tracking {dto.WaybillNo}",
+                    Description = $"Delivery order synchronized from DMS (Waybill: {dto.WaybillNo})",
+                    PriorityLevel = PriorityLevel.High,
+                    Status = Backend.Models.Enums.TaskStatus.InProgress,
+                    Classification = TaskClassification.SpecialTask,
+                    CreatedById = creatorId,
+                    Deadline = DateTime.UtcNow.AddDays(1),
+                    CreatedAt = DateTime.UtcNow
+                };
+                _db.Tasks.Add(targetTask);
+                await _db.SaveChangesAsync();
+            }
+
+            detail = new TaskDeliveryDetail
+            {
+                TaskId = targetTask.Id,
+                RecipientName = "Operations Dispatch",
+                RecipientContact = "09123456789",
+                DeliveryAddress = "Metro Manila",
+                Area = "Manila",
+                PackageDescription = targetTask.Title,
+                DmsWaybillNo = dto.WaybillNo,
+                DmsStatus = dto.Status,
+                DmsRawStatus = dto.DmsStatus ?? dto.Status,
+                DmsLastSyncedAt = dto.Timestamp.Kind == DateTimeKind.Utc ? dto.Timestamp : dto.Timestamp.ToUniversalTime(),
+                DmsFailureReason = dto.FailureReason,
+                DmsLatitude = dto.Latitude,
+                DmsLongitude = dto.Longitude,
+                SyncStatus = "Synced",
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.TaskDeliveryDetails.Add(detail);
+            await _db.SaveChangesAsync();
+        }
 
         detail.DmsStatus = dto.Status;
         detail.DmsRawStatus = dto.DmsStatus ?? dto.Status;

@@ -26,6 +26,11 @@ public class UpsertTaskDeliveryDetailDTO
     public string? CourierEmployeeId { get; set; }
 }
 
+public class TriggerDispatchDTO
+{
+    public Guid? TaskId { get; set; }
+}
+
 public class TaskDeliveryDetailResponseDTO
 {
     public Guid Id { get; set; }
