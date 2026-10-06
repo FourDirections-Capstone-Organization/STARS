@@ -19,6 +19,7 @@ using Backend.Models;
 using Backend.Models.Enums;
 
 using System.Text.Json.Serialization;
+using Backend.Modules.DmsIntegration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -174,6 +175,12 @@ builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigSt
 builder.Services.Configure<Neo4jSettings>(builder.Configuration.GetSection("Neo4jSettings"));
 builder.Services.Configure<ExpertSystemConfig>(builder.Configuration.GetSection("ExpertSystemConfig"));
 builder.Services.Configure<BiomarkerThresholds>(builder.Configuration.GetSection("BiomarkerThresholds"));
+builder.Services.Configure<DmsIntegrationSettings>(builder.Configuration.GetSection(DmsIntegrationSettings.SectionName));
+builder.Services.AddHttpClient(DmsIntegrationService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(25);
+});
+builder.Services.AddScoped<IDmsIntegrationService, DmsIntegrationService>();
 
 // Analytics Services
 builder.Services.AddScoped<IStreamAnalyticsService, StreamAnalyticsService>();
