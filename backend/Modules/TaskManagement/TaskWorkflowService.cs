@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -13,12 +13,18 @@ public class TaskWorkflowService : ITaskWorkflowService
     private readonly AppDbContext _db;
     private readonly INotificationService _notificationService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IServiceProvider _serviceProvider;
 
-    public TaskWorkflowService(AppDbContext db, INotificationService notificationService, IAuditLogService auditLogService)
+    public TaskWorkflowService(
+        AppDbContext db,
+        INotificationService notificationService,
+        IAuditLogService auditLogService,
+        IServiceProvider serviceProvider)
     {
         _db = db;
         _notificationService = notificationService;
         _auditLogService = auditLogService;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<ApiResponseDTO<TaskResponseDTO>> UpdateStatusAsync(
@@ -186,6 +192,20 @@ public class TaskWorkflowService : ITaskWorkflowService
                     "Task Completed",
                     $"Task '{taskTitle}' has been approved and completed.",
                     task.Id);
+            }
+
+            // Trigger Integration 1: Task Completion -> Delivery Order Creation
+            try
+            {
+                var dmsService = _serviceProvider.GetService<Backend.Modules.DmsIntegration.IDmsIntegrationService>();
+                if (dmsService != null && dmsService.IsConfigured)
+                {
+                    await dmsService.CreateDeliveryOrderForTaskAsync(taskId, reviewerId);
+                }
+            }
+            catch
+            {
+                // Task approval must never fail if DMS is temporarily unreachable
             }
 
             return ApiResponseDTO<TaskResponseDTO>.Success(

@@ -26,6 +26,8 @@ public class AppDbContext : DbContext
     public DbSet<TaskCommentAttachment> TaskCommentAttachments => Set<TaskCommentAttachment>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<BiomarkerAlert> BiomarkerAlerts => Set<BiomarkerAlert>();
+    public DbSet<TaskDeliveryDetail> TaskDeliveryDetails => Set<TaskDeliveryDetail>();
+    public DbSet<DmsDeliveryPerformance> DmsDeliveryPerformances => Set<DmsDeliveryPerformance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -311,6 +313,28 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.ActionType);
             entity.HasIndex(e => e.Module);
             entity.HasIndex(e => new { e.TargetEntity, e.TargetEntityId });
+        });
+
+        // TaskDeliveryDetail Configuration
+        modelBuilder.Entity<TaskDeliveryDetail>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TaskId).IsUnique();
+            entity.HasIndex(e => e.DmsWaybillNo);
+
+            entity.HasOne(d => d.Task)
+                .WithMany()
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DmsDeliveryPerformance Configuration
+        modelBuilder.Entity<DmsDeliveryPerformance>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WaybillNo).IsUnique();
+            entity.HasIndex(e => e.DriverId);
+            entity.HasIndex(e => e.CompletedAt);
         });
     }
 }
