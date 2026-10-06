@@ -140,6 +140,18 @@ async function main() {
     return `Returned existing Waybill: ${res.json.waybillNo}`;
   });
 
+  await test("STARS initiates M2M outbound dispatch to DMS over internet", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/dispatch`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {}
+    });
+
+    expect(res.status === 200, `dispatch failed with status ${res.status}: ${res.text}`);
+    const detail = res.json?.data || res.json;
+    expect(detail?.dmsWaybillNo, "missing dmsWaybillNo in response");
+    return `Dispatched Task: ${detail.taskId} -> Generated Waybill: ${detail.dmsWaybillNo} (${res.ms}ms)`;
+  });
+
   console.log("\n[3] Integration 2: DMS -> STARS Delivery Status Webhook");
   await test("STARS receives status sync and updates live parcel tracking", async () => {
     const waybill = generatedWaybill || "WB-2026-TEST01";
