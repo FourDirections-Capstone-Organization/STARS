@@ -7455,13 +7455,19 @@ export default function OpsAdminDashboard() {
                     subItems: [
                         { label: 'Dashboard', onClick: () => handleNavChange('dashboard'), active: activeTab === 'dashboard' },
                         { label: 'Tasks', onClick: () => handleNavChange('tasks'), active: activeTab === 'tasks' },
-                        { label: 'Delivery Tracking (DMS)', onClick: () => handleNavChange('delivery'), active: activeTab === 'delivery' },
                         { label: 'Team', onClick: () => handleNavChange('team'), active: activeTab === 'team' },
                         { label: 'Task Templates', onClick: () => handleNavChange('templates'), active: activeTab === 'templates' },
                         { label: 'Reports', onClick: () => handleNavChange('reports'), active: activeTab === 'reports' },
                         { label: 'Activity Logs', onClick: () => handleNavChange('activity_logs'), active: activeTab === 'activity_logs' },
                         { label: 'Announcements', onClick: () => handleNavChange('announcements'), active: activeTab === 'announcements' },
                         { label: 'Notifications', onClick: () => handleNavChange('notifications'), active: activeTab === 'notifications' },
+                    ],
+                },
+                {
+                    label: 'Delivery Management System',
+                    icon: 'ti ti-truck-delivery',
+                    subItems: [
+                        { label: 'Delivery Tracking (DMS)', onClick: () => handleNavChange('delivery'), active: activeTab === 'delivery' },
                     ],
                 },
                 {
@@ -8924,7 +8930,7 @@ export default function OpsAdminDashboard() {
                 )}
 
                 {activeTab === 'delivery' && (
-                    <div className="dashboard-content" style={{ padding: '0 0 28px' }}>
+                    <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tasks}
                             onViewTask={(taskId) => {

@@ -3,7 +3,7 @@ import {
     Pencil, X, Package, CheckCircle2,
     XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock, ArrowLeft,
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
-    Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw,
+    Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw, Save, Plus,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -1057,22 +1057,22 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 type="button"
                                                 className="tv-btn tv-btn-outline-sm"
                                                 onClick={() => {
-                                                    if (!deliveryDetail) {
+                                                    if (!deliveryDetail || !deliveryDetail.recipientName) {
                                                         setEditingDelivery({
-                                                            recipientName: task.assignedEmployee || 'Operations Dispatch',
-                                                            recipientContact: '09123456789',
-                                                            deliveryAddress: 'Metro Manila',
-                                                            area: 'Manila',
-                                                            packageDescription: task.taskTitle,
+                                                            recipientName: task.assignedEmployee || '',
+                                                            recipientContact: '',
+                                                            deliveryAddress: '',
+                                                            area: '',
+                                                            packageDescription: task.taskTitle || '',
                                                             courierEmployeeId: '',
                                                         });
                                                     }
                                                     setShowEditDeliveryModal(true);
                                                 }}
                                             >
-                                                <Pencil size={11} /> {deliveryDetail?.recipientName ? 'Edit Delivery Details' : 'Configure Delivery Details'}
+                                                {deliveryDetail?.recipientName ? <Pencil size={11} /> : <Plus size={11} />} {deliveryDetail?.recipientName ? 'Edit Delivery Details' : 'Attach / Configure Delivery Details'}
                                             </button>
-                                            {(effectiveStatus === 'Completed' || deliveryDetail?.syncStatus === 'Failed') && (
+                                            {deliveryDetail?.recipientName && (
                                                 <button
                                                     type="button"
                                                     className="tv-btn tv-btn-primary tv-btn-sm"

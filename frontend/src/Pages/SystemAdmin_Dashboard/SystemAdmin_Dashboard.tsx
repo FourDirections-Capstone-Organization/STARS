@@ -3707,14 +3707,16 @@ export default function Dashboard() {
                 )}
 
                 {activeTab === 'delivery' && (
-                    <div className="dashboard-content" style={{ padding: '0 0 28px' }}>
+                    <div className="dashboard-content">
                         <DmsDeliveryTab
-                            tasks={managerTasks}
+                            tasks={tmTasks}
                             onViewTask={(taskId) => {
-                                const found = managerTasks.find(t => t.taskId === taskId);
+                                const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {
                                     setActiveTab('tasks');
-                                    setTmDetailTask(found);
+                                    setTmDetailTask(mapManagerTaskToView(found));
+                                } else {
+                                    openManagerTaskById(taskId);
                                 }
                             }}
                         />

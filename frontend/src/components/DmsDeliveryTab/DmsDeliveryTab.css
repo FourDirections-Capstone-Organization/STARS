@@ -6,7 +6,8 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-    padding: 0 28px 32px;
+    padding: 0;
+    width: 100%;
     animation: dms-fade-in 0.2s ease-out;
 }
 
@@ -104,62 +105,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
-}
-
-.dms-kpi-card {
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.dms-kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.dms-kpi-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.dms-kpi-label {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--sidebar-text, #64748b);
-    letter-spacing: 0.04em;
-}
-
-.dms-kpi-icon {
-    padding: 6px;
-    border-radius: 8px;
-    box-sizing: content-box;
-}
-
-.dms-kpi-icon.blue { background: #eff6ff; color: #3b82f6; }
-.dms-kpi-icon.amber { background: #fffbeb; color: #d97706; }
-.dms-kpi-icon.green { background: #ecfdf5; color: #059669; }
-.dms-kpi-icon.teal { background: #f0fdfa; color: var(--primary, #00A99D); }
-
-.dms-kpi-value {
-    font-size: 24px;
-    font-weight: 800;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.dms-kpi-hint {
-    font-size: 11.5px;
-    color: var(--sidebar-text, #64748b);
 }
 
 .dms-pulse-dot {

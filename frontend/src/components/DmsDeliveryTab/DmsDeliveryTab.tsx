@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
+import StatusCard from '../StatusCard/StatusCard';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -299,46 +300,34 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
 
             {/* ── KPI Stat Cards ── */}
             <div className="dms-kpi-grid">
-                <div className="dms-kpi-card">
-                    <div className="dms-kpi-header">
-                        <span className="dms-kpi-label">Total Shipments</span>
-                        <Package size={16} className="dms-kpi-icon blue" />
-                    </div>
-                    <div className="dms-kpi-value">{stats.total}</div>
-                    <div className="dms-kpi-hint">Linked with STARS tasks</div>
-                </div>
-
-                <div className="dms-kpi-card">
-                    <div className="dms-kpi-header">
-                        <span className="dms-kpi-label">Active in Transit</span>
-                        <Truck size={16} className="dms-kpi-icon amber" />
-                    </div>
-                    <div className="dms-kpi-value" style={{ color: '#d97706' }}>
-                        {stats.inTransit}
-                        {stats.inTransit > 0 && <span className="dms-pulse-dot" />}
-                    </div>
-                    <div className="dms-kpi-hint">Driver on road / Out for Delivery</div>
-                </div>
-
-                <div className="dms-kpi-card">
-                    <div className="dms-kpi-header">
-                        <span className="dms-kpi-label">Delivered (POD)</span>
-                        <CheckCircle2 size={16} className="dms-kpi-icon green" />
-                    </div>
-                    <div className="dms-kpi-value" style={{ color: '#059669' }}>{stats.delivered}</div>
-                    <div className="dms-kpi-hint">Proof of Delivery confirmed</div>
-                </div>
-
-                <div className="dms-kpi-card">
-                    <div className="dms-kpi-header">
-                        <span className="dms-kpi-label">On-Time Rate</span>
-                        <Clock size={16} className="dms-kpi-icon teal" />
-                    </div>
-                    <div className="dms-kpi-value" style={{ color: 'var(--primary, #00A99D)' }}>
-                        {performance.onTimePercentage}%
-                    </div>
-                    <div className="dms-kpi-hint">DMS SLA Performance Target</div>
-                </div>
+                <StatusCard
+                    icon={<Package size={20} strokeWidth={2.3} />}
+                    variant="teal"
+                    label="Total Shipments"
+                    value={stats.total}
+                    subtext="Linked with STARS tasks"
+                />
+                <StatusCard
+                    icon={<Truck size={20} strokeWidth={2.3} />}
+                    variant="warning"
+                    label="Active in Transit"
+                    value={stats.inTransit}
+                    subtext="Driver on road / Out for Delivery"
+                />
+                <StatusCard
+                    icon={<CheckCircle2 size={20} strokeWidth={2.3} />}
+                    variant="success"
+                    label="Delivered (POD)"
+                    value={stats.delivered}
+                    subtext="Proof of Delivery confirmed"
+                />
+                <StatusCard
+                    icon={<Clock size={20} strokeWidth={2.3} />}
+                    variant="teal"
+                    label="On-Time Rate"
+                    value={`${performance.onTimePercentage}%`}
+                    subtext="DMS SLA Performance Target"
+                />
             </div>
 
             {/* ── Filters & Search ── */}
