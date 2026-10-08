@@ -7157,6 +7157,7 @@ export default function OpsAdminDashboard() {
     const [taskTab, setTaskTab] = useState<'active' | 'completed' | 'bin'>('active');
     const [taskFilterPrio, setTaskFilterPrio] = useState('');
     const [taskFilterClassification, setTaskFilterClassification] = useState('');
+    const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
     const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number; cancelled: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0, cancelled: 0 });
 
     // Reopen Requests state
