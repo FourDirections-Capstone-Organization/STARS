@@ -65,6 +65,12 @@ public class AnnouncementService : IAnnouncementService
             effectiveUtc = DateTime.SpecifyKind(dto.EffectiveDate, DateTimeKind.Utc);
         }
 
+        var now = DateTime.UtcNow;
+        if (effectiveUtc < now.AddMinutes(-5))
+        {
+            return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Effective date cannot be in the past. Please select the current date and time or a future date.");
+        }
+
         DateTime? expiryUtc = null;
         if (dto.ExpiryDate.HasValue && dto.ExpiryDate.Value != default)
         {

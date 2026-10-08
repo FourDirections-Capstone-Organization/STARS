@@ -1,0 +1,704 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Announcements Tab - Modern Eye-Catching Aesthetics & Design System
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.ann-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+/* ── Hero Stats Row ── */
+.ann-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 4px;
+}
+
+/* ── Control Bar ── */
+.ann-controls-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, rgba(226, 232, 240, 0.8));
+    border-radius: 14px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.ann-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 240px;
+    display: flex;
+    align-items: center;
+}
+
+.ann-search-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted, #94a3b8);
+    pointer-events: none;
+}
+
+.ann-search-input {
+    width: 100%;
+    padding: 9px 36px 9px 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-primary, #0f172a);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.ann-search-input:focus {
+    border-color: var(--primary, #4318ff);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(67, 24, 255, 0.1);
+}
+
+.ann-search-clear {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    border-radius: 50%;
+}
+
+.ann-search-clear:hover {
+    color: var(--text-primary, #0f172a);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* ── Filter Chips ── */
+.ann-filter-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ann-chip {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.ann-chip:hover {
+    background: #f1f5f9;
+    color: var(--text-primary, #0f172a);
+    transform: translateY(-1px);
+}
+
+.ann-chip.active {
+    background: var(--primary, #4318ff);
+    border-color: var(--primary, #4318ff);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(67, 24, 255, 0.25);
+}
+
+.ann-chip.urgent.active {
+    background: #ef4444;
+    border-color: #ef4444;
+    box-shadow: 0 3px 10px rgba(239, 68, 68, 0.3);
+}
+
+.ann-chip.important.active {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    box-shadow: 0 3px 10px rgba(245, 158, 11, 0.3);
+}
+
+/* ── Primary Action Button ── */
+.ann-btn-create {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+    color: #ffffff;
+    border: none;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 9px 18px;
+    border-radius: 10px;
+    box-shadow: 0 3px 12px rgba(6, 182, 212, 0.35);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ann-btn-create:hover {
+    background: linear-gradient(135deg, #0891b2 0%, #0369a1 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(6, 182, 212, 0.45);
+}
+
+/* ── Announcement Cards ── */
+.ann-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.ann-card {
+    background: var(--bg-card, #ffffff);
+    border-radius: 16px;
+    border: 1px solid var(--border, rgba(226, 232, 240, 0.8));
+    overflow: hidden;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    position: relative;
+}
+
+.ann-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    border-color: rgba(67, 24, 255, 0.2);
+}
+
+/* Priority Card Accents */
+.ann-card.urgent {
+    border-left: 5px solid #ef4444;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.03) 0%, var(--bg-card, #ffffff) 100%);
+}
+
+.ann-card.urgent:hover {
+    box-shadow: 0 8px 28px rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.ann-card.important {
+    border-left: 5px solid #f59e0b;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.03) 0%, var(--bg-card, #ffffff) 100%);
+}
+
+.ann-card.important:hover {
+    box-shadow: 0 8px 28px rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.ann-card.normal {
+    border-left: 5px solid var(--primary, #4318ff);
+    background: linear-gradient(135deg, rgba(67, 24, 255, 0.02) 0%, var(--bg-card, #ffffff) 100%);
+}
+
+.ann-card-body {
+    padding: 22px 24px;
+}
+
+/* ── Card Header ── */
+.ann-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.ann-badges-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+/* Priority Glowing Badges */
+.ann-badge-priority {
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ann-badge-priority.urgent {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    animation: annPulse 2s infinite ease-in-out;
+}
+
+.ann-badge-priority.important {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.ann-badge-priority.normal {
+    background: rgba(67, 24, 255, 0.1);
+    color: var(--primary, #4318ff);
+    border: 1px solid rgba(67, 24, 255, 0.2);
+}
+
+@keyframes annPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.ann-badge-audience {
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(100, 116, 139, 0.08);
+    color: #475569;
+    border: 1px solid rgba(100, 116, 139, 0.15);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ann-badge-audience.public {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.ann-badge-id {
+    font-family: 'JetBrains Mono', monospace, monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--bg-main, #f1f5f9);
+    border: 1px solid var(--border, #e2e8f0);
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.ann-badge-id:hover {
+    color: var(--primary, #4318ff);
+    border-color: var(--primary, #4318ff);
+    background: #ffffff;
+}
+
+/* Title & Author Meta */
+.ann-card-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary, #0f172a);
+    line-height: 1.35;
+    margin: 0 0 10px 0;
+}
+
+.ann-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-secondary, #64748b);
+    flex-wrap: wrap;
+}
+
+.ann-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ann-author-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ann-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.ann-expiry-pill {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Content Box ── */
+.ann-content-box {
+    margin-top: 14px;
+    padding: 16px 20px;
+    background: var(--bg-main, #f8fafc);
+    border-radius: 12px;
+    border: 1px solid var(--border, #e2e8f0);
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-primary, #1e293b);
+}
+
+.ann-content-box blockquote {
+    margin: 8px 0;
+    padding: 8px 14px;
+    border-left: 3px solid var(--primary, #4318ff);
+    background: rgba(67, 24, 255, 0.04);
+    border-radius: 0 8px 8px 0;
+    color: var(--text-secondary, #475569);
+    font-style: italic;
+}
+
+/* ── Attachment Card ── */
+.ann-attachment-card {
+    margin-top: 14px;
+    padding: 10px 16px;
+    background: var(--bg-card, #ffffff);
+    border-radius: 10px;
+    border: 1px dashed rgba(67, 24, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    transition: border-color 0.2s ease;
+}
+
+.ann-attachment-card:hover {
+    border-color: var(--primary, #4318ff);
+}
+
+.ann-attach-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.ann-attach-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(67, 24, 255, 0.08);
+    color: var(--primary, #4318ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ann-attach-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.ann-attach-size {
+    font-size: 11px;
+    color: var(--text-muted, #94a3b8);
+}
+
+.ann-btn-download {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-primary, #0f172a);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.ann-btn-download:hover {
+    background: var(--primary, #4318ff);
+    color: #ffffff;
+    border-color: var(--primary, #4318ff);
+}
+
+/* ── Actions / Engagement Bar ── */
+.ann-actions-bar {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border, #e2e8f0);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ann-left-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ann-btn-ack {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-primary, #0f172a);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.ann-btn-ack:hover:not(:disabled) {
+    background: #e2e8f0;
+    transform: translateY(-1px);
+}
+
+.ann-btn-ack.acknowledged {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #059669;
+}
+
+.ann-ack-count {
+    background: rgba(0, 0, 0, 0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    margin-left: 2px;
+}
+
+.ann-btn-comment-toggle {
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    background: none;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+
+.ann-btn-comment-toggle:hover {
+    background: var(--bg-main, #f1f5f9);
+    color: var(--text-primary, #0f172a);
+}
+
+.ann-btn-view-notice {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border, #e2e8f0);
+    background: #ffffff;
+    color: var(--text-primary, #0f172a);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.ann-btn-view-notice:hover {
+    border-color: var(--primary, #4318ff);
+    color: var(--primary, #4318ff);
+}
+
+/* ── Publisher Acknowledgment Accordion ── */
+.ann-publisher-roster {
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: var(--bg-main, #f8fafc);
+    border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0);
+}
+
+.ann-roster-summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.ann-roster-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.ann-roster-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #ffffff;
+    border-radius: 6px;
+    border: 1px solid var(--border, #e2e8f0);
+    font-size: 12px;
+}
+
+/* ── Comments Thread ── */
+.ann-comments-section {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.ann-comment-bubble {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.ann-comment-bubble:last-child {
+    border-bottom: none;
+}
+
+.ann-comment-content {
+    flex: 1;
+}
+
+.ann-comment-author-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.ann-comment-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+}
+
+.ann-comment-time {
+    font-size: 11px;
+    color: var(--text-muted, #94a3b8);
+    margin-left: auto;
+}
+
+.ann-comment-text {
+    font-size: 13px;
+    color: var(--text-primary, #334155);
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+/* ── Comment Input Box ── */
+.ann-comment-form {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ann-comment-input-row {
+    display: flex;
+    gap: 8px;
+}
+
+.ann-comment-input {
+    flex: 1;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-primary, #0f172a);
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+.ann-comment-input:focus {
+    border-color: var(--primary, #4318ff);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(67, 24, 255, 0.1);
+}
+
+.ann-btn-send {
+    padding: 0 16px;
+    border-radius: 10px;
+    border: none;
+    background: var(--primary, #4318ff);
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.ann-btn-send:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+
+.ann-btn-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Form Modal Enhancements ── */
+.ann-date-hint {
+    font-size: 11px;
+    color: var(--text-muted, #64748b);
+    margin-top: 4px;
+    display: block;
+}
+
+.ann-date-hint.valid {
+    color: #059669;
+}
+
+.ann-date-hint.error {
+    color: #ef4444;
+}
