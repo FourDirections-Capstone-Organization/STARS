@@ -19,6 +19,8 @@
     padding: 4px;
     box-shadow: var(--shadow-sm, 0 2px 4px rgba(0,0,0,0.02));
     width: fit-content;
+    max-width: 100%;
+    flex-wrap: wrap;
 }
 
 .rm2-subtab-btn {

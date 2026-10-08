@@ -4524,7 +4524,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
-                    { key: 'task-completion', label: 'Task Completion Report', icon: <FileText size={14} /> },
+                    { key: 'task-completion', label: 'Task Completion', icon: <FileText size={14} /> },
                     { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
                     { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
                     { key: 'dms-performance', label: 'DMS Delivery Analytics', icon: <Truck size={14} /> },
@@ -5800,7 +5800,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <Truck size={20} style={{ color: '#4318ff' }} />
                                     DMS Delivery Completion &amp; SLA Performance Analytics
                                 </h3>
-                                <span className="report-pill teal">Integration 3 • Batch Sync Active</span>
                             </div>
                             <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
                                 Consolidated SLA performance metrics, courier on-time delivery rates, and batch completion logs imported from the Delivery Management System.
@@ -6158,8 +6157,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                 Speedex Operations &amp; Field Operations Management System (FOMS) ledger. Track billed charges, collections, outstanding balances, and invoice settlements.
                             </p>
                         </div>
-                        <div className="report-filter-bar">
-                            <div className="report-filter-fields">
+                        <div className="report-filter-bar" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div className="report-filter-fields" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
                                 <DateRangeEngineField
                                     dateRangeStart={fomsFilter.dateRangeStart}
                                     dateRangeEnd={fomsFilter.dateRangeEnd}
@@ -6170,18 +6169,18 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     yearType={fomsYearType}
                                     onYearTypeChange={handleFomsYearTypeChange}
                                 />
-                                <div className="field" style={{ width: 170 }}>
+                                <div className="field" style={{ minWidth: 170, flex: '1 1 170px' }}>
                                     <label>Department</label>
                                     <select className="report-select"
                                         value={fomsFilter.departmentId}
                                         onChange={e => setFomsFilter(prev => ({ ...prev, departmentId: e.target.value }))}>
                                         <option value="">All Departments</option>
                                         {departments.map(d => (
-                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                             <option key={d.id} value={d.id}>{d.name}</option>
                                         ))}
                                     </select>
                                 </div>
-                                <div className="field" style={{ width: 150 }}>
+                                <div className="field" style={{ minWidth: 150, flex: '1 1 150px' }}>
                                     <label>Invoice Status</label>
                                     <select className="report-select"
                                         value={fomsFilter.status}
@@ -6192,8 +6191,12 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         <option value="Overdue">Overdue</option>
                                     </select>
                                 </div>
-                                <div className="field fiscal-toggle-field" style={{ marginLeft: 'auto', alignSelf: 'flex-end' }}>
-                                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                            </div>
+
+                            {/* Bottom row: Accounting Cycle on far left, Export & Generate on far right */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
+                                <div className="field fiscal-toggle-field" style={{ margin: 0 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px 0' }}>
                                         Accounting Cycle
                                     </label>
                                     <div className="fiscal-toggle-pill-group">
@@ -6217,42 +6220,43 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="report-filter-actions-right">
-                                {financialReport && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <select
-                                            className="report-select"
-                                            value={fomsExportFormat}
-                                            onChange={e => setFomsExportFormat(e.target.value as 'Excel' | 'Pdf' | 'Csv' | 'TasksCsv')}
-                                            style={{ width: 165, height: 34, fontSize: 12.5 }}
-                                        >
-                                            <option value="Excel">📊 Excel (.xlsx)</option>
-                                            <option value="Pdf">📄 PDF (.pdf)</option>
-                                            <option value="Csv">📝 CSV (.csv)</option>
-                                            <option value="TasksCsv">📋 Field Tasks CSV</option>
-                                        </select>
-                                        <button
-                                            className="btn"
-                                            onClick={() => {
-                                                if (fomsExportFormat === 'TasksCsv') {
-                                                    handleLegacyFomsTaskExport();
-                                                } else {
-                                                    handleFinancialExport(fomsExportFormat);
-                                                }
-                                            }}
-                                            disabled={financialExporting}
-                                            style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                            title="Export Financial Report"
-                                        >
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                                            <span>{financialExporting ? 'Exporting...' : 'Export'}</span>
-                                        </button>
-                                    </div>
-                                )}
-                                <button className="btn btn-teal" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ height: 34 }}>
-                                    {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
-                                </button>
+
+                                <div className="report-filter-actions-right" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {financialReport && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <select
+                                                className="report-select"
+                                                value={fomsExportFormat}
+                                                onChange={e => setFomsExportFormat(e.target.value as 'Excel' | 'Pdf' | 'Csv' | 'TasksCsv')}
+                                                style={{ width: 165, height: 34, fontSize: 12.5 }}
+                                            >
+                                                <option value="Excel">📊 Excel (.xlsx)</option>
+                                                <option value="Pdf">📄 PDF (.pdf)</option>
+                                                <option value="Csv">📝 CSV (.csv)</option>
+                                                <option value="TasksCsv">📋 Field Tasks CSV</option>
+                                            </select>
+                                            <button
+                                                className="btn"
+                                                onClick={() => {
+                                                    if (fomsExportFormat === 'TasksCsv') {
+                                                        handleLegacyFomsTaskExport();
+                                                    } else {
+                                                        handleFinancialExport(fomsExportFormat);
+                                                    }
+                                                }}
+                                                disabled={financialExporting}
+                                                style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                                title="Export Financial Report"
+                                            >
+                                                {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                                <span>{financialExporting ? 'Exporting...' : 'Export'}</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                    <button className="btn btn-teal" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ height: 34 }}>
+                                        {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

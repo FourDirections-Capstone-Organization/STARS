@@ -62,6 +62,15 @@ const isExpiringSoon = (d?: string) => {
     return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
 };
 
+const getExpiryStatus = (expiryDate?: string) => {
+    if (!expiryDate) return null;
+    const diff = new Date(expiryDate).getTime() - Date.now();
+    if (diff < 0) return { label: 'Expired', isUrgent: true };
+    const diffDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    if (diffDays <= 3) return { label: `Expires in ${diffDays}d`, isUrgent: true };
+    return { label: `Expires ${fmtDate(expiryDate)}`, isUrgent: false };
+};
+
 const getMinDateTimeLocal = () => {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -260,9 +269,9 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
 
             const q = searchTerm.trim().toLowerCase();
             const matchesSearch = !q ||
-                a.title.toLowerCase().includes(q) ||
-                a.content.toLowerCase().includes(q) ||
-                a.createdByName.toLowerCase().includes(q);
+                (a.title && a.title.toLowerCase().includes(q)) ||
+                (a.content && a.content.toLowerCase().includes(q)) ||
+                (a.createdByName && a.createdByName.toLowerCase().includes(q));
 
             return matchesFilter && matchesSearch;
         });

@@ -44,7 +44,8 @@ public class ReportService : IReportService
         {
             query = query.Where(t =>
                 t.AssignedDepartmentId == requestUserDepartmentId.Value ||
-                t.Assignments.Any(a => a.AssignedUser != null && a.AssignedUser.DepartmentId == requestUserDepartmentId.Value));
+                t.Assignments.Any(a => a.AssignedUser != null && a.AssignedUser.DepartmentId == requestUserDepartmentId.Value) ||
+                t.CreatedById == requestUserId);
         }
 
         if (filters?.EmployeeId.HasValue == true && filters.EmployeeId.Value != Guid.Empty)

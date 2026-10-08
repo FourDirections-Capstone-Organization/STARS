@@ -1394,6 +1394,8 @@
     padding: 4px;
     box-shadow: var(--shadow-sm);
     width: fit-content;
+    max-width: 100%;
+    flex-wrap: wrap;
     margin-bottom: 20px;
 }
 
