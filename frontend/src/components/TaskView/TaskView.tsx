@@ -3,6 +3,7 @@ import {
     Pencil, X, Package, CheckCircle2,
     XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock, ArrowLeft,
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
+    Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -14,6 +15,38 @@ import axios from 'axios';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface TaskDeliveryDetailData {
+    id?: string;
+    taskId: string;
+    recipientName: string;
+    recipientContact: string;
+    deliveryAddress: string;
+    area?: string;
+    packageDescription?: string;
+    courierEmployeeId?: string;
+    dmsWaybillNo?: string;
+    dmsOrderId?: number;
+    dmsStatus?: string;
+    dmsRawStatus?: string;
+    dmsLastSyncedAt?: string;
+    dmsFailureReason?: string;
+    dmsLatitude?: number;
+    dmsLongitude?: number;
+    syncStatus: string;
+    syncError?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface UpsertDeliveryDetailPayload {
+    recipientName: string;
+    recipientContact: string;
+    deliveryAddress: string;
+    area?: string;
+    packageDescription?: string;
+    courierEmployeeId?: string;
+}
 
 type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';
 type TaskStatus = 'Not Started' | 'In Progress' | 'Done/Pending Review' | 'Completed' | 'On Hold' | 'Cancelled' | 'Overdue';
@@ -183,6 +216,99 @@ const TaskView: React.FC<TaskViewProps> = ({
 
     const token = localStorage.getItem('authToken');
 
+    // ─── DMS Delivery Order & Tracking ──────────────────────────────────────────
+    const [deliveryDetail, setDeliveryDetail] = useState<TaskDeliveryDetailData | null>(null);
+    const [deliveryLoading, setDeliveryLoading] = useState(false);
+    const [showEditDeliveryModal, setShowEditDeliveryModal] = useState(false);
+    const [editingDelivery, setEditingDelivery] = useState<UpsertDeliveryDetailPayload>({
+        recipientName: '',
+        recipientContact: '',
+        deliveryAddress: '',
+        area: '',
+        packageDescription: '',
+        courierEmployeeId: '',
+    });
+    const [savingDelivery, setSavingDelivery] = useState(false);
+    const [resendingDms, setResendingDms] = useState(false);
+    const [copiedWaybill, setCopiedWaybill] = useState(false);
+
+    const fetchDeliveryDetail = useCallback(async () => {
+        if (!task.taskId) return;
+        setDeliveryLoading(true);
+        try {
+            const res = await api.get<any>(`/api/dms-integration/tasks/${task.taskId}/delivery-details`);
+            const json = res.data;
+            const data = json?.data ?? json;
+            if (data && (data.recipientName || data.dmsWaybillNo || data.syncStatus)) {
+                setDeliveryDetail(data);
+                setEditingDelivery({
+                    recipientName: data.recipientName || '',
+                    recipientContact: data.recipientContact || '',
+                    deliveryAddress: data.deliveryAddress || '',
+                    area: data.area || '',
+                    packageDescription: data.packageDescription || '',
+                    courierEmployeeId: data.courierEmployeeId || '',
+                });
+            } else {
+                setDeliveryDetail(null);
+            }
+        } catch {
+            setDeliveryDetail(null);
+        } finally {
+            setDeliveryLoading(false);
+        }
+    }, [task.taskId]);
+
+    useEffect(() => {
+        fetchDeliveryDetail();
+    }, [fetchDeliveryDetail]);
+
+    const handleSaveDelivery = async () => {
+        if (!editingDelivery.recipientName.trim() || !editingDelivery.recipientContact.trim() || !editingDelivery.deliveryAddress.trim()) {
+            toastError('Recipient Name, Contact Number, and Delivery Address are required.');
+            return;
+        }
+        setSavingDelivery(true);
+        try {
+            const res = await api.put(`/api/dms-integration/tasks/${task.taskId}/delivery-details`, editingDelivery);
+            const savedData = res?.data?.data ?? res?.data;
+            setDeliveryDetail(savedData);
+            setShowEditDeliveryModal(false);
+            toastSuccess('Delivery details saved successfully.');
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Failed to save delivery details.');
+        } finally {
+            setSavingDelivery(false);
+        }
+    };
+
+    const handleResendDms = async () => {
+        setResendingDms(true);
+        try {
+            const res = await api.post(`/api/dms-integration/tasks/${task.taskId}/resend`, {});
+            const savedData = res?.data?.data ?? res?.data;
+            setDeliveryDetail(savedData);
+            if (savedData?.dmsWaybillNo) {
+                toastSuccess(`DMS Delivery Order created! Waybill: ${savedData.dmsWaybillNo}`);
+            } else {
+                toastSuccess('Dispatched to DMS successfully.');
+            }
+        } catch (err: any) {
+            const msg = err?.response?.data?.message || err?.message || 'Failed to dispatch to DMS.';
+            toastError(msg);
+            await fetchDeliveryDetail();
+        } finally {
+            setResendingDms(false);
+        }
+    };
+
+    const handleCopyWaybill = (waybill: string) => {
+        navigator.clipboard.writeText(waybill);
+        setCopiedWaybill(true);
+        toastSuccess(`Waybill ${waybill} copied to clipboard!`);
+        setTimeout(() => setCopiedWaybill(false), 2500);
+    };
+
     const fetchAttachments = useCallback(async () => {
         if (!task.taskId) return;
         setAttachmentsLoading(true);
@@ -339,14 +465,24 @@ const TaskView: React.FC<TaskViewProps> = ({
         } catch { /* silently fail */ }
     };
 
-    const handleApprove = () => {
-        setReviewState('approved');
-        setLocalStatus('Completed');
-        setReviewHistory(prev => [...prev, {
-            action: 'approved', by: currentUser,
-            at: new Date().toISOString(),
-        }]);
-        onApprove?.(task.taskId);
+    const handleApprove = async () => {
+        try {
+            if (onApprove) {
+                await onApprove(task.taskId);
+            } else {
+                await api.patch(`/api/Task/${task.taskId}/review`, { isApproved: true });
+            }
+            setReviewState('approved');
+            setLocalStatus('Completed');
+            setReviewHistory(prev => [...prev, {
+                action: 'approved', by: currentUser,
+                at: new Date().toISOString(),
+            }]);
+            onUpdate?.({ ...task, taskStatus: 'Completed' });
+            await fetchDeliveryDetail();
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Failed to approve task.');
+        }
     };
 
     const handleReject = (reason: string) => {
@@ -384,20 +520,20 @@ const TaskView: React.FC<TaskViewProps> = ({
             return (
                 <div className="tv-review-banner tv-review-pending">
                     <div className="tv-review-banner-left">
-                        <Clock size={16} />
+                        <Truck size={18} className="tv-review-truck-icon" />
                         <div>
-                            <span className="tv-review-banner-title">Awaiting completion review</span>
+                            <span className="tv-review-banner-title">Awaiting Completion Review & DMS Dispatch</span>
                             <span className="tv-review-banner-sub">
-                                {task.assignedEmployee} submitted this task for review.
+                                {task.assignedEmployee} submitted this task for review. Approving will mark it <strong>Completed</strong> and automatically create a <strong>Delivery Order in DMS</strong> with an auto-generated Waybill number.
                             </span>
                         </div>
                     </div>
                     <div className="tv-review-banner-actions">
                         <button className="tv-btn tv-btn-danger-solid" onClick={() => setShowRejectModal(true)}>
-                            <XCircle size={13} /> Reject
+                            <XCircle size={13} /> Return for Rework
                         </button>
                         <button className="tv-btn tv-btn-success" onClick={handleApprove}>
-                            <CheckCircle2 size={13} /> Approve
+                            <CheckCircle2 size={13} /> Approve & Create DMS Order
                         </button>
                     </div>
                 </div>
@@ -685,6 +821,209 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 <div className="tv-text-box tv-text-box-remarks">{task.taskRemarks}</div>
                             </div>
                         )}
+
+                        {/* ── DMS Delivery Details & Tracking Card (Integration 1) ── */}
+                        <div className="tv-section tv-dms-section">
+                            <div className="tv-dms-header">
+                                <div className="tv-dms-header-title">
+                                    <Truck size={15} className="tv-dms-icon" />
+                                    <span>Delivery Management & Waybill (DMS)</span>
+                                </div>
+                                <div className="tv-dms-header-status">
+                                    {deliveryDetail?.dmsWaybillNo ? (
+                                        <span className="tv-dms-pill tv-dms-pill-synced">
+                                            <Check size={11} /> Synced to DMS
+                                        </span>
+                                    ) : deliveryDetail?.syncStatus === 'Failed' ? (
+                                        <span className="tv-dms-pill tv-dms-pill-failed">
+                                            <AlertCircle size={11} /> Sync Failed
+                                        </span>
+                                    ) : deliveryDetail?.recipientName ? (
+                                        <span className="tv-dms-pill tv-dms-pill-pending">
+                                            <Clock size={11} /> Ready for Dispatch
+                                        </span>
+                                    ) : (
+                                        <span className="tv-dms-pill tv-dms-pill-empty">
+                                            Optional Delivery Info
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {deliveryLoading ? (
+                                <div className="tv-text-box" style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Loader2 size={12} className="spin" /> Loading delivery information…
+                                </div>
+                            ) : deliveryDetail?.dmsWaybillNo ? (
+                                <div className="tv-dms-card tv-dms-card-active">
+                                    <div className="tv-dms-waybill-banner">
+                                        <div className="tv-dms-waybill-info">
+                                            <span className="tv-dms-waybill-label">DMS WAYBILL NUMBER</span>
+                                            <span className="tv-dms-waybill-val">{deliveryDetail.dmsWaybillNo}</span>
+                                        </div>
+                                        <div className="tv-dms-waybill-actions">
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm tv-dms-copy-btn"
+                                                onClick={() => handleCopyWaybill(deliveryDetail.dmsWaybillNo!)}
+                                                title="Copy Waybill Number"
+                                            >
+                                                {copiedWaybill ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                                                {copiedWaybill ? 'Copied!' : 'Copy Waybill'}
+                                            </button>
+                                            {deliveryDetail.dmsStatus && (
+                                                <span className="tv-dms-status-tag">
+                                                    Status: <strong>{deliveryDetail.dmsStatus}</strong>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="tv-dms-grid">
+                                        <div className="tv-dms-grid-item">
+                                            <span className="tv-dms-grid-label">Recipient</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.recipientName || '—'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item">
+                                            <span className="tv-dms-grid-label">Contact Number</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.recipientContact || '—'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item tv-dms-grid-full">
+                                            <span className="tv-dms-grid-label">Delivery Address</span>
+                                            <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <MapPin size={12} color="var(--primary)" />
+                                                {deliveryDetail.deliveryAddress || '—'}
+                                                {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
+                                            </span>
+                                        </div>
+                                        {deliveryDetail.packageDescription && (
+                                            <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                <span className="tv-dms-grid-label">Package Description</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.dmsOrderId && (
+                                            <div className="tv-dms-grid-item">
+                                                <span className="tv-dms-grid-label">DMS Order ID</span>
+                                                <span className="tv-dms-grid-value">#{deliveryDetail.dmsOrderId}</span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.dmsLastSyncedAt && (
+                                            <div className="tv-dms-grid-item">
+                                                <span className="tv-dms-grid-label">Last Synced</span>
+                                                <span className="tv-dms-grid-value">{fmtDateTime(deliveryDetail.dmsLastSyncedAt)}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {isCoordOrManager && (
+                                        <div className="tv-dms-card-footer">
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => setShowEditDeliveryModal(true)}
+                                            >
+                                                <Pencil size={11} /> Edit Recipient Details
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={handleResendDms}
+                                                disabled={resendingDms}
+                                                title="Re-sync order with DMS"
+                                            >
+                                                {resendingDms ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}
+                                                {resendingDms ? 'Syncing…' : 'Re-sync DMS'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="tv-dms-card tv-dms-card-inactive">
+                                    {deliveryDetail?.syncStatus === 'Failed' && (
+                                        <div className="tv-dms-error-box">
+                                            <AlertCircle size={14} className="tv-dms-error-icon" />
+                                            <div>
+                                                <div className="tv-dms-error-title">DMS Transmission Failed</div>
+                                                <div className="tv-dms-error-msg">{deliveryDetail.syncError || 'Unable to communicate with DMS service.'}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {deliveryDetail?.recipientName ? (
+                                        <div className="tv-dms-grid">
+                                            <div className="tv-dms-grid-item">
+                                                <span className="tv-dms-grid-label">Recipient</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.recipientName}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item">
+                                                <span className="tv-dms-grid-label">Contact Number</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.recipientContact}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                <span className="tv-dms-grid-label">Delivery Address</span>
+                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <MapPin size={12} color="var(--primary)" />
+                                                    {deliveryDetail.deliveryAddress}
+                                                    {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
+                                                </span>
+                                            </div>
+                                            {deliveryDetail.packageDescription && (
+                                                <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                    <span className="tv-dms-grid-label">Package Description</span>
+                                                    <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="tv-dms-empty-hint">
+                                            <Truck size={24} style={{ opacity: 0.35, marginBottom: 4 }} />
+                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                                                Delivery details will be automatically synthesized from the task title on completion.
+                                            </p>
+                                            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                You can also pre-specify custom recipient name, contact number, and drop-off address.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {isCoordOrManager && (
+                                        <div className="tv-dms-card-footer">
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    if (!deliveryDetail) {
+                                                        setEditingDelivery({
+                                                            recipientName: task.assignedEmployee || 'Operations Dispatch',
+                                                            recipientContact: '09123456789',
+                                                            deliveryAddress: 'Metro Manila',
+                                                            area: 'Manila',
+                                                            packageDescription: task.taskTitle,
+                                                            courierEmployeeId: '',
+                                                        });
+                                                    }
+                                                    setShowEditDeliveryModal(true);
+                                                }}
+                                            >
+                                                <Pencil size={11} /> {deliveryDetail?.recipientName ? 'Edit Delivery Details' : 'Configure Delivery Details'}
+                                            </button>
+                                            {(effectiveStatus === 'Completed' || deliveryDetail?.syncStatus === 'Failed') && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-primary tv-btn-sm"
+                                                    onClick={handleResendDms}
+                                                    disabled={resendingDms}
+                                                >
+                                                    {resendingDms ? <Loader2 size={11} className="spin" /> : <Send size={11} />}
+                                                    {resendingDms ? 'Dispatching…' : 'Dispatch Order to DMS Now'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
 
                         {/* Attachments */}
                         <div className="tv-section">
@@ -1017,6 +1356,113 @@ const TaskView: React.FC<TaskViewProps> = ({
                 }}
                 onCancel={() => setConfidentialConfirm({ open: false, pendingValue: false })}
             />
+
+            {/* ── Edit Delivery Details Modal (DMS Integration) ── */}
+            {showEditDeliveryModal && (
+                <div className="tv-modal-overlay" onClick={() => !savingDelivery && setShowEditDeliveryModal(false)}>
+                    <div className="tv-modal tv-modal-delivery" onClick={e => e.stopPropagation()}>
+                        <div className="tv-modal-header">
+                            <div className="tv-modal-icon tv-modal-icon-primary">
+                                <Truck size={20} />
+                            </div>
+                            <div>
+                                <h4 className="tv-modal-title">Configure Delivery & Recipient Details</h4>
+                                <p className="tv-modal-sub">Details sent to DMS for automatic Delivery Order & Waybill generation upon task completion.</p>
+                            </div>
+                        </div>
+
+                        <div className="tv-modal-form-body">
+                            <div className="tv-form-group">
+                                <label className="tv-form-label">Recipient Full Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <input
+                                    type="text"
+                                    className="tv-form-input"
+                                    placeholder="e.g. Engr. Roberto Cruz / Operations Lead"
+                                    value={editingDelivery.recipientName}
+                                    onChange={e => setEditingDelivery(prev => ({ ...prev, recipientName: e.target.value }))}
+                                />
+                            </div>
+
+                            <div className="tv-form-row">
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Recipient Contact Number <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. 09171234567"
+                                        value={editingDelivery.recipientContact}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, recipientContact: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Area / City / District</label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. Taguig, Makati, Manila, Cebu"
+                                        value={editingDelivery.area || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, area: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="tv-form-group">
+                                <label className="tv-form-label">Delivery Address / Destination <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <textarea
+                                    className="tv-form-input tv-form-textarea"
+                                    rows={2}
+                                    placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
+                                    value={editingDelivery.deliveryAddress}
+                                    onChange={e => setEditingDelivery(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                                />
+                            </div>
+
+                            <div className="tv-form-row">
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Package Description / Item</label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. Confidential Project Dossier / Hardware Parts"
+                                        value={editingDelivery.packageDescription || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Courier Employee ID <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>(Optional DMS Driver)</span></label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. DRV-001"
+                                        value={editingDelivery.courierEmployeeId || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="tv-modal-actions">
+                            <button
+                                type="button"
+                                className="tv-btn tv-btn-outline"
+                                onClick={() => setShowEditDeliveryModal(false)}
+                                disabled={savingDelivery}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="tv-btn tv-btn-primary"
+                                onClick={handleSaveDelivery}
+                                disabled={savingDelivery || !editingDelivery.recipientName.trim() || !editingDelivery.recipientContact.trim() || !editingDelivery.deliveryAddress.trim()}
+                            >
+                                {savingDelivery ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
+                                {savingDelivery ? 'Saving…' : 'Save Delivery Details'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

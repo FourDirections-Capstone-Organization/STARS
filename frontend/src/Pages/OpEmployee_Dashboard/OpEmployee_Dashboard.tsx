@@ -41,6 +41,8 @@ import {
     LayoutList,
     GripVertical,
     Kanban,
+    Truck,
+    MapPin,
 } from 'lucide-react';
 import './OpEmployee_Dashboard.css';
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
@@ -385,6 +387,32 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ task, onUpdate, onClose }) => {
     const [downloadError, setDownloadError] = useState('');
     const token = localStorage.getItem('authToken') ?? '';
 
+    // ── DMS Delivery Details (Integration 1) ──
+    const [deliveryDetail, setDeliveryDetail] = useState<{
+        recipientName?: string;
+        recipientContact?: string;
+        deliveryAddress?: string;
+        area?: string;
+        packageDescription?: string;
+        dmsWaybillNo?: string;
+        dmsStatus?: string;
+    } | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        api.get(`/api/dms-integration/tasks/${task.id}/delivery-details`)
+            .then(res => {
+                if (!cancelled) {
+                    const data = res?.data?.data ?? res?.data;
+                    if (data && (data.recipientName || data.dmsWaybillNo || data.deliveryAddress)) {
+                        setDeliveryDetail(data);
+                    }
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [task.id]);
+
     useEffect(() => {
         let cancelled = false;
         const load = async () => {
@@ -485,6 +513,59 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ task, onUpdate, onClose }) => {
             <div className="tc-bar" style={{ height: 8, marginBottom: 12 }}>
                 <div className={`tc-fill ${pm.bar}`} style={{ width: `${task.progress}%` }} />
             </div>
+
+            {/* Delivery Destination & Waybill (DMS Integration 1) */}
+            {deliveryDetail && (
+                <div style={{
+                    marginBottom: 14, padding: '12px 14px', borderRadius: 10,
+                    background: deliveryDetail.dmsWaybillNo ? 'rgba(0,169,157,0.06)' : 'var(--bg-input, #f8fafc)',
+                    border: '1px solid',
+                    borderColor: deliveryDetail.dmsWaybillNo ? 'rgba(0,169,157,0.3)' : 'var(--border)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--primary, #00A99D)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Truck size={14} /> Delivery & Dispatch Info (DMS)
+                        </span>
+                        {deliveryDetail.dmsWaybillNo && (
+                            <span style={{
+                                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                                background: 'rgba(5,150,105,0.12)', color: '#059669', fontFamily: 'monospace'
+                            }}>
+                                Waybill: {deliveryDetail.dmsWaybillNo}
+                            </span>
+                        )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
+                        {deliveryDetail.recipientName && (
+                            <div>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>Recipient</span>
+                                <span style={{ fontWeight: 600 }}>{deliveryDetail.recipientName}</span>
+                            </div>
+                        )}
+                        {deliveryDetail.recipientContact && (
+                            <div>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>Contact</span>
+                                <span>{deliveryDetail.recipientContact}</span>
+                            </div>
+                        )}
+                        {deliveryDetail.deliveryAddress && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>Address</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <MapPin size={12} color="var(--primary)" /> {deliveryDetail.deliveryAddress}
+                                    {deliveryDetail.area && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>({deliveryDetail.area})</span>}
+                                </span>
+                            </div>
+                        )}
+                        {deliveryDetail.packageDescription && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>Package</span>
+                                <span>{deliveryDetail.packageDescription}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {task.status === 'on-hold' && (
                 <div style={{

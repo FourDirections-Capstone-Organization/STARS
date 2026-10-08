@@ -124,7 +124,7 @@ const TermsAndConditions: React.FC = () => {
                         Terms & Conditions
                     </h2>
                     <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                        Speedex Task & Automated Routing System (STARS) — Version {CURRENT_TERMS_VERSION}
+                        Speedex Task Allocation & Review System (STARS) — Version {CURRENT_TERMS_VERSION}
                     </p>
                 </div>
 
@@ -167,7 +167,7 @@ const TermsAndConditions: React.FC = () => {
                         1. Introduction & Acceptance
                     </h4>
                     <p style={{ margin: '0 0 16px' }}>
-                        Welcome to the Speedex Task & Automated Routing System (STARS). By logging into and using this system, you agree to comply with and be bound by the following terms, conditions, and privacy guidelines. If you do not agree to these terms, you may not access or use the application.
+                        Welcome to the Speedex Task Allocation & Review System (STARS). By logging into and using this system, you agree to comply with and be bound by the following terms, conditions, and privacy guidelines. If you do not agree to these terms, you may not access or use the application.
                     </p>
 
                     <h4 style={{ margin: '0 0 8px', color: '#0f172a', fontSize: 14, fontWeight: 700 }}>

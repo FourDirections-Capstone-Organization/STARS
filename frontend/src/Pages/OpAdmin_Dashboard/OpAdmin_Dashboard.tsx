@@ -7912,9 +7912,21 @@ export default function OpsAdminDashboard() {
             await fetchTasks();
             await fetchAwaitingReview();
             await doFetchDashboard();
+
+            let waybillMsg = '';
+            if (adminDecision === 'Approve & Close') {
+                try {
+                    const delRes = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
+                    const waybill = delRes?.data?.data?.dmsWaybillNo;
+                    if (waybill) {
+                        waybillMsg = ` DMS Delivery Order created (Waybill: ${waybill}).`;
+                    }
+                } catch { /* ignore */ }
+            }
+
             success(
                 adminDecision === 'Approve & Close'
-                    ? 'Task officially closed and recorded.'
+                    ? `Task officially closed and recorded.${waybillMsg}`
                     : 'Task returned for rework. The employee has been notified.'
             );
         } catch (err: any) {

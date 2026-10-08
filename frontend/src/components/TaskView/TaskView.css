@@ -1278,3 +1278,323 @@
         display: none;
     }
 }
+
+/* ---------------------------------------------
+   DMS Integration 1 Styles (TaskView)
+--------------------------------------------- */
+.tv-review-truck-icon {
+    color: var(--primary, #00A99D);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.tv-dms-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    margin-top: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.tv-dms-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tv-dms-header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tv-dms-icon {
+    color: var(--primary, #00A99D);
+}
+
+.tv-dms-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+}
+
+.tv-dms-pill-synced {
+    background: rgba(5, 150, 105, 0.1);
+    color: #059669;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.tv-dms-pill-pending {
+    background: rgba(217, 119, 6, 0.1);
+    color: #d97706;
+    border: 1px solid rgba(217, 119, 6, 0.25);
+}
+
+.tv-dms-pill-failed {
+    background: rgba(238, 93, 80, 0.1);
+    color: #ee5d50;
+    border: 1px solid rgba(238, 93, 80, 0.25);
+}
+
+.tv-dms-pill-empty {
+    background: var(--bg-input, #f1f5f9);
+    color: var(--sidebar-text, #64748b);
+    border: 1px solid var(--border);
+}
+
+/* DMS Card Active / Waybill Banner */
+.tv-dms-card {
+    border-radius: 10px;
+    background: var(--bg-input, #f8fafc);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tv-dms-card-active {
+    background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%);
+    border-color: rgba(0, 169, 157, 0.25);
+}
+
+.tv-dms-waybill-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #ffffff;
+    border: 1px solid rgba(0, 169, 157, 0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 3px rgba(0, 169, 157, 0.06);
+}
+
+.tv-dms-waybill-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tv-dms-waybill-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--primary, #00A99D);
+    letter-spacing: 0.06em;
+}
+
+.tv-dms-waybill-val {
+    font-size: 16px;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace, Consolas, sans-serif;
+    color: #0f172a;
+    letter-spacing: 0.05em;
+}
+
+.tv-dms-waybill-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tv-dms-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #ffffff;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tv-dms-copy-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.tv-dms-status-tag {
+    font-size: 11px;
+    color: var(--sidebar-text);
+    background: rgba(0, 169, 157, 0.08);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.tv-dms-status-tag strong {
+    color: var(--primary, #00A99D);
+    font-weight: 700;
+}
+
+/* DMS Grid */
+.tv-dms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px 14px;
+    padding-top: 4px;
+}
+
+.tv-dms-grid-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.tv-dms-grid-full {
+    grid-column: 1 / -1;
+}
+
+.tv-dms-grid-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sidebar-text, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.tv-dms-grid-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+}
+
+.tv-dms-area-tag {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--sidebar-text);
+    margin-left: 4px;
+}
+
+/* Card Footer */
+.tv-dms-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+}
+
+/* Error Box */
+.tv-dms-error-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(238, 93, 80, 0.08);
+    border: 1px solid rgba(238, 93, 80, 0.25);
+}
+
+.tv-dms-error-icon {
+    color: #ee5d50;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.tv-dms-error-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #ee5d50;
+    margin-bottom: 2px;
+}
+
+.tv-dms-error-msg {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Empty Hint */
+.tv-dms-empty-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 14px 12px;
+    gap: 4px;
+}
+
+/* Edit Modal */
+.tv-modal-delivery {
+    max-width: 540px !important;
+    width: 100%;
+}
+
+.tv-modal-icon-primary {
+    background: rgba(0, 169, 157, 0.1);
+    color: var(--primary, #00A99D);
+}
+
+.tv-modal-form-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 24px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.tv-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.tv-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.tv-form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tv-form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-input, #f8fafc);
+    outline: none;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.tv-form-input:focus {
+    border-color: var(--primary, #00A99D);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.12);
+}
+
+.tv-form-textarea {
+    resize: vertical;
+    min-height: 60px;
+}

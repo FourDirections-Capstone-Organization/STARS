@@ -3628,7 +3628,15 @@ export default function Dashboard() {
                                     onApprove={async (id) => {
                                         try {
                                             await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
-                                            success('Task approved.');
+                                            let waybillMsg = '';
+                                            try {
+                                                const delRes = await api.get(`/api/dms-integration/tasks/${id}/delivery-details`);
+                                                const waybill = delRes?.data?.data?.dmsWaybillNo;
+                                                if (waybill) {
+                                                    waybillMsg = ` DMS Delivery Order created (Waybill: ${waybill}).`;
+                                                }
+                                            } catch { /* ignore */ }
+                                            success(`Task approved.${waybillMsg}`);
                                             setTmDetailTask(null);
                                             fetchManagerTasks();
                                         } catch {
