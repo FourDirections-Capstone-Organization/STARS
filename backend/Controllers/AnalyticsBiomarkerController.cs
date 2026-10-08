@@ -31,6 +31,7 @@ public class AnalyticsBiomarkerController : ControllerBase
         [FromQuery] string? type = null,
         [FromQuery] string? employeeNumber = null,
         [FromQuery] Guid? departmentId = null,
+        [FromQuery] string? team = null,
         [FromQuery] DateTime? dateFrom = null,
         [FromQuery] DateTime? dateTo = null,
         [FromQuery] string? search = null)
@@ -64,6 +65,11 @@ public class AnalyticsBiomarkerController : ControllerBase
             if (departmentId.HasValue)
                 filteredQuery = filteredQuery.Where(a => a.DepartmentId == departmentId.Value);
 
+            if (!string.IsNullOrEmpty(team))
+                filteredQuery = filteredQuery.Where(a =>
+                    EF.Functions.ILike(a.DepartmentName, $"%{team}%") ||
+                    EF.Functions.ILike(a.Description, $"%{team}%"));
+
             if (dateFrom.HasValue)
                 filteredQuery = filteredQuery.Where(a => a.ScanDateTime >= dateFrom.Value);
 
@@ -74,7 +80,9 @@ public class AnalyticsBiomarkerController : ControllerBase
                 filteredQuery = filteredQuery.Where(a =>
                     EF.Functions.ILike(a.Description, $"%{search}%") ||
                     EF.Functions.ILike(a.EmployeeName ?? "", $"%{search}%") ||
-                    EF.Functions.ILike(a.EmployeeNumber ?? "", $"%{search}%"));
+                    EF.Functions.ILike(a.EmployeeNumber ?? "", $"%{search}%") ||
+                    EF.Functions.ILike(a.DepartmentName, $"%{search}%") ||
+                    EF.Functions.ILike(a.MetricName, $"%{search}%"));
 
             // Total count for the filtered query (for pagination)
             var filteredCount = await filteredQuery.CountAsync();

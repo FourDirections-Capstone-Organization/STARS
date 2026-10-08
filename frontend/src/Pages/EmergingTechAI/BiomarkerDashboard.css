@@ -145,10 +145,48 @@
     to { transform: rotate(360deg); }
 }
 
+/* ── Run Scan Now Button (Teal Brand Color) ── */
+.bd-run-scan-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: var(--r-sm, 6px);
+    border: 1px solid var(--teal, #00A99D);
+    background: var(--teal, #00A99D);
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 169, 157, 0.28);
+    transition: all 0.2s ease-in-out;
+    white-space: nowrap;
+}
+
+.bd-run-scan-btn:hover:not(:disabled) {
+    background: var(--teal-hover, #009189);
+    border-color: var(--teal-hover, #009189);
+    box-shadow: 0 4px 12px rgba(0, 169, 157, 0.38);
+    transform: translateY(-1px);
+}
+
+.bd-run-scan-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 169, 157, 0.2);
+}
+
+.bd-run-scan-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    box-shadow: none;
+    background: var(--teal, #00A99D);
+    color: #ffffff;
+}
+
 /* ── Cards Row ── */
 .bd-cards-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
 }
 
@@ -158,53 +196,6 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-}
-
-.bd-dt-filters select {
-    height: 34px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--border);
-    padding: 0 10px;
-    font-size: 0.78rem;
-    background: var(--s1);
-    color: var(--text-primary);
-    outline: none;
-    cursor: pointer;
-    min-width: 140px;
-    max-width: 200px;
-}
-
-.bd-dt-filters select:focus {
-    border-color: var(--teal);
-}
-
-.bd-date-range {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.bd-date-input {
-    height: 34px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--border);
-    padding: 0 8px;
-    font-size: 0.78rem;
-    background: var(--s1);
-    color: var(--text-primary);
-    outline: none;
-    cursor: pointer;
-    width: 120px;
-    font-family: inherit;
-}
-
-.bd-date-input:focus {
-    border-color: var(--teal);
-}
-
-.bd-date-sep {
-    color: var(--text-tertiary);
-    font-size: 0.78rem;
 }
 
 .bd-dt-reset-btn {
@@ -221,6 +212,8 @@
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
+    height: 36px;
+    box-sizing: border-box;
 }
 
 .bd-dt-reset-btn:hover {
@@ -251,8 +244,6 @@
     font-weight: 700;
     color: var(--text-primary);
 }
-
-
 
 /* ── Table Cell Content Styles ── */
 .sev-dot {
@@ -426,7 +417,7 @@
 
 .bd-chart-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
     padding: 16px 20px;
 }
@@ -436,6 +427,9 @@
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
     overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .bd-chart-grid .bd-chart-card:last-child:nth-child(odd) {
@@ -468,26 +462,29 @@
 }
 
 .bd-chart-body {
-    padding: 12px 8px 8px;
-    height: 210px;
+    padding: 12px 14px 10px;
+    height: 250px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* ── Responsive ── */
 @media (max-width: 1024px) {
     .bd-cards-row {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .bd-flags-summary {
         grid-template-columns: 1fr;
     }
     .bd-chart-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
 @media (max-width: 640px) {
     .bd-cards-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
     .bd-scan-header {
         flex-direction: column;

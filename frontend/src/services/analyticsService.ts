@@ -34,6 +34,7 @@ export interface BiomarkerFilters {
     type?: string;
     employeeNumber?: string;
     departmentId?: string;
+    team?: string;
     dateFrom?: string;
     dateTo?: string;
     search?: string;
@@ -110,6 +111,7 @@ async function fetchLatestAlertsPagedInternal(pageNumber: number, pageSize: numb
             if (filters.type) params.type = filters.type;
             if (filters.employeeNumber) params.employeeNumber = filters.employeeNumber;
             if (filters.departmentId) params.departmentId = filters.departmentId;
+            if (filters.team) params.team = filters.team;
             if (filters.dateFrom) params.dateFrom = filters.dateFrom;
             if (filters.dateTo) params.dateTo = filters.dateTo;
             if (filters.search) params.search = filters.search;

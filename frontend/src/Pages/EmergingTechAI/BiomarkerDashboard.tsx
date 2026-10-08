@@ -13,6 +13,7 @@ import './BiomarkerDashboard.css';
 import StatusCard from '../../components/StatusCard/StatusCard';
 import DataTable, { DataTableColumn, DataTableTab } from '../../components/ui/DataTable';
 import Select from '../../components/ui/Select';
+import DateRangePicker from '../../components/ui/DateRangePicker';
 import api from '../../api';
 import { useBiomarker, useBiomarkerCharts, AnalyticsStatusBadge } from '../../components/Analytics';
 import {
@@ -69,6 +70,7 @@ export default function BiomarkerDashboard() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterEmployee, setFilterEmployee] = useState('');
     const [filterDepartment, setFilterDepartment] = useState('');
+    const [filterTeam, setFilterTeam] = useState('');
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
 
@@ -77,10 +79,11 @@ export default function BiomarkerDashboard() {
         type: activeFilter !== 'all' ? activeFilter : undefined,
         employeeNumber: filterEmployee || undefined,
         departmentId: filterDepartment || undefined,
+        team: filterTeam || undefined,
         dateFrom: filterDateFrom || undefined,
         dateTo: filterDateTo || undefined,
         search: searchQuery || undefined,
-    }), [activeFilter, filterEmployee, filterDepartment, filterDateFrom, filterDateTo, searchQuery]);
+    }), [activeFilter, filterEmployee, filterDepartment, filterTeam, filterDateFrom, filterDateTo, searchQuery]);
 
     const {
         violations, scanMeta, nextScan, scanStatus,
@@ -89,9 +92,10 @@ export default function BiomarkerDashboard() {
     } = useBiomarker(filters);
     const safeScanMeta = scanMeta ?? { batchId: 'N/A', scannedAt: '', duration: '—', totalViolations: 0 };
 
-    // ── Full employee/department lists (unfiltered, for dropdown options) ──
+    // ── Full employee/department/team lists (unfiltered, for dropdown options) ──
     const [employeeOptions, setEmployeeOptions] = useState<{ value: string; label: string }[]>([]);
     const [departmentOptions, setDepartmentOptions] = useState<{ value: string; label: string }[]>([]);
+    const [teamOptions, setTeamOptions] = useState<{ value: string; label: string }[]>([]);
 
     useEffect(() => {
         // Fetch all departments
@@ -105,6 +109,18 @@ export default function BiomarkerDashboard() {
                     .sort((a: any, b: any) => a.label.localeCompare(b.label))
             );
         }).catch(() => {});
+
+        // Fetch all teams
+        api.get('/api/Team?pageNumber=1&pageSize=200').then((res: any) => {
+            const raw = res.data?.data?.items ?? (Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.data) ? res.data?.data : []));
+            setTeamOptions(
+                raw
+                    .filter((t: any) => t.isActive !== false)
+                    .map((t: any) => ({ value: t.name ?? t.Name ?? t.id, label: t.name ?? t.Name }))
+                    .sort((a: any, b: any) => a.label.localeCompare(b.label))
+            );
+        }).catch(() => {});
+
         // Fetch users, filter to non-manager couriers with employee numbers
         api.get('/api/User', { pageNumber: 1, pageSize: 200 }).then((res: any) => {
             const raw: any[] = res.data?.data?.items ?? (Array.isArray(res.data) ? res.data : []);
@@ -123,7 +139,7 @@ export default function BiomarkerDashboard() {
     // ── Reset page when filters change ──
     useEffect(() => {
         setPage(1);
-    }, [activeFilter, searchQuery, filterEmployee, filterDepartment, filterDateFrom, filterDateTo, setPage]);
+    }, [activeFilter, searchQuery, filterEmployee, filterDepartment, filterTeam, filterDateFrom, filterDateTo, setPage]);
 
     // ── Counts ──
     const newCount = useMemo(() => violations.filter(v => v.status === 'New').length, [violations]);
@@ -232,12 +248,13 @@ export default function BiomarkerDashboard() {
         setSearchQuery('');
         setFilterEmployee('');
         setFilterDepartment('');
+        setFilterTeam('');
         setFilterDateFrom('');
         setFilterDateTo('');
         setActiveFilter('all');
     }, []);
 
-    const hasActiveFilters = !!(searchQuery || filterEmployee || filterDepartment || filterDateFrom || filterDateTo || activeFilter !== 'all');
+    const hasActiveFilters = !!(searchQuery || filterEmployee || filterDepartment || filterTeam || filterDateFrom || filterDateTo || activeFilter !== 'all');
 
     // ── Columns ──
     const columns: DataTableColumn<BiomarkerViolation>[] = useMemo(() => [
@@ -317,30 +334,35 @@ export default function BiomarkerDashboard() {
                 options={departmentOptions}
                 placeholder="All Departments"
             />
-            <div className="bd-date-range">
-                <input
-                    type="date"
-                    value={filterDateFrom}
-                    onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
-                    className="bd-date-input"
-                    title="From date"
-                />
-                <span className="bd-date-sep">–</span>
-                <input
-                    type="date"
-                    value={filterDateTo}
-                    onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
-                    className="bd-date-input"
-                    title="To date"
-                />
-            </div>
+            <Select
+                value={filterTeam}
+                onChange={v => { setFilterTeam(v); setPage(1); }}
+                options={teamOptions}
+                placeholder="All Teams"
+            />
+            <DateRangePicker
+                startDate={filterDateFrom}
+                endDate={filterDateTo}
+                onChange={(start, end) => {
+                    setFilterDateFrom(start);
+                    setFilterDateTo(end);
+                    setPage(1);
+                }}
+                onClear={() => {
+                    setFilterDateFrom('');
+                    setFilterDateTo('');
+                    setPage(1);
+                }}
+                placeholder="Filter by date range…"
+                ariaLabel="Filter biomarker scan alerts by date range"
+            />
             {hasActiveFilters && (
-                <button className="bd-dt-reset-btn" onClick={handleResetFilters}>
+                <button className="bd-dt-reset-btn" onClick={handleResetFilters} title="Reset all filters">
                     <RotateCcw size={13} /> Reset
                 </button>
             )}
         </div>
-    ), [filterEmployee, filterDepartment, filterDateFrom, filterDateTo, employeeOptions, departmentOptions, hasActiveFilters, handleResetFilters]);
+    ), [filterEmployee, filterDepartment, filterTeam, filterDateFrom, filterDateTo, employeeOptions, departmentOptions, teamOptions, hasActiveFilters, handleResetFilters, setPage]);
 
     return (
         <div className="biomarker-dashboard">
@@ -377,10 +399,10 @@ export default function BiomarkerDashboard() {
                     </div>
                 </div>
                 <button
-                    className="btn btn--primary"
+                    className="bd-run-scan-btn"
                     onClick={handleManualScan}
                     disabled={scanning}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 16px', borderRadius: 9, fontSize: 13, whiteSpace: 'nowrap' }}
+                    title="Trigger immediate biomarker scan across all operations"
                 >
                     {scanning ? (
                         <><Loader2 size={16} className="spin" /> Scanning...</>
@@ -395,30 +417,30 @@ export default function BiomarkerDashboard() {
                 <StatusCard
                     label="Total Violations"
                     value={summary.slaBreaches + summary.workloadOverloads + summary.biomarkerFlags}
-                    icon={<AlertTriangle size={22} />}
+                    icon={<AlertTriangle size={18} />}
                     variant="danger"
                     subtext={`${newCount} new • Latest scan`}
                 />
                 <StatusCard
                     label="SLA Breaches"
                     value={summary.slaBreaches}
-                    icon={<Clock size={22} />}
+                    icon={<Clock size={18} />}
                     variant="warning"
                     subtext="Tasks past SLA deadline"
                 />
                 <StatusCard
                     label="Workload Overloads"
                     value={summary.workloadOverloads}
-                    icon={<Users size={22} />}
-                    variant="warning"
+                    icon={<Users size={18} />}
+                    variant="teal"
                     subtext="Couriers exceeding threshold"
                 />
                 <StatusCard
                     label="Biomarker Flags"
                     value={summary.biomarkerFlags}
-                    icon={<Activity size={22} />}
+                    icon={<Activity size={18} />}
                     variant="info"
-                    subtext="Flags generated from violations"
+                    subtext="Compound flags generated"
                 />
             </div>
 
@@ -451,15 +473,15 @@ export default function BiomarkerDashboard() {
                                 <span className="bd-chart-card-count">{chartRows.length} total</span>
                             </div>
                             <div className="bd-chart-body">
-                                <ResponsiveContainer width="100%" height={210}>
+                                <ResponsiveContainer width="100%" height={240}>
                                     <PieChart>
-                                        <Pie data={byTypeData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} strokeWidth={0}>
+                                        <Pie data={byTypeData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={45} outerRadius={68} paddingAngle={3} strokeWidth={0}>
                                             {byTypeData.map(entry => (
                                                 <Cell key={entry.key} fill={TYPE_COLORS[entry.key]} />
                                             ))}
                                         </Pie>
                                         <Tooltip {...chartTooltipProps} />
-                                        <Legend iconSize={10} />
+                                        <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -471,15 +493,15 @@ export default function BiomarkerDashboard() {
                                 <span className="bd-chart-card-count">{chartRows.length} total</span>
                             </div>
                             <div className="bd-chart-body">
-                                <ResponsiveContainer width="100%" height={210}>
+                                <ResponsiveContainer width="100%" height={240}>
                                     <PieChart>
-                                        <Pie data={bySeverityData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} strokeWidth={0}>
+                                        <Pie data={bySeverityData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={45} outerRadius={68} paddingAngle={3} strokeWidth={0}>
                                             {bySeverityData.map(entry => (
                                                 <Cell key={entry.name} fill={SEVERITY_COLORS[entry.name]} />
                                             ))}
                                         </Pie>
                                         <Tooltip {...chartTooltipProps} />
-                                        <Legend iconSize={10} />
+                                        <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -491,11 +513,17 @@ export default function BiomarkerDashboard() {
                                 <span className="bd-chart-card-count">{byDepartmentData.length} dept(s)</span>
                             </div>
                             <div className="bd-chart-body">
-                                <ResponsiveContainer width="100%" height={210}>
-                                    <BarChart data={byDepartmentData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+                                <ResponsiveContainer width="100%" height={240}>
+                                    <BarChart data={byDepartmentData} layout="vertical" margin={{ top: 8, right: 24, bottom: 8, left: 10 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                                         <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                        <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+                                        <YAxis
+                                            type="category"
+                                            dataKey="name"
+                                            width={135}
+                                            tick={{ fontSize: 11 }}
+                                            tickFormatter={(val: string) => val.length > 20 ? val.slice(0, 18) + '…' : val}
+                                        />
                                         <Tooltip {...chartTooltipProps} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                                         <Bar dataKey="value" name="Violations" fill="#00A99D" radius={[0, 4, 4, 0]} barSize={14} />
                                     </BarChart>
@@ -509,13 +537,13 @@ export default function BiomarkerDashboard() {
                                 <span className="bd-chart-card-count">by type</span>
                             </div>
                             <div className="bd-chart-body">
-                                <ResponsiveContainer width="100%" height={210}>
-                                    <BarChart data={trendData} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
+                                <ResponsiveContainer width="100%" height={240}>
+                                    <BarChart data={trendData} margin={{ top: 10, right: 16, bottom: 20, left: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                                         <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={1} />
-                                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={30} />
                                         <Tooltip {...chartTooltipProps} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
-                                        <Legend iconSize={10} />
+                                        <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                                         <Bar dataKey="SLA Breach" stackId="trend" fill={TYPE_COLORS.sla_breach} barSize={12} />
                                         <Bar dataKey="Workload Overload" stackId="trend" fill={TYPE_COLORS.workload_overload} barSize={12} />
                                         <Bar dataKey="Biomarker Flag" stackId="trend" fill={TYPE_COLORS.biomarker_flag} barSize={12} />
@@ -531,13 +559,19 @@ export default function BiomarkerDashboard() {
                                     <span className="bd-chart-card-count">{workloadData.length} employee(s)</span>
                                 </div>
                                 <div className="bd-chart-body">
-                                    <ResponsiveContainer width="100%" height={210}>
-                                        <BarChart data={workloadData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <BarChart data={workloadData} layout="vertical" margin={{ top: 8, right: 24, bottom: 8, left: 10 }}>
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                                             <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+                                            <YAxis
+                                                type="category"
+                                                dataKey="name"
+                                                width={125}
+                                                tick={{ fontSize: 11 }}
+                                                tickFormatter={(val: string) => val.length > 18 ? val.slice(0, 16) + '…' : val}
+                                            />
                                             <Tooltip {...chartTooltipProps} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
-                                            <Legend iconSize={10} />
+                                            <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                                             <Bar dataKey="current" name="Current" fill="#ea580c" radius={[0, 4, 4, 0]} barSize={8} />
                                             <Bar dataKey="threshold" name="Threshold" fill="#9ca3af" radius={[0, 4, 4, 0]} barSize={8} />
                                         </BarChart>
@@ -559,7 +593,7 @@ export default function BiomarkerDashboard() {
                 onTabChange={key => setActiveFilter(key as FilterTab)}
                 searchQuery={searchQuery}
                 onSearchChange={val => { setSearchQuery(val); setPage(1); }}
-                searchPlaceholder="Search violations…"
+                searchPlaceholder="Search by name, ID, department, team, or violation…"
                 filterElements={filterElements}
                 emptyMessage="No violations match your filter."
                 emptyIcon={<CheckCircle2 size={24} />}
@@ -575,26 +609,26 @@ export default function BiomarkerDashboard() {
                 <div className="bd-section-header">
                     <h4>Biomarker Flag Summary — {safeScanMeta.batchId}</h4>
                 </div>
-                <div className="bd-flags-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+                <div className="bd-flags-summary">
                     <StatusCard
                         variant="danger"
                         label="Red Flags"
                         value={summary.redFlags}
-                        icon={<XCircle size={22} />}
+                        icon={<XCircle size={18} />}
                         subtext="Immediate action required — compound violations"
                     />
                     <StatusCard
                         variant="warning"
                         label="Amber Flags"
                         value={summary.amberFlags}
-                        icon={<AlertTriangle size={22} />}
+                        icon={<AlertTriangle size={18} />}
                         subtext="Requires monitoring — recurring or trending patterns"
                     />
                     <StatusCard
                         variant="success"
                         label="Green Flags"
                         value={summary.greenFlags}
-                        icon={<CheckCircle2 size={22} />}
+                        icon={<CheckCircle2 size={18} />}
                         subtext="Positive resolution — conditions normalized"
                     />
                 </div>
