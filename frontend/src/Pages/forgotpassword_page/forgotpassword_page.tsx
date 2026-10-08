@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import './forgotpassword_page.css';
 import { Link } from 'react-router-dom';
 import { Package, Mail, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
@@ -15,6 +15,7 @@ function FeatureItem({ title, description }: { title: string; description: strin
 }
 
 export default function ForgotPassword() {
+    const [employeeNumber, setEmployeeNumber] = useState('');
     const [email, setEmail] = useState('');
     const [step, setStep] = useState<'email' | 'sent'>('email');
     const [status, setStatus] = useState<{ type: 'info' | 'error' | 'success'; message: string } | null>(null);
@@ -25,25 +26,36 @@ export default function ForgotPassword() {
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
     const handleSendResetLink = async () => {
-        if (!email) {
-            setStatus({ type: 'error', message: 'Please enter your email.' });
+        if (!employeeNumber.trim()) {
+            setStatus({ type: 'error', message: 'Please enter your Employee ID / Number.' });
             return;
         }
-        if (!isValidEmail(email)) {
-            setStatus({ type: 'error', message: 'Enter a valid email address.' });
+        if (!email.trim()) {
+            setStatus({ type: 'error', message: 'Please enter your registered email address.' });
+            return;
+        }
+        if (!isValidEmail(email.trim())) {
+            setStatus({ type: 'error', message: 'Please enter a valid email address.' });
             return;
         }
 
         setLoading(true);
-        setStatus({ type: 'info', message: 'Sending reset link...' });
+        setStatus({ type: 'info', message: 'Verifying employee credentials and sending reset link...' });
 
         try {
-            await api.post('/api/Auth/forgot-password', { email });
+            const res = await api.post('/api/Auth/forgot-password', {
+                employeeNumber: employeeNumber.trim(),
+                email: email.trim(),
+            });
 
-            setStep('sent');
-            setStatus(null);
+            if (res.data?.isSuccess) {
+                setStep('sent');
+                setStatus(null);
+            } else {
+                setStatus({ type: 'error', message: res.data?.message || 'Failed to send reset link.' });
+            }
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'Something went wrong. Please try again.';
+            const msg = err?.response?.data?.message || err.message || 'Something went wrong. Please check your credentials.';
             setStatus({ type: 'error', message: msg });
         } finally {
             setLoading(false);
@@ -104,7 +116,7 @@ export default function ForgotPassword() {
             <div className="forgot-right">
                 <div className="forgot-card">
 
-                    {/* ── STEP: Email entry ── */}
+                    {/* ── STEP: Employee Number & Email entry ── */}
                     {step === 'email' && (
                         <>
                             <div className="forgot-header">
@@ -113,7 +125,7 @@ export default function ForgotPassword() {
                                 </div>
                                 <h2 className="forgot-title">Forgot Password</h2>
                                 <p className="forgot-subtitle">
-                                    Enter your registered email address and we'll send you a link to reset your password.
+                                    Enter your Employee ID and registered email address to verify your identity and receive a secure password reset link.
                                 </p>
                             </div>
 
@@ -129,14 +141,25 @@ export default function ForgotPassword() {
                                 onSubmit={(e) => { e.preventDefault(); handleSendResetLink(); }}
                             >
                                 <div className="field-group">
-                                    <label className="field-label">Email Address</label>
+                                    <label className="field-label">Employee ID / Number</label>
                                     <input
-                                        className={`forgot-input${status?.type === 'error' ? ' input-error' : ''}`}
+                                        className={`forgot-input${status?.type === 'error' && !employeeNumber ? ' input-error' : ''}`}
+                                        type="text"
+                                        placeholder="e.g. 0001 or MGR001"
+                                        value={employeeNumber}
+                                        onChange={(e) => { setEmployeeNumber(e.target.value); setStatus(null); }}
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="field-group">
+                                    <label className="field-label">Registered Email Address</label>
+                                    <input
+                                        className={`forgot-input${status?.type === 'error' && !email ? ' input-error' : ''}`}
                                         type="email"
                                         placeholder="e.g. employee@speedex.com"
                                         value={email}
                                         onChange={(e) => { setEmail(e.target.value); setStatus(null); }}
-                                        autoFocus
                                     />
                                 </div>
 
@@ -146,7 +169,7 @@ export default function ForgotPassword() {
                                     disabled={loading}
                                 >
                                     {loading
-                                        ? <><Loader2 size={15} className="spin" /> Sending…</>
+                                        ? <><Loader2 size={15} className="spin" /> Verifying & Sending…</>
                                         : 'Send Reset Link'
                                     }
                                 </button>
@@ -168,12 +191,12 @@ export default function ForgotPassword() {
                                 </div>
                                 <h2 className="forgot-title">Check Your Email</h2>
                                 <p className="forgot-subtitle">
-                                    We've sent a password reset link to:
+                                    We've verified Employee ID <strong>{employeeNumber}</strong> and sent a password reset link to:
                                 </p>
                                 <p className="sent-email">{email}</p>
                                 <p className="forgot-subtitle" style={{ marginTop: 8 }}>
                                     Click the link in the email to reset your password.
-                                    The link will expire in a short time for your security.
+                                    The link will expire in 1 hour for your security.
                                 </p>
                             </div>
 
@@ -183,7 +206,7 @@ export default function ForgotPassword() {
                             </div>
 
                             <button className="submit-btn outline" onClick={handleResend}>
-                                Resend Reset Link
+                                Request Another Link
                             </button>
 
                             <div className="right-footer">

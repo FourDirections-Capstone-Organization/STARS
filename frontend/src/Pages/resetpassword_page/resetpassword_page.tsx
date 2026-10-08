@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import '../forgotpassword_page/forgotpassword_page.css';
 import './resetpassword_page.css';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
@@ -46,7 +46,7 @@ export default function ResetPassword() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    const token = searchParams.get('token') ?? '';
+    const token = (searchParams.get('token') ?? '').trim();
 
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');

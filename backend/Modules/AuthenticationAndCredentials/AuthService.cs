@@ -110,21 +110,41 @@ public class AuthService : IAuthService
 
     public async Task<ApiResponseDTO<bool>> ForgotPasswordAsync(ForgotPasswordDTO dto, string resetUrl)
     {
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return ApiResponseDTO<bool>.Failure("Email address is required.");
+
+        if (string.IsNullOrWhiteSpace(dto.EmployeeNumber))
+            return ApiResponseDTO<bool>.Failure("Employee number is required.");
+
+        var cleanEmail = dto.Email.Trim().ToLowerInvariant();
+        var cleanEmpNum = dto.EmployeeNumber.Trim().ToLowerInvariant();
+
         var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == dto.Email.ToLower());
+            .FirstOrDefaultAsync(u =>
+                u.EmployeeNumber.ToLower() == cleanEmpNum &&
+                u.Email.ToLower() == cleanEmail);
 
-        // Don't reveal if email exists (security)
         if (user is null)
-            return ApiResponseDTO<bool>.Success(true, "If the email exists, a password reset link has been sent.");
+        {
+            return ApiResponseDTO<bool>.Failure("The provided employee number and email address do not match our records.");
+        }
 
-        // Check if user is deactivated
         if (user.IsDeactivated)
-            return ApiResponseDTO<bool>.Success(true, "If the email exists, a password reset link has been sent.");
+        {
+            return ApiResponseDTO<bool>.Failure("This account is deactivated. Please contact your system administrator.");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            return ApiResponseDTO<bool>.Failure("This account's email has not been verified yet. Please verify your email before resetting your password.");
+        }
 
         // Generate reset token
         var resetToken = GenerateSecureToken();
         user.PasswordResetToken = resetToken;
-        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(_jwtSettings.PasswordResetTokenExpirationInHours);
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(
+            _jwtSettings.PasswordResetTokenExpirationInHours > 0 ? _jwtSettings.PasswordResetTokenExpirationInHours : 1);
+        user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
 
@@ -132,7 +152,7 @@ public class AuthService : IAuthService
         var fullName = GetFullName(user);
         await _emailService.SendPasswordResetEmailAsync(user.Email, fullName, resetToken, resetUrl);
 
-        _logger.LogInformation("Password reset requested for: {Email}", user.Email);
+        _logger.LogInformation("Password reset requested for employee {EmployeeNumber} ({Email})", user.EmployeeNumber, user.Email);
 
         await _auditLogService.LogAsync(
             user.Id,
@@ -143,19 +163,29 @@ public class AuthService : IAuthService
             $"Password reset requested for {fullName} ({user.EmployeeNumber})",
             "Authentication");
 
-        return ApiResponseDTO<bool>.Success(true, "If the email exists, a password reset link has been sent.");
+        return ApiResponseDTO<bool>.Success(true, "A password reset link has been sent to your registered email address.");
     }
 
     public async Task<ApiResponseDTO<bool>> ResetPasswordAsync(ResetPasswordDTO dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Token))
+            return ApiResponseDTO<bool>.Failure("Reset token is required.");
+
+        var cleanToken = dto.Token.Trim();
+
         // Find user by reset token
         var user = await _db.Users
             .FirstOrDefaultAsync(u =>
-                u.PasswordResetToken == dto.Token &&
-                u.PasswordResetTokenExpiry > DateTime.UtcNow);
+                u.PasswordResetToken != null &&
+                u.PasswordResetToken == cleanToken);
 
         if (user is null)
-            return ApiResponseDTO<bool>.Failure("Invalid or expired reset token");
+            return ApiResponseDTO<bool>.Failure("Invalid password reset token. Please request a new reset link.");
+
+        if (user.PasswordResetTokenExpiry.HasValue && user.PasswordResetTokenExpiry.Value < DateTime.UtcNow)
+        {
+            return ApiResponseDTO<bool>.Failure("The password reset link has expired. Please request a new one.");
+        }
 
         // Validate password meets OWASP requirements
         var (isValid, errors) = PasswordValidator.Validate(dto.NewPassword);
@@ -173,7 +203,7 @@ public class AuthService : IAuthService
 
         var fullName = GetFullName(user);
 
-        _logger.LogInformation("Password reset completed for: {Email}", user.Email);
+        _logger.LogInformation("Password reset completed for employee {EmployeeNumber} ({Email})", user.EmployeeNumber, user.Email);
 
         await _auditLogService.LogAsync(
             user.Id,
@@ -184,7 +214,7 @@ public class AuthService : IAuthService
             $"Password reset completed for {fullName} ({user.EmployeeNumber})",
             "Authentication");
 
-        return ApiResponseDTO<bool>.Success(true, "Password reset successfully");
+        return ApiResponseDTO<bool>.Success(true, "Your password has been reset successfully. You may now log in.");
     }
 
     public async Task<ApiResponseDTO<bool>> ChangePasswordAsync(Guid userId, ChangePasswordDTO dto)

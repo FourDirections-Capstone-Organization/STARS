@@ -30,12 +30,16 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDTO dto)
     {
-        var resetUrl = $"{_frontendUrl}/reset-password";
+        var baseUrl = GetClientBaseUrl();
+        var resetUrl = $"{baseUrl}/reset-password";
         var result = await _authService.ForgotPasswordAsync(dto, resetUrl);
         
-        // Always return success to prevent email enumeration
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
         return Ok(result);
     }
 
@@ -142,5 +146,23 @@ public class AuthController : ControllerBase
             return forwardedFor.Split(',').First().Trim();
 
         return HttpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
+    private string GetClientBaseUrl()
+    {
+        if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
+        {
+            return origin.ToString().TrimEnd('/');
+        }
+
+        if (Request.Headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
+        {
+            if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
+            {
+                return $"{uri.Scheme}://{uri.Authority}";
+            }
+        }
+
+        return _frontendUrl.TrimEnd('/');
     }
 }
