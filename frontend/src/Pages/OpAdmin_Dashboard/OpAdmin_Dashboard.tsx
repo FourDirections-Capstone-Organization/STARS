@@ -4527,8 +4527,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                     { key: 'task-completion', label: 'Task Completion', icon: <FileText size={14} /> },
                     { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
                     { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
-                    { key: 'dms-performance', label: 'DMS Delivery Analytics', icon: <Truck size={14} /> },
-                    { key: 'foms-export', label: 'Financial Report (FOMS)', icon: <DollarSign size={14} /> },
+                    { key: 'dms-performance', label: 'Delivery Analytics', icon: <Truck size={14} /> },
+                    { key: 'foms-export', label: 'Financial Report', icon: <DollarSign size={14} /> },
                 ]}
                 activeTab={reportSubTab}
                 onTabChange={key => {
@@ -8930,7 +8930,9 @@ export default function OpsAdminDashboard() {
                     </div>
                 )}
                 {activeTab === 'announcements' && (
-                    <AnnouncementsTab canCreate={true} />
+                    <div className="dashboard-content">
+                        <AnnouncementsTab canCreate={true} />
+                    </div>
                 )}
 
                 {activeTab === 'delivery' && (

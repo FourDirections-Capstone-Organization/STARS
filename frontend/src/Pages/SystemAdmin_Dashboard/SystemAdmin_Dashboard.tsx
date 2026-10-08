@@ -3555,7 +3555,11 @@ export default function Dashboard() {
                 {activeTab === 'org-structure' && <OrgStructureTab />}
                 {activeTab === 'biomarker' && <BiomarkerDashboard />}
 
-                {activeTab === 'announcements' && <AnnouncementsTab canCreate={true} />}
+                {activeTab === 'announcements' && (
+                    <div className="dashboard-content">
+                        <AnnouncementsTab canCreate={true} />
+                    </div>
+                )}
 
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">

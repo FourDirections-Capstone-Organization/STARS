@@ -137,22 +137,22 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+    background: var(--teal, #00A99D);
     color: #ffffff;
     border: none;
     font-weight: 600;
     font-size: 13px;
     padding: 9px 18px;
     border-radius: 10px;
-    box-shadow: 0 3px 12px rgba(6, 182, 212, 0.35);
+    box-shadow: 0 3px 12px var(--teal-ring, rgba(0, 169, 157, 0.25));
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .ann-btn-create:hover {
-    background: linear-gradient(135deg, #0891b2 0%, #0369a1 100%);
+    background: var(--teal-hover, #009189);
     transform: translateY(-1px);
-    box-shadow: 0 5px 16px rgba(6, 182, 212, 0.45);
+    box-shadow: 0 5px 16px var(--teal-ring, rgba(0, 169, 157, 0.35));
 }
 
 /* ── Announcement Cards ── */
