@@ -494,13 +494,15 @@ public class TaskTemplateService : ITaskTemplateService
         };
     }
 
-    private static DateTime CalculateDeadline(PriorityLevel priority, DateTime createdAt)
-    {
-        if (priority == PriorityLevel.Urgent)
-            return createdAt.AddHours(24);
-
-        return createdAt.AddDays(7);
-    }
+    public static DateTime CalculateDeadline(PriorityLevel priority, DateTime createdAt) =>
+        priority switch
+        {
+            PriorityLevel.Urgent => createdAt.AddHours(24),
+            PriorityLevel.High => createdAt.AddDays(2),
+            PriorityLevel.Medium => createdAt.AddDays(7),
+            PriorityLevel.Low => createdAt.AddDays(14),
+            _ => createdAt.AddDays(7)
+        };
 
     private async Task<TaskTemplateResponseDTO> MapToResponseDTOAsync(TaskTemplate template)
     {

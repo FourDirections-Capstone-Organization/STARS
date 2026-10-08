@@ -59,9 +59,7 @@ public class RecurringTaskGenerator : BackgroundService
         {
             try
             {
-                var deadline = template.DefaultPriorityLevel == PriorityLevel.Urgent
-                    ? now.AddHours(24)
-                    : now.AddDays(7);
+                var deadline = TaskTemplateService.CalculateDeadline(template.DefaultPriorityLevel, now);
 
                 var lowerTitle = template.DefaultTitle.Trim().ToLower();
                 var prefix = lowerTitle + " ";

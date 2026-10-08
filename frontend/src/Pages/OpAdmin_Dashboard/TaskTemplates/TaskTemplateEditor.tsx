@@ -35,6 +35,58 @@ interface TaskTemplateEditorProps {
 
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High', 'Urgent'] as const;
 
+export const PRIORITY_SLA_CONFIG: Record<'Low' | 'Medium' | 'High' | 'Urgent', {
+    minDays: number;
+    maxDays: number;
+    defaultDays: number;
+    isLocked: boolean;
+    helperText: string;
+    badgeText: string;
+    badgeColor: string;
+    badgeBg: string;
+}> = {
+    Urgent: {
+        minDays: 1,
+        maxDays: 1,
+        defaultDays: 1,
+        isLocked: true,
+        helperText: '🔴 Urgent SLA: Strictly locked to 24 hours (1 day) from task creation.',
+        badgeText: '24h SLA Locked',
+        badgeColor: '#DC2626',
+        badgeBg: 'rgba(220, 38, 38, 0.1)',
+    },
+    High: {
+        minDays: 1,
+        maxDays: 2,
+        defaultDays: 2,
+        isLocked: false,
+        helperText: '🟠 High SLA: Deadline must be 1 to 2 days maximum from creation.',
+        badgeText: 'Max 2 Days SLA',
+        badgeColor: '#EA580C',
+        badgeBg: 'rgba(234, 88, 12, 0.1)',
+    },
+    Medium: {
+        minDays: 1,
+        maxDays: 7,
+        defaultDays: 7,
+        isLocked: false,
+        helperText: '🟡 Medium SLA: Deadline must be within 7 days (1 week) from creation.',
+        badgeText: 'Max 7 Days SLA',
+        badgeColor: '#00A99D',
+        badgeBg: 'rgba(0, 169, 157, 0.1)',
+    },
+    Low: {
+        minDays: 1,
+        maxDays: 14,
+        defaultDays: 14,
+        isLocked: false,
+        helperText: '🟢 Low SLA: Flexible deadline up to 14 days from creation.',
+        badgeText: 'Max 14 Days SLA',
+        badgeColor: '#059669',
+        badgeBg: 'rgba(5, 150, 105, 0.1)',
+    },
+};
+
 export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     template,
     employees,
@@ -47,11 +99,19 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     const isNew = !template || !template.id;
 
     // Form state
+    const initialPriority = template?.priorityLevel ?? 'Medium';
     const [name, setName] = useState(template?.templateName ?? '');
     const [title, setTitle] = useState(template?.defaultTitle ?? template?.templateName ?? '');
     const [description, setDescription] = useState(template?.cleanDescription ?? template?.defaultDescription ?? '');
-    const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>(template?.priorityLevel ?? 'Medium');
-    const [dueAfterDays, setDueAfterDays] = useState<number>(template?.dueAfterDays ?? (template?.priorityLevel === 'Urgent' ? 1 : 7));
+    const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>(initialPriority);
+    const [dueAfterDays, setDueAfterDays] = useState<number>(() => {
+        if (template?.dueAfterDays) {
+            const config = PRIORITY_SLA_CONFIG[initialPriority];
+            if (config.isLocked) return config.defaultDays;
+            return Math.min(Math.max(template.dueAfterDays, config.minDays), config.maxDays);
+        }
+        return PRIORITY_SLA_CONFIG[initialPriority].defaultDays;
+    });
     const [departmentId, setDepartmentId] = useState<string>(template?.defaultDepartmentId ?? '');
     const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>(template?.assignmentMode ?? 'round-robin');
     const [fixedAssigneeId, setFixedAssigneeId] = useState<string>(template?.defaultAssigneeId ?? '');
@@ -85,8 +145,12 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         name: template?.templateName ?? '',
         title: template?.defaultTitle ?? '',
         description: template?.cleanDescription ?? template?.defaultDescription ?? '',
-        priority: template?.priorityLevel ?? 'Medium',
-        dueAfterDays: template?.dueAfterDays ?? (template?.priorityLevel === 'Urgent' ? 1 : 7),
+        priority: initialPriority,
+        dueAfterDays: template?.dueAfterDays 
+            ? (PRIORITY_SLA_CONFIG[initialPriority].isLocked 
+                ? PRIORITY_SLA_CONFIG[initialPriority].defaultDays 
+                : Math.min(Math.max(template.dueAfterDays, PRIORITY_SLA_CONFIG[initialPriority].minDays), PRIORITY_SLA_CONFIG[initialPriority].maxDays))
+            : PRIORITY_SLA_CONFIG[initialPriority].defaultDays,
         departmentId: template?.defaultDepartmentId ?? '',
         assignmentMode: template?.assignmentMode ?? 'round-robin',
         fixedAssigneeId: template?.defaultAssigneeId ?? '',
@@ -180,6 +244,23 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         dragOverItem.current = null;
     };
 
+    // Handle priority change with SLA enforcement
+    const handlePriorityChange = (newPriority: 'Low' | 'Medium' | 'High' | 'Urgent') => {
+        setPriority(newPriority);
+        const config = PRIORITY_SLA_CONFIG[newPriority];
+        if (config.isLocked) {
+            setDueAfterDays(config.defaultDays);
+        } else {
+            // Adjust dueAfterDays if it exceeds the new priority SLA limits
+            if (dueAfterDays > config.maxDays || dueAfterDays < config.minDays) {
+                setDueAfterDays(config.defaultDays);
+            }
+        }
+        if (errors.dueAfterDays) {
+            setErrors(prev => ({ ...prev, dueAfterDays: '' }));
+        }
+    };
+
     // Validation
     const validate = (): boolean => {
         const errs: Record<string, string> = {};
@@ -200,8 +281,11 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
             }
         }
 
-        if (dueAfterDays <= 0) {
-            errs.dueAfterDays = 'Due after days must be at least 1 day.';
+        const slaConfig = PRIORITY_SLA_CONFIG[priority];
+        if (slaConfig.isLocked && dueAfterDays !== slaConfig.defaultDays) {
+            errs.dueAfterDays = `Urgent priority SLA is strictly locked to 24 hours (${slaConfig.defaultDays} day).`;
+        } else if (dueAfterDays < slaConfig.minDays || dueAfterDays > slaConfig.maxDays) {
+            errs.dueAfterDays = `For ${priority} priority, deadline must be between ${slaConfig.minDays} and ${slaConfig.maxDays} day(s).`;
         }
 
         setErrors(errs);
@@ -418,19 +502,29 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                         {errors.name && <span className="tt-error-text"><AlertCircle size={12} /> {errors.name}</span>}
                     </div>
 
-                    {/* Priority & Due After Days */}
+                    {/* Priority & Due After Days with SLA rules */}
                     <div className="tt-field-row">
                         <div className="tt-field-group">
-                            <label className="tt-label">Priority Level</label>
+                            <label className="tt-label">
+                                <span>Priority Level</span>
+                                <span 
+                                    className="tt-badge" 
+                                    style={{ 
+                                        background: PRIORITY_SLA_CONFIG[priority].badgeBg, 
+                                        color: PRIORITY_SLA_CONFIG[priority].badgeColor,
+                                        fontSize: 10,
+                                        padding: '2px 7px',
+                                        borderRadius: 4,
+                                        fontWeight: 700
+                                    }}
+                                >
+                                    {PRIORITY_SLA_CONFIG[priority].badgeText}
+                                </span>
+                            </label>
                             <select
                                 className="tt-select"
                                 value={priority}
-                                onChange={e => {
-                                    const p = e.target.value as 'Low' | 'Medium' | 'High' | 'Urgent';
-                                    setPriority(p);
-                                    if (p === 'Urgent') setDueAfterDays(1);
-                                    else if (dueAfterDays === 1) setDueAfterDays(7);
-                                }}
+                                onChange={e => handlePriorityChange(e.target.value as 'Low' | 'Medium' | 'High' | 'Urgent')}
                             >
                                 {PRIORITY_OPTIONS.map(p => (
                                     <option key={p} value={p}>{p}</option>
@@ -441,17 +535,49 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                         <div className="tt-field-group">
                             <label className="tt-label">
                                 <span>Due after (days) <span style={{ color: 'var(--status-failed)' }}>*</span></span>
+                                {PRIORITY_SLA_CONFIG[priority].isLocked ? (
+                                    <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 700 }}>24h Locked</span>
+                                ) : (
+                                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Max {PRIORITY_SLA_CONFIG[priority].maxDays} {PRIORITY_SLA_CONFIG[priority].maxDays === 1 ? 'day' : 'days'}</span>
+                                )}
                             </label>
                             <input
                                 type="number"
-                                min={1}
-                                max={90}
-                                className={`tt-input${errors.dueAfterDays ? ' error' : ''}`}
+                                min={PRIORITY_SLA_CONFIG[priority].minDays}
+                                max={PRIORITY_SLA_CONFIG[priority].maxDays}
+                                disabled={PRIORITY_SLA_CONFIG[priority].isLocked}
+                                className={`tt-input${errors.dueAfterDays ? ' error' : ''}${PRIORITY_SLA_CONFIG[priority].isLocked ? ' tt-input-locked' : ''}`}
                                 value={dueAfterDays}
-                                onChange={e => setDueAfterDays(Math.max(1, parseInt(e.target.value) || 1))}
+                                onChange={e => {
+                                    const val = parseInt(e.target.value) || PRIORITY_SLA_CONFIG[priority].minDays;
+                                    setDueAfterDays(Math.min(Math.max(val, PRIORITY_SLA_CONFIG[priority].minDays), PRIORITY_SLA_CONFIG[priority].maxDays));
+                                    if (errors.dueAfterDays) {
+                                        setErrors(prev => ({ ...prev, dueAfterDays: '' }));
+                                    }
+                                }}
                             />
                             {errors.dueAfterDays && <span className="tt-error-text"><AlertCircle size={12} /> {errors.dueAfterDays}</span>}
                         </div>
+                    </div>
+
+                    {/* SLA Helper Info Banner */}
+                    <div 
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '8px 12px',
+                            background: PRIORITY_SLA_CONFIG[priority].badgeBg,
+                            border: `1px solid ${PRIORITY_SLA_CONFIG[priority].badgeColor}33`,
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: PRIORITY_SLA_CONFIG[priority].badgeColor,
+                            fontWeight: 600,
+                            marginBottom: 16
+                        }}
+                    >
+                        <Clock size={14} />
+                        <span>{PRIORITY_SLA_CONFIG[priority].helperText}</span>
                     </div>
 
                     {/* Description */}

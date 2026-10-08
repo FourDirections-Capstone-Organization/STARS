@@ -275,6 +275,18 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                 </span>
                                             </div>
 
+                                            {t.status !== 'Backlog' && (
+                                                <div style={{ marginTop: 6, marginBottom: 4 }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
+                                                        <span>Progress</span>
+                                                        <span style={{ fontWeight: 700, color: t.progress >= 100 ? '#05cd99' : t.progress >= 50 ? '#00A99D' : '#3b82f6' }}>{t.progress}%</span>
+                                                    </div>
+                                                    <div style={{ width: '100%', height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                                                        <div style={{ width: `${t.progress}%`, height: '100%', background: t.progress >= 100 ? '#05cd99' : t.progress >= 50 ? '#00A99D' : '#3b82f6', borderRadius: 2, transition: 'width 0.3s' }} />
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="tm-board-card-meta">
                                                 <div>
                                                     {t.assignee ? (
@@ -714,7 +726,17 @@ export default function TaskManager({
                                 <td><PriorityBadge p={t.priority} /></td>
                                 <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} /></td>
                                 <td>
-                                    <StatusBadge status={t.status} size="sm" />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <StatusBadge status={t.status} size="sm" />
+                                        {t.status !== 'Backlog' && (
+                                            <>
+                                                <div style={{ width: 60, height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }} title={`${t.progress}% completed`}>
+                                                    <div style={{ width: `${t.progress}%`, height: '100%', background: t.progress >= 100 ? '#05cd99' : t.progress >= 50 ? '#00A99D' : '#3b82f6', borderRadius: 2 }} />
+                                                </div>
+                                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>{t.progress}%</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </td>
                                 <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
                                     <ActionsDropdown

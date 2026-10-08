@@ -605,8 +605,8 @@ const ProgressModal: React.FC<ProgressModalProps> = ({ task, onSave, onClose }) 
     };
 
     const handleSave = async () => {
-        if (status === baseStatus && (!remarks.trim() || remarks.trim() === (task.remarks ?? '').trim())) {
-            setFsmError('No changes detected. Update the status or remarks to proceed.');
+        if (status === baseStatus && progress === task.progress && (!remarks.trim() || remarks.trim() === (task.remarks ?? '').trim())) {
+            setFsmError('No changes detected. Update the status, progress, or remarks to proceed.');
             return;
         }
         setError('');
@@ -2418,12 +2418,19 @@ export default function EmployeeDashboard() {
     const handleSaveProgress = async (
         id: string, status: TaskStatus, progress: number, remarks: string
     ): Promise<void> => {
+        const task = tasks.find(t => t.id === id);
+        const currentTaskStatus = task ? (task.status === 'overdue' ? 'in-progress' : task.status) : 'in-progress';
         const newStatus = STATUS_TO_BACKEND[status] ?? 1;
+        const currentBackendStatus = STATUS_TO_BACKEND[currentTaskStatus] ?? 0;
+
         try {
-            await api.patch(`/api/Task/${id}/status`, { newStatus, progressNotes: remarks.trim() || undefined });
+            // Only send status change PATCH if status is actually changing
+            if (status !== currentTaskStatus && newStatus !== currentBackendStatus) {
+                await api.patch(`/api/Task/${id}/status`, { newStatus, progressNotes: remarks.trim() || undefined });
+            }
             // Persist the employee's reported completion percentage so
-            // Coordinators and Managers can see it in the Task Details.
-            const finalProgress = status === 'done' || status === 'completed' ? 100 : progress;
+            // Coordinators and Managers can see it in the Task Details and Task Manager.
+            const finalProgress = status === 'done' || status === 'completed' || status === 'pending-review' ? 100 : progress;
             await api.patch(`/api/Task/${id}/progress`, { completionPercentage: finalProgress });
         } catch (err: any) {
             const msg = err?.response?.data?.message || err?.response?.data?.Message || 'Failed to update task progress.';
@@ -2432,7 +2439,7 @@ export default function EmployeeDashboard() {
         setTasks(ts => ts.map(t => t.id === id ? {
             ...t,
             status: status === 'overdue' ? 'in-progress' : status,
-            progress: status === 'done' ? 100 : status === 'completed' ? 100 : progress,
+            progress: (status === 'done' || status === 'completed' || status === 'pending-review') ? 100 : progress,
             remarks: remarks.trim() || t.remarks,
         } : t));
     };

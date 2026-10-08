@@ -683,7 +683,9 @@ interface TaskRowProps {
 const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = false }) => {
     const od = isEffectivelyOverdue(task);
     const effectiveStatus = od ? 'Overdue' : task.taskStatus;
-    const progress = statusToProgress(effectiveStatus);
+    const progress = (task.assignees && task.assignees.length > 0 && task.assignees[0].completionPercentage !== undefined)
+        ? Math.round(task.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / task.assignees.length)
+        : statusToProgress(effectiveStatus);
     const refDisplay = task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase();
 
     return (
@@ -2583,6 +2585,9 @@ const TasksTab: React.FC<{
                     const od = isEffectivelyOverdue(t);
                     const effectiveStatus = od ? 'Overdue' : t.taskStatus;
                     const refDisplay = t.taskReferenceNumber || t.taskId.slice(0, 8).toUpperCase();
+                    const reportedProgress = (t.assignees && t.assignees.length > 0 && t.assignees[0].completionPercentage !== undefined)
+                        ? Math.round(t.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / t.assignees.length)
+                        : statusToProgress(effectiveStatus);
                     return (
                         <tr key={t.taskId} onClick={() => onView(t.taskId)} style={{ cursor: 'pointer' }}>
                             <td>
@@ -2595,9 +2600,10 @@ const TasksTab: React.FC<{
                                         </div>
                                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                                             <span className={statusBadgeClass(effectiveStatus)} style={{ fontSize: 10, padding: '1px 8px' }}>{effectiveStatus}</span>
-                                            <div style={{ width: 100, height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }}>
-                                                <div style={{ width: `${statusToProgress(effectiveStatus)}%`, height: '100%', background: statusToProgress(effectiveStatus) >= 100 ? '#05cd99' : statusToProgress(effectiveStatus) >= 75 ? '#4318ff' : statusToProgress(effectiveStatus) >= 45 ? '#ffb547' : '#94a3b8', borderRadius: 2 }} />
+                                            <div style={{ width: 100, height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }} title={`${reportedProgress}% completed`}>
+                                                <div style={{ width: `${reportedProgress}%`, height: '100%', background: reportedProgress >= 100 ? '#05cd99' : reportedProgress >= 75 ? '#4318ff' : reportedProgress >= 45 ? '#ffb547' : '#94a3b8', borderRadius: 2 }} />
                                             </div>
+                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>{reportedProgress}%</span>
                                         </div>
                                     </div>
                                 </div>
@@ -6928,7 +6934,9 @@ export default function OpsAdminDashboard() {
         priority: t.priority as TMTask['priority'],
         status: ({ Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', 'In Progress': 'In progress', 'Pending Admin Review': 'In review', Done: 'Done', Completed: 'Done', 'On Hold': 'On hold', Cancelled: 'Cancelled', Overdue: 'In progress' } as Record<string, TMTask['status']>)[t.taskStatus] || 'Backlog',
         dueDate: t.dueAt || undefined,
-        progress: t.taskStatus === 'Completed' || t.taskStatus === 'Done' ? 100 : t.taskStatus === 'In Progress' ? 50 : t.taskStatus === 'Pending Admin Review' ? 80 : t.taskStatus === 'Assigned' || t.taskStatus === 'Pending' ? 10 : 0,
+        progress: (t.assignees && t.assignees.length > 0 && t.assignees[0].completionPercentage !== undefined)
+            ? Math.round(t.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / t.assignees.length)
+            : (t.taskStatus === 'Completed' || t.taskStatus === 'Done' ? 100 : t.taskStatus === 'In Progress' ? 50 : t.taskStatus === 'Pending Admin Review' ? 80 : t.taskStatus === 'Assigned' || t.taskStatus === 'Pending' ? 10 : 0),
         isArchived: false,
         isDeleted: t.deleted || t.Deleted || false,
         isConfidential: t.isConfidential ?? false,

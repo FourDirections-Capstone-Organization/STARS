@@ -81,4 +81,19 @@ public class RecurringTemplateStateTests
         Assert.Equal(DateTimeKind.Utc, next.Kind);
         Assert.Equal(start.AddDays(7), next);
     }
+
+    [Theory]
+    [InlineData(PriorityLevel.Urgent, 1, 0)] // 24 hours (1 day)
+    [InlineData(PriorityLevel.High, 2, 0)]   // 2 days
+    [InlineData(PriorityLevel.Medium, 7, 0)] // 7 days
+    [InlineData(PriorityLevel.Low, 14, 0)]   // 14 days
+    public void CalculateDeadline_AdheresToSLARules(PriorityLevel priority, int expectedDays, int expectedHours)
+    {
+        var createdAt = new DateTime(2026, 10, 8, 10, 0, 0, DateTimeKind.Utc);
+        var deadline = Backend.Modules.TaskManagement.TaskTemplateService
+            .CalculateDeadline(priority, createdAt);
+
+        var expectedDeadline = expectedDays > 0 ? createdAt.AddDays(expectedDays) : createdAt.AddHours(expectedHours);
+        Assert.Equal(expectedDeadline, deadline);
+    }
 }
