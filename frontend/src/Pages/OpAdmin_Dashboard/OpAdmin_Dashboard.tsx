@@ -49,6 +49,10 @@ import {
     ArrowLeft,
     TrendingUp,
     UserCheck,
+    Search,
+    Check,
+    ExternalLink,
+    RefreshCw,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -3685,7 +3689,7 @@ const DateRangeEngineField: React.FC<{
 
 export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; employeeName: string; role?: string }> }> = ({ teamMembers }) => {
     const { success, error } = useToast();
-    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary'>('kpi-tracking');
+    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
     // Shared filter options
     const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
@@ -3735,6 +3739,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     const [opDeptPage, setOpDeptPage] = useState(1);
     const [opEmpPage, setOpEmpPage] = useState(1);
     const [financialPage, setFinancialPage] = useState(1);
+    const [dmsPerfPage, setDmsPerfPage] = useState(1);
 
     useEffect(() => {
         setKpiPage(1);
@@ -3744,7 +3749,118 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         setOpDeptPage(1);
         setOpEmpPage(1);
         setFinancialPage(1);
+        setDmsPerfPage(1);
     }, [reportSubTab]);
+
+    // --- DMS Delivery Performance State (Integration 3) ---
+    const [dmsPerfData, setDmsPerfData] = useState<{
+        totalDeliveries: number;
+        onTimeCount: number;
+        lateCount: number;
+        onTimePercentage: number;
+        driverFilter?: string | null;
+        records: Array<{
+            waybillNo: string;
+            starsTaskId?: string;
+            driverId?: string;
+            completedAt: string;
+            slaTargetAt: string;
+            isOnTime: boolean;
+        }>;
+    } | null>(null);
+    const [dmsPerfLoading, setDmsPerfLoading] = useState(false);
+    const [dmsDriverFilter, setDmsDriverFilter] = useState('');
+    const [dmsPerfSearch, setDmsPerfSearch] = useState('');
+    const [dmsCopiedWb, setDmsCopiedWb] = useState<string | null>(null);
+    const [dmsExportFormat, setDmsExportFormat] = useState<'Csv' | 'Excel'>('Csv');
+
+    const fetchDmsPerfData = useCallback(async (driver?: string) => {
+        setDmsPerfLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (driver) params.set('driverId', driver);
+            const res = await api.get(`/api/integration/dms/performance-summary?${params.toString()}`);
+            const json = res.data;
+            if (json?.isSuccess && json?.data) {
+                setDmsPerfData(json.data);
+            }
+        } catch {
+            // Keep fallback
+        } finally {
+            setDmsPerfLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchDmsPerfData(dmsDriverFilter);
+    }, [dmsDriverFilter, fetchDmsPerfData]);
+
+    const dmsDriverBreakdown = useMemo(() => {
+        if (!dmsPerfData?.records) return [];
+        const driverMap: Record<string, { driverId: string; total: number; onTime: number; late: number }> = {};
+        for (const r of dmsPerfData.records) {
+            const dId = r.driverId || 'Unassigned / Field';
+            if (!driverMap[dId]) {
+                driverMap[dId] = { driverId: dId, total: 0, onTime: 0, late: 0 };
+            }
+            driverMap[dId].total += 1;
+            if (r.isOnTime) driverMap[dId].onTime += 1;
+            else driverMap[dId].late += 1;
+        }
+        return Object.values(driverMap).map(d => ({
+            ...d,
+            onTimeRate: d.total > 0 ? Math.round((d.onTime / d.total) * 1000) / 10 : 100,
+        })).sort((a, b) => b.total - a.total);
+    }, [dmsPerfData?.records]);
+
+    const dmsFilteredRecords = useMemo(() => {
+        if (!dmsPerfData?.records) return [];
+        let list = dmsPerfData.records;
+        if (dmsPerfSearch.trim()) {
+            const q = dmsPerfSearch.toLowerCase();
+            list = list.filter(r =>
+                r.waybillNo?.toLowerCase().includes(q) ||
+                r.driverId?.toLowerCase().includes(q) ||
+                r.starsTaskId?.toLowerCase().includes(q)
+            );
+        }
+        return list;
+    }, [dmsPerfData?.records, dmsPerfSearch]);
+
+    const pagedDmsRecords = useMemo(() => {
+        const start = (dmsPerfPage - 1) * REPORT_PAGE_SIZE;
+        return dmsFilteredRecords.slice(start, start + REPORT_PAGE_SIZE);
+    }, [dmsFilteredRecords, dmsPerfPage]);
+    const totalDmsPerfPages = Math.max(1, Math.ceil(dmsFilteredRecords.length / REPORT_PAGE_SIZE));
+
+    const handleDmsPerfExport = (fmt: 'Csv' | 'Excel' = dmsExportFormat) => {
+        if (!dmsPerfData?.records || dmsPerfData.records.length === 0) {
+            error('No DMS delivery performance records to export.');
+            return;
+        }
+        const headers = ['Waybill Number', 'Driver ID', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
+        const rows = dmsPerfData.records.map(r => [
+            `"${r.waybillNo || ''}"`,
+            `"${r.driverId || ''}"`,
+            `"${r.starsTaskId || ''}"`,
+            `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
+            `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
+            r.isOnTime ? 'On-Time (SLA Met)' : 'Late (SLA Missed)'
+        ]);
+        const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+        downloadBlob(
+            csvContent,
+            `DMS_Delivery_Performance_Report_${new Date().toISOString().slice(0, 10)}.csv`,
+            'text/csv;charset=utf-8;'
+        );
+        success(`DMS Delivery Performance ${fmt} exported successfully.`);
+    };
+
+    const handleCopyWaybill = (wb: string) => {
+        navigator.clipboard.writeText(wb);
+        setDmsCopiedWb(wb);
+        setTimeout(() => setDmsCopiedWb(null), 2000);
+    };
 
     // --- KPI Tracking State ---
     const initialKpiDates = useMemo(() => computeDateRange('Monthly'), []);
@@ -4332,6 +4448,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             handlePrGenerate();
         } else if (reportSubTab === 'foms-export' && !financialReport && !financialLoading && !financialError) {
             handleFinancialGenerate();
+        } else if (reportSubTab === 'dms-performance' && !dmsPerfData && !dmsPerfLoading) {
+            fetchDmsPerfData(dmsDriverFilter);
         }
     }, [reportSubTab]);
 
@@ -4409,12 +4527,13 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                     { key: 'task-completion', label: 'Task Completion Report', icon: <FileText size={14} /> },
                     { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
                     { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
+                    { key: 'dms-performance', label: 'DMS Delivery Analytics', icon: <Truck size={14} /> },
                     { key: 'foms-export', label: 'Financial Report (FOMS)', icon: <DollarSign size={14} /> },
                 ]}
                 activeTab={reportSubTab}
                 onTabChange={key => {
                     setSelectedPrEmpId('');
-                    setReportSubTab(key as 'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary');
+                    setReportSubTab(key as any);
                 }}
             />
 
@@ -4503,6 +4622,60 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <StatusCard key={s.label} icon={s.icon} variant={s.variant as any} label={s.label} value={s.value} subtext={s.subtext} />
                                 ))}
                             </div>
+
+                            {/* Unified DMS Delivery SLA Performance Sync (Integration 3) */}
+                            {dmsPerfData && (
+                                <div style={{
+                                    marginTop: 12,
+                                    padding: '12px 16px',
+                                    borderRadius: 10,
+                                    background: 'linear-gradient(135deg, rgba(67, 24, 255, 0.04) 0%, rgba(5, 205, 153, 0.04) 100%)',
+                                    border: '1px solid rgba(67, 24, 255, 0.12)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 12
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <div style={{
+                                            width: 36,
+                                            height: 36,
+                                            borderRadius: 8,
+                                            background: '#4318ff',
+                                            color: '#fff',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}>
+                                            <Truck size={18} />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                DMS Field Delivery SLA Integration Sync
+                                            </div>
+                                            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                                                {dmsPerfData.totalDeliveries} batch-synced deliveries • {dmsPerfData.onTimeCount} SLA Hits / {dmsPerfData.lateCount} SLA Misses
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Delivery SLA Hit Rate</div>
+                                            <div style={{ fontSize: 16, fontWeight: 800, color: dmsPerfData.onTimePercentage >= 90 ? 'var(--status-active)' : '#4318ff' }}>
+                                                {dmsPerfData.onTimePercentage}%
+                                            </div>
+                                        </div>
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => setReportSubTab('dms-performance')}
+                                            style={{ fontSize: 11.5, padding: '4px 10px', height: 30 }}
+                                        >
+                                            View Delivery Analytics <ArrowLeft size={12} style={{ transform: 'rotate(180deg)' }} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Visual Graphs for KPI Tracking */}
                             <div className="report-charts-grid">
@@ -5614,6 +5787,359 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                         </>
                     )}
+                </>
+            )}
+
+            {/* 5. DMS Delivery Analytics & SLA Batch Performance (Integration 3) */}
+            {reportSubTab === 'dms-performance' && (
+                <>
+                    <div className="card report-filter-card">
+                        <div style={{ marginBottom: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Truck size={20} style={{ color: '#4318ff' }} />
+                                    DMS Delivery Completion &amp; SLA Performance Analytics
+                                </h3>
+                                <span className="report-pill teal">Integration 3 • Batch Sync Active</span>
+                            </div>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                Consolidated SLA performance metrics, courier on-time delivery rates, and batch completion logs imported from the Delivery Management System.
+                            </p>
+                        </div>
+                        <div className="report-filter-bar">
+                            <div className="report-filter-fields" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div className="field" style={{ minWidth: 200 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
+                                        Driver / Courier Filter
+                                    </label>
+                                    <select
+                                        className="report-select"
+                                        value={dmsDriverFilter}
+                                        onChange={e => setDmsDriverFilter(e.target.value)}
+                                        style={{ width: '100%', height: 34, fontSize: 12.5 }}
+                                    >
+                                        <option value="">All Drivers / Couriers</option>
+                                        {dmsDriverBreakdown.map(d => (
+                                            <option key={d.driverId} value={d.driverId}>
+                                                {d.driverId} ({d.total} deliveries • {d.onTimeRate}% on-time)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="field" style={{ minWidth: 240 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
+                                        Search Records
+                                    </label>
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                        <input
+                                            type="text"
+                                            className="report-input"
+                                            placeholder="Search Waybill, Driver, Task ID..."
+                                            value={dmsPerfSearch}
+                                            onChange={e => { setDmsPerfSearch(e.target.value); setDmsPerfPage(1); }}
+                                            style={{ paddingLeft: 30, height: 34, fontSize: 12.5, width: '100%' }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="report-filter-actions-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => fetchDmsPerfData(dmsDriverFilter)}
+                                    disabled={dmsPerfLoading}
+                                    title="Refresh latest DMS performance sync"
+                                    style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <RefreshCw size={14} className={dmsPerfLoading ? 'spin' : ''} />
+                                    <span>{dmsPerfLoading ? 'Syncing...' : 'Refresh Sync'}</span>
+                                </button>
+                                {dmsPerfData?.records && dmsPerfData.records.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={dmsExportFormat}
+                                            onChange={e => setDmsExportFormat(e.target.value as 'Csv' | 'Excel')}
+                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="Csv">📝 CSV (.csv)</option>
+                                            <option value="Excel">📊 Excel (.xlsx)</option>
+                                        </select>
+                                        <button
+                                            className="btn"
+                                            onClick={() => handleDmsPerfExport(dmsExportFormat)}
+                                            style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                        >
+                                            <Download size={14} /> Export
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Top KPI Stat Cards */}
+                    <div className="stats-row stats-row-4" style={{ marginTop: 16 }}>
+                        <StatusCard
+                            icon={<Truck size={18} />}
+                            variant="teal"
+                            label="TOTAL DELIVERIES"
+                            value={dmsPerfData?.totalDeliveries ?? 0}
+                            subtext="Batch-synced records"
+                        />
+                        <StatusCard
+                            icon={<CheckCircle2 size={18} />}
+                            variant="success"
+                            label="OVERALL ON-TIME RATE"
+                            value={`${dmsPerfData?.onTimePercentage ?? 0}%`}
+                            subtext="SLA compliance score"
+                        />
+                        <StatusCard
+                            icon={<CheckCircle2 size={18} />}
+                            variant="success"
+                            label="ON-TIME SHIPMENTS"
+                            value={dmsPerfData?.onTimeCount ?? 0}
+                            subtext="Delivered within SLA target"
+                        />
+                        <StatusCard
+                            icon={<AlertCircle size={18} />}
+                            variant="danger"
+                            label="SLA BREACHES (LATE)"
+                            value={dmsPerfData?.lateCount ?? 0}
+                            subtext="Exceeded SLA target"
+                        />
+                    </div>
+
+                    {/* Charts Grid */}
+                    {dmsPerfData?.records && dmsPerfData.records.length > 0 && (
+                        <div className="report-charts-grid" style={{ marginTop: 16 }}>
+                            <div className="card">
+                                <div className="card-header-layout">
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>SLA Compliance Ratio</h4>
+                                    <span className="report-pill teal">Field SLA Performance</span>
+                                </div>
+                                <div className="report-chart-box">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={[
+                                                    { name: 'On-Time (SLA Met)', value: dmsPerfData.onTimeCount || 0 },
+                                                    { name: 'Late (SLA Missed)', value: dmsPerfData.lateCount || 0 },
+                                                ]}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={55}
+                                                outerRadius={80}
+                                                paddingAngle={4}
+                                                dataKey="value"
+                                            >
+                                                <Cell fill="#05cd99" />
+                                                <Cell fill="#ee5d50" />
+                                            </Pie>
+                                            <Tooltip formatter={(val: any) => [`${val} shipments`, 'Count']} />
+                                            <Legend verticalAlign="bottom" height={36} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            <div className="card">
+                                <div className="card-header-layout">
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Courier SLA Comparison</h4>
+                                    <span className="report-pill blue">Top Couriers</span>
+                                </div>
+                                <div className="report-chart-box">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart
+                                            data={dmsDriverBreakdown.slice(0, 7).map(d => ({
+                                                name: d.driverId,
+                                                'On-Time': d.onTime,
+                                                'Late': d.late,
+                                            }))}
+                                            margin={{ top: 10, right: 10, left: -15, bottom: 5 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                            <YAxis tick={{ fontSize: 11 }} />
+                                            <Tooltip />
+                                            <Legend />
+                                            <Bar dataKey="On-Time" fill="#05cd99" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="Late" fill="#ee5d50" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Table 1: Driver SLA Compliance Breakdown */}
+                    {dmsDriverBreakdown.length > 0 && (
+                        <div className="card" style={{ marginTop: 16 }}>
+                            <div className="card-header-layout">
+                                <div>
+                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Courier / Driver SLA Compliance Breakdown</h4>
+                                    <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        Per-driver delivery completion rate, on-time SLA adherence, and performance ranking.
+                                    </p>
+                                </div>
+                                <span className="report-pill blue">{dmsDriverBreakdown.length} Couriers</span>
+                            </div>
+                            <div className="report-table-scroll-wrapper">
+                                <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 800 }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Courier / Driver ID</th>
+                                            <th style={{ textAlign: 'center' }}>Total Deliveries</th>
+                                            <th style={{ textAlign: 'center' }}>On-Time (SLA Met)</th>
+                                            <th style={{ textAlign: 'center' }}>Late (SLA Missed)</th>
+                                            <th style={{ textAlign: 'center' }}>On-Time Rate (%)</th>
+                                            <th style={{ textAlign: 'center' }}>SLA Performance Tier</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {dmsDriverBreakdown.map(d => {
+                                            const isTop = d.onTimeRate >= 95;
+                                            const isGood = d.onTimeRate >= 80 && d.onTimeRate < 95;
+                                            return (
+                                                <tr key={d.driverId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <Truck size={14} style={{ color: '#4318ff' }} />
+                                                            {d.driverId}
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{d.total}</td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--status-active)', fontWeight: 600 }}>{d.onTime}</td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', color: d.late > 0 ? 'var(--status-failed)' : 'var(--text-muted)', fontWeight: 600 }}>{d.late}</td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>
+                                                        {d.onTimeRate}%
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                        <span className={`report-pill ${isTop ? 'success' : isGood ? 'blue' : 'danger'}`}>
+                                                            {isTop ? '🌟 95%+ High Performer' : isGood ? '✅ SLA Target Met' : '⚠️ Action Needed'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Table 2: DMS Batch Completed Deliveries Log */}
+                    <div className="card" style={{ marginTop: 16 }}>
+                        <div className="card-header-layout">
+                            <div>
+                                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>DMS Batch Delivery Completion Records</h4>
+                                <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    Live stream of delivery completion records exported from DMS with timestamps and SLA verdicts.
+                                </p>
+                            </div>
+                            <span className="report-pill teal">{dmsFilteredRecords.length} Records</span>
+                        </div>
+
+                        {dmsFilteredRecords.length > 0 ? (
+                            <>
+                                <div className="report-table-scroll-wrapper">
+                                    <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 900 }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Waybill Number</th>
+                                                <th>Courier / Driver</th>
+                                                <th>STARS Task ID</th>
+                                                <th>Completion Timestamp</th>
+                                                <th>SLA Target Timestamp</th>
+                                                <th style={{ textAlign: 'center' }}>SLA Result</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pagedDmsRecords.map(r => (
+                                                <tr key={r.waybillNo} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '8px 10px' }}>
+                                                        <span
+                                                            onClick={() => handleCopyWaybill(r.waybillNo)}
+                                                            title="Click to copy Waybill"
+                                                            style={{
+                                                                fontFamily: 'monospace',
+                                                                fontWeight: 700,
+                                                                fontSize: 12,
+                                                                color: '#4318ff',
+                                                                background: '#eff6ff',
+                                                                padding: '3px 8px',
+                                                                borderRadius: 4,
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: 4
+                                                            }}
+                                                        >
+                                                            {dmsCopiedWb === r.waybillNo ? <Check size={11} style={{ color: 'var(--status-active)' }} /> : <Copy size={11} />}
+                                                            {r.waybillNo}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                        {r.driverId || '—'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                                                        {r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000' ? (
+                                                            <span style={{ background: '#f8fafc', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                                                                #{r.starsTaskId.slice(0, 8)}…
+                                                            </span>
+                                                        ) : (
+                                                            '—'
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                                        {r.completedAt ? new Date(r.completedAt).toLocaleString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        }) : '—'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                                        {r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        }) : '—'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                        <span className={`report-pill ${r.isOnTime ? 'success' : 'danger'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                            {r.isOnTime ? <><CheckCircle2 size={11} /> On-Time (SLA Met)</> : <><AlertCircle size={11} /> Late (SLA Missed)</>}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        Showing {Math.min((dmsPerfPage - 1) * REPORT_PAGE_SIZE + 1, dmsFilteredRecords.length)}–{Math.min(dmsPerfPage * REPORT_PAGE_SIZE, dmsFilteredRecords.length)} of {dmsFilteredRecords.length} records
+                                    </span>
+                                    <Pagination
+                                        currentPage={dmsPerfPage}
+                                        totalPages={totalDmsPerfPages}
+                                        onPageChange={setDmsPerfPage}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="report-empty-state" style={{ padding: '36px 0' }}>
+                                <Truck size={28} style={{ color: 'var(--text-muted)' }} />
+                                <p style={{ fontWeight: 600, margin: '8px 0 2px' }}>No DMS Delivery Records Found</p>
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    When DMS sends batch delivery completion data, records will be compiled and displayed here automatically.
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </>
             )}
 
