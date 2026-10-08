@@ -110,22 +110,68 @@ public class TaskTemplateCreationValidationTests
         Assert.Contains("inactive or does not exist", error);
     }
 
+    private (bool IsValid, string? ErrorMessage) ValidateDepartmentAndAssignee(
+        Guid? deptId, Guid? assigneeId,
+        Dictionary<Guid, bool> departments,
+        Dictionary<Guid, (bool IsActive, bool IsDeactivated, Guid? DepartmentId)> users)
+    {
+        if (assigneeId.HasValue)
+        {
+            if (!users.ContainsKey(assigneeId.Value) || !users[assigneeId.Value].IsActive || users[assigneeId.Value].IsDeactivated)
+                return (false, "Default assignee is inactive or does not exist");
+        }
+
+        if (deptId.HasValue)
+        {
+            if (!departments.ContainsKey(deptId.Value) || !departments[deptId.Value])
+                return (false, "Default department is inactive or does not exist");
+
+            if (assigneeId.HasValue && users.ContainsKey(assigneeId.Value))
+            {
+                var userDept = users[assigneeId.Value].DepartmentId;
+                if (userDept != deptId.Value)
+                    return (false, "Default assignee does not belong to the selected department");
+            }
+        }
+
+        return (true, null);
+    }
+
     [Fact]
-    public void ActiveDepartment_IsValid()
+    public void DepartmentWithMatchingAssignee_IsValid()
     {
         var deptId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var depts = new Dictionary<Guid, bool> { { deptId, true } };
-        var (isValid, _) = ValidateDepartment(deptId, depts);
+        var users = new Dictionary<Guid, (bool, bool, Guid?)> { { userId, (true, false, deptId) } };
+
+        var (isValid, _) = ValidateDepartmentAndAssignee(deptId, userId, depts, users);
         Assert.True(isValid);
     }
 
     [Fact]
-    public void InactiveDepartment_IsInvalid()
+    public void DepartmentWithMismatchedAssignee_IsInvalid()
+    {
+        var financeDeptId = Guid.NewGuid();
+        var operationsDeptId = Guid.NewGuid();
+        var opsUserId = Guid.NewGuid();
+        var depts = new Dictionary<Guid, bool> { { financeDeptId, true }, { operationsDeptId, true } };
+        var users = new Dictionary<Guid, (bool, bool, Guid?)> { { opsUserId, (true, false, operationsDeptId) } };
+
+        var (isValid, error) = ValidateDepartmentAndAssignee(financeDeptId, opsUserId, depts, users);
+        Assert.False(isValid);
+        Assert.Contains("does not belong to the selected department", error);
+    }
+
+    [Fact]
+    public void TemplateWithoutDepartment_AnyActiveAssignee_IsValid()
     {
         var deptId = Guid.NewGuid();
-        var depts = new Dictionary<Guid, bool> { { deptId, false } };
-        var (isValid, error) = ValidateDepartment(deptId, depts);
-        Assert.False(isValid);
-        Assert.Contains("inactive or does not exist", error);
+        var userId = Guid.NewGuid();
+        var depts = new Dictionary<Guid, bool>();
+        var users = new Dictionary<Guid, (bool, bool, Guid?)> { { userId, (true, false, deptId) } };
+
+        var (isValid, _) = ValidateDepartmentAndAssignee(null, userId, depts, users);
+        Assert.True(isValid);
     }
 }

@@ -26,6 +26,8 @@ public class UpdateTaskTemplateDTO
 
     public Guid? DefaultDepartmentId { get; set; }
 
+    public bool? ClearDefaultDepartment { get; set; }
+
     public RecurrenceRule? RecurrenceRule { get; set; }
 
     public DateTime? RecurrenceStartDate { get; set; }

@@ -40,11 +40,19 @@ export interface QueueEmployee {
     employeeNumber: string;
     role: string;
     department: string;
+    departmentId?: string | null;
     openTasks: number;
     lastAssignedAt: string | null;
     lastAssignedText: string;
     availabilityStatus: 'Active' | 'Offline' | 'OnLeave' | string;
     isAvailable: boolean;
+}
+
+export interface DepartmentItem {
+    id: string;
+    name: string;
+    description?: string;
+    isActive?: boolean;
 }
 
 export interface DeployResult {

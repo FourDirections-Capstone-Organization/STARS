@@ -94,7 +94,30 @@ public class RecurringTaskGenerator : BackgroundService
                     ?? template.DefaultAssignee?.DepartmentId 
                     ?? template.CreatedBy?.DepartmentId;
 
-                if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
+                if (template.DefaultAssigneeId.HasValue)
+                {
+                    var fixedAssignee = await db.Users
+                        .FirstOrDefaultAsync(u => u.Id == template.DefaultAssigneeId.Value && u.IsActive && !u.IsDeactivated, stoppingToken);
+
+                    if (fixedAssignee != null)
+                    {
+                        assigneeIds.Add(fixedAssignee.Id);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Template {TemplateName}: Default assignee is inactive. Task created as Unassigned.", template.TemplateName);
+                        if (template.CreatedById != Guid.Empty)
+                        {
+                            await notificationService.SendNotificationAsync(
+                                template.CreatedById,
+                                NotificationType.TemplateTaskUnassigned,
+                                "Template Task Unassigned",
+                                $"Template task '{task.Title}' default assignee is inactive. Task left unassigned.",
+                                task.Id);
+                        }
+                    }
+                }
+                else if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
                 {
                     // Department broadcast: assign all active and available users in department
                     var deptUsers = await db.Users

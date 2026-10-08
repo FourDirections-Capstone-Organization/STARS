@@ -18,14 +18,15 @@ import {
     Sparkles,
     CheckSquare,
     User,
-    Users
+    Users,
+    Building2
 } from 'lucide-react';
 import StatusCard from '../../../components/StatusCard/StatusCard';
 import { useToast } from '../../../components/Toast/Toast';
 import api from '../../../api';
 import { TaskTemplateCard } from './TaskTemplateCard';
 import { TaskTemplateEditor } from './TaskTemplateEditor';
-import { TaskTemplateItem, FilterChip, ViewMode, QueueEmployee, DeployResult, ChecklistItem } from './types';
+import { TaskTemplateItem, FilterChip, ViewMode, QueueEmployee, DeployResult, ChecklistItem, DepartmentItem } from './types';
 import './TaskTemplates.css';
 
 interface TaskTemplatesTabProps {
@@ -42,6 +43,7 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
     // Data state
     const [templates, setTemplates] = useState<TaskTemplateItem[]>([]);
     const [employees, setEmployees] = useState<QueueEmployee[]>([]);
+    const [departments, setDepartments] = useState<DepartmentItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string>('');
     const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -164,6 +166,29 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
         }
     }, []);
 
+    // Fetch Departments
+    const fetchDepartments = useCallback(async () => {
+        try {
+            const res = await api.get('/api/Department?pageNumber=1&pageSize=100');
+            const body = res.data;
+            const list: any[] = body.isSuccess && Array.isArray(body.data?.items)
+                ? body.data.items
+                : (Array.isArray(body.data) ? body.data : (Array.isArray(body.data?.data) ? body.data.data : []));
+
+            const mappedDepts: DepartmentItem[] = list
+                .filter((d: any) => d.isActive !== false)
+                .map((d: any) => ({
+                    id: d.id,
+                    name: d.name,
+                    description: d.description,
+                    isActive: d.isActive,
+                }));
+            setDepartments(mappedDepts);
+        } catch {
+            // Silently fallback
+        }
+    }, []);
+
     // Fetch Employees & Live Workload
     const fetchEmployees = useCallback(async () => {
         try {
@@ -185,6 +210,7 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                         employeeNumber: e.employeeNumber ?? e.EmployeeNumber ?? '',
                         role: e.role ?? e.Role ?? 'Staff',
                         department: e.department ?? e.Department ?? 'Operations',
+                        departmentId: e.departmentId ?? e.DepartmentId ?? null,
                         openTasks: workload,
                         lastAssignedAt: null,
                         lastAssignedText: workload === 0 ? 'Never' : '2h ago',
@@ -215,8 +241,9 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
 
     useEffect(() => {
         fetchTemplates();
+        fetchDepartments();
         fetchEmployees();
-    }, [fetchTemplates, fetchEmployees]);
+    }, [fetchTemplates, fetchDepartments, fetchEmployees]);
 
     // Summary Statistics
     const stats = useMemo(() => {
@@ -272,6 +299,8 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                 recurrenceStartDate: startDateStr,
                 defaultAssigneeId: data.assignmentMode === 'fixed' ? data.defaultAssigneeId : null,
                 clearDefaultAssignee: data.assignmentMode !== 'fixed',
+                defaultDepartmentId: data.defaultDepartmentId || null,
+                clearDefaultDepartment: !data.defaultDepartmentId,
                 isActive: data.isActive ?? true,
             };
 
@@ -369,7 +398,8 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
             const matchesSearch = !q ||
                 t.templateName.toLowerCase().includes(q) ||
                 t.defaultDescription.toLowerCase().includes(q) ||
-                (t.defaultAssigneeName && t.defaultAssigneeName.toLowerCase().includes(q));
+                (t.defaultAssigneeName && t.defaultAssigneeName.toLowerCase().includes(q)) ||
+                (t.defaultDepartmentName && t.defaultDepartmentName.toLowerCase().includes(q));
 
             // Chip filter matching
             let matchesChip = true;
@@ -403,6 +433,7 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
             <TaskTemplateEditor
                 template={selectedTemplate}
                 employees={employees}
+                departments={departments}
                 onSave={handleSaveTemplate}
                 onDiscard={handleCloseEditor}
                 onDeployNow={handleDeployNow}
@@ -612,6 +643,7 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                         <thead>
                             <tr>
                                 <th>Template Name</th>
+                                <th>Department</th>
                                 <th>Priority</th>
                                 <th>Assignment</th>
                                 <th>Due After</th>
@@ -629,6 +661,22 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                                         <div style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {t.cleanDescription || t.defaultDescription}
                                         </div>
+                                    </td>
+                                    <td>
+                                        {t.defaultDepartmentName ? (
+                                            <span 
+                                                className="tt-badge" 
+                                                style={{ 
+                                                    background: 'rgba(79, 70, 229, 0.1)', 
+                                                    color: '#4F46E5', 
+                                                    fontWeight: 600 
+                                                }}
+                                            >
+                                                <Building2 size={11} /> {t.defaultDepartmentName}
+                                            </span>
+                                        ) : (
+                                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>All Departments</span>
+                                        )}
                                     </td>
                                     <td>
                                         <span className="tt-badge" style={{

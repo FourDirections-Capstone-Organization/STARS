@@ -37,12 +37,13 @@ public class TaskTemplateService : ITaskTemplateService
             return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
                 "Only Coordinators and Managers can create task templates");
 
+        User? defaultAssignee = null;
         if (dto.DefaultAssigneeId.HasValue)
         {
-            var assigneeExists = await _db.Users
-                .AnyAsync(u => u.Id == dto.DefaultAssigneeId.Value && u.IsActive && !u.IsDeactivated);
+            defaultAssignee = await _db.Users
+                .FirstOrDefaultAsync(u => u.Id == dto.DefaultAssigneeId.Value && u.IsActive && !u.IsDeactivated);
 
-            if (!assigneeExists)
+            if (defaultAssignee is null)
                 return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
                     "Default assignee is inactive or does not exist");
         }
@@ -55,6 +56,12 @@ public class TaskTemplateService : ITaskTemplateService
             if (!deptExists)
                 return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
                     "Default department is inactive or does not exist");
+
+            if (defaultAssignee != null && defaultAssignee.DepartmentId != dto.DefaultDepartmentId.Value)
+            {
+                return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
+                    "Default assignee does not belong to the selected department");
+            }
         }
 
         // The frontend sends date-only strings (Kind=Unspecified); PostgreSQL timestamptz
@@ -211,8 +218,31 @@ public class TaskTemplateService : ITaskTemplateService
             template.DefaultAssigneeId = dto.DefaultAssigneeId;
         }
 
-        if (dto.DefaultDepartmentId.HasValue)
+        if (dto.ClearDefaultDepartment == true)
+        {
+            template.DefaultDepartmentId = null;
+        }
+        else if (dto.DefaultDepartmentId.HasValue)
+        {
+            var deptExists = await _db.Departments
+                .AnyAsync(d => d.Id == dto.DefaultDepartmentId.Value && d.IsActive);
+
+            if (!deptExists)
+                return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
+                    "Default department is inactive or does not exist");
+
             template.DefaultDepartmentId = dto.DefaultDepartmentId;
+        }
+
+        if (template.DefaultAssigneeId.HasValue && template.DefaultDepartmentId.HasValue)
+        {
+            var assignee = await _db.Users.FirstOrDefaultAsync(u => u.Id == template.DefaultAssigneeId.Value);
+            if (assignee != null && assignee.DepartmentId != template.DefaultDepartmentId.Value)
+            {
+                return ApiResponseDTO<TaskTemplateResponseDTO>.Failure(
+                    "Default assignee does not belong to the selected department");
+            }
+        }
 
         if (dto.RecurrenceRule.HasValue || dto.RecurrenceStartDate.HasValue)
         {
@@ -351,7 +381,26 @@ public class TaskTemplateService : ITaskTemplateService
             ?? template.DefaultAssignee?.DepartmentId
             ?? template.CreatedBy?.DepartmentId;
 
-        if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
+        if (template.DefaultAssigneeId.HasValue)
+        {
+            var fixedAssignee = await _db.Users
+                .FirstOrDefaultAsync(u => u.Id == template.DefaultAssigneeId.Value && u.IsActive && !u.IsDeactivated);
+
+            if (fixedAssignee != null)
+            {
+                assigneeIds.Add(fixedAssignee.Id);
+            }
+            else
+            {
+                await _notificationService.SendNotificationAsync(
+                    coordinatorId,
+                    NotificationType.TemplateTaskUnassigned,
+                    "Template Task Unassigned",
+                    $"Template task '{task.Title}' default assignee is no longer active. Task left unassigned.",
+                    task.Id);
+            }
+        }
+        else if (template.DefaultAssignmentScope == AssignmentScope.Department && targetDeptId.HasValue)
         {
             var deptUsers = await _db.Users
                 .Where(u => u.DepartmentId == targetDeptId.Value

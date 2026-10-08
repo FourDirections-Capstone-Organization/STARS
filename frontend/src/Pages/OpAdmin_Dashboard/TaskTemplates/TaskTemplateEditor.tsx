@@ -17,14 +17,16 @@ import {
     Clock, 
     ShieldCheck, 
     Sparkles, 
-    HelpCircle
+    HelpCircle,
+    Building2
 } from 'lucide-react';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
-import { TaskTemplateItem, ChecklistItem, QueueEmployee, DeployResult, AssignmentMode } from './types';
+import { TaskTemplateItem, ChecklistItem, QueueEmployee, DeployResult, AssignmentMode, DepartmentItem } from './types';
 
 interface TaskTemplateEditorProps {
     template: TaskTemplateItem | null;
     employees: QueueEmployee[];
+    departments?: DepartmentItem[];
     onSave: (templateData: Partial<TaskTemplateItem>, isNew: boolean) => Promise<void>;
     onDiscard: () => void;
     onDeployNow: (templateData: Partial<TaskTemplateItem>) => Promise<DeployResult>;
@@ -36,6 +38,7 @@ const PRIORITY_OPTIONS = ['Low', 'Medium', 'High', 'Urgent'] as const;
 export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     template,
     employees,
+    departments = [],
     onSave,
     onDiscard,
     onDeployNow,
@@ -49,6 +52,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     const [description, setDescription] = useState(template?.cleanDescription ?? template?.defaultDescription ?? '');
     const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>(template?.priorityLevel ?? 'Medium');
     const [dueAfterDays, setDueAfterDays] = useState<number>(template?.dueAfterDays ?? (template?.priorityLevel === 'Urgent' ? 1 : 7));
+    const [departmentId, setDepartmentId] = useState<string>(template?.defaultDepartmentId ?? '');
     const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>(template?.assignmentMode ?? 'round-robin');
     const [fixedAssigneeId, setFixedAssigneeId] = useState<string>(template?.defaultAssigneeId ?? '');
     const [recurrenceRule, setRecurrenceRule] = useState<'Daily' | 'Weekly' | 'Monthly'>(template?.recurrenceRule ?? 'Daily');
@@ -83,6 +87,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         description: template?.cleanDescription ?? template?.defaultDescription ?? '',
         priority: template?.priorityLevel ?? 'Medium',
         dueAfterDays: template?.dueAfterDays ?? (template?.priorityLevel === 'Urgent' ? 1 : 7),
+        departmentId: template?.defaultDepartmentId ?? '',
         assignmentMode: template?.assignmentMode ?? 'round-robin',
         fixedAssigneeId: template?.defaultAssigneeId ?? '',
         recurrenceRule: template?.recurrenceRule ?? 'Daily',
@@ -99,6 +104,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
             description,
             priority,
             dueAfterDays,
+            departmentId,
             assignmentMode,
             fixedAssigneeId,
             recurrenceRule,
@@ -108,7 +114,18 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
             checklistCount: checklist.length,
         });
         return current !== initialSnapshot.current;
-    }, [name, title, description, priority, dueAfterDays, assignmentMode, fixedAssigneeId, recurrenceRule, isActive, skipOffline, alertCoordinator, checklist]);
+    }, [name, title, description, priority, dueAfterDays, departmentId, assignmentMode, fixedAssigneeId, recurrenceRule, isActive, skipOffline, alertCoordinator, checklist]);
+
+    // Filter employees by selected responsible department
+    const filteredEmployees = useMemo(() => {
+        if (!departmentId) return employees;
+        const selectedDept = departments?.find(d => d.id === departmentId);
+        return employees.filter(e => {
+            if (e.departmentId && e.departmentId === departmentId) return true;
+            if (selectedDept && e.department && e.department.toLowerCase() === selectedDept.name.toLowerCase()) return true;
+            return false;
+        });
+    }, [employees, departmentId, departments]);
 
     // Handle name change (auto sync default title if user hasn't modified title separately)
     const handleNameChange = (val: string) => {
@@ -172,8 +189,15 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         if (!description.trim()) errs.description = 'Description is required.';
         else if (description.length > 2000) errs.description = 'Description must not exceed 2000 characters.';
 
-        if (assignmentMode === 'fixed' && !fixedAssigneeId) {
-            errs.fixedAssigneeId = 'Please select a designated employee for fixed assignment.';
+        if (assignmentMode === 'fixed') {
+            if (!fixedAssigneeId) {
+                errs.fixedAssigneeId = 'Please select a designated employee for fixed assignment.';
+            } else if (departmentId) {
+                const isMatch = filteredEmployees.some(e => e.userId === fixedAssigneeId);
+                if (!isMatch) {
+                    errs.fixedAssigneeId = 'Selected employee does not belong to the chosen department.';
+                }
+            }
         }
 
         if (dueAfterDays <= 0) {
@@ -199,6 +223,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         }
 
         const selectedEmployee = employees.find(e => e.userId === fixedAssigneeId);
+        const selectedDept = departments?.find(d => d.id === departmentId);
 
         await onSave({
             id: template?.id,
@@ -213,6 +238,8 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
             assignmentMode,
             defaultAssigneeId: assignmentMode === 'fixed' ? fixedAssigneeId : null,
             defaultAssigneeName: assignmentMode === 'fixed' ? selectedEmployee?.fullName ?? null : null,
+            defaultDepartmentId: departmentId || null,
+            defaultDepartmentName: selectedDept?.name || null,
             checklist: cleanChecklist,
             skipOffline,
             alertCoordinator,
@@ -256,6 +283,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                 recurrenceRule,
                 assignmentMode,
                 defaultAssigneeId: assignmentMode === 'fixed' ? fixedAssigneeId : null,
+                defaultDepartmentId: departmentId || null,
                 checklist: cleanChecklist,
                 skipOffline,
                 alertCoordinator,
@@ -271,9 +299,9 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
         }
     };
 
-    // Sorted Queue: available active employees first ordered by least workload, then longest idle
+    // Sorted Queue: available active employees in department ordered by least workload, then longest idle
     const sortedQueueEmployees = useMemo(() => {
-        return [...employees].sort((a, b) => {
+        return [...filteredEmployees].sort((a, b) => {
             // Active online comes first
             const aActive = a.availabilityStatus === 'Active';
             const bActive = b.availabilityStatus === 'Active';
@@ -503,6 +531,47 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                         </div>
                     </div>
 
+                    {/* Responsible Department */}
+                    <div className="tt-field-group">
+                        <label className="tt-label">
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <Building2 size={14} color="var(--primary)" /> Responsible Department
+                            </span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Target department scope</span>
+                        </label>
+                        <select
+                            className="tt-select"
+                            value={departmentId}
+                            onChange={e => {
+                                const newDeptId = e.target.value;
+                                setDepartmentId(newDeptId);
+                                if (newDeptId && fixedAssigneeId) {
+                                    const selectedDept = departments.find(d => d.id === newDeptId);
+                                    const currentAssignee = employees.find(emp => emp.userId === fixedAssigneeId);
+                                    const belongsToNewDept = currentAssignee && (
+                                        currentAssignee.departmentId === newDeptId || 
+                                        (selectedDept && currentAssignee.department?.toLowerCase() === selectedDept.name.toLowerCase())
+                                    );
+                                    if (!belongsToNewDept) {
+                                        setFixedAssigneeId('');
+                                    }
+                                }
+                            }}
+                        >
+                            <option value="">All / Any Department (No department restriction)</option>
+                            {departments.map(dept => (
+                                <option key={dept.id} value={dept.id}>
+                                    {dept.name}
+                                </option>
+                            ))}
+                        </select>
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
+                            {departmentId 
+                                ? `Tasks generated from this template can only be assigned to employees in the ${departments.find(d => d.id === departmentId)?.name || 'selected'} department.` 
+                                : 'Tasks generated from this template can be assigned across all departments.'}
+                        </span>
+                    </div>
+
                     {/* Assignment Mode */}
                     <div className="tt-field-group">
                         <label className="tt-label">Assignment Mode</label>
@@ -522,6 +591,11 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                         <div className="tt-field-group" style={{ animation: 'ttFadeIn 0.2s ease-out' }}>
                             <label className="tt-label">
                                 <span>Designated Employee <span style={{ color: 'var(--status-failed)' }}>*</span></span>
+                                {departmentId && (
+                                    <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+                                        Filtered: {departments.find(d => d.id === departmentId)?.name || 'Department'}
+                                    </span>
+                                )}
                             </label>
                             <select
                                 className={`tt-select${errors.fixedAssigneeId ? ' error' : ''}`}
@@ -532,12 +606,17 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                                 }}
                             >
                                 <option value="">Select an employee...</option>
-                                {employees.map(emp => (
+                                {filteredEmployees.map(emp => (
                                     <option key={emp.userId} value={emp.userId}>
-                                        {emp.fullName} ({emp.role} — {emp.availabilityStatus})
+                                        {emp.fullName} ({emp.role} • {emp.department} • {emp.availabilityStatus})
                                     </option>
                                 ))}
                             </select>
+                            {departmentId && filteredEmployees.length === 0 && (
+                                <span style={{ fontSize: 11, color: 'var(--status-failed, #DC2626)', marginTop: 4, display: 'block' }}>
+                                    No active assignable employees found in the selected department.
+                                </span>
+                            )}
                             {errors.fixedAssigneeId && <span className="tt-error-text"><AlertCircle size={12} /> {errors.fixedAssigneeId}</span>}
                         </div>
                     )}
@@ -602,7 +681,9 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                                 <Users size={18} color="var(--primary)" /> Assignment Queue
                             </h2>
                             <p className="tt-editor-card-sub">
-                                Live workload rankings for fair round-robin task routing.
+                                {departmentId
+                                    ? `Live workload rankings for ${departments.find(d => d.id === departmentId)?.name || 'selected department'}.`
+                                    : 'Live workload rankings for fair round-robin task routing across all departments.'}
                             </p>
                         </div>
                     </div>

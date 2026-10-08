@@ -10,7 +10,8 @@ import {
     Users, 
     Flame, 
     Calendar,
-    Sparkles
+    Sparkles,
+    Building2
 } from 'lucide-react';
 import { TaskTemplateItem } from './types';
 
@@ -93,6 +94,19 @@ export const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({
                             {template.templateName}
                         </h3>
                         <div className="tt-card-badges">
+                            {template.defaultDepartmentName && (
+                                <span 
+                                    className="tt-badge" 
+                                    style={{ 
+                                        background: 'rgba(79, 70, 229, 0.1)', 
+                                        color: '#4F46E5',
+                                        fontWeight: 600
+                                    }}
+                                    title={`Department: ${template.defaultDepartmentName}`}
+                                >
+                                    <Building2 size={11} /> {template.defaultDepartmentName}
+                                </span>
+                            )}
                             {renderAssignmentBadge()}
                             <span 
                                 className="tt-badge" 
