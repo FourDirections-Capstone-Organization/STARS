@@ -24,6 +24,7 @@ public class EmailVerificationController : ControllerBase
     }
 
     [HttpPost("verify")]
+    [AllowAnonymous]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDTO dto)
     {
         var result = await _verificationService.VerifyEmailAsync(dto.Token);
@@ -34,12 +35,21 @@ public class EmailVerificationController : ControllerBase
     }
 
     [HttpPost("resend")]
-    [Authorize(Policy = AuthorizationPolicies.CanManageUsers)]
+    [AllowAnonymous]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationDTO dto)
     {
-        var verificationUrl = $"{_frontendUrl}/verify-email";
+        var baseUrl = GetClientBaseUrl();
+        var verificationUrl = $"{baseUrl}/verify-email";
+
+        Guid? employeeGuid = null;
+        string? identifier = dto.Identifier ?? dto.EmployeeNumber ?? dto.EmployeeID ?? dto.EmployeeId;
+        if (!string.IsNullOrWhiteSpace(identifier) && Guid.TryParse(identifier, out var parsedGuid))
+        {
+            employeeGuid = parsedGuid;
+        }
+
         var result = await _verificationService.ResendVerificationAsync(
-            dto.EmployeeId, dto.Email, verificationUrl);
+            employeeGuid, dto.Email, verificationUrl, identifier);
 
         if (!result.IsSuccess)
             return BadRequest(result);
@@ -56,5 +66,23 @@ public class EmailVerificationController : ControllerBase
             return NotFound(result);
 
         return Ok(result);
+    }
+
+    private string GetClientBaseUrl()
+    {
+        if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
+        {
+            return origin.ToString().TrimEnd('/');
+        }
+
+        if (Request.Headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
+        {
+            if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
+            {
+                return $"{uri.Scheme}://{uri.Authority}";
+            }
+        }
+
+        return _frontendUrl.TrimEnd('/');
     }
 }

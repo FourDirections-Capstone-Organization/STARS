@@ -33,8 +33,10 @@ public class EmailVerificationService : IEmailVerificationService
         if (string.IsNullOrWhiteSpace(token))
             return ApiResponseDTO<bool>.Failure("Verification token is required.");
 
+        var cleanToken = token.Trim().ToLowerInvariant();
+
         var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken != null && u.EmailVerificationToken.ToLower() == cleanToken);
 
         if (user is null)
         {
@@ -85,27 +87,49 @@ public class EmailVerificationService : IEmailVerificationService
     }
 
     public async Task<ApiResponseDTO<bool>> ResendVerificationAsync(
-        Guid? employeeId, string? email, string verificationUrl)
+        Guid? employeeId, string? email, string verificationUrl, string? identifier = null)
     {
         User? user = null;
 
-        if (employeeId.HasValue)
+        if (employeeId.HasValue && employeeId.Value != Guid.Empty)
         {
             user = await _db.Users.FindAsync(employeeId.Value);
         }
-        else if (!string.IsNullOrWhiteSpace(email))
+
+        var searchEmail = email?.Trim() ?? string.Empty;
+        var searchIdentifier = identifier?.Trim() ?? string.Empty;
+
+        if (user is null && !string.IsNullOrWhiteSpace(searchEmail))
         {
-            user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var emailLower = searchEmail.ToLowerInvariant();
+            user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower);
+        }
+
+        if (user is null && !string.IsNullOrWhiteSpace(searchIdentifier))
+        {
+            if (Guid.TryParse(searchIdentifier, out var parsedGuid))
+            {
+                user = await _db.Users.FindAsync(parsedGuid);
+            }
+
+            if (user is null)
+            {
+                var idLower = searchIdentifier.ToLowerInvariant();
+                user = await _db.Users.FirstOrDefaultAsync(u =>
+                    u.EmployeeNumber.ToLower() == idLower ||
+                    (u.Username != null && u.Username.ToLower() == idLower) ||
+                    u.Email.ToLower() == idLower);
+            }
         }
 
         if (user is null)
             return ApiResponseDTO<bool>.Failure("Employee not found.");
 
         if (user.IsEmailVerified)
-            return ApiResponseDTO<bool>.Failure("Account is already verified.");
+            return ApiResponseDTO<bool>.Failure("Account is already verified. You may log in.");
 
         if (user.IsDeactivated)
-            return ApiResponseDTO<bool>.Failure("Account is deactivated.");
+            return ApiResponseDTO<bool>.Failure("Account is deactivated. Please contact your administrator.");
 
         var token = GenerateToken();
         user.EmailVerificationToken = token;
@@ -124,7 +148,7 @@ public class EmailVerificationService : IEmailVerificationService
 
         _logger.LogInformation("Verification email resent to user {UserId} ({Email})", user.Id, user.Email);
 
-        return ApiResponseDTO<bool>.Success(true, "Verification email resent successfully.");
+        return ApiResponseDTO<bool>.Success(true, "Verification email resent successfully. Please check your inbox.");
     }
 
     public async Task<ApiResponseDTO<EmailVerificationStatusDTO>> GetVerificationStatusAsync(Guid userId)

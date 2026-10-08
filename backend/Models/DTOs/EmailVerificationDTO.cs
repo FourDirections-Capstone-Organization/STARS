@@ -10,9 +10,14 @@ public class VerifyEmailDTO
 
 public class ResendVerificationDTO
 {
-    public Guid? EmployeeId { get; set; }
+    public string? EmployeeId { get; set; }
 
-    [EmailAddress]
+    public string? EmployeeID { get; set; }
+
+    public string? EmployeeNumber { get; set; }
+
+    public string? Identifier { get; set; }
+
     public string? Email { get; set; }
 }
 

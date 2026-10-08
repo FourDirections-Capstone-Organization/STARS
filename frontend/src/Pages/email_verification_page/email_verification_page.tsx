@@ -1,12 +1,18 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api";
 import "./email_verification_page.css";
 
 type VerifyState = "verifying" | "success" | "error";
+
 function VerifyEmail() {
     const [searchParams] = useSearchParams();
     const [state, setState] = useState<VerifyState>("verifying");
+    const [errorMessage, setErrorMessage] = useState<string>("");
+    const [resendEmail, setResendEmail] = useState("");
+    const [resending, setResending] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState(false);
+    const [resendError, setResendError] = useState("");
     const navigate = useNavigate();
     const hasVerified = useRef(false);
 
@@ -15,21 +21,50 @@ function VerifyEmail() {
         hasVerified.current = true;    
 
         const verifyEmail = async () => {
-            const token = searchParams.get("token");
+            const rawToken = searchParams.get("token");
+            const token = rawToken?.trim();
             if (!token) {
+                setErrorMessage("No verification token was provided in the link.");
                 setState("error");
                 return;
             }
             try {
-                await axios.post('/api/email-verification/verify', { token });
-                setState("success");
+                const res = await api.post('/api/email-verification/verify', { token });
+                if (res.data?.isSuccess) {
+                    setState("success");
+                } else {
+                    setErrorMessage(res.data?.message || "Verification failed. The link may have expired or is invalid.");
+                    setState("error");
+                }
             } catch (error: any) {
-                console.log("Error response:", error.response?.data); 
+                const msg = error.response?.data?.message || error.message || "We couldn't verify your email address. The link may be invalid or expired.";
+                setErrorMessage(msg);
                 setState("error");
             }
         };
         verifyEmail();
     }, [searchParams]);
+
+    const handleResend = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resendEmail.trim()) return;
+        setResending(true);
+        setResendError("");
+        setResendSuccess(false);
+        try {
+            const val = resendEmail.trim();
+            await api.post('/api/email-verification/resend', {
+                identifier: val,
+                employeeID: val,
+                email: val.includes('@') ? val : undefined,
+            });
+            setResendSuccess(true);
+        } catch (err: any) {
+            setResendError(err.response?.data?.message || err.message || "Failed to resend verification email.");
+        } finally {
+            setResending(false);
+        }
+    };
 
     return (
         <div className="ev-page">
@@ -133,13 +168,52 @@ function VerifyEmail() {
                                     </svg>
                                     <div>
                                         <p className="ev-alert-title">Verification Failed</p>
-                                        <p className="ev-alert-desc">The link may be invalid or expired.</p>
+                                        <p className="ev-alert-desc">{errorMessage || "The link may be invalid or expired."}</p>
                                     </div>
                                 </div>
+
+                                <form onSubmit={handleResend} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12, marginBottom: 12 }}>
+                                    <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                        Need a new verification link? Enter your email or employee ID:
+                                    </label>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <input
+                                            type="text"
+                                            value={resendEmail}
+                                            onChange={e => setResendEmail(e.target.value)}
+                                            placeholder="e.g. employee@company.com or 0001"
+                                            style={{
+                                                flex: 1,
+                                                padding: '8px 12px',
+                                                borderRadius: 6,
+                                                border: '1px solid var(--border)',
+                                                fontSize: 13,
+                                                background: 'var(--bg-input)',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={resending || !resendEmail.trim()}
+                                            className="ev-btn ev-btn--primary"
+                                            style={{ padding: '8px 14px', fontSize: 12, width: 'auto', whiteSpace: 'nowrap' }}
+                                        >
+                                            {resending ? 'Sending...' : 'Resend'}
+                                        </button>
+                                    </div>
+                                    {resendSuccess && (
+                                        <span style={{ fontSize: 12, color: '#01B574' }}>
+                                            ✓ Verification email resent! Please check your inbox.
+                                        </span>
+                                    )}
+                                    {resendError && (
+                                        <span style={{ fontSize: 12, color: '#E31A1A' }}>
+                                            {resendError}
+                                        </span>
+                                    )}
+                                </form>
+
                                 <div className="ev-btn-group">
-                                    <p className="ev-resend-note">
-                                        Contact your manager to request a new verification email.
-                                    </p>
                                     <a href="/" className="ev-btn ev-btn--outline">
                                         Back to Login
                                     </a>

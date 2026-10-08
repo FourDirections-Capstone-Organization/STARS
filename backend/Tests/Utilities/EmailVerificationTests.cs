@@ -58,6 +58,17 @@ public class EmailVerificationTests
     }
 
     [Fact]
+    public void ValidToken_CaseInsensitiveAndTrimmed_Succeeds()
+    {
+        var storedToken = "abc123def";
+        var inputToken = "  ABC123DEF  ";
+        var cleanInput = inputToken.Trim().ToLowerInvariant();
+        var (isValid, error) = ValidateToken(storedToken, cleanInput, DateTime.UtcNow.AddHours(24), DateTime.UtcNow, false);
+        Assert.True(isValid);
+        Assert.Null(error);
+    }
+
+    [Fact]
     public void EmptyToken_Fails()
     {
         var (isValid, error) = ValidateToken("abc123", "", DateTime.UtcNow.AddHours(24), DateTime.UtcNow, false);

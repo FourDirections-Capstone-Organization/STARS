@@ -252,7 +252,13 @@ export default function Login() {
     const handleResendVerification = async () => {
         setResending(true);
         try {
-            await api.post('/api/email-verification/resend', { employeeID: employeeId.trim() });
+            const trimmed = employeeId.trim();
+            await api.post('/api/email-verification/resend', {
+                identifier: trimmed,
+                employeeID: trimmed,
+                employeeNumber: trimmed,
+                email: trimmed.includes('@') ? trimmed : undefined,
+            });
             updateStatus('A new verification link has been sent to your email.', 'success');
         } catch (err: any) {
             const msg = err?.response?.data?.message || err.message || 'Failed to resend verification email.';
