@@ -321,7 +321,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     }, [employees]);
 
     const getInitials = (nameStr: string) => {
-        const parts = nameStr.split(' ').filter(Boolean);
+        const parts = (nameStr || '').split(' ').filter(Boolean);
         if (parts.length === 0) return 'EM';
         if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
         return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -330,8 +330,9 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     const getAvatarBg = (nameStr: string) => {
         const colors = ['#00A99D', '#4F46E5', '#0891B2', '#059669', '#7C3AED', '#2563EB', '#EA580C'];
         let hash = 0;
-        for (let i = 0; i < nameStr.length; i++) {
-            hash = nameStr.charCodeAt(i) + ((hash << 5) - hash);
+        const str = nameStr || '';
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
         return colors[Math.abs(hash) % colors.length];
     };

@@ -10,8 +10,10 @@ interface AnnouncementBannerProps {
 const getUserId = (): string => {
     try {
         const token = localStorage.getItem('authToken');
-        if (token) {
-            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '')));
+        if (token && token.includes('.')) {
+            const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+            const payload = JSON.parse(atob(padded));
             const id = payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || payload.sub || payload.nameid;
             if (id) return String(id);
         }
@@ -179,7 +181,7 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                                     )}
                                 </div>
                                 <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, maxHeight: 38, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {a.content.replace(/[#*_`]/g, '')}
+                                    {(a.content || '').replace(/[#*_`]/g, '')}
                                 </p>
                             </div>
                         </div>

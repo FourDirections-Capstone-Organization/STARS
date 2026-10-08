@@ -2061,10 +2061,10 @@ const DashboardTab: React.FC<{
     ].filter(d => d.value > 0);
 
     const workloadChartData = workloads.map(w => ({
-        name: w.employeeName.split(' ')[0],
-        Total: w.activeTaskCount + w.overdueTaskCount,
+        name: (w.employeeName || w.employeeNumber || 'Employee').split(' ')[0],
+        Total: (w.activeTaskCount ?? 0) + (w.overdueTaskCount ?? 0),
         Completed: 0,
-        Overdue: w.overdueTaskCount,
+        Overdue: w.overdueTaskCount ?? 0,
     }));
 
     const donutColors = statusChartData.map(d => d.color);
@@ -3159,7 +3159,7 @@ const TeamTab: React.FC<{
                             const memberTeam = teams.find(t => t.members.some(x => x.userId === m.accountId));
                             return (
                                 <div key={m.accountId} className="perf-item">
-                                    <span className="perf-label">{m.employeeName.split(' ')[0]}{memberTeam ? ` (${memberTeam.name})` : ''}</span>
+                                    <span className="perf-label">{(m.employeeName || 'Employee').split(' ')[0]}{memberTeam ? ` (${memberTeam.name})` : ''}</span>
                                     <div className="perf-track">
                                         <div className="perf-fill" style={{ width: `${pct}%`, background: pct >= 80 ? 'var(--status-active)' : pct >= 50 ? 'var(--status-pending)' : 'var(--status-failed)', borderRadius: 3, height: '100%', transition: 'width 0.4s ease' }} />
                                     </div>
@@ -4535,7 +4535,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={kpiData.employeeKpis?.slice(0, 7).map((e: any) => ({
-                                                name: e.employeeName.split(' ')[0],
+                                                name: (e.employeeName || 'Employee').split(' ')[0],
                                                 'On-Time': e.onTimeCount || 0,
                                                 'Late': e.lateCount || 0,
                                             })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
@@ -4982,7 +4982,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     <div className="report-chart-box">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={opReport.departmentSummaries?.slice(0, 6).map(d => ({
-                                                name: d.departmentName.split(' ')[0],
+                                                name: (d.departmentName || 'Dept').split(' ')[0],
                                                 Total: d.totalTasks,
                                                 Completed: d.completedTasks,
                                                 'SLA Breached': d.slaBreachedTasks,
@@ -5467,7 +5467,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                             <div className="report-chart-box">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={prData.employeeBreakdown?.slice(0, 6).map((e: any) => ({
-                                                        name: e.employeeName.split(' ')[0],
+                                                        name: (e.employeeName || 'Employee').split(' ')[0],
                                                         'Completion %': e.completionRate || 0,
                                                         'On-Time %': e.onTimeRate || 0,
                                                     })) || []} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
