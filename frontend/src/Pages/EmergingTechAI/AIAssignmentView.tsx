@@ -807,6 +807,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
             if (checkJson?.isSuccess && checkJson?.data?.hasDuplicates && checkJson.data.matches?.length > 0) {
                 setDuplicateWarnings(checkJson.data.matches);
                 setPendingPayload(payload);
+                setSubmitting(false);
                 return;
             }
         } catch {
@@ -814,6 +815,58 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
         }
 
         await submitTask(payload);
+    };
+
+    // ── Render Duplicate Modal Helper ──
+    const renderDuplicateModal = () => {
+        if (duplicateWarnings.length === 0 || !pendingPayload) return null;
+        return (
+            <FormModal
+                isOpen
+                onClose={handleDupCancel}
+                title="Potential duplicate task detected."
+                subtitle={`The system found ${duplicateWarnings.length} similar task${duplicateWarnings.length !== 1 ? 's' : ''} in existing records. Review the matches below.`}
+                size="lg"
+                footer={
+                    <div className="modal-actions" style={{ width: '100%', justifyContent: 'flex-end' }}>
+                        <button className="btn" onClick={handleDupCancel}><X size={13} /> Cancel</button>
+                        <button className="btn btn-primary" onClick={handleDupContinue}>
+                            <CheckCircle2 size={13} /> Continue Anyway
+                        </button>
+                    </div>
+                }
+            >
+                <div style={{ margin: '4px 0 12px', padding: '10px 12px', background: 'rgba(2, 132, 199, 0.06)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>New task: {pendingPayload.title}</div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{pendingPayload.description}</div>
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#0284c7' }}>
+                        💡 <strong>Auto-numbering rule:</strong> If an existing task shares the exact title, the new task title will automatically receive an increment number upon creation (e.g., &quot;Title 1&quot;, &quot;Title 2&quot;).
+                    </div>
+                </div>
+                <div style={{ overflowX: 'auto', margin: '8px 0 4px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
+                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)', width: 110 }}>Similarity</th>
+                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Existing Task</th>
+                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {duplicateWarnings.map(m => (
+                                <tr key={m.taskId} style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                                    <td style={{ padding: '8px', fontWeight: 700, color: m.similarityPercentage >= 90 ? 'var(--status-failed)' : m.similarityPercentage >= 80 ? '#c05c00' : m.similarityPercentage >= 70 ? '#9a6e00' : 'var(--text-primary)' }}>
+                                        {m.similarityPercentage}%
+                                    </td>
+                                    <td style={{ padding: '8px', color: 'var(--text-primary)' }}>{m.title}</td>
+                                    <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{m.status}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </FormModal>
+        );
     };
 
     // ── Event Handlers ──
@@ -1276,6 +1329,8 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                         </button>
                     </div>
                 </div>
+
+                {renderDuplicateModal()}
             </div>
         );
     }
@@ -1804,53 +1859,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
             </div>
 
             {/* ── Duplicate task warning (U-001) ── */}
-            {duplicateWarnings.length > 0 && pendingPayload && (
-                <FormModal
-                    isOpen
-                    onClose={handleDupCancel}
-                    title="Potential duplicate task detected."
-                    subtitle={`The system found ${duplicateWarnings.length} similar task${duplicateWarnings.length !== 1 ? 's' : ''} in existing records. Review the matches below.`}
-                    size="lg"
-                    footer={
-                        <div className="modal-actions" style={{ width: '100%', justifyContent: 'flex-end' }}>
-                            <button className="btn" onClick={handleDupCancel}><X size={13} /> Cancel</button>
-                            <button className="btn btn-primary" onClick={handleDupContinue}>
-                                <CheckCircle2 size={13} /> Continue Anyway
-                            </button>
-                        </div>
-                    }
-                >
-                    <div style={{ margin: '4px 0 12px', padding: '10px 12px', background: 'rgba(2, 132, 199, 0.06)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: 8, fontSize: 13 }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>New task: {pendingPayload.title}</div>
-                        <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{pendingPayload.description}</div>
-                        <div style={{ marginTop: 6, fontSize: 11, color: '#0284c7' }}>
-                            💡 <strong>Auto-numbering rule:</strong> If an existing task shares the exact title, the new task title will automatically receive an increment number upon creation (e.g., &quot;Title 1&quot;, &quot;Title 2&quot;).
-                        </div>
-                    </div>
-                    <div style={{ overflowX: 'auto', margin: '8px 0 4px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                            <thead>
-                                <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                                    <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)', width: 110 }}>Similarity</th>
-                                    <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Existing Task</th>
-                                    <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {duplicateWarnings.map(m => (
-                                    <tr key={m.taskId} style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                                        <td style={{ padding: '8px', fontWeight: 700, color: m.similarityPercentage >= 90 ? 'var(--status-failed)' : m.similarityPercentage >= 80 ? '#c05c00' : m.similarityPercentage >= 70 ? '#9a6e00' : 'var(--text-primary)' }}>
-                                            {m.similarityPercentage}%
-                                        </td>
-                                        <td style={{ padding: '8px', color: 'var(--text-primary)' }}>{m.title}</td>
-                                        <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{m.status}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </FormModal>
-            )}
+            {renderDuplicateModal()}
         </div>
     );
 };
