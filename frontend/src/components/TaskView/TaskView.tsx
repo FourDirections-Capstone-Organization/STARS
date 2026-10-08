@@ -879,6 +879,46 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                     </div>
 
+                                    {/* ── Multi-Step Delivery Stepper (Integration 2) ── */}
+                                    <div className="tv-dms-stepper-wrap">
+                                        {(() => {
+                                            const s = (deliveryDetail.dmsStatus || '').toLowerCase();
+                                            const isDelivered = s.includes('delivered') || s.includes('completed');
+                                            const isTransit = s.includes('transit') || s.includes('out') || isDelivered;
+                                            const isPickedUp = s.includes('pickup') || isTransit;
+                                            return (
+                                                <div className="tv-dms-mini-stepper">
+                                                    <div className="tv-dms-mini-step done">
+                                                        <div className="tv-dms-mini-dot"><Check size={10} /></div>
+                                                        <span className="tv-dms-mini-label">Dispatched</span>
+                                                    </div>
+                                                    <div className={`tv-dms-mini-step ${isPickedUp ? 'done' : ''}`}>
+                                                        <div className="tv-dms-mini-dot">{isPickedUp ? <Check size={10} /> : '2'}</div>
+                                                        <span className="tv-dms-mini-label">Picked Up</span>
+                                                    </div>
+                                                    <div className={`tv-dms-mini-step ${isTransit ? 'done' : ''}`}>
+                                                        <div className="tv-dms-mini-dot">{isTransit ? <Check size={10} /> : '3'}</div>
+                                                        <span className="tv-dms-mini-label">In Transit</span>
+                                                    </div>
+                                                    <div className={`tv-dms-mini-step ${isDelivered ? 'done' : ''}`}>
+                                                        <div className="tv-dms-mini-dot">{isDelivered ? <Check size={10} /> : '4'}</div>
+                                                        <span className="tv-dms-mini-label">Delivered</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {deliveryDetail.dmsFailureReason && (
+                                        <div className="tv-dms-error-box" style={{ margin: '4px 0' }}>
+                                            <AlertCircle size={14} className="tv-dms-error-icon" />
+                                            <div>
+                                                <div className="tv-dms-error-title">Delivery Issue Reported</div>
+                                                <div className="tv-dms-error-msg">{deliveryDetail.dmsFailureReason}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="tv-dms-grid">
                                         <div className="tv-dms-grid-item">
                                             <span className="tv-dms-grid-label">Recipient</span>
@@ -896,10 +936,34 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
                                             </span>
                                         </div>
+                                        {deliveryDetail.courierEmployeeId && (
+                                            <div className="tv-dms-grid-item">
+                                                <span className="tv-dms-grid-label">Assigned Driver</span>
+                                                <span className="tv-dms-grid-value" style={{ fontFamily: 'monospace' }}>
+                                                    {deliveryDetail.courierEmployeeId}
+                                                </span>
+                                            </div>
+                                        )}
                                         {deliveryDetail.packageDescription && (
                                             <div className="tv-dms-grid-item tv-dms-grid-full">
                                                 <span className="tv-dms-grid-label">Package Description</span>
                                                 <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.dmsLatitude && deliveryDetail.dmsLongitude && (
+                                            <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                <span className="tv-dms-grid-label">GPS Telemetry</span>
+                                                <a
+                                                    href={`https://www.google.com/maps?q=${deliveryDetail.dmsLatitude},${deliveryDetail.dmsLongitude}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="tv-dms-gps-badge"
+                                                    title="Open live coordinates in Google Maps"
+                                                >
+                                                    <MapPin size={11} />
+                                                    <span>Lat: {deliveryDetail.dmsLatitude.toFixed(4)}, Lng: {deliveryDetail.dmsLongitude.toFixed(4)}</span>
+                                                    <ExternalLink size={10} />
+                                                </a>
                                             </div>
                                         )}
                                         {deliveryDetail.dmsOrderId && (

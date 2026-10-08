@@ -78,6 +78,7 @@ import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
+import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -170,6 +171,7 @@ type NavTab =
     | 'dashboard'
     | 'tasks'
     | 'team'
+    | 'delivery'
     | 'reports'
     | 'profile'
     | 'reopen'
@@ -6927,6 +6929,7 @@ export default function OpsAdminDashboard() {
                     subItems: [
                         { label: 'Dashboard', onClick: () => handleNavChange('dashboard'), active: activeTab === 'dashboard' },
                         { label: 'Tasks', onClick: () => handleNavChange('tasks'), active: activeTab === 'tasks' },
+                        { label: 'Delivery Tracking (DMS)', onClick: () => handleNavChange('delivery'), active: activeTab === 'delivery' },
                         { label: 'Team', onClick: () => handleNavChange('team'), active: activeTab === 'team' },
                         { label: 'Task Templates', onClick: () => handleNavChange('templates'), active: activeTab === 'templates' },
                         { label: 'Reports', onClick: () => handleNavChange('reports'), active: activeTab === 'reports' },
@@ -8035,6 +8038,7 @@ export default function OpsAdminDashboard() {
         dashboard: 'Board Overview',
         tasks: 'Task Management',
         team: 'Team Management',
+        delivery: 'Delivery Tracking (DMS)',
         reports: 'Performance Reports',
         profile: 'My Profile',
         reopen: 'Reopen Requests',
@@ -8391,6 +8395,21 @@ export default function OpsAdminDashboard() {
                 )}
                 {activeTab === 'announcements' && (
                     <AnnouncementsTab canCreate={true} />
+                )}
+
+                {activeTab === 'delivery' && (
+                    <div className="dashboard-content" style={{ padding: '0 0 28px' }}>
+                        <DmsDeliveryTab
+                            tasks={tasks}
+                            onViewTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                }
+                            }}
+                        />
+                    </div>
                 )}
 
                 {activeTab === 'notifications' && (

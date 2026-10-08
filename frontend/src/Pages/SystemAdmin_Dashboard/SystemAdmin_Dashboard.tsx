@@ -72,6 +72,7 @@ import TaskManager from '../../components/TaskManager/TaskManager';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
+import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import api from '../../api';
 import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
@@ -3705,7 +3706,20 @@ export default function Dashboard() {
                     <ReportsTab teamMembers={reportTeamMembers} />
                 )}
 
-                {activeTab === 'delivery' && <div className="dashboard-content"><div className="card"><EmptyState icon={<Truck size={32} />} message="Delivery module coming soon." /></div></div>}
+                {activeTab === 'delivery' && (
+                    <div className="dashboard-content" style={{ padding: '0 0 28px' }}>
+                        <DmsDeliveryTab
+                            tasks={managerTasks}
+                            onViewTask={(taskId) => {
+                                const found = managerTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setTmDetailTask(found);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
                 {activeTab === 'finance' && <div className="dashboard-content"><div className="card"><EmptyState icon={<BarChart3 size={32} />} message="Finance module coming soon." /></div></div>}
 
                 {activeTab === 'activity_logs' && (

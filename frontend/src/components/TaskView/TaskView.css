@@ -1597,4 +1597,73 @@
 .tv-form-textarea {
     resize: vertical;
     min-height: 60px;
-}
+}
+
+/* Mini Stepper (TaskView) */
+.tv-dms-stepper-wrap {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.tv-dms-mini-stepper {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    text-align: center;
+}
+
+.tv-dms-mini-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.tv-dms-mini-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.tv-dms-mini-step.done .tv-dms-mini-dot {
+    background: #059669;
+    color: #ffffff;
+}
+
+.tv-dms-mini-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tv-dms-gps-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f0fdfa;
+    color: var(--primary, #00A99D);
+    border: 1px solid rgba(0, 169, 157, 0.25);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: none;
+    margin-top: 2px;
+    transition: all 0.12s ease;
+}
+
+.tv-dms-gps-badge:hover {
+    background: var(--primary, #00A99D);
+    color: #ffffff;
+}
+
