@@ -1756,6 +1756,9 @@ input.input-sla-locked {
     background: var(--bg-card, #fff);
     border: 1px solid var(--border, #e2e8f0);
     border-radius: 12px;
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-bar {
@@ -1763,6 +1766,9 @@ input.input-sla-locked {
     flex-direction: column;
     gap: 12px;
     width: 100%;
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-fields {
@@ -1771,6 +1777,9 @@ input.input-sla-locked {
     gap: 10px;
     flex-wrap: wrap;
     width: 100%;
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-actions-right {
@@ -1782,6 +1791,8 @@ input.input-sla-locked {
     width: 100%;
     padding-top: 10px;
     border-top: 1px solid var(--border);
+    position: relative;
+    z-index: 10;
 }
 
 .report-filter-grid {
@@ -2501,6 +2512,9 @@ input.emp-picker-checkbox {
 .report-filter-card {
     padding: 16px 20px;
     border-radius: var(--r-md, 12px);
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-bar {
@@ -2508,6 +2522,9 @@ input.emp-picker-checkbox {
     flex-direction: column;
     gap: 12px;
     width: 100%;
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-fields {
@@ -2516,6 +2533,9 @@ input.emp-picker-checkbox {
     gap: 10px;
     flex-wrap: wrap;
     width: 100%;
+    position: relative;
+    z-index: 50;
+    overflow: visible !important;
 }
 
 .report-filter-fields .field {
@@ -2523,6 +2543,8 @@ input.emp-picker-checkbox {
     flex-direction: column;
     gap: 4px;
     margin-bottom: 0;
+    position: relative;
+    overflow: visible !important;
 }
 
 .report-filter-fields .field label {
@@ -2543,6 +2565,8 @@ input.emp-picker-checkbox {
     width: 100%;
     padding-top: 10px;
     border-top: 1px solid var(--border);
+    position: relative;
+    z-index: 10;
 }
 
 .btn-teal {

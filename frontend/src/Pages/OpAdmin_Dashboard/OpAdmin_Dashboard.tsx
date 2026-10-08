@@ -3593,7 +3593,7 @@ const DateRangeEngineField: React.FC<{
     dateRangeStart,
     dateRangeEnd,
     onChange,
-    label = 'Date Range',
+    label = 'Date Range Preset',
     showFiscalYear = false,
     activeChunk: externalChunk,
     onChunkChange: externalOnChunkChange,
@@ -3606,100 +3606,78 @@ const DateRangeEngineField: React.FC<{
     const activeChunk = externalChunk !== undefined ? externalChunk : internalChunk;
     const activeYearType = externalYearType !== undefined ? externalYearType : internalYearType;
 
-    const handleChunkChange = (chunk: TimeChunk) => {
-        if (externalOnChunkChange) {
-            externalOnChunkChange(chunk);
-        } else {
-            setInternalChunk(chunk);
+    const currentPreset = useMemo(() => {
+        if (showFiscalYear && activeYearType === 'Fiscal') {
+            const fiscalDates = computeDateRange(activeChunk, 'Fiscal');
+            if (dateRangeStart === fiscalDates.start && dateRangeEnd === fiscalDates.end) {
+                return activeChunk === 'Annual' ? 'FiscalAnnual' : `Fiscal${activeChunk}`;
+            }
         }
-        const { start, end } = computeDateRange(chunk, showFiscalYear || externalYearType !== undefined ? activeYearType : 'Calendar');
-        onChange(start, end);
-    };
+        const monthly = computeDateRange('Monthly', 'Calendar');
+        if (dateRangeStart === monthly.start && dateRangeEnd === monthly.end) return 'Monthly';
+        const quarterly = computeDateRange('Quarterly', 'Calendar');
+        if (dateRangeStart === quarterly.start && dateRangeEnd === quarterly.end) return 'Quarterly';
+        const annual = computeDateRange('Annual', 'Calendar');
+        if (dateRangeStart === annual.start && dateRangeEnd === annual.end) return 'Annual';
 
-    const handleYearTypeChange = (yt: YearType) => {
-        if (externalOnYearTypeChange) {
-            externalOnYearTypeChange(yt);
+        return activeChunk || 'Monthly';
+    }, [dateRangeStart, dateRangeEnd, activeChunk, activeYearType, showFiscalYear]);
+
+    const handlePresetChange = (preset: string) => {
+        if (preset === 'FiscalAnnual') {
+            if (externalOnYearTypeChange) externalOnYearTypeChange('Fiscal');
+            else setInternalYearType('Fiscal');
+            if (externalOnChunkChange) externalOnChunkChange('Annual');
+            else setInternalChunk('Annual');
+            const { start, end } = computeDateRange('Annual', 'Fiscal');
+            onChange(start, end);
         } else {
-            setInternalYearType(yt);
+            const chunk = preset as TimeChunk;
+            if (externalOnYearTypeChange) externalOnYearTypeChange('Calendar');
+            else setInternalYearType('Calendar');
+            if (externalOnChunkChange) externalOnChunkChange(chunk);
+            else setInternalChunk(chunk);
+            const { start, end } = computeDateRange(chunk, 'Calendar');
+            onChange(start, end);
         }
-        const { start, end } = computeDateRange(activeChunk, yt);
-        onChange(start, end);
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-                    {label}
-                </label>
-                <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                    <button
-                        type="button"
-                        className={`filter-pill${activeChunk === 'Monthly' ? ' active' : ''}`}
-                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
-                        onClick={() => handleChunkChange('Monthly')}
-                    >
-                        Monthly
-                    </button>
-                    <button
-                        type="button"
-                        className={`filter-pill${activeChunk === 'Quarterly' ? ' active' : ''}`}
-                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
-                        onClick={() => handleChunkChange('Quarterly')}
-                    >
-                        Quarterly
-                    </button>
-                    <button
-                        type="button"
-                        className={`filter-pill${activeChunk === 'Annual' ? ' active' : ''}`}
-                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
-                        onClick={() => handleChunkChange('Annual')}
-                    >
-                        Annual
-                    </button>
+        <>
+            <div className="field" style={{ minWidth: 175 }}>
+                <label>{label}</label>
+                <select
+                    className="report-select"
+                    value={currentPreset}
+                    onChange={e => handlePresetChange(e.target.value)}
+                >
+                    <option value="Monthly">📅 Monthly</option>
+                    <option value="Quarterly">📊 Quarterly</option>
+                    <option value="Annual">🗓️ Annually (Calendar)</option>
                     {showFiscalYear && (
-                        <>
-                            <span style={{ width: 1, height: 12, background: 'var(--border)', margin: '0 2px' }} />
-                            <button
-                                type="button"
-                                className={`filter-pill${activeYearType === 'Calendar' ? ' active' : ''}`}
-                                style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
-                                onClick={() => handleYearTypeChange('Calendar')}
-                                title="Calendar Year (Jan 1 - Dec 31)"
-                            >
-                                Calendar
-                            </button>
-                            <button
-                                type="button"
-                                className={`filter-pill${activeYearType === 'Fiscal' ? ' active' : ''}`}
-                                style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600, height: 20 }}
-                                onClick={() => handleYearTypeChange('Fiscal')}
-                                title="Speedex Accounting Year: Oct 1 - Sep 30"
-                            >
-                                Fiscal
-                            </button>
-                        </>
+                        <option value="FiscalAnnual">🏢 Fiscal Year (Speedex)</option>
                     )}
-                </div>
+                </select>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div className="field" style={{ width: 135 }}>
+                <label>Start Date</label>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ width: 128, padding: '5px 8px', fontSize: 11.5, borderRadius: 6, height: 34 }}
                     value={dateRangeStart}
                     onChange={e => onChange(e.target.value, dateRangeEnd)}
                 />
-                <span style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>to</span>
+            </div>
+            <div className="field" style={{ width: 135 }}>
+                <label>End Date</label>
                 <input
                     type="date"
                     className="report-select"
-                    style={{ width: 128, padding: '5px 8px', fontSize: 11.5, borderRadius: 6, height: 34 }}
                     value={dateRangeEnd}
                     onChange={e => onChange(dateRangeStart, e.target.value)}
                 />
             </div>
-        </div>
+        </>
     );
 };
 
@@ -3811,7 +3789,13 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         }
     };
 
-    const handleKpiExport = () => {
+    // Export format states
+    const [kpiExportFormat, setKpiExportFormat] = useState<'Csv' | 'Excel'>('Csv');
+    const [tcExportFormat, setTcExportFormat] = useState<'Excel' | 'Pdf' | 'Csv'>('Excel');
+    const [prExportFormat, setPrExportFormat] = useState<'Excel' | 'Pdf' | 'Csv'>('Excel');
+    const [fomsExportFormat, setFomsExportFormat] = useState<'Excel' | 'Pdf' | 'Csv' | 'TasksCsv'>('Excel');
+
+    const handleKpiExport = (fmt: 'Csv' | 'Excel' = kpiExportFormat) => {
         if (!kpiData?.employeeKpis || kpiData.employeeKpis.length === 0) {
             error('No KPI data to export. Generate a report first.');
             return;
@@ -3832,7 +3816,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             `KPI_Tracking_Report_${kpiFilter.dateRangeStart}_${kpiFilter.dateRangeEnd}.csv`,
             'text/csv;charset=utf-8;'
         );
-        success('KPI Tracking CSV exported successfully.');
+        success(`KPI Tracking ${fmt} exported successfully.`);
     };
 
     // --- Performance Report State (Part 2: 5 KPIs) ---
@@ -4460,9 +4444,20 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                             <div className="report-filter-actions-right">
                                 {kpiData && (
-                                    <button className="btn" onClick={handleKpiExport} title="Export KPI CSV">
-                                        <Download size={14} /> Export CSV
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={kpiExportFormat}
+                                            onChange={e => setKpiExportFormat(e.target.value as 'Csv' | 'Excel')}
+                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="Csv">📝 CSV (.csv)</option>
+                                            <option value="Excel">📊 Excel (.xlsx)</option>
+                                        </select>
+                                        <button className="btn" onClick={() => handleKpiExport(kpiExportFormat)} title="Export KPI Data" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <Download size={14} /> Export
+                                        </button>
+                                    </div>
                                 )}
                                 <button className="btn btn-teal" onClick={handleKpiGenerate} disabled={kpiLoading} style={{ height: 34 }}>
                                     {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
@@ -4693,17 +4688,22 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="report-filter-actions-right">
                                 <button className="btn" onClick={handleTcReset} title="Reset Filters"><RotateCcw size={14} /> Reset</button>
                                 {tcReport && (
-                                    <>
-                                        <button className="btn" onClick={() => handleTcExport('Csv')} disabled={tcExporting} title="Export CSV">
-                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={tcExportFormat}
+                                            onChange={e => setTcExportFormat(e.target.value as 'Excel' | 'Pdf' | 'Csv')}
+                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="Excel">📊 Excel (.xlsx)</option>
+                                            <option value="Pdf">📄 PDF (.pdf)</option>
+                                            <option value="Csv">📝 CSV (.csv)</option>
+                                        </select>
+                                        <button className="btn" onClick={() => handleTcExport(tcExportFormat)} disabled={tcExporting} title={`Export as ${tcExportFormat}`} style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                            <span>{tcExporting ? 'Exporting...' : 'Export'}</span>
                                         </button>
-                                        <button className="btn" onClick={() => handleTcExport('Excel')} disabled={tcExporting} title="Export Excel">
-                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
-                                        </button>
-                                        <button className="btn" onClick={() => handleTcExport('Pdf')} disabled={tcExporting} title="Export PDF">
-                                            {tcExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
-                                        </button>
-                                    </>
+                                    </div>
                                 )}
                                 <button className="btn btn-teal" onClick={handleTcGenerate} disabled={tcLoading} style={{ height: 34 }}>
                                     {tcLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
@@ -4943,17 +4943,22 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             <div className="report-filter-actions-right">
                                 <button className="btn" onClick={handleOpReset} title="Reset Filters"><RotateCcw size={14} /> Reset</button>
                                 {opReport && (
-                                    <>
-                                        <button className="btn" onClick={() => handleOpDownload('PDF')} disabled={opDownloading} title="Download PDF">
-                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={opFilter.reportFormat}
+                                            onChange={e => setOpFilter(p => ({ ...p, reportFormat: e.target.value as any }))}
+                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="PDF">📄 PDF (.pdf)</option>
+                                            <option value="EXCEL">📊 Excel (.xlsx)</option>
+                                            <option value="CSV">📝 CSV (.csv)</option>
+                                        </select>
+                                        <button className="btn" onClick={() => handleOpDownload()} disabled={opDownloading} title={`Download as ${opFilter.reportFormat}`} style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                            <span>{opDownloading ? 'Downloading...' : 'Export'}</span>
                                         </button>
-                                        <button className="btn" onClick={() => handleOpDownload('EXCEL')} disabled={opDownloading} title="Download Excel">
-                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
-                                        </button>
-                                        <button className="btn" onClick={() => handleOpDownload('CSV')} disabled={opDownloading} title="Download CSV">
-                                            {opDownloading ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
-                                        </button>
-                                    </>
+                                    </div>
                                 )}
                                 <button className="btn btn-teal" onClick={handleOpGenerate} disabled={opLoading} style={{ height: 34 }}>
                                     {opLoading ? <Loader2 size={14} className="spin" /> : <Filter size={14} />}
@@ -5177,17 +5182,10 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     dateRangeStart={prFilter.dateRangeStart}
                                     dateRangeEnd={prFilter.dateRangeEnd}
                                     onChange={(start, end) => setPrFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                    activeChunk={prFilter.period === 'Weekly' ? 'Monthly' : (prFilter.period as TimeChunk)}
+                                    onChunkChange={chunk => setPrFilter(prev => ({ ...prev, period: chunk }))}
                                     showFiscalYear={false}
                                 />
-                                <div className="field" style={{ width: 120 }}>
-                                    <label>Period *</label>
-                                    <select className="report-select" value={prFilter.period} onChange={e => setPrFilter(prev => ({ ...prev, period: e.target.value as any }))}>
-                                        <option value="Weekly">Weekly</option>
-                                        <option value="Monthly">Monthly</option>
-                                        <option value="Quarterly">Quarterly</option>
-                                        <option value="Annual">Annual</option>
-                                    </select>
-                                </div>
                                 <div className="field" style={{ minWidth: 170 }}>
                                     <label>Employee Filter</label>
                                     <SearchableSelect
@@ -5213,17 +5211,22 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                             <div className="report-filter-actions-right">
                                 {prData && (
-                                    <>
-                                        <button className="btn" onClick={() => handlePrExport('Excel')} disabled={prExporting} title="Export Excel">
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={prExportFormat}
+                                            onChange={e => setPrExportFormat(e.target.value as 'Excel' | 'Pdf' | 'Csv')}
+                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="Excel">📊 Excel (.xlsx)</option>
+                                            <option value="Pdf">📄 PDF (.pdf)</option>
+                                            <option value="Csv">📝 CSV (.csv)</option>
+                                        </select>
+                                        <button className="btn" onClick={() => handlePrExport(prExportFormat)} disabled={prExporting} title={`Export as ${prExportFormat}`} style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                            <span>{prExporting ? 'Exporting...' : 'Export'}</span>
                                         </button>
-                                        <button className="btn" onClick={() => handlePrExport('Pdf')} disabled={prExporting} title="Export PDF">
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
-                                        </button>
-                                        <button className="btn" onClick={() => handlePrExport('Csv')} disabled={prExporting} title="Export CSV">
-                                            {prExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
-                                        </button>
-                                    </>
+                                    </div>
                                 )}
                                 <button className="btn btn-teal" onClick={handlePrGenerate} disabled={prLoading} style={{ height: 34 }}>
                                     {prLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
@@ -5683,20 +5686,35 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                             <div className="report-filter-actions-right">
                                 {financialReport && (
-                                    <>
-                                        <button className="btn" onClick={() => handleFinancialExport('Excel')} disabled={financialExporting} title="Export Excel">
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Excel
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <select
+                                            className="report-select"
+                                            value={fomsExportFormat}
+                                            onChange={e => setFomsExportFormat(e.target.value as 'Excel' | 'Pdf' | 'Csv' | 'TasksCsv')}
+                                            style={{ width: 165, height: 34, fontSize: 12.5 }}
+                                        >
+                                            <option value="Excel">📊 Excel (.xlsx)</option>
+                                            <option value="Pdf">📄 PDF (.pdf)</option>
+                                            <option value="Csv">📝 CSV (.csv)</option>
+                                            <option value="TasksCsv">📋 Field Tasks CSV</option>
+                                        </select>
+                                        <button
+                                            className="btn"
+                                            onClick={() => {
+                                                if (fomsExportFormat === 'TasksCsv') {
+                                                    handleLegacyFomsTaskExport();
+                                                } else {
+                                                    handleFinancialExport(fomsExportFormat);
+                                                }
+                                            }}
+                                            disabled={financialExporting}
+                                            style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                            title="Export Financial Report"
+                                        >
+                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                                            <span>{financialExporting ? 'Exporting...' : 'Export'}</span>
                                         </button>
-                                        <button className="btn" onClick={() => handleFinancialExport('Pdf')} disabled={financialExporting} title="Export PDF">
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} PDF
-                                        </button>
-                                        <button className="btn" onClick={() => handleFinancialExport('Csv')} disabled={financialExporting} title="Export CSV">
-                                            {financialExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />} CSV
-                                        </button>
-                                        <button className="btn" onClick={handleLegacyFomsTaskExport} disabled={financialExporting} title="Export task records for Field Operations">
-                                            <FileText size={14} /> Tasks CSV
-                                        </button>
-                                    </>
+                                    </div>
                                 )}
                                 <button className="btn btn-teal" onClick={handleFinancialGenerate} disabled={financialLoading} style={{ height: 34 }}>
                                     {financialLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}

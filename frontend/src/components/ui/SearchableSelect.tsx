@@ -118,7 +118,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         <div
             ref={containerRef}
             className={`searchable-select-container ${isOpen ? 'open' : ''} ${className}`}
-            style={{ width: width ?? (style?.width || 'auto'), ...style }}
+            style={{ width: width ?? (style?.width || 'auto'), zIndex: isOpen ? 1200 : undefined, ...style }}
         >
             <button
                 type="button"

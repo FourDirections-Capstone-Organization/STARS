@@ -39,6 +39,10 @@
     box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.12);
 }
 
+.searchable-select-container.open {
+    z-index: 1200 !important;
+}
+
 .searchable-select-trigger:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -77,12 +81,12 @@
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    min-width: 200px;
+    min-width: 220px;
     background: var(--bg-card, #FFFFFF);
     border: 1px solid var(--border, #E2E8F0);
     border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
-    z-index: 1050;
+    box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.2), 0 8px 12px -6px rgba(15, 23, 42, 0.12);
+    z-index: 1300 !important;
     overflow: hidden;
     display: flex;
     flex-direction: column;
