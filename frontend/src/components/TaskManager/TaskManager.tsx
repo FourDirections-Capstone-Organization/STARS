@@ -38,6 +38,7 @@ export interface TaskSummary {
     inProgress: number;
     completed: number;
     overdue: number;
+    cancelled?: number;
 }
 
 export type TabType = 'active' | 'completed' | 'bin';
@@ -461,8 +462,8 @@ export default function TaskManager({
         { label: 'Rate', value: `${completionRate}%`, icon: <BarChart3 size={18} />, variant: 'success' as const, subtext: 'Completion rate' },
     ] : [
         { label: 'Archived', value: tabTasks.filter(t => t.isArchived).length, icon: <Archive size={18} />, variant: 'warning' as const, subtext: 'Archived tasks' },
-        { label: 'Cancelled', value: tabTasks.filter(t => t.status === 'Cancelled').length, icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: 'Cancelled tasks' },
-        { label: 'Total', value: tabTasks.length, icon: <ClipboardList size={18} />, variant: 'teal' as const, subtext: 'In bin' },
+        { label: 'Cancelled', value: summary?.cancelled ?? tabTasks.filter(t => t.status === 'Cancelled').length, icon: <AlertCircle size={18} />, variant: 'danger' as const, subtext: 'Cancelled tasks' },
+        { label: 'Total', value: summary?.cancelled ?? tabTasks.length, icon: <ClipboardList size={18} />, variant: 'teal' as const, subtext: 'In bin' },
     ];
 
     return (
@@ -480,7 +481,7 @@ export default function TaskManager({
                         {[
                             { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
                             { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
-                            { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
+                            { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: summary?.cancelled ?? tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
                         ].map(({ key, label, icon, badge }) => (
                             <button key={key} onClick={() => handleTabChange(key)} className={`table-card-tab-btn${tab === key ? ' active' : ''}`}>
                                 {icon}<span>{label}</span>
@@ -576,7 +577,7 @@ export default function TaskManager({
                     tabs={[
                         { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && !t.isArchived && !t.isDeleted).length },
                         { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
-                        { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
+                        { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: summary?.cancelled ?? tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
                     ]}
                     activeTab={tab}
                     onTabChange={handleTabChange}

@@ -401,8 +401,8 @@ public class TaskWorkflowService : ITaskWorkflowService
         if (coordinator is null)
             return ApiResponseDTO<TaskResponseDTO>.Failure("User not found");
 
-        if (coordinator.Role != UserRole.Coordinator)
-            return ApiResponseDTO<TaskResponseDTO>.Failure("Only Coordinators can cancel tasks");
+        if (coordinator.Role != UserRole.Coordinator && coordinator.Role != UserRole.Manager)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("Only Coordinators and Managers can cancel tasks");
 
         if (task.Status == Models.Enums.TaskStatus.Completed)
             return ApiResponseDTO<TaskResponseDTO>.Failure("Completed tasks cannot be cancelled");
@@ -410,17 +410,13 @@ public class TaskWorkflowService : ITaskWorkflowService
         if (task.Status == Models.Enums.TaskStatus.Cancelled)
             return ApiResponseDTO<TaskResponseDTO>.Failure("Task is already cancelled");
 
-        var activeStatuses = new[] { Models.Enums.TaskStatus.NotStarted, Models.Enums.TaskStatus.InProgress, Models.Enums.TaskStatus.OnHold };
-        if (!activeStatuses.Contains(task.Status))
-            return ApiResponseDTO<TaskResponseDTO>.Failure(
-                "Only active tasks (Not Started, In Progress, or On Hold) can be cancelled");
-
         if (string.IsNullOrWhiteSpace(dto.CancellationReason))
             return ApiResponseDTO<TaskResponseDTO>.Failure("Cancellation reason is required");
 
         if (!dto.IsConfirmed)
             return ApiResponseDTO<TaskResponseDTO>.Failure("Cancellation must be confirmed");
 
+        task.PreviousStatus = task.Status;
         task.Status = Models.Enums.TaskStatus.Cancelled;
         task.CancellationReason = dto.CancellationReason.Trim();
         task.UpdatedAt = DateTime.UtcNow;
@@ -457,6 +453,71 @@ public class TaskWorkflowService : ITaskWorkflowService
         return ApiResponseDTO<TaskResponseDTO>.Success(
             await MapToResponseDTOAsync(task),
             "Task cancelled successfully");
+    }
+
+    public async Task<ApiResponseDTO<TaskResponseDTO>> RestoreTaskAsync(
+        Guid taskId, Guid coordinatorId, string? ipAddress = null)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .Include(t => t.CreatedBy)
+            .Include(t => t.AssignedDepartment)
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task is null)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("Task not found");
+
+        var coordinator = await _db.Users.FindAsync(coordinatorId);
+        if (coordinator is null)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("User not found");
+
+        if (coordinator.Role != UserRole.Coordinator && coordinator.Role != UserRole.Manager)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("Only Coordinators and Managers can restore tasks");
+
+        if (task.Status != Models.Enums.TaskStatus.Cancelled)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("Only cancelled tasks in the bin can be restored");
+
+        var restoredStatus = task.PreviousStatus ?? (task.Assignments.Any() ? Models.Enums.TaskStatus.InProgress : Models.Enums.TaskStatus.NotStarted);
+        if (restoredStatus == Models.Enums.TaskStatus.Cancelled || restoredStatus == Models.Enums.TaskStatus.Completed)
+            restoredStatus = Models.Enums.TaskStatus.NotStarted;
+
+        task.Status = restoredStatus;
+        task.PreviousStatus = null;
+        task.CancellationReason = null;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        await _auditLogService.LogAsync(
+            coordinatorId,
+            AuditActionType.StatusChange,
+            "Task",
+            taskId,
+            ipAddress,
+            $"Task restored from Cancelled to {task.Status}",
+            "TaskManagement",
+            oldValue: "Cancelled",
+            newValue: task.Status.ToString());
+
+        var recipientIds = task.Assignments.Select(a => a.AssignedUserId).ToList();
+        if (task.CreatedById != Guid.Empty)
+            recipientIds.Add(task.CreatedById);
+        recipientIds = recipientIds.Distinct().ToList();
+
+        if (recipientIds.Count > 0)
+        {
+            var taskTitle = task.Title.Length > 50 ? task.Title[..50] + "..." : task.Title;
+            await _notificationService.SendBulkNotificationAsync(
+                recipientIds,
+                NotificationType.TaskResumed,
+                "Task Restored",
+                $"Task '{taskTitle}' has been restored from the bin.",
+                task.Id);
+        }
+
+        return ApiResponseDTO<TaskResponseDTO>.Success(
+            await MapToResponseDTOAsync(task),
+            "Task restored successfully");
     }
 
     private (bool IsValid, string? ErrorMessage) ValidateTransition(

@@ -7157,8 +7157,7 @@ export default function OpsAdminDashboard() {
     const [taskTab, setTaskTab] = useState<'active' | 'completed' | 'bin'>('active');
     const [taskFilterPrio, setTaskFilterPrio] = useState('');
     const [taskFilterClassification, setTaskFilterClassification] = useState('');
-    const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
-    const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0 });
+    const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number; cancelled: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0, cancelled: 0 });
 
     // Reopen Requests state
     const [reopenRequests, setReopenRequests] = useState<ReopenRequest[]>([]);
@@ -7411,6 +7410,7 @@ export default function OpsAdminDashboard() {
                     inProgress: jsonRes.data.inProgressCount ?? 0,
                     completed: jsonRes.data.completedCount ?? 0,
                     overdue: jsonRes.data.overdueCount ?? 0,
+                    cancelled: jsonRes.data.cancelledCount ?? 0,
                 });
             }
 
@@ -7467,7 +7467,12 @@ export default function OpsAdminDashboard() {
     // -- Restore task --
     const handleRestoreTask = async (taskId: string) => {
         try {
-            await api.patch(`/api/Task/${taskId}/restore-task`);
+            await api.patch(`/api/Task/${taskId}/restore`);
+            setDeletedTaskIds(prev => {
+                const next = new Set(prev);
+                next.delete(taskId);
+                return next;
+            });
             setAllTasks(prev => prev.map(t =>
                 t.taskId === taskId ? { ...t, deleted: false } : t
             ));
@@ -7494,7 +7499,7 @@ export default function OpsAdminDashboard() {
             onConfirm: async () => {
                 setConfirmModal(CONFIRM_CLOSED);
                 try {
-                    await api.delete(`/api/Task/empty-bin/${employeeId}`);
+                    await api.delete('/api/Task/empty-bin');
 
                     setBinTasks([]);
                     await fetchTasks();
@@ -7925,7 +7930,7 @@ export default function OpsAdminDashboard() {
             onConfirm: async () => {
                 setConfirmModal(CONFIRM_CLOSED);
                 try {
-                    await api.delete(`/api/Task/${taskId}/delete-task`);
+                    await api.delete(`/api/Task/${taskId}`);
 
                     // Track locally so refetches don't resurrect the task
                     setDeletedTaskIds(prev => new Set(prev).add(taskId));

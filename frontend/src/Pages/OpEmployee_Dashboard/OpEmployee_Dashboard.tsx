@@ -1240,6 +1240,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
         { key: 'in-progress', label: 'In Progress', count: tasks.filter(t => t.status === 'in-progress').length },
         { key: 'completed', label: 'Completed', count: tasks.filter(t => t.status === 'completed').length },
         { key: 'overdue', label: 'Overdue', count: tasks.filter(t => effectiveStatus(t) === 'overdue').length },
+        { key: 'cancelled', label: 'Cancelled', count: tasks.filter(t => t.status === 'cancelled').length },
     ];
 
     const baseFiltered = filter === 'all'

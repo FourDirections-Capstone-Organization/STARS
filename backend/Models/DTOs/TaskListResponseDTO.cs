@@ -15,4 +15,5 @@ public class TaskListResponseDTO
     public int InProgressCount { get; set; }
     public int CompletedCount { get; set; }
     public int OverdueCount { get; set; }
+    public int CancelledCount { get; set; }
 }

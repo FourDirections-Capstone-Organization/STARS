@@ -1,4 +1,4 @@
-﻿using Backend.Models;
+using Backend.Models;
 using Backend.Models.DTOs;
 
 namespace Backend.Modules.TaskManagement;
@@ -11,4 +11,5 @@ public interface ITaskWorkflowService
     Task<ApiResponseDTO<TaskResponseDTO>> PlaceOnHoldAsync(Guid taskId, PlaceOnHoldDTO dto, Guid coordinatorId, string? ipAddress = null);
     Task<ApiResponseDTO<TaskResponseDTO>> ResumeTaskAsync(Guid taskId, ResumeTaskDTO dto, Guid coordinatorId, string? ipAddress = null);
     Task<ApiResponseDTO<TaskResponseDTO>> CancelTaskAsync(Guid taskId, CancelTaskDTO dto, Guid coordinatorId, string? ipAddress = null);
+    Task<ApiResponseDTO<TaskResponseDTO>> RestoreTaskAsync(Guid taskId, Guid coordinatorId, string? ipAddress = null);
 }

@@ -509,7 +509,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 <Clock size={13} /> Hold
                             </button>
                         )}
-                        {isCoordinator && effectiveStatus !== 'Completed' && effectiveStatus !== 'Cancelled' && effectiveStatus !== 'Done/Pending Review' && effectiveStatus !== 'Pending Admin Review' && (
+                        {isCoordOrManager && effectiveStatus !== 'Completed' && effectiveStatus !== 'Cancelled' && (
                             <button className="tv-btn tv-btn-outline-danger" onClick={() => setShowCancel(true)}>
                                 <XCircle size={13} /> Cancel
                             </button>

@@ -216,6 +216,8 @@ public class TaskService : ITaskService
             t.Status != Models.Enums.TaskStatus.Completed &&
             t.Status != Models.Enums.TaskStatus.Cancelled &&
             (t.RevisedDeadline ?? t.Deadline) < nowUtc);
+        var cancelledCount = await query.CountAsync(t =>
+            t.Status == Models.Enums.TaskStatus.Cancelled);
 
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
@@ -273,10 +275,78 @@ public class TaskService : ITaskService
             ActiveCount = activeCount,
             InProgressCount = inProgressCount,
             CompletedCount = completedCount,
-            OverdueCount = overdueCount
+            OverdueCount = overdueCount,
+            CancelledCount = cancelledCount
         };
 
         return ApiResponseDTO<TaskListResponseDTO>.Success(paginatedResult);
+    }
+
+    public async Task<ApiResponseDTO<bool>> DeleteAsync(Guid taskId, Guid requestUserId, UserRole requestUserRole, string? ipAddress = null)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .Include(t => t.Attachments)
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task is null)
+            return ApiResponseDTO<bool>.Failure("Task not found");
+
+        if (requestUserRole != UserRole.Coordinator && requestUserRole != UserRole.Manager)
+            return ApiResponseDTO<bool>.Failure("Only Coordinators and Managers can delete tasks");
+
+        _db.TaskAttachments.RemoveRange(task.Attachments);
+        _db.TaskAssignments.RemoveRange(task.Assignments);
+        _db.Tasks.Remove(task);
+        await _db.SaveChangesAsync();
+
+        await _auditLogService.LogAsync(
+            requestUserId,
+            AuditActionType.Delete,
+            "Task",
+            taskId,
+            ipAddress,
+            $"Task '{task.Title}' permanently deleted",
+            "TaskManagement");
+
+        return ApiResponseDTO<bool>.Success(true, "Task deleted successfully");
+    }
+
+    public async Task<ApiResponseDTO<int>> EmptyBinAsync(Guid requestUserId, UserRole requestUserRole, Guid? departmentId = null, string? ipAddress = null)
+    {
+        if (requestUserRole != UserRole.Coordinator && requestUserRole != UserRole.Manager)
+            return ApiResponseDTO<int>.Failure("Only Coordinators and Managers can empty the bin");
+
+        var query = _db.Tasks
+            .Include(t => t.Assignments)
+            .Include(t => t.Attachments)
+            .Where(t => t.Status == Models.Enums.TaskStatus.Cancelled);
+
+        if (requestUserRole == UserRole.Coordinator && departmentId.HasValue)
+            query = query.Where(t => t.AssignedDepartmentId == departmentId.Value);
+
+        var cancelledTasks = await query.ToListAsync();
+        var count = cancelledTasks.Count;
+
+        foreach (var t in cancelledTasks)
+        {
+            _db.TaskAttachments.RemoveRange(t.Attachments);
+            _db.TaskAssignments.RemoveRange(t.Assignments);
+            _db.Tasks.Remove(t);
+        }
+
+        await _db.SaveChangesAsync();
+
+        await _auditLogService.LogAsync(
+            requestUserId,
+            AuditActionType.Delete,
+            "Task",
+            Guid.Empty,
+            ipAddress,
+            $"Emptied bin: {count} cancelled task(s) permanently removed",
+            "TaskManagement");
+
+        return ApiResponseDTO<int>.Success(count, $"{count} item(s) permanently removed from bin");
     }
 
     public async Task<ApiResponseDTO<TaskResponseDTO>> GetByIdAsync(Guid id, Guid requestUserId, UserRole requestUserRole)

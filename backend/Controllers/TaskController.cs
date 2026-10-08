@@ -240,6 +240,104 @@ public class TaskController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPatch("{id:guid}/restore")]
+    [HttpPatch("{id:guid}/restore-task")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> Restore(Guid id)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var coordinatorId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var ipAddress = GetIpAddress();
+        var result = await _workflowService.RestoreTaskAsync(id, coordinatorId, ipAddress);
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [HttpDelete("{id:guid}/delete-task")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        var ipAddress = GetIpAddress();
+        var result = await _taskService.DeleteAsync(id, requestUserId, requestUserRole, ipAddress);
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("empty-bin")]
+    [HttpDelete("empty-bin/{userId?}")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> EmptyBin()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        Guid? requestUserDepartmentId = null;
+        if (requestUserRole == UserRole.Coordinator)
+        {
+            var user = await _db.Users.FindAsync(requestUserId);
+            requestUserDepartmentId = user?.DepartmentId;
+        }
+
+        var ipAddress = GetIpAddress();
+        var result = await _taskService.EmptyBinAsync(requestUserId, requestUserRole, requestUserDepartmentId, ipAddress);
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [HttpGet("bin-records/{userId?}")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> GetBinRecords(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 100)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        Guid? requestUserDepartmentId = null;
+        if (requestUserRole == UserRole.Coordinator)
+        {
+            var user = await _db.Users.FindAsync(requestUserId);
+            requestUserDepartmentId = user?.DepartmentId;
+        }
+
+        var result = await _taskService.GetAllAsync(
+            requestUserId, requestUserRole, requestUserDepartmentId,
+            pageNumber, pageSize,
+            status: Models.Enums.TaskStatus.Cancelled);
+
+        return Ok(result);
+    }
+
     private string? GetIpAddress()
     {
         var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();

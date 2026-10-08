@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Menu, X } from 'lucide-react';
+import { Package, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useToast } from '../../components/Toast/Toast';
 import api from '../../api';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
@@ -47,7 +47,6 @@ export default function Login() {
     const [passwordError, setPasswordError] = useState('');
     const [pendingVerification, setPendingVerification] = useState(false);
     const [resending, setResending] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -274,37 +273,10 @@ export default function Login() {
                         <img src={SpeedexLogo} alt="Speedex Courier & Forwarder, Inc." className="speedex-nav-logo" />
                     </a>
 
-                    {/* Desktop / Tablet Nav */}
                     <nav className="speedex-nav-links" aria-label="Speedex Public Website Navigation">
-                        <a href={`${publicWebsiteUrl}/`} className="speedex-nav-link">Home</a>
-                        <a href={`${publicWebsiteUrl}/advisories`} className="speedex-nav-link">Advisories</a>
-                        <a href={`${publicWebsiteUrl}/track`} className="speedex-nav-link">Track</a>
-                        <a href={`${publicWebsiteUrl}/about`} className="speedex-nav-link">About Us</a>
-                        <a href={`${publicWebsiteUrl}/contact`} className="speedex-nav-link">Contact</a>
+                        <a href={`${publicWebsiteUrl}/`} className="speedex-nav-link">Back to Home</a>
                     </nav>
-
-                    {/* Mobile Hamburger Button */}
-                    <button
-                        type="button"
-                        className="speedex-mobile-menu-toggle"
-                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        aria-label="Toggle navigation menu"
-                        aria-expanded={mobileMenuOpen}
-                    >
-                        {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-                    </button>
                 </div>
-
-                {/* Mobile Dropdown Nav Menu */}
-                {mobileMenuOpen && (
-                    <nav className="speedex-mobile-dropdown-menu" aria-label="Mobile Navigation Menu">
-                        <a href={`${publicWebsiteUrl}/`} className="speedex-mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Home</a>
-                        <a href={`${publicWebsiteUrl}/advisories`} className="speedex-mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Advisories</a>
-                        <a href={`${publicWebsiteUrl}/track`} className="speedex-mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Track</a>
-                        <a href={`${publicWebsiteUrl}/about`} className="speedex-mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>About Us</a>
-                        <a href={`${publicWebsiteUrl}/contact`} className="speedex-mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Contact</a>
-                    </nav>
-                )}
             </header>
 
             <div className="login-page">
