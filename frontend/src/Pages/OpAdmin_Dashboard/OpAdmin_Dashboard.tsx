@@ -3774,7 +3774,13 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             const res = await api.get(`/api/reports/kpi?${params.toString()}`);
             const json = res.data;
             if (json?.isSuccess && json?.data) {
-                setKpiData(json.data);
+                if (json.data.totalCompletedTasks === 0 && (!json.data.employeeKpis || json.data.employeeKpis.length === 0)) {
+                    setKpiNoRecords(true);
+                    setKpiData(null);
+                } else {
+                    setKpiData(json.data);
+                    setKpiNoRecords(false);
+                }
             } else {
                 setKpiNoRecords(true);
             }

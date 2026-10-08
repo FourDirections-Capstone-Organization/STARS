@@ -34,28 +34,63 @@ public class ReportService : IReportService
             .Include(t => t.Assignments)
                 .ThenInclude(a => a.AssignedUser)
                     .ThenInclude(u => u!.Department)
+            .Include(t => t.CreatedBy)
+                .ThenInclude(u => u!.Department)
             .Where(t => t.Status == Models.Enums.TaskStatus.Completed)
-            .Where(t => t.UpdatedAt >= dateStart && t.UpdatedAt <= dateEnd);
+            .Where(t => ((t.UpdatedAt ?? t.CreatedAt) >= dateStart && (t.UpdatedAt ?? t.CreatedAt) <= dateEnd) ||
+                        (t.CreatedAt >= dateStart && t.CreatedAt <= dateEnd));
 
         if (requestUserRole == UserRole.Coordinator && requestUserDepartmentId.HasValue)
-            query = query.Where(t => t.AssignedDepartmentId == requestUserDepartmentId.Value);
+        {
+            query = query.Where(t =>
+                t.AssignedDepartmentId == requestUserDepartmentId.Value ||
+                t.Assignments.Any(a => a.AssignedUser != null && a.AssignedUser.DepartmentId == requestUserDepartmentId.Value));
+        }
 
-        if (filters?.EmployeeId.HasValue == true)
-            query = query.Where(t => t.Assignments.Any(a => a.AssignedUserId == filters.EmployeeId.Value));
+        if (filters?.EmployeeId.HasValue == true && filters.EmployeeId.Value != Guid.Empty)
+        {
+            query = query.Where(t =>
+                t.Assignments.Any(a => a.AssignedUserId == filters.EmployeeId.Value) ||
+                (t.Assignments.Count == 0 && t.CreatedById == filters.EmployeeId.Value));
+        }
 
         var completedTasks = await query.ToListAsync();
 
         if (completedTasks.Count == 0)
-            return ApiResponseDTO<KpiTrackingDTO>.Failure("No completed tasks found for the selected criteria.");
+        {
+            var emptyResult = new KpiTrackingDTO
+            {
+                PeriodStart = dateStart,
+                PeriodEnd = dateEnd,
+                TotalCompletedTasks = 0,
+                TotalOnTimeTasks = 0,
+                TotalLateTasks = 0,
+                OverallOnTimeRate = 0,
+                OverallLateRate = 0,
+                EmployeeKpis = new List<EmployeeKpiDTO>()
+            };
+            return ApiResponseDTO<KpiTrackingDTO>.Success(emptyResult);
+        }
 
         var employeeKpis = completedTasks
-            .SelectMany(t => t.Assignments.Select(a => new
-            {
-                a.AssignedUserId,
-                a.AssignedUser,
-                IsOnTime = t.UpdatedAt <= (t.RevisedDeadline ?? t.Deadline)
-            }))
-            .GroupBy(x => x.AssignedUserId)
+            .SelectMany(t => t.Assignments.Any()
+                ? t.Assignments.Select(a => new
+                {
+                    UserId = a.AssignedUserId,
+                    User = a.AssignedUser,
+                    IsOnTime = (t.UpdatedAt ?? t.CreatedAt) <= (t.RevisedDeadline ?? t.Deadline)
+                })
+                : new[]
+                {
+                    new
+                    {
+                        UserId = t.CreatedById,
+                        User = t.CreatedBy,
+                        IsOnTime = (t.UpdatedAt ?? t.CreatedAt) <= (t.RevisedDeadline ?? t.Deadline)
+                    }
+                })
+            .Where(x => x.User != null)
+            .GroupBy(x => x.UserId)
             .Select(g =>
             {
                 var first = g.First();
@@ -66,11 +101,11 @@ public class ReportService : IReportService
                 return new EmployeeKpiDTO
                 {
                     EmployeeId = g.Key,
-                    EmployeeName = first.AssignedUser is not null
-                        ? $"{first.AssignedUser.FirstName} {first.AssignedUser.LastName}".Trim()
+                    EmployeeName = first.User is not null
+                        ? $"{first.User.FirstName} {first.User.LastName}".Trim()
                         : "Unknown",
-                    EmployeeNumber = first.AssignedUser?.EmployeeNumber ?? "",
-                    Department = first.AssignedUser?.Department?.Name ?? "",
+                    EmployeeNumber = first.User?.EmployeeNumber ?? "",
+                    Department = first.User?.Department?.Name ?? "",
                     TotalCompleted = total,
                     OnTimeCount = onTime,
                     LateCount = late,
