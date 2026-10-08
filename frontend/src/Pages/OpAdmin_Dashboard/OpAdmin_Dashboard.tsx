@@ -3530,6 +3530,13 @@ const REPORT_PAGE_SIZE = 10;
 type TimeChunk = 'Monthly' | 'Quarterly' | 'Annual';
 type YearType = 'Calendar' | 'Fiscal';
 
+const formatLocalDate = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const computeDateRange = (chunk: TimeChunk, yearType: YearType = 'Calendar', refDate: Date = new Date()) => {
     const y = refDate.getFullYear();
     const m = refDate.getMonth(); // 0 to 11
@@ -3538,8 +3545,8 @@ const computeDateRange = (chunk: TimeChunk, yearType: YearType = 'Calendar', ref
         const start = new Date(y, m, 1);
         const end = new Date(y, m + 1, 0);
         return {
-            start: start.toISOString().split('T')[0],
-            end: end.toISOString().split('T')[0],
+            start: formatLocalDate(start),
+            end: formatLocalDate(end),
         };
     } else if (chunk === 'Quarterly') {
         if (yearType === 'Fiscal') {
@@ -3553,16 +3560,16 @@ const computeDateRange = (chunk: TimeChunk, yearType: YearType = 'Calendar', ref
             const start = new Date(qYear, qStartMonth, 1);
             const end = new Date(qYear, qStartMonth + 3, 0);
             return {
-                start: start.toISOString().split('T')[0],
-                end: end.toISOString().split('T')[0],
+                start: formatLocalDate(start),
+                end: formatLocalDate(end),
             };
         } else {
             const q = Math.floor(m / 3);
             const start = new Date(y, q * 3, 1);
             const end = new Date(y, (q + 1) * 3, 0);
             return {
-                start: start.toISOString().split('T')[0],
-                end: end.toISOString().split('T')[0],
+                start: formatLocalDate(start),
+                end: formatLocalDate(end),
             };
         }
     } else { // Annual
@@ -3571,15 +3578,15 @@ const computeDateRange = (chunk: TimeChunk, yearType: YearType = 'Calendar', ref
             const start = new Date(fYear, 9, 1); // Oct 1
             const end = new Date(fYear + 1, 9, 0); // Sep 30
             return {
-                start: start.toISOString().split('T')[0],
-                end: end.toISOString().split('T')[0],
+                start: formatLocalDate(start),
+                end: formatLocalDate(end),
             };
         } else {
             const start = new Date(y, 0, 1); // Jan 1
             const end = new Date(y, 11, 31); // Dec 31
             return {
-                start: start.toISOString().split('T')[0],
-                end: end.toISOString().split('T')[0],
+                start: formatLocalDate(start),
+                end: formatLocalDate(end),
             };
         }
     }
@@ -3874,8 +3881,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     const [kpiError, setKpiError] = useState('');
     const [kpiNoRecords, setKpiNoRecords] = useState(false);
 
-    const handleKpiGenerate = async () => {
-        if (!kpiFilter.dateRangeStart || !kpiFilter.dateRangeEnd) {
+    const handleKpiGenerate = async (customFilter?: { dateRangeStart: string; dateRangeEnd: string; employeeId?: string }) => {
+        const filterToUse = customFilter || kpiFilter;
+        if (!filterToUse.dateRangeStart || !filterToUse.dateRangeEnd) {
             setKpiError('Please select a date range first.');
             return;
         }
@@ -3886,9 +3894,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         setKpiData(null);
         try {
             const params = new URLSearchParams();
-            params.set('dateRangeStart', kpiFilter.dateRangeStart);
-            params.set('dateRangeEnd', kpiFilter.dateRangeEnd);
-            if (kpiFilter.employeeId) params.set('employeeId', kpiFilter.employeeId);
+            params.set('dateRangeStart', filterToUse.dateRangeStart);
+            params.set('dateRangeEnd', filterToUse.dateRangeEnd);
+            if (filterToUse.employeeId) params.set('employeeId', filterToUse.employeeId);
             const res = await api.get(`/api/reports/kpi?${params.toString()}`);
             const json = res.data;
             if (json?.isSuccess && json?.data) {
@@ -4604,9 +4612,54 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
                     {kpiNoRecords && (
                         <div className="card" style={{ marginTop: 16 }}>
-                            <div className="report-empty-state">
-                                <FileText size={22} />
-                                <p>No completed tasks found for the selected criteria.</p>
+                            <div className="report-empty-state" style={{ textAlign: 'center', padding: '28px 20px' }}>
+                                <FileText size={32} style={{ color: 'var(--text-muted)', marginBottom: 10 }} />
+                                <p style={{ fontWeight: 700, fontSize: 15, margin: '0 0 6px', color: 'var(--text-primary)' }}>
+                                    No completed tasks found for the selected criteria.
+                                </p>
+                                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 auto 16px', maxWidth: 520, lineHeight: 1.5 }}>
+                                    KPI Tracking evaluates SLA compliance (on-time vs. late) specifically for tasks in <strong>Completed</strong> status within the selected timeframe.
+                                </p>
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => {
+                                            const annual = computeDateRange('Annual', 'Calendar');
+                                            const newFilter = { ...kpiFilter, dateRangeStart: annual.start, dateRangeEnd: annual.end };
+                                            setKpiFilter(newFilter);
+                                            handleKpiGenerate(newFilter);
+                                        }}
+                                    >
+                                        🗓️ Search Full Calendar Year
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => {
+                                            const today = formatLocalDate(new Date());
+                                            const pastYear = formatLocalDate(new Date(new Date().setFullYear(new Date().getFullYear() - 2)));
+                                            const newFilter = { ...kpiFilter, dateRangeStart: pastYear, dateRangeEnd: today };
+                                            setKpiFilter(newFilter);
+                                            handleKpiGenerate(newFilter);
+                                        }}
+                                    >
+                                        🌐 Search Past 2 Years
+                                    </button>
+                                    {kpiFilter.employeeId && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => {
+                                                const newFilter = { ...kpiFilter, employeeId: '' };
+                                                setKpiFilter(newFilter);
+                                                handleKpiGenerate(newFilter);
+                                            }}
+                                        >
+                                            👥 Clear Employee Filter
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
