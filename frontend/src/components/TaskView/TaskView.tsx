@@ -89,7 +89,7 @@ interface TaskViewProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const isEffectivelyOverdue = (t: TaskViewTask): boolean =>
-    t.taskStatus !== 'Completed' && !!t.dueAt && new Date(t.dueAt) < new Date();
+    t.taskStatus !== 'Completed' && t.taskStatus !== 'Cancelled' && t.taskStatus !== 'On Hold' && !!t.dueAt && new Date(t.dueAt) < new Date();
 
 const fmtDate = (d: string): string => {
     if (!d) return '—';
@@ -924,12 +924,12 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     if (!revisedDeadline) return;
                                     setResuming(true);
                                     try {
-                                        await api.patch(`/api/Task/${task.taskId}/resume`, { revisedDeadline: new Date(revisedDeadline).toISOString() });
-                                        // The backend restores the status held before the hold
-                                        // (Not Started or In Progress); In Progress is the common case.
-                                        setLocalStatus('In Progress');
+                                        const res = await api.patch(`/api/Task/${task.taskId}/resume`, { revisedDeadline: new Date(revisedDeadline).toISOString() });
+                                        const resumedDto = res?.data?.data ?? res?.data;
+                                        const newStatus: TaskViewTask['taskStatus'] = (resumedDto?.status === 0 || resumedDto?.status === 'NotStarted') ? 'Not Started' : 'In Progress';
+                                        setLocalStatus(newStatus);
                                         setShowResume(false);
-                                        onUpdate?.({ ...task, taskStatus: 'In Progress' });
+                                        onUpdate?.({ ...task, taskStatus: newStatus, dueAt: resumedDto?.deadline ?? (new Date(revisedDeadline).toISOString()) });
                                     } catch (err: any) {
                                         console.error(err);
                                     } finally { setResuming(false); }

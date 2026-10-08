@@ -2548,28 +2548,42 @@ export default function Dashboard() {
     };
 
     const mapManagerTaskToView = (t: any): TaskViewTask => {
-        const statusNum = t.status;
-        const mappedStatus = STATUS_LABELS[statusNum] ?? 'Not Started';
+        const statusVal = t.status;
+        let mappedStatus: TaskViewTask['taskStatus'] = 'Not Started';
+        if (typeof statusVal === 'number') {
+            const STATUS_MAP: Record<number, TaskViewTask['taskStatus']> = {
+                0: 'Not Started', 1: 'In Progress', 2: 'Done/Pending Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled'
+            };
+            mappedStatus = STATUS_MAP[statusVal] ?? 'Not Started';
+        } else if (typeof statusVal === 'string') {
+            const sLower = statusVal.toLowerCase();
+            if (sLower === 'cancelled' || sLower === 'canceled') mappedStatus = 'Cancelled';
+            else if (sLower === 'onhold' || sLower === 'on hold') mappedStatus = 'On Hold';
+            else if (sLower === 'completed' || sLower === 'done') mappedStatus = 'Completed';
+            else if (sLower === 'inprogress' || sLower === 'in progress') mappedStatus = 'In Progress';
+            else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'in review') mappedStatus = 'Done/Pending Review';
+            else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') mappedStatus = 'Not Started';
+        }
         const assignees = t.assignees ?? [];
         const firstAssignee = assignees[0];
         return {
             taskId: t.id ?? t.taskId ?? '',
-            taskTitle: t.title ?? t.taskTitle ?? '',
+            taskTitle: t.title ?? t.taskTitle ?? t.name ?? '',
             taskDescription: t.description ?? t.taskDescription ?? '',
-            priority: ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] ?? 'Medium',
-            dueAt: t.deadline ?? t.dueAt ?? null,
-            taskStatus: mappedStatus as TaskViewTask['taskStatus'],
+            priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) ?? 'Medium',
+            dueAt: t.deadline ?? t.dueAt ?? t.dueDate ?? null,
+            taskStatus: mappedStatus,
             taskRemarks: t.remarks ?? t.taskRemarks ?? '',
-            assignedEmployee: firstAssignee?.fullName ?? t.assignedEmployee ?? 'Unassigned',
+            assignedEmployee: firstAssignee?.fullName ?? t.assignee?.name ?? t.assignedEmployee ?? 'Unassigned',
             createdByEmployee: t.createdByName ?? t.createdByEmployee ?? localStorage.getItem('employeeName') ?? 'Manager',
-            assignedTo: firstAssignee?.userId ?? t.assignedTo ?? '',
+            assignedTo: firstAssignee?.userId ?? t.assignee?.id ?? t.assignedTo ?? '',
             assignees: assignees.map((a: any) => ({
                 fullName: a.fullName ?? a.FullName ?? '',
                 completionPercentage: a.completionPercentage ?? a.CompletionPercentage ?? 0,
             })),
             createdAt: t.createdAt ?? new Date().toISOString(),
             isConfidential: t.isConfidential ?? false,
-            classification: t.classification === 1 ? 'special' : 'routine',
+            classification: t.classification === 1 || t.classification === 'special' ? 'special' : 'routine',
             isSLALocked: t.isSLALocked ?? false,
             assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
             assignedDepartmentId: t.assignedDepartmentId ?? t.AssignedDepartmentId ?? '',
@@ -2584,22 +2598,41 @@ export default function Dashboard() {
             const res = await api.get('/api/Task', { pageNumber: 1, pageSize: 500 });
             const json = res.data;
             const raw = Array.isArray(json) ? json : (Array.isArray(json?.data?.items) ? json.data.items : (Array.isArray(json?.data) ? json.data : []));
-            setTmTasks(raw.map((t: any) => ({
-                id: t.id ?? t.taskId,
-                name: t.title ?? t.taskTitle ?? '',
-                referenceNumber: t.taskReferenceNumber ?? '',
-                classification: t.classification === 1 ? 'special' : 'routine',
-                project: t.classification === 1 ? 'SpecialTask' : '',
-                assignee: t.assignees?.length ? { id: t.assignees[0].userId ?? '', name: t.assignees[0].fullName ?? '' } : undefined,
-                priority: ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] || 'Medium',
-                status: ({ 0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Done', 4: 'On hold', 5: 'Cancelled' } as Record<number, any>)[t.status] || 'Backlog',
-                dueDate: t.deadline ?? t.dueAt ?? undefined,
-                progress: t.status === 3 ? 100 : t.status === 1 ? 50 : t.status === 2 ? 80 : t.status === 0 ? 10 : 0,
-                isArchived: false,
-                isConfidential: t.isConfidential ?? false,
-                isSLALocked: t.isSLALocked ?? false,
-                assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
-            })));
+            setTmTasks(raw.map((t: any) => {
+                let statusVal: TMTask['status'] = 'Backlog';
+                const s = t.status;
+                if (typeof s === 'number') {
+                    const map: Record<number, TMTask['status']> = {
+                        0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Done', 4: 'On hold', 5: 'Cancelled'
+                    };
+                    statusVal = map[s] || 'Backlog';
+                } else if (typeof s === 'string') {
+                    const sLower = s.toLowerCase();
+                    if (sLower === 'cancelled' || sLower === 'canceled') statusVal = 'Cancelled';
+                    else if (sLower === 'onhold' || sLower === 'on hold') statusVal = 'On hold';
+                    else if (sLower === 'completed' || sLower === 'done') statusVal = 'Done';
+                    else if (sLower === 'inprogress' || sLower === 'in progress') statusVal = 'In progress';
+                    else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'in review') statusVal = 'In review';
+                    else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') statusVal = 'To do';
+                }
+                return {
+                    id: t.id ?? t.taskId,
+                    name: t.title ?? t.taskTitle ?? '',
+                    referenceNumber: t.taskReferenceNumber ?? '',
+                    classification: t.classification === 1 || t.Classification === 1 ? 'special' : 'routine',
+                    project: t.taskCategory ?? (t.classification === 1 ? 'SpecialTask' : ''),
+                    assignee: t.assignees?.length ? { id: t.assignees[0].userId ?? '', name: t.assignees[0].fullName ?? '' } : undefined,
+                    priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) || 'Medium',
+                    status: statusVal,
+                    dueDate: t.deadline ?? t.dueAt ?? undefined,
+                    progress: statusVal === 'Done' ? 100 : statusVal === 'In progress' ? 50 : statusVal === 'In review' ? 80 : statusVal === 'To do' ? 10 : 0,
+                    isArchived: false,
+                    isDeleted: statusVal === 'Cancelled',
+                    isConfidential: t.isConfidential ?? false,
+                    isSLALocked: t.isSLALocked ?? false,
+                    assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
+                };
+            }));
         } catch { setTmTasks([]); }
         if (!silent) setTmLoading(false);
     };

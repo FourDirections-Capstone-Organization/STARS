@@ -102,6 +102,7 @@ interface Task {
     pushBackComment?: string;
     reviewRemarks?: string;
     holdReason?: string;
+    cancellationReason?: string;
     isApproved?: boolean;
 }
 
@@ -118,7 +119,7 @@ interface TaskResponseDTO {
     priority?: string;
     deadline?: string;
     dueAt?: string;
-    status?: number;
+    status?: number | string;
     taskStatus?: string;
     assignees?: { userId?: string; fullName?: string; employeeNumber?: string; role?: string }[];
     assignedEmployee?: string;
@@ -132,6 +133,7 @@ interface TaskResponseDTO {
     pushBackComment?: string;
     reviewRemarks?: string;
     holdReason?: string;
+    cancellationReason?: string;
     isApproved?: boolean;
 }
 
@@ -155,27 +157,51 @@ const NOTIF_TYPE_MAP: Record<number, string> = {
     8: 'TaskCompleted', 9: 'TemplateTaskUnassigned'
 };
 
+const normalizeStatusString = (rawStatus: any): string => {
+    if (typeof rawStatus === 'number') {
+        return STATUS_LABELS[rawStatus] ?? 'Assigned';
+    }
+    if (typeof rawStatus === 'string') {
+        const s = rawStatus.trim();
+        const sLower = s.toLowerCase();
+        if (sLower === 'cancelled' || sLower === 'canceled') return 'Cancelled';
+        if (sLower === 'onhold' || sLower === 'on hold') return 'On Hold';
+        if (sLower === 'completed' || sLower === 'done') return 'Completed';
+        if (sLower === 'inprogress' || sLower === 'in progress' || sLower === 'in-progress') return 'In Progress';
+        if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'pending review' || sLower === 'pending-review') return 'Pending Admin Review';
+        if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do' || sLower === 'todo') return 'Assigned';
+        if (sLower === 'draft' || sLower === 'pending') return 'Pending';
+        return s;
+    }
+    return 'Assigned';
+};
+
 const dtoToTask = (dto: TaskResponseDTO): Task => {
     const taskId = dto.id ?? dto.taskId ?? '';
     const title = dto.title ?? dto.taskTitle ?? '';
     const description = dto.description ?? dto.taskDescription ?? '';
-    const priorityStr = dto.priorityLevel !== undefined ? PRIORITY_LABELS[dto.priorityLevel] : (dto.priority || 'Medium');
+    const priorityStr = typeof dto.priorityLevel === 'number'
+        ? (PRIORITY_LABELS[dto.priorityLevel] ?? 'Medium')
+        : (dto.priority || 'Medium');
     const dueAt = dto.deadline ?? dto.dueAt ?? '';
-    const statusStr = dto.status !== undefined ? STATUS_LABELS[dto.status] : (dto.taskStatus || 'Assigned');
+    const rawStatus = dto.status !== undefined ? dto.status : dto.taskStatus;
+    const statusStr = normalizeStatusString(rawStatus);
     const assignedEmployee = dto.assignees?.length ? dto.assignees[0].fullName ?? '' : (dto.assignedEmployee ?? '');
     const createdByEmployee = dto.createdByName ?? dto.createdByEmployee ?? '';
 
     const priorityMap: Record<string, Priority> = {
         High: 'high', Medium: 'medium', Low: 'low', Urgent: 'high',
+        high: 'high', medium: 'medium', low: 'low', urgent: 'high',
     };
     const statusMap: Record<string, TaskStatus> = {
         Draft: 'pending', Pending: 'pending', Assigned: 'assigned',
-        'In Progress': 'in-progress', 'Pending Admin Review': 'pending-review', Done: 'done', Completed: 'completed',
+        'In Progress': 'in-progress', 'Pending Admin Review': 'pending-review',
+        Done: 'done', Completed: 'completed',
         'On Hold': 'on-hold', Cancelled: 'cancelled',
     };
-    const status: TaskStatus = statusMap[statusStr] ?? 'pending';
+    const status: TaskStatus = statusMap[statusStr] ?? (statusStr.toLowerCase() as TaskStatus) ?? 'pending';
     const defaultProgress: Record<TaskStatus, number> = {
-        pending: 0, assigned: 0, 'in-progress': 50, 'pending-review': 90, done: 90, completed: 100, overdue: 0, cancelled: 0,
+        pending: 0, assigned: 0, 'in-progress': 50, 'pending-review': 90, done: 90, completed: 100, overdue: 0, cancelled: 0, 'on-hold': 0,
     };
     return {
         id: taskId,
@@ -198,6 +224,7 @@ const dtoToTask = (dto: TaskResponseDTO): Task => {
         pushBackComment: dto.pushBackComment,
         reviewRemarks: dto.reviewRemarks,
         holdReason: dto.holdReason,
+        cancellationReason: dto.cancellationReason,
         isApproved: dto.isApproved,
     };
 };
@@ -474,6 +501,26 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ task, onUpdate, onClose }) => {
                             {task.holdReason
                                 ? <>Reason: {task.holdReason}</>
                                 : 'This task has been paused by the assigner and cannot be updated until it is resumed.'}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {task.status === 'cancelled' && (
+                <div style={{
+                    marginBottom: 12, padding: '10px 12px', borderRadius: 8,
+                    background: 'rgba(238,93,80,0.08)', border: '1px solid rgba(238,93,80,0.25)',
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                }}>
+                    <AlertCircle size={14} style={{ color: '#EE5D50', marginTop: 1, flexShrink: 0 }} />
+                    <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#EE5D50', marginBottom: 2 }}>
+                            Task Cancelled — read-only
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {task.cancellationReason
+                                ? <>Reason: {task.cancellationReason}</>
+                                : 'This task was cancelled and is no longer active.'}
                         </div>
                     </div>
                 </div>
@@ -783,7 +830,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     const URGENT_PAGE_SIZE = 6;
     const PROGRESS_PAGE_SIZE = 8;
 
-    const activeAndCompletedTasks = tasks.filter(t => t.status !== 'cancelled');
+    const activeAndCompletedTasks = tasks.filter(t => t.status !== 'cancelled' && t.status !== 'on-hold');
     const total = activeAndCompletedTasks.length;
     const done = activeAndCompletedTasks.filter(t => t.status === 'completed').length;
     const inProg = activeAndCompletedTasks.filter(t => t.status === 'in-progress').length;
@@ -802,9 +849,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     const safeProgressPage = Math.min(progressPage, progressTotalPages);
     const progressItems = progressFiltered.slice((safeProgressPage - 1) * PROGRESS_PAGE_SIZE, safeProgressPage * PROGRESS_PAGE_SIZE);
 
-    // High Priority - not completed or cancelled, searchable + status filter, paginated.
+    // High Priority - not completed, cancelled, or on hold, searchable + status filter, paginated.
     const urgentFiltered = tasks
-        .filter(t => t.priority === 'high' && t.status !== 'completed' && t.status !== 'cancelled')
+        .filter(t => t.priority === 'high' && t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'on-hold')
         .filter(t => !urgentSearch || t.name.toLowerCase().includes(urgentSearch.toLowerCase()))
         .filter(t => !urgentStatus || effectiveStatus(t) === urgentStatus);
     const urgentTotalPages = Math.max(1, Math.ceil(urgentFiltered.length / URGENT_PAGE_SIZE));
@@ -1101,9 +1148,9 @@ const EmployeeKanbanBoard: React.FC<EmployeeKanbanBoardProps> = ({ tasks, onView
     const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
     const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
-    const todoTasks = useMemo(() => tasks.filter(t => (t.status === 'pending' || t.status === 'assigned') && t.status !== 'cancelled'), [tasks]);
-    const inProgressTasks = useMemo(() => tasks.filter(t => (t.status === 'in-progress' || t.status === 'overdue' || t.status === 'on-hold') && t.status !== 'cancelled'), [tasks]);
-    const doneTasks = useMemo(() => tasks.filter(t => (t.status === 'pending-review' || t.status === 'done' || t.status === 'completed') && t.status !== 'cancelled'), [tasks]);
+    const todoTasks = useMemo(() => tasks.filter(t => (t.status === 'pending' || t.status === 'assigned') && t.status !== 'cancelled' && t.status !== 'on-hold'), [tasks]);
+    const inProgressTasks = useMemo(() => tasks.filter(t => (t.status === 'in-progress' || t.status === 'overdue') && t.status !== 'cancelled' && t.status !== 'on-hold'), [tasks]);
+    const doneTasks = useMemo(() => tasks.filter(t => (t.status === 'pending-review' || t.status === 'done' || t.status === 'completed') && t.status !== 'cancelled' && t.status !== 'on-hold'), [tasks]);
 
     const handleDragStart = (e: React.DragEvent, task: Task) => {
         setDraggingTaskId(task.id);
@@ -1235,16 +1282,17 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
     const PAGE_SIZE = 9;
 
     const filters: { key: 'all' | TaskStatus; label: string; count: number }[] = [
-        { key: 'all', label: 'All', count: tasks.filter(t => t.status !== 'cancelled').length },
+        { key: 'all', label: 'All', count: tasks.filter(t => t.status !== 'cancelled' && t.status !== 'on-hold').length },
         { key: 'pending', label: 'Pending', count: tasks.filter(t => t.status === 'pending').length },
         { key: 'in-progress', label: 'In Progress', count: tasks.filter(t => t.status === 'in-progress').length },
+        { key: 'on-hold', label: 'On Hold', count: tasks.filter(t => t.status === 'on-hold').length },
         { key: 'completed', label: 'Completed', count: tasks.filter(t => t.status === 'completed').length },
         { key: 'overdue', label: 'Overdue', count: tasks.filter(t => effectiveStatus(t) === 'overdue').length },
         { key: 'cancelled', label: 'Cancelled', count: tasks.filter(t => t.status === 'cancelled').length },
     ];
 
     const baseFiltered = filter === 'all'
-        ? tasks.filter(t => t.status !== 'cancelled')
+        ? tasks.filter(t => t.status !== 'cancelled' && t.status !== 'on-hold')
         : filter === 'overdue'
             ? tasks.filter(t => effectiveStatus(t) === 'overdue')
             : tasks.filter(t => t.status === filter);

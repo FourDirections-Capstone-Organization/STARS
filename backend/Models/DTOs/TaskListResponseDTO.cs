@@ -16,4 +16,5 @@ public class TaskListResponseDTO
     public int CompletedCount { get; set; }
     public int OverdueCount { get; set; }
     public int CancelledCount { get; set; }
+    public int OnHoldCount { get; set; }
 }

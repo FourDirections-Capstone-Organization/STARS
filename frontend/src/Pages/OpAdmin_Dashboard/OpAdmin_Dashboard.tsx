@@ -507,7 +507,7 @@ const NAV_GROUPS = [
 
 // --- Helpers ------------------------------------------------------------------
 const isEffectivelyOverdue = (t: Task): boolean =>
-    t.taskStatus !== 'Completed' && t.taskStatus !== 'Draft' && t.taskStatus !== 'Done' && t.taskStatus !== 'Pending Admin Review' && !!t.dueAt && new Date(t.dueAt) < new Date();
+    t.taskStatus !== 'Completed' && t.taskStatus !== 'Draft' && t.taskStatus !== 'Done' && t.taskStatus !== 'Pending Admin Review' && t.taskStatus !== 'On Hold' && t.taskStatus !== 'Cancelled' && !!t.dueAt && new Date(t.dueAt) < new Date();
 
 const getInitials = (name: string): string => {
     if (!name) return 'OA';
@@ -6932,13 +6932,20 @@ export default function OpsAdminDashboard() {
         project: t.taskCategory,
         assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
         priority: t.priority as TMTask['priority'],
-        status: ({ Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', 'In Progress': 'In progress', 'Pending Admin Review': 'In review', Done: 'Done', Completed: 'Done', 'On Hold': 'On hold', Cancelled: 'Cancelled', Overdue: 'In progress' } as Record<string, TMTask['status']>)[t.taskStatus] || 'Backlog',
+        status: ({
+            Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', NotStarted: 'To do',
+            'In Progress': 'In progress', InProgress: 'In progress',
+            'Pending Admin Review': 'In review', DonePendingReview: 'In review',
+            Done: 'Done', Completed: 'Done',
+            'On Hold': 'On hold', OnHold: 'On hold',
+            Cancelled: 'Cancelled', Canceled: 'Cancelled', Overdue: 'In progress'
+        } as Record<string, TMTask['status']>)[t.taskStatus] || (t.taskStatus === 'Cancelled' ? 'Cancelled' : 'Backlog'),
         dueDate: t.dueAt || undefined,
         progress: (t.assignees && t.assignees.length > 0 && t.assignees[0].completionPercentage !== undefined)
             ? Math.round(t.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / t.assignees.length)
             : (t.taskStatus === 'Completed' || t.taskStatus === 'Done' ? 100 : t.taskStatus === 'In Progress' ? 50 : t.taskStatus === 'Pending Admin Review' ? 80 : t.taskStatus === 'Assigned' || t.taskStatus === 'Pending' ? 10 : 0),
         isArchived: false,
-        isDeleted: t.deleted || t.Deleted || false,
+        isDeleted: t.deleted || t.Deleted || t.taskStatus === 'Cancelled' || false,
         isConfidential: t.isConfidential ?? false,
     })), [tasks]);
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -7162,11 +7169,11 @@ export default function OpsAdminDashboard() {
     const [taskTotalPages, setTaskTotalPages] = useState(1);
     const [taskTotalRecords, setTaskTotalRecords] = useState(0);
     const [taskPageSize, setTaskPageSize] = useState(8);
-    const [taskTab, setTaskTab] = useState<'active' | 'completed' | 'bin'>('active');
+    const [taskTab, setTaskTab] = useState<'active' | 'on_hold' | 'completed' | 'bin'>('active');
     const [taskFilterPrio, setTaskFilterPrio] = useState('');
     const [taskFilterClassification, setTaskFilterClassification] = useState('');
     const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
-    const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number; cancelled: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0, cancelled: 0 });
+    const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number; cancelled: number; onHold: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0, cancelled: 0, onHold: 0 });
 
     // Reopen Requests state
     const [reopenRequests, setReopenRequests] = useState<ReopenRequest[]>([]);
@@ -7389,12 +7396,12 @@ export default function OpsAdminDashboard() {
             setLoadingTasks(true);
         }
         try {
-            const statusParam = taskTabRef.current === 'completed' ? `&status=3` : taskTabRef.current === 'bin' ? `&status=5` : ``;
-            // The Active tab filters out Done and Cancelled tasks client-side (TaskManager tabTasks),
-            // so exclude Completed (status 3) and Cancelled (status 5) server-side BEFORE pagination. Otherwise a
-            // Completed or Cancelled task landing on a page gets dropped client-side and that page
+            const statusParam = taskTabRef.current === 'on_hold' ? `&status=4` : taskTabRef.current === 'completed' ? `&status=3` : taskTabRef.current === 'bin' ? `&status=5` : ``;
+            // The Active tab filters out Done, Cancelled, and On Hold tasks client-side (TaskManager tabTasks),
+            // so exclude Completed (status 3), On Hold (status 4), and Cancelled (status 5) server-side BEFORE pagination. Otherwise an
+            // excluded task landing on a page gets dropped client-side and that page
             // shows fewer rows than the page size.
-            const excludeStatusParam = taskTabRef.current === 'active' ? `&excludeStatuses=3,5` : ``;
+            const excludeStatusParam = taskTabRef.current === 'active' ? `&excludeStatuses=3,4,5` : ``;
             // Dropdown filters are sent server-side so the server filters AND paginates
             // consistently — each page then shows the same number of matching rows.
             const prioParam = taskFilterPrioRef.current ? `&priority=${encodeURIComponent(taskFilterPrioRef.current)}` : ``;
@@ -7420,38 +7427,59 @@ export default function OpsAdminDashboard() {
                     completed: jsonRes.data.completedCount ?? 0,
                     overdue: jsonRes.data.overdueCount ?? 0,
                     cancelled: jsonRes.data.cancelledCount ?? 0,
+                    onHold: jsonRes.data.onHoldCount ?? 0,
                 });
             }
 
             const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
             const STATUS_LABELS: Record<number, string> = { 0: 'Assigned', 1: 'In Progress', 2: 'Pending Admin Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled' };
-            const normalized: Task[] = rawList.map(t => ({
-                taskId: t.id ?? t.taskId,
-                taskTitle: t.title ?? t.taskTitle ?? '',
-                taskDescription: t.description ?? t.taskDescription ?? '',
-                taskCategory: t.taskCategory ?? '',
-                taskReferenceNumber: t.taskReferenceNumber ?? '',
-                classification: t.classification ?? t.Classification ?? 0,
-                priority: (PRIORITY_LABELS[t.priorityLevel] || t.priority || 'Medium') as Priority,
-                dueAt: t.deadline ?? t.dueAt ?? null,
-                taskStatus: STATUS_LABELS[t.status] ?? t.taskStatus ?? '',
-                taskRemarks: t.progressNotes ?? t.taskRemarks ?? '',
-                assignedEmployee: t.assignees?.length > 0 ? t.assignees[0].fullName ?? '' : '',
-                createdByEmployee: t.createdByName ?? t.createdByEmployee ?? '',
-                assignedTo: t.assignees?.length > 0 ? t.assignees[0].userId ?? '' : '',
-                assignees: (t.assignees ?? []).map((a: any) => ({
-                    fullName: a.fullName ?? a.FullName ?? '',
-                    completionPercentage: a.completionPercentage ?? a.CompletionPercentage ?? 0,
-                })),
-                createdAt: t.createdAt ?? '',
-                updatedAt: t.updatedAt ?? undefined,
-                deleted: deletedTaskIdsRef.current.has(t.id ?? t.taskId),
-                supportingEvidenceUrl: t.supportingEvidenceUrl ?? '',
-                isConfidential: t.isConfidential ?? false,
-                isSLALocked: t.isSLALocked ?? false,
-                attachmentCount: t.attachmentCount ?? 0,
-                assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
-            }));
+            const normalized: Task[] = rawList.map(t => {
+                let statusStr = '';
+                if (typeof t.status === 'number') {
+                    statusStr = STATUS_LABELS[t.status] ?? 'Assigned';
+                } else if (typeof t.status === 'string') {
+                    const sLower = t.status.toLowerCase();
+                    if (sLower === 'cancelled' || sLower === 'canceled') statusStr = 'Cancelled';
+                    else if (sLower === 'onhold' || sLower === 'on hold') statusStr = 'On Hold';
+                    else if (sLower === 'completed' || sLower === 'done') statusStr = 'Completed';
+                    else if (sLower === 'inprogress' || sLower === 'in progress') statusStr = 'In Progress';
+                    else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'pending review') statusStr = 'Pending Admin Review';
+                    else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') statusStr = 'Assigned';
+                    else statusStr = t.status;
+                } else {
+                    statusStr = t.taskStatus || 'Assigned';
+                }
+                const priorityStr = typeof t.priorityLevel === 'number'
+                    ? (PRIORITY_LABELS[t.priorityLevel] || 'Medium')
+                    : (t.priority || 'Medium');
+                return {
+                    taskId: t.id ?? t.taskId,
+                    taskTitle: t.title ?? t.taskTitle ?? '',
+                    taskDescription: t.description ?? t.taskDescription ?? '',
+                    taskCategory: t.taskCategory ?? '',
+                    taskReferenceNumber: t.taskReferenceNumber ?? '',
+                    classification: t.classification ?? t.Classification ?? 0,
+                    priority: priorityStr as Priority,
+                    dueAt: t.deadline ?? t.dueAt ?? null,
+                    taskStatus: statusStr,
+                    taskRemarks: t.progressNotes ?? t.taskRemarks ?? '',
+                    assignedEmployee: t.assignees?.length > 0 ? t.assignees[0].fullName ?? '' : '',
+                    createdByEmployee: t.createdByName ?? t.createdByEmployee ?? '',
+                    assignedTo: t.assignees?.length > 0 ? t.assignees[0].userId ?? '' : '',
+                    assignees: (t.assignees ?? []).map((a: any) => ({
+                        fullName: a.fullName ?? a.FullName ?? '',
+                        completionPercentage: a.completionPercentage ?? a.CompletionPercentage ?? 0,
+                    })),
+                    createdAt: t.createdAt ?? '',
+                    updatedAt: t.updatedAt ?? undefined,
+                    deleted: deletedTaskIdsRef.current.has(t.id ?? t.taskId) || statusStr === 'Cancelled',
+                    supportingEvidenceUrl: t.supportingEvidenceUrl ?? '',
+                    isConfidential: t.isConfidential ?? false,
+                    isSLALocked: t.isSLALocked ?? false,
+                    attachmentCount: t.attachmentCount ?? 0,
+                    assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
+                };
+            });
 
             setAllTasks(normalized);
             setTasks(normalized.filter(t => !t.deleted));

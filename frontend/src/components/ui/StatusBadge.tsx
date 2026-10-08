@@ -18,6 +18,8 @@ const BADGE_CLASSES: Record<string, string> = {
     'Done/Pending Review': 'badge badge-purple',
     Completed: 'badge badge-green',
     'On Hold': 'badge badge-amber',
+    'On hold': 'badge badge-amber',
+    'on-hold': 'badge badge-amber',
     Cancelled: 'badge badge-gray',
     Overdue: 'badge badge-red',
     Active: 'status-badge active',

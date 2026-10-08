@@ -207,7 +207,8 @@ public class TaskService : ITaskService
         var nowUtc = DateTime.UtcNow;
         var activeCount = await query.CountAsync(t =>
             t.Status != Models.Enums.TaskStatus.Completed &&
-            t.Status != Models.Enums.TaskStatus.Cancelled);
+            t.Status != Models.Enums.TaskStatus.Cancelled &&
+            t.Status != Models.Enums.TaskStatus.OnHold);
         var inProgressCount = await query.CountAsync(t =>
             t.Status == Models.Enums.TaskStatus.InProgress);
         var completedCount = await query.CountAsync(t =>
@@ -215,17 +216,20 @@ public class TaskService : ITaskService
         var overdueCount = await query.CountAsync(t =>
             t.Status != Models.Enums.TaskStatus.Completed &&
             t.Status != Models.Enums.TaskStatus.Cancelled &&
+            t.Status != Models.Enums.TaskStatus.OnHold &&
             (t.RevisedDeadline ?? t.Deadline) < nowUtc);
         var cancelledCount = await query.CountAsync(t =>
             t.Status == Models.Enums.TaskStatus.Cancelled);
+        var onHoldCount = await query.CountAsync(t =>
+            t.Status == Models.Enums.TaskStatus.OnHold);
 
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
 
-        // The "Active" tab shows every non-completed and non-cancelled status, so the caller can pass
-        // excludeStatus or excludeStatuses to drop statuses (e.g. Completed, Cancelled) from the result BEFORE
+        // The "Active" tab shows every non-completed, non-cancelled, and non-on-hold status, so the caller can pass
+        // excludeStatus or excludeStatuses to drop statuses (e.g. Completed, Cancelled, OnHold) from the result BEFORE
         // pagination. This keeps server pages consistent with the client-side
-        // Active-tab filter — otherwise a Completed/Cancelled task landing mid-list silently
+        // Active-tab filter — otherwise a Completed/Cancelled/OnHold task landing mid-list silently
         // shrinks that page's visible row count.
         if (excludeStatuses != null && excludeStatuses.Any())
             query = query.Where(t => !excludeStatuses.Contains(t.Status));
@@ -276,7 +280,8 @@ public class TaskService : ITaskService
             InProgressCount = inProgressCount,
             CompletedCount = completedCount,
             OverdueCount = overdueCount,
-            CancelledCount = cancelledCount
+            CancelledCount = cancelledCount,
+            OnHoldCount = onHoldCount
         };
 
         return ApiResponseDTO<TaskListResponseDTO>.Success(paginatedResult);
