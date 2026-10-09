@@ -222,7 +222,7 @@ using (var scope = app.Services.CreateScope())
         var tasksWithoutNumber = await db.Tasks.Where(t => t.TaskNumber == null || t.TaskNumber == "").ToListAsync();
         if (tasksWithoutNumber.Count > 0)
         {
-            var existingNumbers = new HashSet<string>(await db.Tasks.Where(t => t.TaskNumber != null && t.TaskNumber != "").Select(t => t.TaskNumber).ToListAsync());
+            var existingNumbers = new HashSet<string>(await db.Tasks.Where(t => t.TaskNumber != null && t.TaskNumber != "").Select(t => t.TaskNumber!).ToListAsync() as List<string> ?? new List<string>());
             foreach (var t in tasksWithoutNumber)
             {
                 string key;

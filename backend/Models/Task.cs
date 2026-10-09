@@ -7,7 +7,7 @@ public class Task
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     [MaxLength(32)]
-    public string TaskNumber { get; set; } = string.Empty;
+    public string? TaskNumber { get; set; }
 
     [Required]
     [MaxLength(150)]
