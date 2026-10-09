@@ -198,6 +198,7 @@ interface Task {
     taskTitle: string;
     taskDescription: string;
     taskCategory?: string;
+    taskNumber?: string;
     taskReferenceNumber?: string;
     priority: Priority;
     classification: number;
@@ -692,7 +693,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
     const progress = (task.assignees && task.assignees.length > 0 && task.assignees[0].completionPercentage !== undefined)
         ? Math.round(task.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / task.assignees.length)
         : statusToProgress(effectiveStatus);
-    const refDisplay = task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase();
+    const refDisplay = task.taskNumber || task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase();
 
     return (
         <div className="task-item" onClick={() => onView(task.taskId)}>
@@ -2729,7 +2730,7 @@ const TasksTab: React.FC<{
                 {subTab === 'active' && pagedTasks.length > 0 && pagedTasks.map(t => {
                     const od = isEffectivelyOverdue(t);
                     const effectiveStatus = od ? 'Overdue' : t.taskStatus;
-                    const refDisplay = t.taskReferenceNumber || t.taskId.slice(0, 8).toUpperCase();
+                    const refDisplay = t.taskNumber || t.taskReferenceNumber || t.taskId.slice(0, 8).toUpperCase();
                     const reportedProgress = (t.assignees && t.assignees.length > 0 && t.assignees[0].completionPercentage !== undefined)
                         ? Math.round(t.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / t.assignees.length)
                         : statusToProgress(effectiveStatus);
@@ -7682,7 +7683,8 @@ export default function OpsAdminDashboard() {
     const tmTasks = useMemo(() => tasks.map(t => ({
         id: t.taskId,
         name: t.taskTitle,
-        referenceNumber: t.taskReferenceNumber,
+        taskNumber: t.taskNumber || t.taskReferenceNumber,
+        referenceNumber: t.taskNumber || t.taskReferenceNumber,
         classification: CLASSIFICATION_MAP[t.classification] ?? '',
         project: t.taskCategory,
         assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
@@ -7873,7 +7875,8 @@ export default function OpsAdminDashboard() {
                     taskTitle: rawTitle,
                     taskDescription: t.description ?? t.taskDescription ?? '',
                     taskCategory: t.taskCategory ?? '',
-                    taskReferenceNumber: t.taskReferenceNumber ?? '',
+                    taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
+                    taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification ?? t.Classification ?? 0,
                     priority: (PRIORITY_LABELS[t.priorityLevel] || t.priority || 'Medium') as Priority,
                     dueAt: deadlineStr,
@@ -8212,7 +8215,8 @@ export default function OpsAdminDashboard() {
                     taskTitle: t.title ?? t.taskTitle ?? '',
                     taskDescription: t.description ?? t.taskDescription ?? '',
                     taskCategory: t.taskCategory ?? '',
-                    taskReferenceNumber: t.taskReferenceNumber ?? '',
+                    taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
+                    taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification ?? t.Classification ?? 0,
                     priority: priorityStr as Priority,
                     dueAt: t.deadline ?? t.dueAt ?? null,
@@ -8483,7 +8487,7 @@ export default function OpsAdminDashboard() {
             const dto: any = r.value;
             return {
                 ...m,
-                referenceNumber: dto.referenceNumber ?? dto.taskReferenceNumber ?? '',
+                referenceNumber: dto.taskNumber ?? dto.taskReferenceNumber ?? dto.referenceNumber ?? '',
                 description: dto.description ?? '',
                 deadline: dto.deadline ?? null,
                 priority: (PRIORITY_LABELS[dto.priorityLevel] ?? dto.priority ?? '') as string,
@@ -8539,7 +8543,8 @@ export default function OpsAdminDashboard() {
             assignedDepartmentId: dto.assignedDepartmentId ?? undefined,
             assignedDepartmentName: dto.assignedDepartmentName ?? undefined,
             assignmentScope: dto.assignmentScope ?? dto.AssignmentScope ?? 0,
-            taskReferenceNumber: dto.taskReferenceNumber ?? dto.referenceNumber ?? '',
+            taskNumber: dto.taskNumber ?? dto.taskReferenceNumber ?? '',
+            taskReferenceNumber: dto.taskNumber ?? dto.taskReferenceNumber ?? dto.referenceNumber ?? '',
         };
     };
 

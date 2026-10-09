@@ -90,6 +90,8 @@ export interface TaskViewTask {
     assignmentScope?: number;
     assignedDepartmentId?: string;
     assignedDepartmentName?: string;
+    /** 8-character unique alphanumeric random key (e.g. "K7N9P4X2") */
+    taskNumber?: string;
     /** Non-primary-key display reference (e.g. "ABC12345"); falls back to a short id. */
     taskReferenceNumber?: string;
     /** Each assignee plus the completion percentage the employee reported. */
@@ -605,7 +607,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                         <span className="tv-breadcrumb-muted">Task Management</span>
                         <span className="tv-breadcrumb-sep">/</span>
                         <span className="tv-breadcrumb-active">Task Details</span>
-                        {task.taskId && <span className="tv-breadcrumb-id">#{task.taskId.slice(0, 8)}</span>}
+                        {task.taskId && <span className="tv-breadcrumb-id">#{task.taskNumber || task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase()}</span>}
                     </div>
                 </div>
 
@@ -936,6 +938,15 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <span className="tv-dms-grid-label">Contact Number</span>
                                             <span className="tv-dms-grid-value">{deliveryDetail.recipientContact || '—'}</span>
                                         </div>
+                                        {deliveryDetail.senderAddress && (
+                                            <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                <span className="tv-dms-grid-label">Sender / Pickup Address</span>
+                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <MapPin size={12} color="var(--primary)" />
+                                                    {deliveryDetail.senderAddress}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="tv-dms-grid-item tv-dms-grid-full">
                                             <span className="tv-dms-grid-label">Delivery Address</span>
                                             <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -956,6 +967,14 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <div className="tv-dms-grid-item tv-dms-grid-full">
                                                 <span className="tv-dms-grid-label">Package Description</span>
                                                 <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.specialInstructions && (
+                                            <div className="tv-dms-grid-item tv-dms-grid-full" style={{ background: 'var(--surface-subtle, rgba(255,255,255,0.03))', borderRadius: 6, padding: '8px 10px', borderLeft: '3px solid var(--primary, #00b4d8)' }}>
+                                                <span className="tv-dms-grid-label" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Special Instructions</span>
+                                                <span className="tv-dms-grid-value" style={{ fontStyle: 'italic', marginTop: 2, display: 'block' }}>
+                                                    {deliveryDetail.specialInstructions}
+                                                </span>
                                             </div>
                                         )}
                                         {deliveryDetail.dmsLatitude && deliveryDetail.dmsLongitude && (

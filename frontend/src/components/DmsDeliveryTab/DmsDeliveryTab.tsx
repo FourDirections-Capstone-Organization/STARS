@@ -28,6 +28,7 @@ import './DmsDeliveryTab.css';
 export interface DmsDeliveryItem {
     taskId: string;
     taskTitle: string;
+    taskNumber?: string;
     taskReferenceNumber?: string;
     recipientName: string;
     recipientContact: string;
@@ -124,7 +125,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             return {
                                 taskId: taskId,
                                 taskTitle: t.taskTitle || t.title || t.name || 'Delivery Task',
-                                taskReferenceNumber: t.taskReferenceNumber || t.referenceNumber,
+                                taskNumber: (t as any).taskNumber || (t as any).taskReferenceNumber,
+                                taskReferenceNumber: (t as any).taskNumber || t.taskReferenceNumber || t.referenceNumber,
                                 recipientName: d.recipientName || 'Operations Dispatch',
                                 recipientContact: d.recipientContact || '—',
                                 deliveryAddress: d.deliveryAddress || 'Metro Manila',
@@ -433,8 +435,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                     <td>
                                         <div className="dms-task-cell">
                                             <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
-                                            {item.taskReferenceNumber && (
-                                                <span className="dms-task-ref">#{item.taskReferenceNumber}</span>
+                                            {(item.taskNumber || item.taskReferenceNumber) && (
+                                                <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
                                             )}
                                         </div>
                                     </td>

@@ -130,6 +130,7 @@ interface TaskResponseDTO {
     createdByEmployee?: string;
     createdAt?: string;
     supportingEvidenceUrl?: string;
+    taskNumber?: string;
     taskReferenceNumber?: string;
     isConfidential?: boolean;
     pushBackComment?: string;
@@ -221,7 +222,7 @@ const dtoToTask = (dto: TaskResponseDTO): Task => {
         createdAt: dto.createdAt ?? '',
         category: '',
         supportingEvidenceUrl: dto.supportingEvidenceUrl,
-        referenceNumber: dto.taskReferenceNumber,
+        referenceNumber: dto.taskNumber || dto.taskReferenceNumber,
         isConfidential: dto.isConfidential ?? false,
         pushBackComment: dto.pushBackComment,
         reviewRemarks: dto.reviewRemarks,

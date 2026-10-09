@@ -9,6 +9,7 @@ import './TaskManager.css';
 export interface TMTask {
     id: string;
     name: string;
+    taskNumber?: string;
     referenceNumber?: string;
     classification?: string;
     project?: string;
@@ -232,7 +233,7 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                 </div>
                             ) : (
                                 col.items.map(t => {
-                                    const refDisplay = t.referenceNumber || t.id.slice(0, 8).toUpperCase();
+                                    const refDisplay = t.taskNumber || t.referenceNumber || t.id.slice(0, 8).toUpperCase();
                                     const isDragging = draggingTaskId === t.id;
                                     return (
                                         <div
@@ -691,7 +692,7 @@ export default function TaskManager({
                     onPageSizeChange={serverPagination?.onPageSizeChange}
                 >
                     {paginated.map(t => {
-                        const refDisplay = t.referenceNumber || t.id.slice(0, 8).toUpperCase();
+                        const refDisplay = t.taskNumber || t.referenceNumber || t.id.slice(0, 8).toUpperCase();
                         const isChecked = selectedIds.has(t.id);
                         return (
                             <tr key={t.id} onClick={() => tab !== 'bin' ? onView(t.id) : null} style={{ cursor: tab !== 'bin' ? 'pointer' : 'default', opacity: tab === 'bin' ? 0.75 : 1 }}>

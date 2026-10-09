@@ -2600,7 +2600,8 @@ export default function Dashboard() {
             assignmentScope: t.assignmentScope ?? t.AssignmentScope ?? 0,
             assignedDepartmentId: t.assignedDepartmentId ?? t.AssignedDepartmentId ?? '',
             assignedDepartmentName: t.assignedDepartmentName ?? t.AssignedDepartmentName ?? '',
-            taskReferenceNumber: t.taskReferenceNumber ?? t.referenceNumber ?? '',
+            taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
+            taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? t.referenceNumber ?? '',
         };
     };
 
@@ -2630,7 +2631,8 @@ export default function Dashboard() {
                 return {
                     id: t.id ?? t.taskId,
                     name: t.title ?? t.taskTitle ?? '',
-                    referenceNumber: t.taskReferenceNumber ?? '',
+                    taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
+                    referenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification === 1 || t.Classification === 1 ? 'special' : 'routine',
                     project: t.taskCategory ?? (t.classification === 1 ? 'SpecialTask' : ''),
                     assignee: t.assignees?.length ? { id: t.assignees[0].userId ?? '', name: t.assignees[0].fullName ?? '' } : undefined,

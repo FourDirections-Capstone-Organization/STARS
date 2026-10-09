@@ -181,9 +181,18 @@ public class DmsIntegrationService : IDmsIntegrationService
                 reviewerName = $"{revUser.FirstName} {revUser.LastName}".Trim();
         }
 
+        var taskDisplayId = !string.IsNullOrWhiteSpace(task.TaskNumber)
+            ? task.TaskNumber
+            : task.Id.ToString()[..8].ToUpper();
+
+        var specialInstructionsFormatted = !string.IsNullOrWhiteSpace(detail.SpecialInstructions)
+            ? $"{detail.SpecialInstructions.Trim()} (Referenced to STARS Task ID: {taskDisplayId})"
+            : $"(Referenced to STARS Task ID: {taskDisplayId})";
+
         var payload = new
         {
             starsTaskId = taskId,
+            starsTaskNumber = taskDisplayId,
             taskTitle = task.Title,
             senderName = senderName,
             senderAddress = senderAddress,
@@ -193,7 +202,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             deliveryAddress = detail.DeliveryAddress,
             area = string.IsNullOrWhiteSpace(detail.Area) ? "Manila" : detail.Area,
             packageDescription = string.IsNullOrWhiteSpace(detail.PackageDescription) ? task.Title : detail.PackageDescription,
-            specialInstructions = detail.SpecialInstructions,
+            specialInstructions = specialInstructionsFormatted,
             encodedBy = creatorName,
             updatedBy = reviewerName ?? creatorName,
             priorityLevel = task.PriorityLevel.ToString(),

@@ -85,8 +85,15 @@ public class TaskService : ITaskService
 
         var uniqueTitle = await GenerateUniqueTaskTitleAsync(dto.Title);
 
+        string taskNumber;
+        do
+        {
+            taskNumber = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8);
+        } while (await _db.Tasks.AnyAsync(t => t.TaskNumber == taskNumber));
+
         var task = new Models.Task
         {
+            TaskNumber = taskNumber,
             Title = uniqueTitle,
             Description = dto.Description.Trim(),
             PriorityLevel = dto.PriorityLevel,
@@ -733,6 +740,9 @@ public class TaskService : ITaskService
         return new TaskResponseDTO
         {
             Id = task.Id,
+            TaskNumber = string.IsNullOrWhiteSpace(task.TaskNumber)
+                ? task.Id.ToString()[..8].ToUpper()
+                : task.TaskNumber,
             Title = task.Title,
             Description = task.Description,
             PriorityLevel = task.PriorityLevel,

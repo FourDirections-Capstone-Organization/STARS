@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using Backend.Models.Enums;
 
 namespace Backend.Models;
@@ -6,6 +6,8 @@ namespace Backend.Models;
 public class Task
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    [MaxLength(32)]
+    public string TaskNumber { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(150)]

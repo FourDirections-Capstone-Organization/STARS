@@ -1,10 +1,12 @@
-﻿using Backend.Models.Enums;
+using Backend.Models.Enums;
 
 namespace Backend.Models.DTOs;
 
 public class TaskResponseDTO
 {
     public Guid Id { get; set; }
+    public string TaskNumber { get; set; } = string.Empty;
+    public string TaskReferenceNumber => TaskNumber;
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public PriorityLevel PriorityLevel { get; set; }
