@@ -170,6 +170,7 @@ public class DmsIntegrationController : ControllerBase
                 var newTask = new Backend.Models.Task
                 {
                     Id = Guid.NewGuid(),
+                    TaskNumber = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8),
                     Title = "STARS-DMS Integration Verification Task",
                     Description = "Auto-generated task for live API transmission testing",
                     PriorityLevel = Backend.Models.Enums.PriorityLevel.Urgent,

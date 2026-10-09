@@ -315,6 +315,8 @@ using (var scope = app.Services.CreateScope())
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.ExecuteSqlRawAsync(@"
             ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""TaskNumber"" character varying(32) NULL;
+            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SenderAddress"" character varying(500) NULL;
+            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SpecialInstructions"" character varying(1000) NULL;
         ");
 
         var tasksWithoutNumber = await db.Tasks.Where(t => t.TaskNumber == null || t.TaskNumber == "").ToListAsync();
