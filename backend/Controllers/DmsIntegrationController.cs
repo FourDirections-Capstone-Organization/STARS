@@ -152,42 +152,49 @@ public class DmsIntegrationController : ControllerBase
         var authError = ValidateApiKey();
         if (authError != null) return authError;
 
-        Guid targetTaskId;
-        if (dto?.TaskId.HasValue == true && dto.TaskId.Value != Guid.Empty)
+        try
         {
-            targetTaskId = dto.TaskId.Value;
-        }
-        else
-        {
-            var existingTask = await _db.Tasks.FirstOrDefaultAsync();
-            if (existingTask != null)
+            Guid targetTaskId;
+            if (dto?.TaskId.HasValue == true && dto.TaskId.Value != Guid.Empty)
             {
-                targetTaskId = existingTask.Id;
+                targetTaskId = dto.TaskId.Value;
             }
             else
             {
-                var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
-                var newTask = new Backend.Models.Task
+                var existingTask = await _db.Tasks.FirstOrDefaultAsync();
+                if (existingTask != null)
                 {
-                    Id = Guid.NewGuid(),
-                    TaskNumber = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8),
-                    Title = "STARS-DMS Integration Verification Task",
-                    Description = "Auto-generated task for live API transmission testing",
-                    PriorityLevel = Backend.Models.Enums.PriorityLevel.Urgent,
-                    Status = Backend.Models.Enums.TaskStatus.Completed,
-                    Classification = Backend.Models.Enums.TaskClassification.SpecialTask,
-                    CreatedById = creatorId,
-                    Deadline = DateTime.UtcNow.AddHours(4),
-                    CreatedAt = DateTime.UtcNow
-                };
-                _db.Tasks.Add(newTask);
-                await _db.SaveChangesAsync();
-                targetTaskId = newTask.Id;
+                    targetTaskId = existingTask.Id;
+                }
+                else
+                {
+                    var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+                    var newTask = new Backend.Models.Task
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskNumber = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8),
+                        Title = "STARS-DMS Integration Verification Task",
+                        Description = "Auto-generated task for live API transmission testing",
+                        PriorityLevel = Backend.Models.Enums.PriorityLevel.Urgent,
+                        Status = Backend.Models.Enums.TaskStatus.Completed,
+                        Classification = Backend.Models.Enums.TaskClassification.SpecialTask,
+                        CreatedById = creatorId,
+                        Deadline = DateTime.UtcNow.AddHours(4),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _db.Tasks.Add(newTask);
+                    await _db.SaveChangesAsync();
+                    targetTaskId = newTask.Id;
+                }
             }
-        }
 
-        var result = await _dmsService.CreateDeliveryOrderForTaskAsync(targetTaskId);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+            var result = await _dmsService.CreateDeliveryOrderForTaskAsync(targetTaskId);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiResponseDTO<object>.Failure($"TriggerDispatch error: {ex.Message} -> {ex.InnerException?.Message}"));
+        }
     }
 
     /// <summary>

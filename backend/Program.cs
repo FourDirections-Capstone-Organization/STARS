@@ -212,6 +212,36 @@ using (var scope = app.Services.CreateScope())
         db.Database.Migrate();
         Console.WriteLine("[STARTUP] Database migrations applied successfully.");
 
+        // Ensure schema columns exist before any seeds or queries run
+        await db.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""TaskNumber"" character varying(32) NULL;
+            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SenderAddress"" character varying(500) NULL;
+            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SpecialInstructions"" character varying(1000) NULL;
+        ");
+
+        var tasksWithoutNumber = await db.Tasks.Where(t => t.TaskNumber == null || t.TaskNumber == "").ToListAsync();
+        if (tasksWithoutNumber.Count > 0)
+        {
+            var existingNumbers = new HashSet<string>(await db.Tasks.Where(t => t.TaskNumber != null && t.TaskNumber != "").Select(t => t.TaskNumber).ToListAsync());
+            foreach (var t in tasksWithoutNumber)
+            {
+                string key;
+                do
+                {
+                    key = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8);
+                } while (existingNumbers.Contains(key));
+                existingNumbers.Add(key);
+                t.TaskNumber = key;
+            }
+            await db.SaveChangesAsync();
+            Console.WriteLine($"[STARTUP] Backfilled TaskNumber for {tasksWithoutNumber.Count} tasks.");
+        }
+
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Tasks_TaskNumber"" ON ""Tasks"" (""TaskNumber"") WHERE ""TaskNumber"" IS NOT NULL;
+        ");
+        Console.WriteLine("[STARTUP] Database schema verified: TaskNumber, SenderAddress, SpecialInstructions ensured.");
+
         // Seed default departments and positions
         var departmentService = scope.ServiceProvider.GetRequiredService<IDepartmentService>();
         await departmentService.SeedDefaultDepartmentsAsync();
@@ -306,46 +336,5 @@ app.UseAuditLogAccessLogging();
 app.UseAuthorization();
 app.UseSessionTimeout(sessionSettings);
 app.MapControllers();
-
-// Ensure PostgreSQL schema has TaskNumber column and backfill existing tasks
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.ExecuteSqlRawAsync(@"
-            ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""TaskNumber"" character varying(32) NULL;
-            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SenderAddress"" character varying(500) NULL;
-            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SpecialInstructions"" character varying(1000) NULL;
-        ");
-
-        var tasksWithoutNumber = await db.Tasks.Where(t => t.TaskNumber == null || t.TaskNumber == "").ToListAsync();
-        if (tasksWithoutNumber.Count > 0)
-        {
-            var existingNumbers = new HashSet<string>(await db.Tasks.Where(t => t.TaskNumber != null && t.TaskNumber != "").Select(t => t.TaskNumber).ToListAsync());
-            foreach (var t in tasksWithoutNumber)
-            {
-                string key;
-                do
-                {
-                    key = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8);
-                } while (existingNumbers.Contains(key));
-                existingNumbers.Add(key);
-                t.TaskNumber = key;
-            }
-            await db.SaveChangesAsync();
-            Console.WriteLine($"[STARTUP] Backfilled TaskNumber for {tasksWithoutNumber.Count} tasks.");
-        }
-
-        await db.Database.ExecuteSqlRawAsync(@"
-            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Tasks_TaskNumber"" ON ""Tasks"" (""TaskNumber"") WHERE ""TaskNumber"" IS NOT NULL;
-        ");
-        Console.WriteLine("[STARTUP] Database schema verified: TaskNumber column and index ensured.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[STARTUP SCHEMA NOTICE] {ex.Message}");
-    }
-}
 
 app.Run();
