@@ -3,7 +3,7 @@ import {
     UserCircle2, Users, Building, Search, CheckCircle2, AlertCircle,
     Loader2, X, Lock, Save, Lightbulb, Activity, Bell, FileText, Calendar,
     Shield, ChevronRight, ChevronLeft, Clock, Briefcase, ExternalLink,
-    Brain, TrendingUp, Zap, ChevronDown, ChevronUp, Plus, ArrowRight, Check
+    Brain, TrendingUp, Zap, ChevronDown, ChevronUp, Plus, ArrowRight, Check, Truck
 } from 'lucide-react';
 import './AIAssignmentView.css';
 import api from '../../api';
@@ -204,6 +204,19 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState('');
+
+    // ── DMS Delivery Integration State ──
+    const [enableDelivery, setEnableDelivery] = useState(false);
+    const [deliveryForm, setDeliveryForm] = useState({
+        recipientName: '',
+        recipientContact: '',
+        deliveryAddress: '',
+        area: '',
+        senderAddress: '',
+        packageDescription: '',
+        courierEmployeeId: '',
+        specialInstructions: '',
+    });
 
     // ── Data State ──
     const [employees, setEmployees] = useState<AvailableEmployee[]>([]);
@@ -549,6 +562,21 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
             return false;
         }
 
+        if (enableDelivery) {
+            if (!deliveryForm.recipientName.trim()) {
+                setFormError('Recipient Full Name is required when DMS Delivery is enabled.');
+                return false;
+            }
+            if (!deliveryForm.recipientContact.trim()) {
+                setFormError('Recipient Contact Number is required when DMS Delivery is enabled.');
+                return false;
+            }
+            if (!deliveryForm.deliveryAddress.trim()) {
+                setFormError('Delivery Destination Address is required when DMS Delivery is enabled.');
+                return false;
+            }
+        }
+
         return true;
     };
 
@@ -735,6 +763,24 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
             const res = await api.post('/api/Task', payload);
             const created = res.data;
             const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
+
+            // Save DMS Delivery Details if enabled
+            if (taskId && enableDelivery) {
+                try {
+                    await api.put(`/api/dms-integration/tasks/${taskId}/delivery-details`, {
+                        recipientName: deliveryForm.recipientName.trim(),
+                        recipientContact: deliveryForm.recipientContact.trim(),
+                        deliveryAddress: deliveryForm.deliveryAddress.trim(),
+                        area: deliveryForm.area?.trim() || '',
+                        senderAddress: deliveryForm.senderAddress?.trim() || null,
+                        packageDescription: deliveryForm.packageDescription?.trim() || payload.title,
+                        specialInstructions: deliveryForm.specialInstructions?.trim() || null,
+                        courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || null,
+                    });
+                } catch (delErr) {
+                    console.error('Failed to attach DMS delivery details to task:', delErr);
+                }
+            }
 
             // Upload supporting documents (one or more files) if provided
             if (taskId && supportingFiles.length > 0) {
@@ -1002,6 +1048,15 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 </div>
                             </div>
                         )}
+
+                        {enableDelivery && (
+                            <div className="ai-success-section">
+                                <h4><Truck size={14} color="var(--primary, #0284c7)" /> DMS Delivery Queued</h4>
+                                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                                    Delivery details attached for <strong>{deliveryForm.recipientName}</strong> ({deliveryForm.deliveryAddress}). Waybill will automatically be generated in DMS upon task completion.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center', gap: 12 }}>
@@ -1026,6 +1081,17 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 setSelectedTeamId('');
                                 setSelectedEmployeeId('');
                                 setSupportingFiles([]);
+                                setEnableDelivery(false);
+                                setDeliveryForm({
+                                    recipientName: '',
+                                    recipientContact: '',
+                                    deliveryAddress: '',
+                                    area: '',
+                                    senderAddress: '',
+                                    packageDescription: '',
+                                    courierEmployeeId: '',
+                                    specialInstructions: '',
+                                });
                                 setStep('form');
                             }}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 22px', fontSize: 13, fontWeight: 600, background: 'var(--teal, #00A99D)', borderColor: 'var(--teal, #00A99D)', color: '#fff' }}
@@ -1288,6 +1354,48 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 )}
                             </div>
                         </div>
+
+                        {/* Card 5: DMS Delivery & Dispatch Details (if enabled) */}
+                        {enableDelivery && (
+                            <div className="ai-review-card" style={{ border: '1.5px solid var(--primary, #0284c7)', gridColumn: 'span 2' }}>
+                                <div className="ai-review-card-header">
+                                    <h4><Truck size={16} color="var(--primary, #0284c7)" /> 5. DMS Delivery Dispatch (Enabled)</h4>
+                                    <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(2, 132, 199, 0.1)', color: 'var(--primary, #0284c7)', fontSize: 11, fontWeight: 700 }}>
+                                        Auto-Waybill on Completion
+                                    </span>
+                                </div>
+                                <div className="ai-review-card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+                                    <div className="ai-review-row">
+                                        <span className="ai-review-row-label">Recipient</span>
+                                        <span className="ai-review-row-val" style={{ fontWeight: 600 }}>{deliveryForm.recipientName} ({deliveryForm.recipientContact})</span>
+                                    </div>
+                                    <div className="ai-review-row">
+                                        <span className="ai-review-row-label">Destination Address</span>
+                                        <span className="ai-review-row-val">{deliveryForm.deliveryAddress}{deliveryForm.area ? `, ${deliveryForm.area}` : ''}</span>
+                                    </div>
+                                    <div className="ai-review-row">
+                                        <span className="ai-review-row-label">Sender Pickup Address</span>
+                                        <span className="ai-review-row-val">{deliveryForm.senderAddress || 'STARS Operations Office (Default)'}</span>
+                                    </div>
+                                    <div className="ai-review-row">
+                                        <span className="ai-review-row-label">Package Description</span>
+                                        <span className="ai-review-row-val">{deliveryForm.packageDescription || form.taskTitle}</span>
+                                    </div>
+                                    {deliveryForm.courierEmployeeId && (
+                                        <div className="ai-review-row">
+                                            <span className="ai-review-row-label">Assigned Courier ID</span>
+                                            <span className="ai-review-row-val">{deliveryForm.courierEmployeeId}</span>
+                                        </div>
+                                    )}
+                                    {deliveryForm.specialInstructions && (
+                                        <div className="ai-review-row" style={{ gridColumn: 'span 2' }}>
+                                            <span className="ai-review-row-label">Special Instructions</span>
+                                            <span className="ai-review-row-val" style={{ fontStyle: 'italic' }}>{deliveryForm.specialInstructions}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Bottom Action Bar */}
@@ -1599,6 +1707,113 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                 )}
                             </div>
                         </div>
+                    </div>
+
+                    {/* SECTION 1.5: DMS Delivery & Dispatch Details (Optional) */}
+                    <div className="ai-card" style={{ border: enableDelivery ? '1.5px solid var(--primary, #0284c7)' : '1px solid var(--border, #e2e8f0)', background: enableDelivery ? 'rgba(2, 132, 199, 0.02)' : 'var(--bg-card, #ffffff)' }}>
+                        <div className="ai-card-header" style={{ justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Truck size={18} color="var(--primary, #0284c7)" />
+                                <h3>Require Delivery via DMS (Auto-Generate Waybill)</h3>
+                            </div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--primary, #0284c7)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={enableDelivery}
+                                    onChange={e => {
+                                        const checked = e.target.checked;
+                                        setEnableDelivery(checked);
+                                        if (checked && !deliveryForm.packageDescription) {
+                                            setDeliveryForm(prev => ({ ...prev, packageDescription: form.taskTitle }));
+                                        }
+                                    }}
+                                />
+                                <span>{enableDelivery ? 'Enabled' : 'Enable Delivery'}</span>
+                            </label>
+                        </div>
+                        <p className="ai-card-desc">
+                            When enabled, completing and approving this task will automatically dispatch a delivery order to the Delivery Management System (DMS) and generate an official Waybill.
+                        </p>
+
+                        {enableDelivery && (
+                            <div className="ai-form-grid" style={{ marginTop: 12 }}>
+                                <div className="ai-field-row">
+                                    <div className="ai-field">
+                                        <label>Recipient Full Name <span className="ai-required">*</span></label>
+                                        <input
+                                            value={deliveryForm.recipientName}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientName: e.target.value }))}
+                                            placeholder="e.g. Engr. Roberto Cruz"
+                                        />
+                                    </div>
+                                    <div className="ai-field">
+                                        <label>Recipient Contact Number <span className="ai-required">*</span></label>
+                                        <input
+                                            value={deliveryForm.recipientContact}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientContact: e.target.value }))}
+                                            placeholder="e.g. 09171234567"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="ai-field-row">
+                                    <div className="ai-field">
+                                        <label>Area / City</label>
+                                        <input
+                                            value={deliveryForm.area}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, area: e.target.value }))}
+                                            placeholder="e.g. Taguig, Makati"
+                                        />
+                                    </div>
+                                    <div className="ai-field">
+                                        <label>Sender / Pickup Address <span className="ai-opt">(optional)</span></label>
+                                        <input
+                                            value={deliveryForm.senderAddress}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, senderAddress: e.target.value }))}
+                                            placeholder="e.g. STARS Operations Office"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="ai-field ai-field-full">
+                                    <label>Delivery Destination Address <span className="ai-required">*</span></label>
+                                    <textarea
+                                        rows={2}
+                                        value={deliveryForm.deliveryAddress}
+                                        onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                                        placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
+                                    />
+                                </div>
+
+                                <div className="ai-field-row">
+                                    <div className="ai-field">
+                                        <label>Package Description <span className="ai-opt">(optional)</span></label>
+                                        <input
+                                            value={deliveryForm.packageDescription}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                            placeholder="e.g. Confidential Project Dossier"
+                                        />
+                                    </div>
+                                    <div className="ai-field">
+                                        <label>Courier Employee ID <span className="ai-opt">(optional)</span></label>
+                                        <input
+                                            value={deliveryForm.courierEmployeeId}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                            placeholder="e.g. DRV-001"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="ai-field ai-field-full">
+                                    <label>Special Instructions <span className="ai-opt">(optional notes for DMS courier)</span></label>
+                                    <input
+                                        value={deliveryForm.specialInstructions}
+                                        onChange={e => setDeliveryForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                                        placeholder="e.g. Fragile documents, call recipient upon arrival"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* SECTION 2: Cascading Assignment Hierarchy */}

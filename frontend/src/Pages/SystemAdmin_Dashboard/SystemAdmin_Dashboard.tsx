@@ -2458,6 +2458,17 @@ export default function Dashboard() {
 
     const [newTaskForm, setNewTaskForm] = useState({ title: '', description: '', priority: '', deadline: '', classification: '', isConfidential: false, assignmentScope: 'SingleEmployee', assignedDepartmentId: '', assignedTo: '', assignedUserIds: [] as string[], supportingEvidenceUrl: '' });
     const [newTaskErrors, setNewTaskErrors] = useState<Record<string, string>>({});
+    const [newEnableDelivery, setNewEnableDelivery] = useState(false);
+    const [newDeliveryForm, setNewDeliveryForm] = useState({
+        recipientName: '',
+        recipientContact: '',
+        deliveryAddress: '',
+        area: '',
+        senderAddress: '',
+        packageDescription: '',
+        courierEmployeeId: '',
+        specialInstructions: '',
+    });
     const [newTaskSubmitting, setNewTaskSubmitting] = useState(false);
     const [newTaskApiError, setNewTaskApiError] = useState('');
     const [editForm, setEditForm] = useState({ title: '', description: '', priority: '', deadline: '', classification: '', isConfidential: false, assignmentScope: 'SingleEmployee', assignedDepartmentId: '', assignedTo: '', assignedUserIds: [] as string[], supportingEvidenceUrl: '' });
@@ -2882,6 +2893,11 @@ export default function Dashboard() {
         if (newTaskForm.assignmentScope === 'SingleEmployee' && !newTaskForm.assignedTo) errs.assignedTo = 'Please select an employee to assign.';
         if (newTaskForm.assignmentScope === 'Team' && newTaskForm.assignedUserIds.length === 0) errs.assignedUserIds = 'Please select at least one team member.';
         if (newTaskForm.assignmentScope === 'Department' && !newTaskForm.assignedDepartmentId) errs.assignedDepartmentId = 'Department is required for Department scope.';
+        if (newEnableDelivery) {
+            if (!newDeliveryForm.recipientName.trim()) errs.recipientName = 'Recipient Full Name is required for DMS Delivery.';
+            if (!newDeliveryForm.recipientContact.trim()) errs.recipientContact = 'Recipient Contact Number is required for DMS Delivery.';
+            if (!newDeliveryForm.deliveryAddress.trim()) errs.deliveryAddress = 'Delivery Destination Address is required for DMS Delivery.';
+        }
         if (Object.keys(errs).length) { setNewTaskErrors(errs); return; }
         setNewTaskErrors({});
 
@@ -2914,6 +2930,24 @@ export default function Dashboard() {
             const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
             const createdTitle = created?.data?.title ?? created?.title ?? created?.data?.Title ?? t;
 
+            // Save DMS Delivery Details if enabled
+            if (taskId && newEnableDelivery) {
+                try {
+                    await api.put(`/api/dms-integration/tasks/${taskId}/delivery-details`, {
+                        recipientName: newDeliveryForm.recipientName.trim(),
+                        recipientContact: newDeliveryForm.recipientContact.trim(),
+                        deliveryAddress: newDeliveryForm.deliveryAddress.trim(),
+                        area: newDeliveryForm.area?.trim() || '',
+                        senderAddress: newDeliveryForm.senderAddress?.trim() || null,
+                        packageDescription: newDeliveryForm.packageDescription?.trim() || t,
+                        specialInstructions: newDeliveryForm.specialInstructions?.trim() || null,
+                        courierEmployeeId: newDeliveryForm.courierEmployeeId?.trim() || null,
+                    });
+                } catch (delErr) {
+                    console.error('Failed to attach DMS delivery details to task:', delErr);
+                }
+            }
+
             // Upload supporting documents (one or more files) if provided
             if (taskId && newTaskSupportingEvidence.length > 0) {
                 const results = await Promise.allSettled(newTaskSupportingEvidence.map(async (file) => {
@@ -2930,6 +2964,17 @@ export default function Dashboard() {
             }
             success(`Task "${createdTitle}" created successfully.`);
             setShowNewTask(false);
+            setNewEnableDelivery(false);
+            setNewDeliveryForm({
+                recipientName: '',
+                recipientContact: '',
+                deliveryAddress: '',
+                area: '',
+                senderAddress: '',
+                packageDescription: '',
+                courierEmployeeId: '',
+                specialInstructions: '',
+            });
             fetchManagerTasks();
         } catch (err: any) {
             setNewTaskApiError(err.response?.data?.message || err.response?.data?.Message || err.message || 'Failed to create task.');
@@ -4423,6 +4468,129 @@ export default function Dashboard() {
                                 </span>
                             </div>
                         </label>
+                    </div>
+
+                    {/* ── DMS Delivery Details Card (Optional) ── */}
+                    <div className="fm-section" style={{ border: newEnableDelivery ? '1.5px solid var(--primary, #0284c7)' : '1px solid var(--border, #e2e8f0)', borderRadius: 8, padding: 12, background: newEnableDelivery ? 'rgba(2, 132, 199, 0.03)' : 'var(--bg-input, #f8fafc)' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                            <input
+                                type="checkbox"
+                                checked={newEnableDelivery}
+                                onChange={e => {
+                                    const checked = e.target.checked;
+                                    setNewEnableDelivery(checked);
+                                    if (checked && !newDeliveryForm.packageDescription) {
+                                        setNewDeliveryForm(prev => ({ ...prev, packageDescription: newTaskForm.title }));
+                                    }
+                                }}
+                            />
+                            <Truck size={15} color="var(--primary, #0284c7)" />
+                            <span>Require Delivery via DMS (Auto-Generate Waybill)</span>
+                        </label>
+                        <p style={{ margin: '3px 0 0 24px', fontSize: 11, color: 'var(--text-secondary)' }}>
+                            Attach recipient drop-off address and parcel details for automatic DMS dispatch upon completion.
+                        </p>
+
+                        {newEnableDelivery && (
+                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Recipient Full Name <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.recipientName}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, recipientName: e.target.value }))}
+                                            placeholder="e.g. Engr. Roberto Cruz"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                        {newTaskErrors.recipientName && (
+                                            <span style={{ fontSize: 10, color: '#ee5d50', marginTop: 2, display: 'block' }}>{newTaskErrors.recipientName}</span>
+                                        )}
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Recipient Contact Number <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.recipientContact}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, recipientContact: e.target.value }))}
+                                            placeholder="e.g. 09171234567"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                        {newTaskErrors.recipientContact && (
+                                            <span style={{ fontSize: 10, color: '#ee5d50', marginTop: 2, display: 'block' }}>{newTaskErrors.recipientContact}</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Area / City</label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.area}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, area: e.target.value }))}
+                                            placeholder="e.g. Taguig, Makati"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Sender / Pickup Address</label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.senderAddress}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, senderAddress: e.target.value }))}
+                                            placeholder="e.g. STARS Operations Office"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="fm-field" style={{ margin: 0 }}>
+                                    <label className="fm-label" style={{ fontSize: 11 }}>Delivery Destination Address <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                    <textarea
+                                        className="fm-input"
+                                        rows={2}
+                                        value={newDeliveryForm.deliveryAddress}
+                                        onChange={e => setNewDeliveryForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                                        placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                    {newTaskErrors.deliveryAddress && (
+                                        <span style={{ fontSize: 10, color: '#ee5d50', marginTop: 2, display: 'block' }}>{newTaskErrors.deliveryAddress}</span>
+                                    )}
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Package Description</label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.packageDescription}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                            placeholder="e.g. Confidential Project Dossier"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                        <input
+                                            className="fm-input"
+                                            value={newDeliveryForm.courierEmployeeId}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                            placeholder="e.g. DRV-001"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="fm-field" style={{ margin: 0 }}>
+                                    <label className="fm-label" style={{ fontSize: 11 }}>Special Instructions (Optional notes for DMS)</label>
+                                    <input
+                                        className="fm-input"
+                                        value={newDeliveryForm.specialInstructions}
+                                        onChange={e => setNewDeliveryForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                                        placeholder="e.g. Fragile documents, call recipient upon arrival"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </FormModal>
             )}
