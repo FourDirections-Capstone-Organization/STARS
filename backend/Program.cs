@@ -307,22 +307,4 @@ app.UseAuthorization();
 app.UseSessionTimeout(sessionSettings);
 app.MapControllers();
 
-// Ensure PostgreSQL schema has latest TaskDeliveryDetails columns
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.ExecuteSqlRawAsync(@"
-            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SenderAddress"" character varying(500) NULL;
-            ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN IF NOT EXISTS ""SpecialInstructions"" character varying(1000) NULL;
-        ");
-        Console.WriteLine("[STARTUP] Database schema verified: SenderAddress and SpecialInstructions ensured.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[STARTUP SCHEMA NOTICE] {ex.Message}");
-    }
-}
-
 app.Run();
