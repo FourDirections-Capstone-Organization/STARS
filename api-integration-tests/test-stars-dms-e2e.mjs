@@ -163,7 +163,11 @@ async function main() {
       timestamp: new Date().toISOString(),
       driverId: "DRV-001",
       latitude: 14.5547,
-      longitude: 121.0509
+      longitude: 121.0509,
+      recipientName: "Engr. Roberto Cruz",
+      recipientContact: "09171234567",
+      deliveryAddress: "Tower 2, High Street South, Bonifacio Global City, Taguig",
+      area: "Taguig"
     };
 
     const res = await call("POST", `${STARS_URL}/api/integration/dms/status`, {
@@ -173,7 +177,17 @@ async function main() {
 
     expect(res.status === 200, `status update failed with ${res.status}: ${res.text}`);
     expect(res.json?.isSuccess === true || res.json?.success === true, `response: ${res.text}`);
-    return `Updated to 'In Transit' (GPS: 14.5547, 121.0509) (${res.ms}ms)`;
+
+    // Verify STARS persisted the recipient details from the webhook
+    const checkRes = await call("GET", `${STARS_URL}/api/integration/dms/tasks/${testTaskId}/delivery-details`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+    const saved = checkRes.json?.data || checkRes.json;
+    expect(saved?.recipientName === "Engr. Roberto Cruz", `expected recipient 'Engr. Roberto Cruz' but got '${saved?.recipientName}'`);
+    expect(saved?.recipientContact === "09171234567", `expected contact '09171234567' but got '${saved?.recipientContact}'`);
+    expect(saved?.deliveryAddress?.includes("Taguig"), `expected Taguig address but got '${saved?.deliveryAddress}'`);
+
+    return `Updated to 'In Transit' (Recipient: ${saved.recipientName}, Address: ${saved.deliveryAddress}) (${res.ms}ms)`;
   });
 
   console.log("\n[4] Integration 3: DMS -> STARS Performance Analytics Sync");
