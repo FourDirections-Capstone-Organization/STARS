@@ -79,6 +79,12 @@ public class DmsStatusWebhookDTO
     public double? Longitude { get; set; }
 
     public int? HistoryId { get; set; }
+
+    public string? RecipientName { get; set; }
+    public string? RecipientContact { get; set; }
+    public string? DeliveryAddress { get; set; }
+    public string? Area { get; set; }
+    public string? PackageDescription { get; set; }
 }
 
 public class DmsPerformanceRecordDTO

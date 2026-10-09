@@ -156,11 +156,13 @@ public class DmsIntegrationService : IDmsIntegrationService
         var assigneeRef = assigneeUser != null
             ? $"{assigneeUser.EmployeeNumber} ({assigneeUser.FirstName} {assigneeUser.LastName})".Trim()
             : null;
+        var senderContact = task.CreatedBy?.ContactNumber ?? "09123456789";
 
         var payload = new
         {
             starsTaskId = taskId,
             taskTitle = task.Title,
+            senderContact = senderContact,
             recipientName = detail.RecipientName,
             recipientContact = detail.RecipientContact,
             deliveryAddress = detail.DeliveryAddress,
@@ -268,14 +270,30 @@ public class DmsIntegrationService : IDmsIntegrationService
                 await _db.SaveChangesAsync();
             }
 
+            var initRecipientName = !string.IsNullOrWhiteSpace(dto.RecipientName)
+                ? dto.RecipientName.Trim()
+                : "Operations Dispatch";
+            var initRecipientContact = !string.IsNullOrWhiteSpace(dto.RecipientContact)
+                ? dto.RecipientContact.Trim()
+                : "09123456789";
+            var initDeliveryAddress = !string.IsNullOrWhiteSpace(dto.DeliveryAddress)
+                ? dto.DeliveryAddress.Trim()
+                : "Metro Manila";
+            var initArea = !string.IsNullOrWhiteSpace(dto.Area)
+                ? dto.Area.Trim()
+                : "Manila";
+            var initPackageDesc = !string.IsNullOrWhiteSpace(dto.PackageDescription)
+                ? dto.PackageDescription.Trim()
+                : targetTask.Title;
+
             detail = new TaskDeliveryDetail
             {
                 TaskId = targetTask.Id,
-                RecipientName = "Operations Dispatch",
-                RecipientContact = "09123456789",
-                DeliveryAddress = "Metro Manila",
-                Area = "Manila",
-                PackageDescription = targetTask.Title,
+                RecipientName = initRecipientName,
+                RecipientContact = initRecipientContact,
+                DeliveryAddress = initDeliveryAddress,
+                Area = initArea,
+                PackageDescription = initPackageDesc,
                 DmsWaybillNo = dto.WaybillNo,
                 DmsStatus = dto.Status,
                 DmsRawStatus = dto.DmsStatus ?? dto.Status,
@@ -296,6 +314,19 @@ public class DmsIntegrationService : IDmsIntegrationService
         detail.DmsFailureReason = dto.FailureReason;
         detail.DmsLatitude = dto.Latitude;
         detail.DmsLongitude = dto.Longitude;
+
+        // If the webhook from DMS carries real recipient details, update them
+        if (!string.IsNullOrWhiteSpace(dto.RecipientName))
+            detail.RecipientName = dto.RecipientName.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.RecipientContact))
+            detail.RecipientContact = dto.RecipientContact.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.DeliveryAddress))
+            detail.DeliveryAddress = dto.DeliveryAddress.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Area))
+            detail.Area = dto.Area.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.PackageDescription))
+            detail.PackageDescription = dto.PackageDescription.Trim();
+
         detail.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
