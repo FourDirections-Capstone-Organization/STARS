@@ -24,6 +24,8 @@ export interface TaskDeliveryDetailData {
     deliveryAddress: string;
     area?: string;
     packageDescription?: string;
+    senderAddress?: string;
+    specialInstructions?: string;
     courierEmployeeId?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
@@ -45,6 +47,8 @@ export interface UpsertDeliveryDetailPayload {
     deliveryAddress: string;
     area?: string;
     packageDescription?: string;
+    senderAddress?: string;
+    specialInstructions?: string;
     courierEmployeeId?: string;
 }
 
@@ -226,6 +230,8 @@ const TaskView: React.FC<TaskViewProps> = ({
         deliveryAddress: '',
         area: '',
         packageDescription: '',
+        senderAddress: 'STARS Operations Office',
+        specialInstructions: '',
         courierEmployeeId: '',
     });
     const [savingDelivery, setSavingDelivery] = useState(false);
@@ -247,6 +253,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                     deliveryAddress: data.deliveryAddress || '',
                     area: data.area || '',
                     packageDescription: data.packageDescription || '',
+                    senderAddress: data.senderAddress || 'STARS Operations Office',
+                    specialInstructions: data.specialInstructions || '',
                     courierEmployeeId: data.courierEmployeeId || '',
                 });
             } else {
@@ -1038,6 +1046,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
                                                 </div>
                                             )}
+                                            {deliveryDetail.senderAddress && (
+                                                <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                    <span className="tv-dms-grid-label">Sender Pickup Address</span>
+                                                    <span className="tv-dms-grid-value">{deliveryDetail.senderAddress}</span>
+                                                </div>
+                                            )}
+                                            {deliveryDetail.specialInstructions && (
+                                                <div className="tv-dms-grid-item tv-dms-grid-full">
+                                                    <span className="tv-dms-grid-label">Special Instructions</span>
+                                                    <span className="tv-dms-grid-value">{deliveryDetail.specialInstructions}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="tv-dms-empty-hint">
@@ -1502,6 +1522,27 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         onChange={e => setEditingDelivery(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
                                     />
                                 </div>
+                            </div>
+                            <div className="tv-form-group">
+                                <label className="tv-form-label">Sender / Pickup Address <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>(Defaults to STARS Operations Office)</span></label>
+                                <input
+                                    type="text"
+                                    className="tv-form-input"
+                                    placeholder="e.g. STARS Operations Office"
+                                    value={editingDelivery.senderAddress || ''}
+                                    onChange={e => setEditingDelivery(prev => ({ ...prev, senderAddress: e.target.value }))}
+                                />
+                            </div>
+
+                            <div className="tv-form-group">
+                                <label className="tv-form-label">Special Instructions <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>(Optional notes for DMS courier)</span></label>
+                                <textarea
+                                    className="tv-form-input tv-form-textarea"
+                                    rows={2}
+                                    placeholder="e.g. Fragile documents, call recipient upon arrival, deliver before 3 PM"
+                                    value={editingDelivery.specialInstructions || ''}
+                                    onChange={e => setEditingDelivery(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                                />
                             </div>
                         </div>
 

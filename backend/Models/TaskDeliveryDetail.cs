@@ -32,6 +32,12 @@ public class TaskDeliveryDetail
     [MaxLength(500)]
     public string PackageDescription { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? SenderAddress { get; set; }
+
+    [MaxLength(1000)]
+    public string? SpecialInstructions { get; set; }
+
     /// <summary>
     /// Optional DMS employee id (e.g. DRV-001) for assigning a driver in DMS.
     /// </summary>

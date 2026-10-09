@@ -24,6 +24,12 @@ public class UpsertTaskDeliveryDetailDTO
 
     [MaxLength(50)]
     public string? CourierEmployeeId { get; set; }
+
+    [MaxLength(500)]
+    public string? SenderAddress { get; set; }
+
+    [MaxLength(1000)]
+    public string? SpecialInstructions { get; set; }
 }
 
 public class TriggerDispatchDTO
@@ -40,6 +46,8 @@ public class TaskDeliveryDetailResponseDTO
     public string DeliveryAddress { get; set; } = string.Empty;
     public string Area { get; set; } = string.Empty;
     public string PackageDescription { get; set; } = string.Empty;
+    public string? SenderAddress { get; set; }
+    public string? SpecialInstructions { get; set; }
     public string? CourierEmployeeId { get; set; }
     public string? DmsWaybillNo { get; set; }
     public int? DmsOrderId { get; set; }

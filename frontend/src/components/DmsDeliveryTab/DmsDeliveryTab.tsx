@@ -34,6 +34,8 @@ export interface DmsDeliveryItem {
     deliveryAddress: string;
     area?: string;
     packageDescription?: string;
+    senderAddress?: string;
+    specialInstructions?: string;
     courierEmployeeId?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
@@ -128,6 +130,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 deliveryAddress: d.deliveryAddress || 'Metro Manila',
                                 area: d.area || '',
                                 packageDescription: d.packageDescription || t.taskTitle || '',
+                                senderAddress: d.senderAddress,
+                                specialInstructions: d.specialInstructions,
                                 courierEmployeeId: d.courierEmployeeId || '',
                                 dmsWaybillNo: d.dmsWaybillNo,
                                 dmsOrderId: d.dmsOrderId,
@@ -589,6 +593,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                     <label>Assigned Driver</label>
                                     <span>{selectedDelivery.courierEmployeeId || 'Not assigned'}</span>
                                 </div>
+                                {selectedDelivery.senderAddress && (
+                                    <div className="dms-modal-field dms-modal-full">
+                                        <label>Sender Pickup Address</label>
+                                        <span>{selectedDelivery.senderAddress}</span>
+                                    </div>
+                                )}
+                                {selectedDelivery.specialInstructions && (
+                                    <div className="dms-modal-field dms-modal-full">
+                                        <label>Special Instructions</label>
+                                        <span>{selectedDelivery.specialInstructions}</span>
+                                    </div>
+                                )}
                                 <div className="dms-modal-field">
                                     <label>Current Status</label>
                                     <span>{selectedDelivery.dmsStatus}</span>

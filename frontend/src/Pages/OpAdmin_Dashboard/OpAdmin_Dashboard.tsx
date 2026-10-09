@@ -868,6 +868,18 @@ const TaskModal: React.FC<TaskModalProps> = ({
         taskRemarks: initial.taskRemarks ?? '',
     });
 
+    const [enableDelivery, setEnableDelivery] = useState(false);
+    const [deliveryForm, setDeliveryForm] = useState({
+        recipientName: '',
+        recipientContact: '',
+        deliveryAddress: '',
+        area: '',
+        packageDescription: '',
+        senderAddress: 'STARS Operations Office',
+        specialInstructions: '',
+        courierEmployeeId: '',
+    });
+
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
     const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
@@ -1050,6 +1062,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
         setSubmitting(true);
         setFormError('');
 
+        if (enableDelivery) {
+            if (!deliveryForm.recipientName.trim() || !deliveryForm.recipientContact.trim() || !deliveryForm.deliveryAddress.trim()) {
+                setFormError('Recipient Full Name, Contact Number, and Delivery Address are required when delivery is enabled.');
+                setSubmitting(false);
+                return;
+            }
+        }
+
         const scopeMap = { SingleEmployee: 0, Team: 1, Department: 2 };
         const prioMap = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
 
@@ -1065,6 +1085,19 @@ const TaskModal: React.FC<TaskModalProps> = ({
             teamId: form.assignmentScope === 'Team' ? selectedTeamId || undefined : undefined,
             assignedDepartmentId: form.assignmentScope === 'Department' ? form.assignedDepartmentId || undefined : undefined,
         };
+
+        if (enableDelivery) {
+            payload.deliveryDetails = {
+                recipientName: deliveryForm.recipientName.trim(),
+                recipientContact: deliveryForm.recipientContact.trim(),
+                deliveryAddress: deliveryForm.deliveryAddress.trim(),
+                area: deliveryForm.area?.trim() || '',
+                senderAddress: deliveryForm.senderAddress?.trim() || 'STARS Operations Office',
+                packageDescription: deliveryForm.packageDescription?.trim() || form.taskTitle.trim(),
+                specialInstructions: deliveryForm.specialInstructions?.trim() || '',
+                courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || '',
+            };
+        }
 
         if (supportingEvidenceFiles.length > 0) {
             onFileChange?.(supportingEvidenceFiles);
@@ -1591,6 +1624,112 @@ const TaskModal: React.FC<TaskModalProps> = ({
                             <CharCount value={form.taskRemarks} max={200} />
                         </div>
                     )}
+
+                    {/* -- DMS Delivery Details Card (Optional) -- */}
+                    <div style={{ marginTop: 12, marginBottom: 12, padding: 12, borderRadius: 8, border: enableDelivery ? '1.5px solid var(--primary, #0284c7)' : '1px solid var(--border, #e2e8f0)', background: enableDelivery ? 'rgba(2, 132, 199, 0.04)' : 'var(--bg-input, #f8fafc)' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                            <input
+                                type="checkbox"
+                                checked={enableDelivery}
+                                onChange={e => {
+                                    const checked = e.target.checked;
+                                    setEnableDelivery(checked);
+                                    if (checked && !deliveryForm.packageDescription) {
+                                        setDeliveryForm(prev => ({ ...prev, packageDescription: form.taskTitle }));
+                                    }
+                                }}
+                            />
+                            <Truck size={15} color="var(--primary, #0284c7)" />
+                            <span>Require Delivery via DMS (Auto-Generate Waybill)</span>
+                        </label>
+                        <p style={{ margin: '3px 0 0 24px', fontSize: 11, color: 'var(--text-secondary)' }}>
+                            Attach recipient drop-off address and parcel details for automatic DMS dispatch.
+                        </p>
+
+                        {enableDelivery && (
+                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Recipient Full Name <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <input
+                                            value={deliveryForm.recipientName}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientName: e.target.value }))}
+                                            placeholder="e.g. Engr. Roberto Cruz"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Recipient Contact Number <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <input
+                                            value={deliveryForm.recipientContact}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientContact: e.target.value }))}
+                                            placeholder="e.g. 09171234567"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Area / City</label>
+                                        <input
+                                            value={deliveryForm.area}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, area: e.target.value }))}
+                                            placeholder="e.g. Taguig, Makati"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Sender / Pickup Address</label>
+                                        <input
+                                            value={deliveryForm.senderAddress}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, senderAddress: e.target.value }))}
+                                            placeholder="e.g. STARS Operations Office"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="field" style={{ margin: 0 }}>
+                                    <label style={{ fontSize: 11 }}>Delivery Destination Address <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                    <textarea
+                                        rows={2}
+                                        value={deliveryForm.deliveryAddress}
+                                        onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                                        placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Package Description</label>
+                                        <input
+                                            value={deliveryForm.packageDescription}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                            placeholder="e.g. Confidential Project Dossier"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                        <input
+                                            value={deliveryForm.courierEmployeeId}
+                                            onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                            placeholder="e.g. DRV-001"
+                                            style={{ fontSize: 12 }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="field" style={{ margin: 0 }}>
+                                    <label style={{ fontSize: 11 }}>Special Instructions (Optional notes for DMS)</label>
+                                    <input
+                                        value={deliveryForm.specialInstructions}
+                                        onChange={e => setDeliveryForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                                        placeholder="e.g. Fragile documents, call recipient upon arrival"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {formError && (
@@ -8266,6 +8405,15 @@ export default function OpsAdminDashboard() {
             const created = res.data;
             const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
             const createdTitle = created?.data?.title ?? created?.title ?? created?.data?.Title ?? data.title;
+
+            // Save delivery details if enabled and provided
+            if (taskId && (data as any).deliveryDetails) {
+                try {
+                    await api.put(`/api/dms-integration/tasks/${taskId}/delivery-details`, (data as any).deliveryDetails);
+                } catch (delErr) {
+                    console.error('Failed to attach DMS delivery details to task:', delErr);
+                }
+            }
 
             // Upload supporting documents if provided
             if (taskId && pendingFiles.length > 0) {

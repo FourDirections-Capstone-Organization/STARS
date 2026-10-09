@@ -70,6 +70,8 @@ public class DmsIntegrationService : IDmsIntegrationService
                 Area = (dto.Area ?? string.Empty).Trim(),
                 PackageDescription = (dto.PackageDescription ?? string.Empty).Trim(),
                 CourierEmployeeId = dto.CourierEmployeeId?.Trim(),
+                SenderAddress = dto.SenderAddress?.Trim(),
+                SpecialInstructions = dto.SpecialInstructions?.Trim(),
                 SyncStatus = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
@@ -83,6 +85,8 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.Area = (dto.Area ?? string.Empty).Trim();
             detail.PackageDescription = (dto.PackageDescription ?? string.Empty).Trim();
             detail.CourierEmployeeId = dto.CourierEmployeeId?.Trim();
+            detail.SenderAddress = dto.SenderAddress?.Trim();
+            detail.SpecialInstructions = dto.SpecialInstructions?.Trim();
             detail.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -156,18 +160,42 @@ public class DmsIntegrationService : IDmsIntegrationService
         var assigneeRef = assigneeUser != null
             ? $"{assigneeUser.EmployeeNumber} ({assigneeUser.FirstName} {assigneeUser.LastName})".Trim()
             : null;
-        var senderContact = task.CreatedBy?.ContactNumber ?? "09123456789";
+
+        var creator = task.CreatedBy;
+        var creatorName = creator != null
+            ? $"{creator.FirstName} {creator.LastName}".Trim()
+            : "STARS Operations";
+        var senderName = creator != null
+            ? $"{creator.FirstName} {creator.LastName} (STARS Operations)".Trim()
+            : "STARS Operations";
+        var senderAddress = !string.IsNullOrWhiteSpace(detail.SenderAddress)
+            ? detail.SenderAddress.Trim()
+            : "STARS Operations Office";
+        var senderContact = creator?.ContactNumber ?? "09123456789";
+
+        string? reviewerName = null;
+        if (reviewerId.HasValue && reviewerId.Value != Guid.Empty)
+        {
+            var revUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == reviewerId.Value);
+            if (revUser != null)
+                reviewerName = $"{revUser.FirstName} {revUser.LastName}".Trim();
+        }
 
         var payload = new
         {
             starsTaskId = taskId,
             taskTitle = task.Title,
+            senderName = senderName,
+            senderAddress = senderAddress,
             senderContact = senderContact,
             recipientName = detail.RecipientName,
             recipientContact = detail.RecipientContact,
             deliveryAddress = detail.DeliveryAddress,
             area = string.IsNullOrWhiteSpace(detail.Area) ? "Manila" : detail.Area,
             packageDescription = string.IsNullOrWhiteSpace(detail.PackageDescription) ? task.Title : detail.PackageDescription,
+            specialInstructions = detail.SpecialInstructions,
+            encodedBy = creatorName,
+            updatedBy = reviewerName ?? creatorName,
             priorityLevel = task.PriorityLevel.ToString(),
             courierEmployeeId = detail.CourierEmployeeId,
             assigneeReference = assigneeRef,
@@ -471,6 +499,8 @@ public class DmsIntegrationService : IDmsIntegrationService
         DeliveryAddress = d.DeliveryAddress,
         Area = d.Area,
         PackageDescription = d.PackageDescription,
+        SenderAddress = d.SenderAddress,
+        SpecialInstructions = d.SpecialInstructions,
         CourierEmployeeId = d.CourierEmployeeId,
         DmsWaybillNo = d.DmsWaybillNo,
         DmsOrderId = d.DmsOrderId,
