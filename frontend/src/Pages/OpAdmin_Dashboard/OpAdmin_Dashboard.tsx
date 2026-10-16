@@ -8241,7 +8241,8 @@ export default function OpsAdminDashboard() {
             });
 
             setAllTasks(normalized);
-            setTasks(normalized.filter(t => !t.deleted));
+            const isBinTab = taskTabRef.current === 'bin';
+            setTasks(isBinTab ? normalized : normalized.filter(t => !t.deleted));
         } catch {
             if (!silent) console.warn('[fetchTasks] Failed to load tasks');
         } finally {
