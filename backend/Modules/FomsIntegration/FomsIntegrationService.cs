@@ -52,6 +52,12 @@ public class FomsIntegrationService : IFomsIntegrationService
         return CryptographicOperations.FixedTimeEquals(a, b);
     }
 
+    private static DateTime? ToUtc(DateTime? dt) =>
+        dt.HasValue ? (dt.Value.Kind == DateTimeKind.Utc ? dt.Value : DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc)) : null;
+
+    private static DateTime ToUtc(DateTime dt) =>
+        dt.Kind == DateTimeKind.Utc ? dt : DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+
     /// <summary>
     /// Integration 1 (FOMS → STARS): Receives a finalized invoice from FOMS and creates an endorsement task in STARS.
     /// </summary>
@@ -107,7 +113,7 @@ public class FomsIntegrationService : IFomsIntegrationService
             PriorityLevel = PriorityLevel.Medium,
             Status = Models.Enums.TaskStatus.NotStarted,
             Classification = TaskClassification.SpecialTask,
-            Deadline = dto.DueDate ?? now.AddDays(7),
+            Deadline = ToUtc(dto.DueDate) ?? now.AddDays(7),
             CreatedById = defaultCreatorId,
             CreatedAt = now,
             UpdatedAt = now
@@ -125,8 +131,8 @@ public class FomsIntegrationService : IFomsIntegrationService
             ClientContactNumber = dto.ClientContactNumber?.Trim(),
             ClientEmail = dto.ClientEmail?.Trim(),
             InvoiceAmount = dto.InvoiceAmount,
-            BillingDate = dto.BillingDate,
-            DueDate = dto.DueDate,
+            BillingDate = ToUtc(dto.BillingDate),
+            DueDate = ToUtc(dto.DueDate),
             InvoiceDocumentUrl = dto.InvoiceDocumentUrl?.Trim(),
             EndorsementStatus = "PendingEndorsement",
             FomsSyncStatus = "Synced",
@@ -303,34 +309,38 @@ public class FomsIntegrationService : IFomsIntegrationService
             .FirstOrDefaultAsync(s => s.InvoiceNumber == dto.InvoiceNumber.Trim());
 
         var now = DateTime.UtcNow;
+        var clientAccountId = string.IsNullOrWhiteSpace(dto.ClientAccountId) ? "CLI-001" : dto.ClientAccountId.Trim();
+        var clientName = string.IsNullOrWhiteSpace(dto.ClientName) ? "Client" : dto.ClientName.Trim();
+        var currentStatus = string.IsNullOrWhiteSpace(dto.CurrentStatus) ? "Unpaid" : dto.CurrentStatus.Trim();
+
         if (record == null)
         {
             record = new FomsClientFinancialStatus
             {
-                ClientAccountId = dto.ClientAccountId.Trim(),
-                ClientName = (dto.ClientName ?? string.Empty).Trim(),
+                ClientAccountId = clientAccountId,
+                ClientName = clientName,
                 InvoiceNumber = dto.InvoiceNumber.Trim(),
-                CurrentStatus = dto.CurrentStatus.Trim(),
+                CurrentStatus = currentStatus,
                 TotalAmount = dto.TotalAmount,
                 AmountPaid = dto.AmountPaid,
                 OutstandingBalance = dto.OutstandingBalance,
-                NextDueDate = dto.NextDueDate,
-                LastPaymentDate = dto.LastPaymentDate,
+                NextDueDate = ToUtc(dto.NextDueDate),
+                LastPaymentDate = ToUtc(dto.LastPaymentDate),
                 LastUpdatedFromFoms = now
             };
             _db.FomsClientFinancialStatuses.Add(record);
         }
         else
         {
-            record.ClientAccountId = dto.ClientAccountId.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.ClientName))
-                record.ClientName = dto.ClientName.Trim();
-            record.CurrentStatus = dto.CurrentStatus.Trim();
+            record.ClientAccountId = clientAccountId;
+            if (!string.IsNullOrWhiteSpace(clientName))
+                record.ClientName = clientName;
+            record.CurrentStatus = currentStatus;
             record.TotalAmount = dto.TotalAmount;
             record.AmountPaid = dto.AmountPaid;
             record.OutstandingBalance = dto.OutstandingBalance;
-            record.NextDueDate = dto.NextDueDate;
-            record.LastPaymentDate = dto.LastPaymentDate;
+            record.NextDueDate = ToUtc(dto.NextDueDate);
+            record.LastPaymentDate = ToUtc(dto.LastPaymentDate);
             record.LastUpdatedFromFoms = now;
         }
 
@@ -422,7 +432,7 @@ public class FomsIntegrationService : IFomsIntegrationService
             AmountDue = dto.AmountDue,
             DaysOverdue = dto.DaysOverdue,
             AgingStatus = dto.AgingStatus.Trim(),
-            DueDate = dto.DueDate,
+            DueDate = ToUtc(dto.DueDate),
             ClientContactPerson = dto.ClientContactPerson?.Trim(),
             ClientContactNumber = dto.ClientContactNumber?.Trim(),
             ClientAddress = dto.ClientAddress?.Trim(),

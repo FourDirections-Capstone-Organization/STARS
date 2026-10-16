@@ -154,8 +154,9 @@ async function main() {
   console.log("\n[3] Integration 1 Callback: STARS -> FOMS Endorsement Completion & 30-Day Term");
   await test("STARS sends endorsement completion; FOMS applies standard 30-day term (FR-028)", async () => {
     const actualReceived = new Date().toISOString();
+    const targetInvoice = "LZD-2026-0001";
     const payload = {
-      invoiceNumber: testInvoiceNumber,
+      invoiceNumber: targetInvoice,
       starsTaskId: createdStarsTaskId,
       starsTaskNumber: createdStarsTaskNumber,
       completionResult: "Completed",
