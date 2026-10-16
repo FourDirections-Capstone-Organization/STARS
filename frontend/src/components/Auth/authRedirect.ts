@@ -281,6 +281,19 @@ export interface IncomingAuthResult {
 export function bootstrapIncomingAuth(): IncomingAuthResult {
     if (typeof window === 'undefined') return { authenticated: false };
 
+    // Explicitly bypass token extraction if the user is visiting a public token-consuming page
+    const pathname = (window.location.pathname || '').toLowerCase();
+    if (
+        pathname.includes('/verify-email') ||
+        pathname.includes('/reset-password') ||
+        pathname.includes('/resetpassword') ||
+        pathname.includes('/set-password') ||
+        pathname.includes('/forgotpassword') ||
+        pathname.includes('/account_locked')
+    ) {
+        return { authenticated: false };
+    }
+
     const searchParams = new URLSearchParams(window.location.search);
     const hash = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
     const hashParams = new URLSearchParams(hash);
