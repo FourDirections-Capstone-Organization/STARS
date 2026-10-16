@@ -30,6 +30,37 @@ public class UpsertTaskDeliveryDetailDTO
 
     [MaxLength(1000)]
     public string? SpecialInstructions { get; set; }
+
+    public int? DmsOrderId { get; set; }
+
+    [MaxLength(50)]
+    public string? DmsWaybillNo { get; set; }
+}
+
+public class DmsPendingOrderDTO
+{
+    public int OrderId { get; set; }
+    public string WaybillNo { get; set; } = string.Empty;
+    public string ClientName { get; set; } = string.Empty;
+    public string ClientType { get; set; } = string.Empty;
+    public string ContactNumber { get; set; } = string.Empty;
+    public string SenderAddress { get; set; } = string.Empty;
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientContact { get; set; } = string.Empty;
+    public string RecipientAddress { get; set; } = string.Empty;
+    public string Area { get; set; } = string.Empty;
+    public string Route { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string TaskType { get; set; } = string.Empty;
+    public string PackageType { get; set; } = string.Empty;
+    public string PackageDescription { get; set; } = string.Empty;
+    public int ItemCount { get; set; } = 1;
+    public string Weight { get; set; } = string.Empty;
+    public string Priority { get; set; } = string.Empty;
+    public string? SpecialInstructions { get; set; }
+    public DateTime OrderDate { get; set; }
+    public DateTime ExpectedDelivery { get; set; }
+    public string? DriverEmployeeId { get; set; }
 }
 
 public class TriggerDispatchDTO

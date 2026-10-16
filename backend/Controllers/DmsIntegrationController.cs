@@ -84,6 +84,17 @@ public class DmsIntegrationController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieve unassigned/pending delivery orders from DMS that require pre-delivery validation in STARS.
+    /// </summary>
+    [HttpGet("api/dms-integration/pending-orders")]
+    [Authorize]
+    public async Task<IActionResult> GetPendingOrders()
+    {
+        var result = await _dmsService.GetPendingOrdersAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Manually trigger or retry sending a task's delivery order to DMS.
     /// </summary>
     [HttpPost("api/dms-integration/tasks/{taskId:guid}/resend")]

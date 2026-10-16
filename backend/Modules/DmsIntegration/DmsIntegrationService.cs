@@ -72,6 +72,8 @@ public class DmsIntegrationService : IDmsIntegrationService
                 CourierEmployeeId = dto.CourierEmployeeId?.Trim(),
                 SenderAddress = dto.SenderAddress?.Trim(),
                 SpecialInstructions = dto.SpecialInstructions?.Trim(),
+                DmsOrderId = dto.DmsOrderId,
+                DmsWaybillNo = dto.DmsWaybillNo?.Trim(),
                 SyncStatus = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
@@ -87,6 +89,8 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.CourierEmployeeId = dto.CourierEmployeeId?.Trim();
             detail.SenderAddress = dto.SenderAddress?.Trim();
             detail.SpecialInstructions = dto.SpecialInstructions?.Trim();
+            if (dto.DmsOrderId.HasValue) detail.DmsOrderId = dto.DmsOrderId;
+            if (!string.IsNullOrWhiteSpace(dto.DmsWaybillNo)) detail.DmsWaybillNo = dto.DmsWaybillNo.Trim();
             detail.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -209,7 +213,8 @@ public class DmsIntegrationService : IDmsIntegrationService
             courierEmployeeId = detail.CourierEmployeeId,
             assigneeReference = assigneeRef,
             taskCompletedAt = DateTime.UtcNow,
-            coordinatorId = reviewerId?.ToString() ?? task.CreatedById.ToString()
+            coordinatorId = reviewerId?.ToString() ?? task.CreatedById.ToString(),
+            existingOrderId = detail.DmsOrderId
         };
 
         try
@@ -564,6 +569,44 @@ public class DmsIntegrationService : IDmsIntegrationService
         }).ToList();
 
         return ApiResponseDTO<List<DmsDeliveryItemDTO>>.Success(list);
+    }
+
+    public async Task<ApiResponseDTO<List<DmsPendingOrderDTO>>> GetPendingOrdersAsync()
+    {
+        if (!IsConfigured)
+        {
+            return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(new List<DmsPendingOrderDTO>());
+        }
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/pending-orders");
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(new List<DmsPendingOrderDTO>());
+            }
+
+            var orders = await response.Content.ReadFromJsonAsync<List<DmsPendingOrderDTO>>() ?? new List<DmsPendingOrderDTO>();
+
+            // Exclude orders that already have an operational task created in STARS
+            var linkedDmsOrderIds = await _db.TaskDeliveryDetails
+                .Where(d => d.DmsOrderId.HasValue)
+                .Select(d => d.DmsOrderId!.Value)
+                .ToListAsync();
+
+            var pending = orders.Where(o => !linkedDmsOrderIds.Contains(o.OrderId)).ToList();
+            return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(pending);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve pending orders from DMS");
+            return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(new List<DmsPendingOrderDTO>());
+        }
     }
 
     private static TaskDeliveryDetailResponseDTO MapToDTO(TaskDeliveryDetail d) => new()
