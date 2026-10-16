@@ -104,10 +104,22 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         try {
             await fetchPerformance();
 
-            // Candidate tasks: tasks from props or fetch from task list
+            // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
+            try {
+                const res = await api.get('/api/dms-integration/deliveries');
+                const list = res?.data?.data ?? res?.data;
+                if (Array.isArray(list)) {
+                    setDeliveries(list);
+                    return;
+                }
+            } catch {
+                // Fall back to candidate tasks if endpoint unavailable
+            }
+
+            // Fallback: candidate tasks from props or fetch from task list
             let sourceTasks = tasks;
             if (!sourceTasks || sourceTasks.length === 0) {
-                const res = await api.get('/api/Task', { pageNumber: 1, pageSize: 100 });
+                const res = await api.get('/api/Task?pageNumber=1&pageSize=100');
                 const json = res.data;
                 sourceTasks = json?.data?.items ?? json?.data ?? (Array.isArray(json) ? json : []);
             }

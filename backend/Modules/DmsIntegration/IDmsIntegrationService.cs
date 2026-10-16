@@ -42,4 +42,9 @@ public interface IDmsIntegrationService
     /// Returns aggregated on-time vs late metrics from DMS deliveries, optionally filtered by driver.
     /// </summary>
     Task<ApiResponseDTO<DmsPerformanceSummaryDTO>> GetPerformanceSummaryAsync(string? driverId = null);
+
+    /// <summary>
+    /// Retrieves all delivery records across tasks for Delivery Summary.
+    /// </summary>
+    Task<ApiResponseDTO<List<DmsDeliveryItemDTO>>> GetAllDeliveriesAsync();
 }

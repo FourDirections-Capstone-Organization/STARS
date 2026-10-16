@@ -73,6 +73,17 @@ public class DmsIntegrationController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieve all delivery orders across tasks for the Delivery Summary tab.
+    /// </summary>
+    [HttpGet("api/dms-integration/deliveries")]
+    [Authorize]
+    public async Task<IActionResult> GetAllDeliveries()
+    {
+        var result = await _dmsService.GetAllDeliveriesAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Manually trigger or retry sending a task's delivery order to DMS.
     /// </summary>
     [HttpPost("api/dms-integration/tasks/{taskId:guid}/resend")]
