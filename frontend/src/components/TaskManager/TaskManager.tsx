@@ -492,7 +492,7 @@ export default function TaskManager({
                 ))}
             </div>
 
-            {viewMode === 'board' && tab !== 'bin' ? (
+            {viewMode === 'board' && tab === 'active' ? (
                 <div className="card table-card">
                     {/* ── Tabs ── */}
                     <div className="table-card-tabs">
@@ -514,24 +514,26 @@ export default function TaskManager({
                     <div className="table-card-header">
                         <h3 className="table-card-title">Task Manager</h3>
                         <div className="table-card-header-right">
-                            <div className="tm-view-toggle-group">
-                                <button
-                                    type="button"
-                                    className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-                                    onClick={() => setViewMode('table')}
-                                    title="Table View"
-                                >
-                                    <LayoutList size={13} /> Table
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
-                                    onClick={() => setViewMode('board')}
-                                    title="Board View"
-                                >
-                                    <Kanban size={13} /> Board
-                                </button>
-                            </div>
+                            {tab === 'active' && (
+                                <div className="tm-view-toggle-group">
+                                    <button
+                                        type="button"
+                                        className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                        onClick={() => setViewMode('table')}
+                                        title="Table View"
+                                    >
+                                        <LayoutList size={13} /> Table
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                                        onClick={() => setViewMode('board')}
+                                        title="Board View"
+                                    >
+                                        <Kanban size={13} /> Board
+                                    </button>
+                                </div>
+                            )}
                             {tab === 'active' && (
                                 <button
                                     type="button"
@@ -604,24 +606,26 @@ export default function TaskManager({
                     title="Task Manager"
                     headerRight={
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div className="tm-view-toggle-group">
-                                <button
-                                    type="button"
-                                    className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-                                    onClick={() => setViewMode('table')}
-                                    title="Table View"
-                                >
-                                    <LayoutList size={13} /> Table
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
-                                    onClick={() => setViewMode('board')}
-                                    title="Board View"
-                                >
-                                    <Kanban size={13} /> Board
-                                </button>
-                            </div>
+                            {tab === 'active' && (
+                                <div className="tm-view-toggle-group">
+                                    <button
+                                        type="button"
+                                        className={`tm-view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                        onClick={() => setViewMode('table')}
+                                        title="Table View"
+                                    >
+                                        <LayoutList size={13} /> Table
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                                        onClick={() => setViewMode('board')}
+                                        title="Board View"
+                                    >
+                                        <Kanban size={13} /> Board
+                                    </button>
+                                </div>
+                            )}
                             {tab === 'active' && (
                                 <button
                                     type="button"
@@ -767,7 +771,7 @@ export default function TaskManager({
                 </DataTable>
             )}
 
-            {selectedIds.size > 0 && viewMode === 'table' && (
+            {selectedIds.size > 0 && (viewMode === 'table' || tab !== 'active') && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
                     <span style={{ fontWeight: 600, color: '#1e293b' }}>{selectedIds.size} selected</span>
                     {tab !== 'bin' && <button onClick={() => { onMarkDone([...selectedIds]); setSelectedIds(new Set()); }} style={{ padding: '4px 10px', borderRadius: 6, border: '0.5px solid #e2e8f0', background: '#fff', fontSize: 12, cursor: 'pointer' }}>Mark done</button>}
