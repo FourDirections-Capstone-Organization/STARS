@@ -355,6 +355,7 @@ export default function BiomarkerDashboard() {
                 }}
                 placeholder="Filter by date range…"
                 ariaLabel="Filter biomarker scan alerts by date range"
+                align="right"
             />
             {hasActiveFilters && (
                 <button className="bd-dt-reset-btn" onClick={handleResetFilters} title="Reset all filters">
@@ -373,7 +374,7 @@ export default function BiomarkerDashboard() {
                         <Activity size={28} />
                     </div>
                     <div className="bd-scan-info">
-                        <h3>Biomarker Scan Engine <span className="bd-live-badge"><Radio size={10} /> LIVE</span> <AnalyticsStatusBadge status={analyticsStatus} /></h3>
+                        <h3>Biomarker Scan Engine <AnalyticsStatusBadge status={analyticsStatus} /></h3>
                         <div className="bd-scan-meta">
                             <span className={`bd-scan-status-badge ${scanStatus.toLowerCase()}`}>
                                 <span className="bd-status-dot" />

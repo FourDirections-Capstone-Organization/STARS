@@ -75,7 +75,6 @@
   color: var(--text-primary, #1E293B);
 }
 
-/* ── Popover ── */
 .drp-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -87,8 +86,15 @@
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
   padding: 16px;
   width: 320px;
+  max-width: calc(100vw - 24px);
   box-sizing: border-box;
   animation: drpFadeIn 0.15s ease-out;
+}
+
+.drp-popover.drp-popover--right,
+.drp-popover-right {
+  left: auto;
+  right: 0;
 }
 
 @keyframes drpFadeIn {
