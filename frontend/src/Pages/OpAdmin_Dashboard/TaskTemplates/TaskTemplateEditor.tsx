@@ -183,9 +183,9 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
     // Filter employees by selected responsible department
     const filteredEmployees = useMemo(() => {
         if (!departmentId) return employees;
-        const selectedDept = departments?.find(d => d.id === departmentId);
+        const selectedDept = departments?.find(d => String(d.id) === String(departmentId));
         return employees.filter(e => {
-            if (e.departmentId && e.departmentId === departmentId) return true;
+            if (e.departmentId && String(e.departmentId) === String(departmentId)) return true;
             if (selectedDept && e.department && e.department.toLowerCase() === selectedDept.name.toLowerCase()) return true;
             return false;
         });
@@ -402,7 +402,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
             const bTime = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
             return aTime - bTime;
         });
-    }, [employees]);
+    }, [filteredEmployees]);
 
     const getInitials = (nameStr: string) => {
         const parts = (nameStr || '').split(' ').filter(Boolean);
@@ -673,10 +673,10 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                                 const newDeptId = e.target.value;
                                 setDepartmentId(newDeptId);
                                 if (newDeptId && fixedAssigneeId) {
-                                    const selectedDept = departments.find(d => d.id === newDeptId);
+                                    const selectedDept = departments.find(d => String(d.id) === String(newDeptId));
                                     const currentAssignee = employees.find(emp => emp.userId === fixedAssigneeId);
                                     const belongsToNewDept = currentAssignee && (
-                                        currentAssignee.departmentId === newDeptId || 
+                                        String(currentAssignee.departmentId) === String(newDeptId) || 
                                         (selectedDept && currentAssignee.department?.toLowerCase() === selectedDept.name.toLowerCase())
                                     );
                                     if (!belongsToNewDept) {
@@ -694,7 +694,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                         </select>
                         <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
                             {departmentId 
-                                ? `Tasks generated from this template can only be assigned to employees in the ${departments.find(d => d.id === departmentId)?.name || 'selected'} department.` 
+                                ? `Tasks generated from this template can only be assigned to employees in the ${departments.find(d => String(d.id) === String(departmentId))?.name || 'selected'} department.` 
                                 : 'Tasks generated from this template can be assigned across all departments.'}
                         </span>
                     </div>
@@ -809,7 +809,7 @@ export const TaskTemplateEditor: React.FC<TaskTemplateEditorProps> = ({
                             </h2>
                             <p className="tt-editor-card-sub">
                                 {departmentId
-                                    ? `Live workload rankings for ${departments.find(d => d.id === departmentId)?.name || 'selected department'}.`
+                                    ? `Live workload rankings for ${departments.find(d => String(d.id) === String(departmentId))?.name || 'selected department'}.`
                                     : 'Live workload rankings for fair round-robin task routing across all departments.'}
                             </p>
                         </div>
