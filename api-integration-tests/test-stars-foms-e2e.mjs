@@ -14,7 +14,7 @@ const env = process.env;
 const strip = (u) => (u || "").replace(/\/+$/, "");
 
 const STARS_URL = strip(env.STARS_API_URL || "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net");
-const FOMS_URL = strip(env.FOMS_API_URL || "http://localhost:5007");
+const FOMS_URL = strip(env.FOMS_API_URL || "https://fomsintegration-amfve2fdccbdgbgy.eastasia-01.azurewebsites.net");
 
 // Pre-shared 256-bit API keys
 const STARS_TO_FOMS_KEY = env.STARS_TO_FOMS_KEY || "cfeb22557344061f853cee23cef70f2a2508fcbb36658ccc79fec8c7d5049ff4";
