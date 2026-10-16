@@ -9,6 +9,7 @@ export interface DateRangePickerProps {
     onClear?: () => void;
     placeholder?: string;
     ariaLabel?: string;
+    align?: 'left' | 'right' | 'auto';
     style?: React.CSSProperties;
     className?: string;
 }
@@ -45,11 +46,31 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     onClear,
     placeholder = 'Filter by date…',
     ariaLabel = 'Date range filter',
+    align = 'auto',
     style,
     className = '',
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const [popoverAlign, setPopoverAlign] = useState<'left' | 'right'>(align === 'right' ? 'right' : 'left');
+
+    // Auto-detect boundary overflow to anchor rightwards if needed
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            if (align === 'right') {
+                setPopoverAlign('right');
+            } else if (align === 'left') {
+                setPopoverAlign('left');
+            } else {
+                const rect = containerRef.current.getBoundingClientRect();
+                if (rect.left + 330 > window.innerWidth) {
+                    setPopoverAlign('right');
+                } else {
+                    setPopoverAlign('left');
+                }
+            }
+        }
+    }, [isOpen, align]);
 
     // Draft selection state inside popover
     const [tempStart, setTempStart] = useState<string>(startDate);
@@ -265,7 +286,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             </div>
 
             {isOpen && (
-                <div className="drp-popover" role="dialog" aria-modal="true">
+                <div className={`drp-popover drp-popover--${popoverAlign}`} role="dialog" aria-modal="true">
                     {/* Quick Presets */}
                     <div className="drp-presets">
                         <button type="button" className="drp-preset-btn" onClick={() => applyPreset('today')}>Today</button>
