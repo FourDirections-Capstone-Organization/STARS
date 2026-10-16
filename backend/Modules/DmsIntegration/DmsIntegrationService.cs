@@ -366,12 +366,40 @@ public class DmsIntegrationService : IDmsIntegrationService
 
         detail.UpdatedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync();
-
-        // Notify Coordinator and Manager
-        var task = detail.Task;
+        // Auto-synchronize STARS Task status with DMS status
+        var task = detail.Task ?? await _db.Tasks.Include(t => t.Assignments).FirstOrDefaultAsync(t => t.Id == detail.TaskId);
         if (task != null)
         {
+            var normStatus = (dto.Status ?? "").Trim().ToLowerInvariant();
+            if (normStatus == "delivered" || normStatus == "completed")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                task.IsApproved = true;
+
+                if (task.Assignments != null)
+                {
+                    foreach (var a in task.Assignments)
+                    {
+                        a.CompletionPercentage = 100;
+                    }
+                }
+            }
+            else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup")
+            {
+                if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
+                {
+                    task.Status = Backend.Models.Enums.TaskStatus.InProgress;
+                    task.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+            else if (normStatus == "cancelled" || normStatus == "canceled")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Cancelled;
+                task.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Notify Coordinator and Manager
             var notifRecipients = new List<Guid>();
             if (task.CreatedById != Guid.Empty)
                 notifRecipients.Add(task.CreatedById);
@@ -386,7 +414,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             notifRecipients.AddRange(managersAndCoords);
             var distinctRecipients = notifRecipients.Distinct().ToList();
 
-            var notifType = (dto.Status == "Completed" || dto.Status == "Delivered")
+            var notifType = (normStatus == "completed" || normStatus == "delivered")
                 ? NotificationType.TaskCompleted
                 : NotificationType.TaskUpdated;
 
@@ -396,6 +424,8 @@ public class DmsIntegrationService : IDmsIntegrationService
 
             await _notificationService.SendBulkNotificationAsync(distinctRecipients, notifType, title, message, task.Id);
         }
+
+        await _db.SaveChangesAsync();
 
         await _auditLogService.LogAsync(
             null,
@@ -497,6 +527,43 @@ public class DmsIntegrationService : IDmsIntegrationService
         };
 
         return ApiResponseDTO<DmsPerformanceSummaryDTO>.Success(dto);
+    }
+
+    public async Task<ApiResponseDTO<List<DmsDeliveryItemDTO>>> GetAllDeliveriesAsync()
+    {
+        var details = await _db.TaskDeliveryDetails
+            .Include(d => d.Task)
+            .OrderByDescending(d => d.UpdatedAt ?? d.CreatedAt)
+            .ToListAsync();
+
+        var list = details.Select(d => new DmsDeliveryItemDTO
+        {
+            TaskId = d.TaskId,
+            TaskTitle = d.Task?.Title ?? "Delivery Task",
+            TaskNumber = d.Task?.TaskNumber,
+            TaskReferenceNumber = d.Task?.TaskNumber,
+            RecipientName = d.RecipientName,
+            RecipientContact = d.RecipientContact,
+            DeliveryAddress = d.DeliveryAddress,
+            Area = d.Area,
+            PackageDescription = d.PackageDescription,
+            SenderAddress = d.SenderAddress,
+            SpecialInstructions = d.SpecialInstructions,
+            CourierEmployeeId = d.CourierEmployeeId,
+            DmsWaybillNo = d.DmsWaybillNo,
+            DmsOrderId = d.DmsOrderId,
+            DmsStatus = d.DmsStatus ?? "Pending",
+            DmsRawStatus = d.DmsRawStatus ?? d.DmsStatus ?? "Pending",
+            DmsLastSyncedAt = d.DmsLastSyncedAt,
+            DmsFailureReason = d.DmsFailureReason,
+            DmsLatitude = (double?)d.DmsLatitude,
+            DmsLongitude = (double?)d.DmsLongitude,
+            SyncStatus = d.SyncStatus ?? "Synced",
+            CreatedAt = d.CreatedAt,
+            UpdatedAt = d.UpdatedAt,
+        }).ToList();
+
+        return ApiResponseDTO<List<DmsDeliveryItemDTO>>.Success(list);
     }
 
     private static TaskDeliveryDetailResponseDTO MapToDTO(TaskDeliveryDetail d) => new()

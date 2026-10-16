@@ -120,3 +120,30 @@ public class DmsPerformanceSummaryDTO
     public string? DriverFilter { get; set; }
     public List<DmsPerformanceRecordDTO> Records { get; set; } = new();
 }
+
+public class DmsDeliveryItemDTO
+{
+    public Guid TaskId { get; set; }
+    public string TaskTitle { get; set; } = string.Empty;
+    public string? TaskNumber { get; set; }
+    public string? TaskReferenceNumber { get; set; }
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientContact { get; set; } = string.Empty;
+    public string DeliveryAddress { get; set; } = string.Empty;
+    public string? Area { get; set; }
+    public string? PackageDescription { get; set; }
+    public string? SenderAddress { get; set; }
+    public string? SpecialInstructions { get; set; }
+    public string? CourierEmployeeId { get; set; }
+    public string? DmsWaybillNo { get; set; }
+    public int? DmsOrderId { get; set; }
+    public string DmsStatus { get; set; } = string.Empty;
+    public string? DmsRawStatus { get; set; }
+    public DateTime? DmsLastSyncedAt { get; set; }
+    public string? DmsFailureReason { get; set; }
+    public double? DmsLatitude { get; set; }
+    public double? DmsLongitude { get; set; }
+    public string SyncStatus { get; set; } = string.Empty;
+    public DateTime? CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
