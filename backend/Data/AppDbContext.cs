@@ -28,6 +28,9 @@ public class AppDbContext : DbContext
     public DbSet<BiomarkerAlert> BiomarkerAlerts => Set<BiomarkerAlert>();
     public DbSet<TaskDeliveryDetail> TaskDeliveryDetails => Set<TaskDeliveryDetail>();
     public DbSet<DmsDeliveryPerformance> DmsDeliveryPerformances => Set<DmsDeliveryPerformance>();
+    public DbSet<TaskFomsInvoiceDetail> TaskFomsInvoiceDetails => Set<TaskFomsInvoiceDetail>();
+    public DbSet<FomsClientFinancialStatus> FomsClientFinancialStatuses => Set<FomsClientFinancialStatus>();
+    public DbSet<TaskFomsCollectionDetail> TaskFomsCollectionDetails => Set<TaskFomsCollectionDetail>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -335,6 +338,41 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.WaybillNo).IsUnique();
             entity.HasIndex(e => e.DriverId);
             entity.HasIndex(e => e.CompletedAt);
+        });
+
+        // TaskFomsInvoiceDetail Configuration
+        modelBuilder.Entity<TaskFomsInvoiceDetail>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TaskId).IsUnique();
+            entity.HasIndex(e => e.InvoiceNumber);
+
+            entity.HasOne(d => d.Task)
+                .WithMany()
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // FomsClientFinancialStatus Configuration
+        modelBuilder.Entity<FomsClientFinancialStatus>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.InvoiceNumber).IsUnique();
+            entity.HasIndex(e => e.ClientAccountId);
+        });
+
+        // TaskFomsCollectionDetail Configuration
+        modelBuilder.Entity<TaskFomsCollectionDetail>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TaskId).IsUnique();
+            entity.HasIndex(e => e.InvoiceNumber);
+            entity.HasIndex(e => e.ClientAccountId);
+
+            entity.HasOne(d => d.Task)
+                .WithMany()
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

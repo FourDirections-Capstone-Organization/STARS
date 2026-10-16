@@ -20,6 +20,7 @@ using Backend.Models.Enums;
 
 using System.Text.Json.Serialization;
 using Backend.Modules.DmsIntegration;
+using Backend.Modules.FomsIntegration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -181,6 +182,13 @@ builder.Services.AddHttpClient(DmsIntegrationService.HttpClientName, c =>
     c.Timeout = TimeSpan.FromSeconds(25);
 });
 builder.Services.AddScoped<IDmsIntegrationService, DmsIntegrationService>();
+
+builder.Services.Configure<FomsIntegrationSettings>(builder.Configuration.GetSection(FomsIntegrationSettings.SectionName));
+builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(25);
+});
+builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
 
 // Analytics Services
 builder.Services.AddScoped<IStreamAnalyticsService, StreamAnalyticsService>();

@@ -208,6 +208,20 @@ public class TaskWorkflowService : ITaskWorkflowService
                 // Task approval must never fail if DMS is temporarily unreachable
             }
 
+            // Trigger FOMS Integration 1: Task Completion -> Invoice Endorsement Completion Callback
+            try
+            {
+                var fomsService = _serviceProvider.GetService<Backend.Modules.FomsIntegration.IFomsIntegrationService>();
+                if (fomsService != null && fomsService.IsConfigured)
+                {
+                    await fomsService.SendInvoiceEndorsementCompletionAsync(taskId, reviewerId);
+                }
+            }
+            catch
+            {
+                // Task approval must never fail if FOMS is temporarily unreachable
+            }
+
             return ApiResponseDTO<TaskResponseDTO>.Success(
                 await MapToResponseDTOAsync(task),
                 "Task approved and officially closed");
