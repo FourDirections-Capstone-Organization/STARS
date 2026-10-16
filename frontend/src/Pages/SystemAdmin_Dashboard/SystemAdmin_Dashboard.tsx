@@ -73,6 +73,7 @@ import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
+import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import api from '../../api';
 import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
@@ -85,6 +86,7 @@ type NavTab =
     | 'dashboard'
     | 'employees'
     | 'delivery'
+    | 'pre_delivery'
     | 'finance'
     | 'settings'
     | 'roles'
@@ -2385,6 +2387,7 @@ export default function Dashboard() {
         icon: 'ti ti-truck-delivery',
         subItems: [
         { label: 'Delivery Summary', onClick: () => handleNavChange('delivery'), active: activeTab === 'delivery' },
+        { label: 'Pre-Delivery Validation', onClick: () => handleNavChange('pre_delivery'), active: activeTab === 'pre_delivery' },
         ],
         },
         {
@@ -2459,7 +2462,18 @@ export default function Dashboard() {
     const [newTaskForm, setNewTaskForm] = useState({ title: '', description: '', priority: '', deadline: '', classification: '', isConfidential: false, assignmentScope: 'SingleEmployee', assignedDepartmentId: '', assignedTo: '', assignedUserIds: [] as string[], supportingEvidenceUrl: '' });
     const [newTaskErrors, setNewTaskErrors] = useState<Record<string, string>>({});
     const [newEnableDelivery, setNewEnableDelivery] = useState(false);
-    const [newDeliveryForm, setNewDeliveryForm] = useState({
+    const [newDeliveryForm, setNewDeliveryForm] = useState<{
+        recipientName: string;
+        recipientContact: string;
+        deliveryAddress: string;
+        area: string;
+        senderAddress: string;
+        packageDescription: string;
+        courierEmployeeId: string;
+        specialInstructions: string;
+        dmsOrderId?: number;
+        dmsWaybillNo?: string;
+    }>({
         recipientName: '',
         recipientContact: '',
         deliveryAddress: '',
@@ -2468,6 +2482,8 @@ export default function Dashboard() {
         packageDescription: '',
         courierEmployeeId: '',
         specialInstructions: '',
+        dmsOrderId: undefined,
+        dmsWaybillNo: undefined,
     });
     const [newTaskSubmitting, setNewTaskSubmitting] = useState(false);
     const [newTaskApiError, setNewTaskApiError] = useState('');
@@ -2835,12 +2851,48 @@ export default function Dashboard() {
     useEffect(() => {
         if (!showNewTask) {
             setNewTaskForm({ title: '', description: '', priority: '', deadline: '', classification: '', isConfidential: false, assignmentScope: 'SingleEmployee', assignedDepartmentId: '', assignedTo: '', assignedUserIds: [], supportingEvidenceUrl: '' });
+            setNewDeliveryForm({
+                recipientName: '',
+                recipientContact: '',
+                deliveryAddress: '',
+                area: '',
+                senderAddress: '',
+                packageDescription: '',
+                courierEmployeeId: '',
+                specialInstructions: '',
+                dmsOrderId: undefined,
+                dmsWaybillNo: undefined,
+            });
+            setNewEnableDelivery(false);
             setNewTaskErrors({});
             setNewTaskApiError('');
             setNewTaskEligibleEmployees([]);
             setNewTaskRecommendation(null);
         }
     }, [showNewTask]);
+
+    const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
+        setNewTaskForm(prev => ({
+            ...prev,
+            title: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
+            description: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
+            priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
+        }));
+        setNewDeliveryForm({
+            recipientName: order.recipientName,
+            recipientContact: order.recipientContact,
+            deliveryAddress: order.recipientAddress,
+            area: order.area || '',
+            senderAddress: order.senderAddress || 'STARS Operations Office',
+            packageDescription: order.packageDescription || '',
+            courierEmployeeId: order.driverEmployeeId || '',
+            specialInstructions: order.specialInstructions || '',
+            dmsOrderId: order.orderId,
+            dmsWaybillNo: order.waybillNo,
+        });
+        setNewEnableDelivery(true);
+        setShowNewTask(true);
+    };
 
     // -- Delete a task attachment --
     const handleManagerDeleteAttachment = async (attachmentId: string) => {
@@ -2944,6 +2996,8 @@ export default function Dashboard() {
                         packageDescription: newDeliveryForm.packageDescription?.trim() || t,
                         specialInstructions: newDeliveryForm.specialInstructions?.trim() || null,
                         courierEmployeeId: newDeliveryForm.courierEmployeeId?.trim() || null,
+                        dmsOrderId: (newDeliveryForm as any).dmsOrderId,
+                        dmsWaybillNo: (newDeliveryForm as any).dmsWaybillNo || null,
                     });
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
@@ -3490,7 +3544,7 @@ export default function Dashboard() {
 
     const pageTitles: Record<NavTab, string> = {
         dashboard: 'Dashboard', employees: 'Manage Employee',
-        delivery: 'Delivery Summary', finance: 'Financial Overview', settings: 'Settings',
+        delivery: 'Delivery Summary', pre_delivery: 'Pre-Delivery Validation', finance: 'Financial Overview', settings: 'Settings',
         roles: 'Role Management', reports: 'Reports', announcements: 'Announcements', notifications: 'Notifications', activity_logs: 'Activity Logs', profile: 'My Profile',
         tasks: 'Task Manager',
         'org-structure': 'Organizational Structure',
@@ -3761,6 +3815,23 @@ export default function Dashboard() {
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tmTasks}
+                            onViewTask={(taskId) => {
+                                const found = tmTasks.find(t => t.id === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setTmDetailTask(mapManagerTaskToView(found));
+                                } else {
+                                    openManagerTaskById(taskId);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+                {activeTab === 'pre_delivery' && (
+                    <div className="dashboard-content">
+                        <PreDeliveryTab
+                            tasks={tmTasks}
+                            onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {

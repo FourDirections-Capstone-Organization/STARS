@@ -47,4 +47,9 @@ public interface IDmsIntegrationService
     /// Retrieves all delivery records across tasks for Delivery Summary.
     /// </summary>
     Task<ApiResponseDTO<List<DmsDeliveryItemDTO>>> GetAllDeliveriesAsync();
+
+    /// <summary>
+    /// Retrieves delivery orders from DMS that have not yet been assigned to an operational task in STARS.
+    /// </summary>
+    Task<ApiResponseDTO<List<DmsPendingOrderDTO>>> GetPendingOrdersAsync();
 }

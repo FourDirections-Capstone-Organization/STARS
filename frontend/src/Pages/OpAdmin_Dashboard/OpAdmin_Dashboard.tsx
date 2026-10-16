@@ -83,6 +83,7 @@ import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
+import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -176,6 +177,7 @@ type NavTab =
     | 'tasks'
     | 'team'
     | 'delivery'
+    | 'pre_delivery'
     | 'reports'
     | 'profile'
     | 'reopen'
@@ -869,16 +871,18 @@ const TaskModal: React.FC<TaskModalProps> = ({
         taskRemarks: initial.taskRemarks ?? '',
     });
 
-    const [enableDelivery, setEnableDelivery] = useState(false);
+    const [enableDelivery, setEnableDelivery] = useState(!!(initial as any)?.deliveryDetails);
     const [deliveryForm, setDeliveryForm] = useState({
-        recipientName: '',
-        recipientContact: '',
-        deliveryAddress: '',
-        area: '',
-        packageDescription: '',
-        senderAddress: 'STARS Operations Office',
-        specialInstructions: '',
-        courierEmployeeId: '',
+        recipientName: (initial as any)?.deliveryDetails?.recipientName ?? '',
+        recipientContact: (initial as any)?.deliveryDetails?.recipientContact ?? '',
+        deliveryAddress: (initial as any)?.deliveryDetails?.deliveryAddress ?? '',
+        area: (initial as any)?.deliveryDetails?.area ?? '',
+        packageDescription: (initial as any)?.deliveryDetails?.packageDescription ?? (initial.taskTitle ?? ''),
+        senderAddress: (initial as any)?.deliveryDetails?.senderAddress ?? 'STARS Operations Office',
+        specialInstructions: (initial as any)?.deliveryDetails?.specialInstructions ?? '',
+        courierEmployeeId: (initial as any)?.deliveryDetails?.courierEmployeeId ?? '',
+        dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
+        dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1097,6 +1101,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 packageDescription: deliveryForm.packageDescription?.trim() || form.taskTitle.trim(),
                 specialInstructions: deliveryForm.specialInstructions?.trim() || '',
                 courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || '',
+                dmsOrderId: (deliveryForm as any).dmsOrderId,
+                dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
             };
         }
 
@@ -7665,6 +7671,7 @@ export default function OpsAdminDashboard() {
                     icon: 'ti ti-truck-delivery',
                     subItems: [
                         { label: 'Delivery Tracking (DMS)', onClick: () => handleNavChange('delivery'), active: activeTab === 'delivery' },
+                        { label: 'Pre-Delivery Validation', onClick: () => handleNavChange('pre_delivery'), active: activeTab === 'pre_delivery' },
                     ],
                 },
                 {
@@ -7797,6 +7804,29 @@ export default function OpsAdminDashboard() {
     }, [activeTab, fetchAllNotifications]);
 
     const [showNew, setShowNew] = useState(false);
+    const [initialTaskData, setInitialTaskData] = useState<any>(null);
+
+    const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
+        setInitialTaskData({
+            taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
+            taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
+            taskCategory: 'Delivery Operations',
+            priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
+            deliveryDetails: {
+                recipientName: order.recipientName,
+                recipientContact: order.recipientContact,
+                deliveryAddress: order.recipientAddress,
+                area: order.area,
+                packageDescription: order.packageDescription,
+                senderAddress: order.senderAddress || 'STARS Operations Office',
+                specialInstructions: order.specialInstructions || '',
+                courierEmployeeId: order.driverEmployeeId || '',
+                dmsOrderId: order.orderId,
+                dmsWaybillNo: order.waybillNo,
+            }
+        });
+        setShowNew(true);
+    };
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [viewingTask, setViewingTask] = useState<Task | null>(null);
@@ -9157,6 +9187,22 @@ export default function OpsAdminDashboard() {
                     </div>
                 )}
 
+                {activeTab === 'pre_delivery' && (
+                    <div className="dashboard-content">
+                        <PreDeliveryTab
+                            tasks={tasks}
+                            onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
+                            onViewTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
                         <div className="card">
@@ -9223,10 +9269,11 @@ export default function OpsAdminDashboard() {
                 <TaskModal
                     key="new-task"
                     mode="new"
+                    initial={initialTaskData || {}}
                     teamMembers={teamMembers}
                     tasks={tasks}
                     onSave={data => handleNewTask(data as CreateTaskDTO)}
-                    onClose={() => { setShowNew(false); setDuplicateWarnings([]); setDuplicateDetails([]); setViewingDuplicateTask(null); setPendingTaskData(null); setPendingFiles([]); }}
+                    onClose={() => { setShowNew(false); setInitialTaskData(null); setDuplicateWarnings([]); setDuplicateDetails([]); setViewingDuplicateTask(null); setPendingTaskData(null); setPendingFiles([]); }}
                     showSuccess={success}
                     onFileChange={f => setPendingFiles(f)}
                 />
