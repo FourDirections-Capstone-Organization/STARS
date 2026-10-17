@@ -313,49 +313,51 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
 
             {/* ── Header Controls & Search Card ── */}
             <div className="ann-controls-card">
-                <div className="ann-search-wrap">
-                    <Search size={15} className="ann-search-icon" />
-                    <input
-                        type="text"
-                        className="ann-search-input"
-                        placeholder="Search bulletins by title, message, or author..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm && (
-                        <button
-                            type="button"
-                            className="ann-search-clear"
-                            onClick={() => setSearchTerm('')}
-                            aria-label="Clear search"
-                        >
-                            <X size={14} />
-                        </button>
-                    )}
-                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, flexWrap: 'wrap', minWidth: 260 }}>
+                    <div className="ann-search-wrap">
+                        <Search size={15} className="ann-search-icon" />
+                        <input
+                            type="text"
+                            className="ann-search-input"
+                            placeholder="Search bulletins by title, message, or author..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm && (
+                            <button
+                                type="button"
+                                className="ann-search-clear"
+                                onClick={() => setSearchTerm('')}
+                                aria-label="Clear search"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
 
-                <div className="ann-filter-chips">
-                    {[
-                        { key: 'All', label: 'All Notices' },
-                        { key: 'Urgent', label: 'Urgent', className: 'urgent' },
-                        { key: 'Important', label: 'Important', className: 'important' },
-                        { key: 'Normal', label: 'Standard' },
-                        { key: 'Public', label: 'Public' },
-                        { key: 'Acknowledged', label: 'Acknowledged' },
-                    ].map(tab => (
-                        <button
-                            key={tab.key}
-                            type="button"
-                            className={`ann-chip ${tab.className || ''} ${filterPriority === tab.key ? 'active' : ''}`}
-                            onClick={() => setFilterPriority(tab.key)}
-                        >
-                            {tab.key === 'Urgent' && <Flame size={12} />}
-                            {tab.key === 'Important' && <Sparkles size={12} />}
-                            {tab.key === 'Public' && <Globe size={12} />}
-                            {tab.key === 'Acknowledged' && <CheckCircle2 size={12} />}
-                            {tab.label}
-                        </button>
-                    ))}
+                    <div className="ann-filter-chips">
+                        {[
+                            { key: 'All', label: 'All Notices' },
+                            { key: 'Urgent', label: 'Urgent', className: 'urgent' },
+                            { key: 'Important', label: 'Important', className: 'important' },
+                            { key: 'Normal', label: 'Standard' },
+                            { key: 'Public', label: 'Public' },
+                            { key: 'Acknowledged', label: 'Acknowledged' },
+                        ].map(tab => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                className={`ann-chip ${tab.className || ''} ${filterPriority === tab.key ? 'active' : ''}`}
+                                onClick={() => setFilterPriority(tab.key)}
+                            >
+                                {tab.key === 'Urgent' && <Flame size={12} />}
+                                {tab.key === 'Important' && <Sparkles size={12} />}
+                                {tab.key === 'Public' && <Globe size={12} />}
+                                {tab.key === 'Acknowledged' && <CheckCircle2 size={12} />}
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {canCreate && (
@@ -363,6 +365,7 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                         type="button"
                         className="ann-btn-create"
                         onClick={() => setShowCreate(true)}
+                        style={{ marginLeft: 'auto', flexShrink: 0 }}
                     >
                         <Plus size={16} /> New Announcement
                     </button>

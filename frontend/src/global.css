@@ -492,14 +492,16 @@
 
   /* 1. Primary (Teal Brand Color) */
   .btn-primary,
-  .btn--primary {
+  .btn--primary,
+  .btn-teal {
     background: var(--teal);
     color: #fff;
     border-color: var(--teal);
   }
 
   .btn-primary:hover:not(:disabled),
-  .btn--primary:hover:not(:disabled) {
+  .btn--primary:hover:not(:disabled),
+  .btn-teal:hover:not(:disabled) {
     background: var(--teal-hover);
     border-color: var(--teal-hover);
     box-shadow: 0 4px 12px rgba(0, 169, 157, .22);

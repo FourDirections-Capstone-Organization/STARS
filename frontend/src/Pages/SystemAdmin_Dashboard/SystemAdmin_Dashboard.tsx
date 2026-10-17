@@ -74,6 +74,7 @@ import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBa
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
+import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 import api from '../../api';
 import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
@@ -570,6 +571,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
     const [gatePassword, setGatePassword] = useState('');
     const [gateError, setGateError] = useState('');
     const [gateLoading, setGateLoading] = useState(false);
+    const [showGatePassword, setShowGatePassword] = useState(false);
 
     useEffect(() => {
         const loadOrgData = async () => {
@@ -1065,7 +1067,19 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 footer={
                     <>
                         <button className="btn" onClick={() => setShowRegisterConfirm(false)} disabled={gateLoading}>Cancel</button>
-                        <button className="btn btn-primary" onClick={handleConfirmRegister} disabled={gateLoading || !gatePassword}>
+                        <button
+                            type="button"
+                            className="btn btn-teal"
+                            onClick={handleConfirmRegister}
+                            disabled={gateLoading || !gatePassword}
+                            style={{
+                                background: 'var(--teal, #00A99D)',
+                                borderColor: 'var(--teal, #00A99D)',
+                                color: '#ffffff',
+                                cursor: (gateLoading || !gatePassword) ? 'not-allowed' : 'pointer',
+                                opacity: (gateLoading || !gatePassword) ? 0.6 : 1,
+                            }}
+                        >
                             {gateLoading ? <><Loader2 size={13} className="fm-spin" /> Verifying…</> : <><Shield size={13} /> Register Employee</>}
                         </button>
                     </>
@@ -1091,11 +1105,45 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                         ))}
                     </div>
                     <div style={{ position: 'relative', marginTop: 8 }}>
-                        <input id="gate-pw-input" type="password" placeholder="Enter your password to confirm"
-                            value={gatePassword} onChange={e => { setGatePassword(e.target.value); setGateError(''); }}
+                        <input
+                            id="gate-pw-input"
+                            type={showGatePassword ? 'text' : 'password'}
+                            placeholder="Enter your password to confirm"
+                            value={gatePassword}
+                            onChange={e => { setGatePassword(e.target.value); setGateError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') handleConfirmRegister(); }}
-                            style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${gateError ? '#dc2626' : '#e2e8f0'}`, fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-                            autoFocus />
+                            style={{
+                                width: '100%',
+                                padding: '10px 38px 10px 12px',
+                                borderRadius: 8,
+                                border: `1.5px solid ${gateError ? '#dc2626' : '#e2e8f0'}`,
+                                fontSize: 13,
+                                outline: 'none',
+                                boxSizing: 'border-box'
+                            }}
+                            autoFocus
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowGatePassword(prev => !prev)}
+                            style={{
+                                position: 'absolute',
+                                right: 10,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 4,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--text-secondary, #64748b)'
+                            }}
+                            aria-label={showGatePassword ? 'Hide password' : 'Show password'}
+                        >
+                            {showGatePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
                     </div>
                     {gateError && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#dc2626' }}>
@@ -1814,8 +1862,8 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                                         <div key={log.activityLogId} className="activity-feed-item" style={{ display: 'flex', gap: 16, marginBottom: 20, position: 'relative' }}>
                                             {index < Math.min(activityLogs.length, 8) - 1 && <div style={{ position: 'absolute', left: 4, top: 16, bottom: -24, width: 2, background: 'var(--border)', zIndex: 0 }} />}
                                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, boxShadow: `0 0 0 4px ${ringColor}`, zIndex: 1, flexShrink: 0, marginTop: 4 }} />
-                                            <div className="activity-feed-content" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                <span className="activity-feed-text" style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: 13 }}>{log.description}</span>
+                                            <div className="activity-feed-content" style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+                                                <span className="activity-feed-text" style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: 13, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{log.description}</span>
                                                 <span className="activity-feed-time" style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                     <Clock size={10} />
                                                     {log.createdAt ? new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
@@ -3664,59 +3712,17 @@ export default function Dashboard() {
 
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
-                        <div className="card">
-                            <div className="card-header-layout">
-                                <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Notifications</h3>
-                            </div>
-                            {notifLoading ? (
-                                <div className="empty-state"><Loader2 size={22} className="spin" /><p>Loading notifications...</p></div>
-                            ) : mergedAllNotifications.length === 0 ? (
-                                <div className="empty-state"><Bell size={22} /><p>No notifications</p></div>
-                            ) : (
-                                <DataTable
-                                    headers={['Date', 'Type', 'Message', 'Status']}
-                                    loading={false}
-                                    emptyMessage="No notifications"
-                                    currentPage={notifPage}
-                                    totalPages={notifTotalPages}
-                                    onPageChange={p => fetchAllNotifications(p)}
-                                    totalRecords={notifTotalRecords}
-                                    pageSize={NOTIF_PAGE_SIZE}
-                                >
-                                    {mergedAllNotifications.map(n => {
-                                        const badge = (() => {
-                                            const type = typeof n.notificationType === 'number' ? NOTIF_TYPE_MAP[n.notificationType] || 'Unknown' : n.notificationType || 'Unknown';
-                                            switch (type) {
-                                                case 'TaskAssigned': return { label: 'Assigned', cls: 'task-assigned' };
-                                                case 'TaskUpdated': return { label: 'Updated', cls: 'task-assigned' };
-                                                case 'TaskOverdue': return { label: 'Overdue', cls: 'deadline' };
-                                                case 'DeadlineWarning': return { label: 'Deadline', cls: 'deadline' };
-                                                case 'PushBack': return { label: 'Pushed back', cls: 'default' };
-                                                case 'TaskCancelled': return { label: 'Cancelled', cls: 'default' };
-                                                case 'TaskAwaitingReview': return { label: 'Awaiting Review', cls: 'task-assigned' };
-                                                default: return { label: type, cls: 'default' };
-                                            }
-                                        })();
-                                        return (
-                                            <tr key={n.notificationId} onClick={() => {
-                                                if (n.taskId) {
-                                                    const found = tmTasks.find(t => t.id === n.taskId);
-                                                    if (found) setTmDetailTask(mapManagerTaskToView(found));
-                                                    else openManagerTaskById(n.taskId);
-                                                }
-                                            }} style={{ cursor: n.taskId ? 'pointer' : 'default' }}>
-                                                <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                                    {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                </td>
-                                                <td><span className={`badge ${badge.cls}`} style={{ fontSize: 11 }}>{badge.label}</span></td>
-                                                <td style={{ fontSize: 13, fontWeight: n.isRead ? 400 : 600 }}>{n.message}</td>
-                                                <td>{n.isRead ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Read</span> : <span className="badge badge-blue" style={{ fontSize: 11 }}>New</span>}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </DataTable>
-                            )}
-                        </div>
+                        <NotificationsTab
+                            onViewTask={(taskId) => {
+                                const found = tmTasks.find(t => t.id === taskId);
+                                setActiveTab('tasks');
+                                if (found) {
+                                    setTmDetailTask(mapManagerTaskToView(found));
+                                } else {
+                                    openManagerTaskById(taskId);
+                                }
+                            }}
+                        />
                     </div>
                 )}
 

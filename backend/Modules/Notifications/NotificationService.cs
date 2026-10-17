@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -48,8 +48,13 @@ public class NotificationService : INotificationService
         _db.Notifications.Add(notification);
         await _db.SaveChangesAsync();
 
+        var recipient = await _db.Users.FindAsync(recipientId);
+        var recipientName = recipient is not null
+            ? $"{recipient.FirstName} {recipient.LastName}".Trim()
+            : recipientId.ToString();
+
         await AuditNotificationAsync(recipientId, taskId, "created",
-            $"Notification sent to user {recipientId}: {title}");
+            $"Notification sent to {recipientName}: {title}");
 
         return notification;
     }
@@ -157,8 +162,11 @@ public class NotificationService : INotificationService
         notification.IsRead = true;
         await _db.SaveChangesAsync();
 
+        var user = await _db.Users.FindAsync(recipientId);
+        var userName = user is not null ? $"{user.FirstName} {user.LastName}".Trim() : recipientId.ToString();
+
         await AuditNotificationAsync(recipientId, notification.RelatedTaskId, "read",
-            $"Notification {notificationId} marked as read by user {recipientId}");
+            $"Notification {notificationId} marked as read by {userName}");
 
         return ApiResponseDTO<bool>.Success(true);
     }
@@ -176,8 +184,11 @@ public class NotificationService : INotificationService
 
         await _db.SaveChangesAsync();
 
+        var user = await _db.Users.FindAsync(recipientId);
+        var userName = user is not null ? $"{user.FirstName} {user.LastName}".Trim() : recipientId.ToString();
+
         await AuditNotificationAsync(recipientId, null, "read-all",
-            $"All notifications marked as read by user {recipientId} ({unreadNotifications.Count} notifications)");
+            $"All notifications marked as read by {userName} ({unreadNotifications.Count} notifications)");
 
         return ApiResponseDTO<bool>.Success(true, "All notifications marked as read");
     }

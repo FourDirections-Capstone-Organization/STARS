@@ -84,6 +84,7 @@ import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBa
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
+import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -592,9 +593,26 @@ const getAuditBadgeStyle = (raw: string): { background: string; color: string } 
     }
 };
 
-const getActivityDescription = (log: any): string => {
-    if (log.description && log.description.trim()) {
-        return log.description;
+const getActivityDescription = (log: any, teamMembers?: TeamMember[]): string => {
+    let desc = log.description && log.description.trim() ? log.description : '';
+    if (desc) {
+        const actor = log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : '');
+        desc = desc.replace(/Notification sent to user ([0-9a-fA-F-]{36}):/gi, (_match: string, guid: string) => {
+            const member = teamMembers?.find(m => m.accountId?.toLowerCase() === guid.toLowerCase());
+            const resolved = member?.employeeName || actor || 'user';
+            return `Notification sent to ${resolved}:`;
+        });
+        desc = desc.replace(/Notification (\w+) marked as read by user ([0-9a-fA-F-]{36})/gi, (_match: string, nId: string, guid: string) => {
+            const member = teamMembers?.find(m => m.accountId?.toLowerCase() === guid.toLowerCase());
+            const resolved = member?.employeeName || actor || 'user';
+            return `Notification ${nId} marked as read by ${resolved}`;
+        });
+        desc = desc.replace(/All notifications marked as read by user ([0-9a-fA-F-]{36})/gi, (_match: string, guid: string) => {
+            const member = teamMembers?.find(m => m.accountId?.toLowerCase() === guid.toLowerCase());
+            const resolved = member?.employeeName || actor || 'user';
+            return `All notifications marked as read by ${resolved}`;
+        });
+        return desc;
     }
     const actor = log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : 'User');
     const action = formatActionType(log.actionType);
@@ -637,9 +655,9 @@ const fmtChangeValue = (v?: string | null): string => {
 const renderChanges = (oldValue?: string | null, newValue?: string | null) => {
     if (!oldValue && !newValue) return '—';
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-            {oldValue ? <span title={String(oldValue)}>Old: {fmtChangeValue(oldValue)}</span> : null}
-            {newValue ? <span title={String(newValue)}>New: {fmtChangeValue(newValue)}</span> : null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+            {oldValue ? <span title={String(oldValue)} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>Old: {fmtChangeValue(oldValue)}</span> : null}
+            {newValue ? <span title={String(newValue)} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>New: {fmtChangeValue(newValue)}</span> : null}
         </div>
     );
 };
@@ -3116,7 +3134,7 @@ const TeamTab: React.FC<{
             <div className="card" style={{ marginBottom: 16 }}>
                 <div className="card-header-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
                     <h3 style={{ margin: 0, fontSize: 16 }}>Team Management</h3>
-                    <button className="btn btn-primary btn-sm" onClick={openCreate} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <button className="btn btn-teal btn-sm" onClick={openCreate} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Plus size={14} /> Create Team
                     </button>
                 </div>
@@ -4027,8 +4045,9 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     const [kpiError, setKpiError] = useState('');
     const [kpiNoRecords, setKpiNoRecords] = useState(false);
 
-    const handleKpiGenerate = async (customFilter?: { dateRangeStart: string; dateRangeEnd: string; employeeId?: string }) => {
-        const filterToUse = customFilter || kpiFilter;
+    const handleKpiGenerate = async (customFilter?: { dateRangeStart: string; dateRangeEnd: string; employeeId?: string } | any) => {
+        const isFilterObj = customFilter && typeof customFilter === 'object' && typeof customFilter.dateRangeStart === 'string';
+        const filterToUse = isFilterObj ? customFilter : kpiFilter;
         if (!filterToUse.dateRangeStart || !filterToUse.dateRangeEnd) {
             setKpiError('Please select a date range first.');
             return;
@@ -4740,7 +4759,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </button>
                                     </div>
                                 )}
-                                <button className="btn btn-teal" onClick={handleKpiGenerate} disabled={kpiLoading} style={{ height: 34 }}>
+                                <button className="btn btn-teal" onClick={() => handleKpiGenerate()} disabled={kpiLoading} style={{ height: 34 }}>
                                     {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
                             </div>
@@ -9109,7 +9128,7 @@ export default function OpsAdminDashboard() {
                         >
                             {filteredActivityLogs.map((log: any) => {
                                 const badge = getAuditBadgeStyle(log.actionType ?? '');
-                                const activityDesc = getActivityDescription(log);
+                                const activityDesc = getActivityDescription(log, teamMembers);
                                 return (
                                     <tr key={log.id || `${log.timestamp}-${log.actionType}-${Math.random()}`}>
                                         <td style={{ padding: '14px 16px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
@@ -9138,19 +9157,35 @@ export default function OpsAdminDashboard() {
                                                 {formatActionType(log.actionType)}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-primary)', maxWidth: 300, verticalAlign: 'middle' }}>
-                                            <div style={{ fontWeight: 500, lineHeight: 1.45 }}>
+                                        <td style={{
+                                            padding: '14px 16px',
+                                            fontSize: 13,
+                                            color: 'var(--text-primary)',
+                                            maxWidth: 340,
+                                            minWidth: 200,
+                                            verticalAlign: 'middle',
+                                            wordBreak: 'break-word',
+                                            overflowWrap: 'anywhere',
+                                            whiteSpace: 'normal',
+                                        }}>
+                                            <div style={{
+                                                fontWeight: 500,
+                                                lineHeight: 1.45,
+                                                wordBreak: 'break-word',
+                                                overflowWrap: 'anywhere',
+                                                whiteSpace: 'normal',
+                                            }}>
                                                 {activityDesc}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '14px 16px', fontSize: 13, verticalAlign: 'middle' }}>
+                                        <td style={{ padding: '14px 16px', fontSize: 13, verticalAlign: 'middle', maxWidth: 180, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                                             {log.targetEntity ? (
                                                 <>
                                                     <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                                                         {log.targetEntity}
                                                     </div>
                                                     {log.targetEntityId && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2, wordBreak: 'break-all' }}>
                                                             ID: {String(log.targetEntityId).length > 8 ? `${String(log.targetEntityId).slice(0, 8)}…` : log.targetEntityId}
                                                         </div>
                                                     )}
@@ -9159,7 +9194,7 @@ export default function OpsAdminDashboard() {
                                                 <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '14px 16px', color: 'var(--text-primary)', verticalAlign: 'middle' }}>{renderChanges(log.oldValue, log.newValue)}</td>
+                                        <td style={{ padding: '14px 16px', color: 'var(--text-primary)', verticalAlign: 'middle', maxWidth: 220, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{renderChanges(log.oldValue, log.newValue)}</td>
                                     </tr>
                                 );
                             })}
@@ -9205,60 +9240,15 @@ export default function OpsAdminDashboard() {
 
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
-                        <div className="card">
-                            <div className="card-header-layout">
-                                <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Notifications</h3>
-                            </div>
-                            {notifLoading ? (
-                                <div className="empty-state"><Loader2 size={22} className="spin" /><p>Loading notifications...</p></div>
-                            ) : allNotifications.length === 0 ? (
-                                <div className="empty-state"><Bell size={22} /><p>No notifications</p></div>
-                            ) : (
-                                <DataTable
-                                    headers={['Date', 'Type', 'Message', 'Status']}
-                                    loading={false}
-                                    emptyMessage="No notifications"
-                                    currentPage={notifPage}
-                                    totalPages={notifTotalPages}
-                                    onPageChange={p => fetchAllNotifications(p)}
-                                    totalRecords={notifTotalRecords}
-                                    pageSize={NOTIF_PAGE_SIZE}
-                                >
-                                    {mergedAllNotifications.map(n => {
-                                        const badge = (() => {
-                                            switch (n.notificationType) {
-                                                case 'TaskAssigned': return { label: 'Assigned', cls: 'task-assigned' };
-                                                case 'TaskUpdated': return { label: 'Updated', cls: 'task-assigned' };
-                                                case 'TaskOverdue': return { label: 'Overdue', cls: 'deadline' };
-                                                case 'DeadlineWarning': return { label: 'Deadline', cls: 'deadline' };
-                                                case 'PushBack': return { label: 'Pushed back', cls: 'default' };
-                                                case 'TaskCancelled': return { label: 'Cancelled', cls: 'default' };
-                                                case 'TaskAwaitingReview': return { label: 'Awaiting Review', cls: 'task-assigned' };
-                                                default: return { label: n.notificationType, cls: 'default' };
-                                            }
-                                        })();
-                                        return (
-                                            <tr key={n.notificationId} onClick={() => {
-                                                if (n.taskId) {
-                                                    const found = allTasks.find(t => t.taskId === n.taskId);
-                                                    if (found) {
-                                                        setActiveTab('tasks');
-                                                        setDetailTask(found);
-                                                    }
-                                                }
-                                            }} style={{ cursor: n.taskId ? 'pointer' : 'default' }}>
-                                                <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                                    {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                </td>
-                                                <td><span className={`badge ${badge.cls}`} style={{ fontSize: 11 }}>{badge.label}</span></td>
-                                                <td style={{ fontSize: 13, fontWeight: n.isRead ? 400 : 600 }}>{n.message}</td>
-                                                <td>{n.isRead ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Read</span> : <span className="badge badge-blue" style={{ fontSize: 11 }}>New</span>}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </DataTable>
-                            )}
-                        </div>
+                        <NotificationsTab
+                            onViewTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                }
+                            }}
+                        />
                     </div>
                 )}
                 {activeTab === 'notification_settings' && <NotificationSettingsTab />}

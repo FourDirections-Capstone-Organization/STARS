@@ -23,6 +23,7 @@ import {
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
+import Pagination from '../ui/Pagination';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -73,10 +74,16 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const pageSize = 10;
     const [selectedDelivery, setSelectedDelivery] = useState<DmsDeliveryItem | null>(null);
     const [copiedWaybill, setCopiedWaybill] = useState<string | null>(null);
     const [autoSync, setAutoSync] = useState(true);
     const [syncingId, setSyncingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, statusFilter]);
 
     const { success: toastSuccess, error: toastError } = useToast();
 
@@ -236,6 +243,12 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
             );
         });
     }, [deliveries, statusFilter, searchQuery]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredDeliveries.length / pageSize));
+    const paginatedDeliveries = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredDeliveries.slice(start, start + pageSize);
+    }, [filteredDeliveries, currentPage, pageSize]);
 
     // Computed Stats
     const stats = useMemo(() => {
@@ -402,7 +415,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                         </span>
                     </div>
                 ) : (
-                    <table className="dms-table">
+                    <>
+                        <table className="dms-table">
                         <thead>
                             <tr>
                                 <th>Waybill No</th>
@@ -416,7 +430,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredDeliveries.map(item => (
+                            {paginatedDeliveries.map(item => (
                                 <tr
                                     key={item.taskId}
                                     className="dms-table-row"
@@ -521,6 +535,19 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             ))}
                         </tbody>
                     </table>
+                    {filteredDeliveries.length > 0 && (
+                        <div className="dms-pagination-bar">
+                            <span className="dms-pagination-info">
+                                Showing {filteredDeliveries.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredDeliveries.length)} of {filteredDeliveries.length} shipments
+                            </span>
+                            <Pagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                onPageChange={setCurrentPage}
+                            />
+                        </div>
+                    )}
+                    </>
                 )}
             </div>
 
@@ -551,28 +578,45 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
 
                         <div className="dms-modal-body">
                             {/* Milestone Tracker */}
-                            <div className="dms-stepper">
-                                {[
-                                    { title: 'Order Dispatched', desc: 'STARS Task Completed' },
-                                    { title: 'Picked Up', desc: 'Driver assigned' },
-                                    { title: 'In Transit', desc: 'Approaching destination' },
-                                    { title: 'Delivered (POD)', desc: 'Proof of Delivery' },
-                                ].map((step, idx) => {
-                                    const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus);
-                                    const isDone = idx <= activeIdx;
-                                    const isCurrent = idx === activeIdx;
-                                    return (
-                                        <div key={idx} className={`dms-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}>
-                                            <div className="dms-step-dot">
-                                                {isDone ? <Check size={11} /> : idx + 1}
+                            <div className="dms-stepper-container">
+                                <div className="dms-stepper">
+                                    <div className="dms-stepper-track">
+                                        <div
+                                            className="dms-stepper-progress"
+                                            style={{
+                                                width: `${(Math.min(getJourneyStepIndex(selectedDelivery.dmsStatus), 3) / 3) * 100}%`
+                                            }}
+                                        />
+                                    </div>
+                                    {[
+                                        { title: 'Order Dispatched', desc: 'STARS Task Completed' },
+                                        { title: 'Picked Up', desc: 'Driver Assigned' },
+                                        { title: 'In Transit', desc: 'Out for Delivery' },
+                                        { title: 'Delivered (POD)', desc: 'Proof Confirmed' },
+                                    ].map((step, idx) => {
+                                        const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus);
+                                        const isDelivered = (selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
+                                        const isDone = isDelivered ? true : idx < activeIdx;
+                                        const isCurrent = !isDelivered && idx === activeIdx;
+                                        const isUpcoming = idx > activeIdx;
+                                        return (
+                                            <div
+                                                key={idx}
+                                                className={`dms-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
+                                            >
+                                                <div className="dms-step-dot">
+                                                    {isDone ? <Check size={14} strokeWidth={2.5} /> : idx + 1}
+                                                </div>
+                                                <div className="dms-step-info">
+                                                    <span className="dms-step-title">{step.title}</span>
+                                                    <span className="dms-step-desc">{step.desc}</span>
+                                                    {isCurrent && <span className="dms-step-status-tag">In Progress</span>}
+                                                    {isDone && <span className="dms-step-status-tag">Completed</span>}
+                                                </div>
                                             </div>
-                                            <div className="dms-step-info">
-                                                <span className="dms-step-title">{step.title}</span>
-                                                <span className="dms-step-desc">{step.desc}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             {/* Failure reason if any */}

@@ -1632,8 +1632,9 @@ body {
         grid-template-columns: 1fr;
     }
 
+    .kanban-board-container,
     .kanban-board {
-        grid-template-columns: repeat(3, minmax(240px, 1fr));
+        grid-template-columns: repeat(3, minmax(260px, 1fr));
         overflow-x: auto;
         padding-bottom: 8px;
     }
@@ -1866,16 +1867,21 @@ body {
 /* ─── Jira-Style Vertical Kanban Board ─── */
 .kanban-board-container {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(270px, 1fr));
     gap: 16px;
     margin-top: 16px;
     align-items: start;
     width: 100%;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
 }
 
 @media (max-width: 1024px) {
     .kanban-board-container {
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
     }
 }
 
@@ -1892,8 +1898,12 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 520px;
+    min-width: 270px;
     transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
     overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
 }
 
 .kanban-column.drag-over {
@@ -1972,6 +1982,10 @@ body {
     position: relative;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .kanban-card:hover {

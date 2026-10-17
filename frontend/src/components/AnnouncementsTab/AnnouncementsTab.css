@@ -147,6 +147,8 @@
     box-shadow: 0 3px 12px var(--teal-ring, rgba(0, 169, 157, 0.25));
     cursor: pointer;
     transition: all 0.2s ease;
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 .ann-btn-create:hover {
