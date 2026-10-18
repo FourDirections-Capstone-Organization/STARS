@@ -1,6 +1,7 @@
-﻿import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { Lock, ArrowLeft, Package, AlertCircle, UserX, Clock } from 'lucide-react';
+import { getCentralLoginUrl } from '../../components/Auth/authRedirect';
 import './account_locked.css';
 
 function FeatureItem({ title, description }: { title: string; description: string }) {
@@ -142,7 +143,9 @@ export default function AccountLocked() {
                     <button
                         type="button"
                         className="locked-back-link"
-                        onClick={() => navigate('/')}
+                        onClick={() => {
+                            window.location.href = getCentralLoginUrl();
+                        }}
                     >
                         <ArrowLeft size={16} />
                         Back to Login

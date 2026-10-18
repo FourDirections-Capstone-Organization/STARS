@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { performLogout } from './authRedirect';
 
 // 15-minute inactivity timeout based on real user UI interaction
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
@@ -17,17 +17,15 @@ const ACTIVITY_EVENTS = [
 ];
 
 export function useSessionTimeout() {
-    const navigate = useNavigate();
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const heartbeatTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
     const lastReset = useRef(0);
     const lastActivityPing = useRef(0);
     const logoutRef = useRef<(() => void) | undefined>(undefined);
 
-    const logout = useCallback(() => {
-        localStorage.clear();
-        navigate('/?reason=inactivity', { replace: true });
-    }, [navigate]);
+    const logout = useCallback(async () => {
+        await performLogout({ reason: 'inactivity' });
+    }, []);
 
     logoutRef.current = logout;
 

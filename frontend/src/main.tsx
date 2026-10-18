@@ -44,13 +44,19 @@ axios.interceptors.response.use(
         // so an active user is recovered by the normal refresh path below.
         // True AFK timeout is enforced by the frontend inactivity timer.
 
-        // Handle deactivated/locked account — only for 401 from SessionTimeoutMiddleware
+        // Handle deactivated/locked account or session timeout — only for 401 from SessionTimeoutMiddleware
         if (error.response?.status === 401) {
             const msg = error.response?.data?.message ?? '';
+            const code = error.response?.data?.code ?? '';
             if (msg.toLowerCase().includes('deactivated') || msg.toLowerCase().includes('locked')) {
                 const empNum = localStorage.getItem('employeeId') || '';
                 localStorage.clear();
                 appNavigate(`/account_locked?employeeNumber=${encodeURIComponent(empNum)}`);
+                return Promise.reject(error);
+            }
+            if (code === 'SESSION_TIMEOUT' || msg.toLowerCase().includes('session expired')) {
+                localStorage.clear();
+                window.location.href = `${getCentralLoginUrl()}?action=logout&reason=inactivity&system=stars`;
                 return Promise.reject(error);
             }
         }
@@ -62,7 +68,7 @@ axios.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) {
             localStorage.clear();
-            appNavigate('/');
+            window.location.href = `${getCentralLoginUrl()}?action=logout&reason=session_expired&system=stars`;
             return Promise.reject(error);
         }
 
@@ -97,7 +103,7 @@ axios.interceptors.response.use(
         } catch (refreshError) {
             processQueue(refreshError, null);
             localStorage.clear();
-            appNavigate('/');
+            window.location.href = `${getCentralLoginUrl()}?action=logout&reason=session_expired&system=stars`;
             return Promise.reject(refreshError);
         } finally {
             isRefreshing = false;
@@ -122,7 +128,7 @@ import SessionTimeoutWatcher from './components/Auth/SessionTimeoutWatcher'
 import { appNavigate } from './components/Auth/useAppNavigate'
 import OnboardingPage from './Pages/onboarding_page/onboarding_page'
 import TermsAndConditions, { CURRENT_TERMS_VERSION } from './Pages/terms_and_conditions/TermsAndConditions'
-import { bootstrapIncomingAuth } from './components/Auth/authRedirect'
+import { bootstrapIncomingAuth, getCentralLoginUrl } from './components/Auth/authRedirect'
 
 // Bootstrap any SSO auth params returned when entering STARS from Speedex Central Portal
 bootstrapIncomingAuth();

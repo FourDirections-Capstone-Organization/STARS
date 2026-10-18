@@ -46,4 +46,23 @@ public interface IFomsIntegrationService
     /// </summary>
     Task<ApiResponseDTO<TaskFomsInvoiceDetail>> SubmitSignedEndorsementAsync(
         Guid taskId, SubmitSignedEndorsementDTO dto, Guid userId);
+
+    /// <summary>
+    /// Multi-system Provisioning: Provisions a new staff/user from STARS into FOMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> ProvisionUserAsync(
+        string employeeId,
+        string username,
+        string? fullName,
+        string? email,
+        string? password,
+        string? role,
+        string? phone,
+        decimal? salaryRate,
+        DateTime? dateHired);
+
+    /// <summary>
+    /// Integration Check: Queries FOMS to check if an email or employee ID already exists in FOMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> CheckUserExistsInFomsAsync(string? email, string? employeeId = null);
 }

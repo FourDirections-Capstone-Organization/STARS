@@ -115,6 +115,12 @@ interface EmployeeRegisterDTO {
     role: string;
     employmentStatus: string;
     hireDate: string;
+    targetSystem?: string;
+    dmsRole?: string;
+    dmsSystemAccess?: string;
+    dmsAreas?: string[];
+    fomsRole?: string;
+    fomsSalaryRate?: number;
 }
 
 interface FieldError {
@@ -144,6 +150,12 @@ const EMPTY_FORM: FormState = {
     role: '',
     employmentStatus: 'Regular',
     hireDate: new Date().toISOString().split('T')[0],
+    targetSystem: 'STARS',
+    dmsRole: 'Driver',
+    dmsSystemAccess: 'Both',
+    dmsAreas: ['Manila'],
+    fomsRole: 'Accountant',
+    fomsSalaryRate: 25000,
 };
 
 interface ActivityLog {
@@ -728,6 +740,12 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 jobPositionId: form.jobPositionId || null,
                 employmentStatus: form.employmentStatus || 'Regular',
                 hireDate: form.hireDate ? new Date(form.hireDate).toISOString() : null,
+                targetSystem: form.targetSystem || 'STARS',
+                dmsRole: form.targetSystem === 'DMS' ? (form.dmsRole || 'Driver') : undefined,
+                dmsSystemAccess: form.targetSystem === 'DMS' ? (form.dmsSystemAccess || 'Both') : undefined,
+                dmsAreas: form.targetSystem === 'DMS' ? (form.dmsAreas || ['Manila']) : undefined,
+                fomsRole: form.targetSystem === 'FOMS' ? (form.fomsRole || 'Accountant') : undefined,
+                fomsSalaryRate: form.targetSystem === 'FOMS' ? Number(form.fomsSalaryRate || 0) : undefined,
             });
 
             const responseData = res.data;
@@ -827,6 +845,125 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     badgeStatus: 'Pending',
                 } : undefined}
             >
+                <div className="fm-section">
+                    <h5 className="fm-section-title">Target Operational System & Ecosystem</h5>
+                    <div className="fm-field-grid">
+                        <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                            <label className="fm-label" htmlFor="emp-target-system">
+                                Target System Destination <span style={{ color: 'var(--primary)' }}>★</span>
+                            </label>
+                            <select
+                                id="emp-target-system"
+                                value={form.targetSystem || 'STARS'}
+                                onChange={e => {
+                                    setDirty(true);
+                                    const val = e.target.value;
+                                    setForm(prev => ({ ...prev, targetSystem: val }));
+                                }}
+                                className="fm-select"
+                                style={{ fontWeight: 600 }}
+                            >
+                                <option value="STARS">STARS — Speedex Task Allocation & Review System (HQ & Operations)</option>
+                                <option value="DMS">DMS — Delivery Management System (Fleet, Drivers & Couriers)</option>
+                                <option value="FOMS">FOMS — Financial & Order Management System (Accounting & Billing)</option>
+                            </select>
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>
+                                Account credentials will be synchronized across the ecosystem and provisioned into the selected system.
+                            </span>
+                        </div>
+
+                        {form.targetSystem === 'DMS' && (
+                            <>
+                                <div className="fm-field">
+                                    <label className="fm-label" htmlFor="dms-role">DMS Operational Role</label>
+                                    <select
+                                        id="dms-role"
+                                        value={form.dmsRole || 'Driver'}
+                                        onChange={e => {
+                                            setDirty(true);
+                                            setForm(prev => ({ ...prev, dmsRole: e.target.value }));
+                                        }}
+                                        className="fm-select"
+                                    >
+                                        <option value="Driver">Driver / Rider</option>
+                                        <option value="Dispatcher">Dispatcher</option>
+                                        <option value="Admin">Fleet Administrator</option>
+                                    </select>
+                                </div>
+                                <div className="fm-field">
+                                    <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
+                                    <select
+                                        id="dms-access"
+                                        value={form.dmsSystemAccess || 'Both'}
+                                        onChange={e => {
+                                            setDirty(true);
+                                            setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
+                                        }}
+                                        className="fm-select"
+                                    >
+                                        <option value="Both">Both (Mobile App & Web Portal)</option>
+                                        <option value="Mobile">Mobile Application Only</option>
+                                        <option value="Web">Web Portal Only</option>
+                                    </select>
+                                </div>
+                                <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                                    <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub</label>
+                                    <input
+                                        id="dms-areas"
+                                        type="text"
+                                        placeholder="e.g. Manila, Quezon City, Makati"
+                                        value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
+                                        onChange={e => {
+                                            setDirty(true);
+                                            const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                            setForm(prev => ({ ...prev, dmsAreas: areas }));
+                                        }}
+                                        className="fm-input"
+                                    />
+                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
+                                </div>
+                            </>
+                        )}
+
+                        {form.targetSystem === 'FOMS' && (
+                            <>
+                                <div className="fm-field">
+                                    <label className="fm-label" htmlFor="foms-role">FOMS Finance Role</label>
+                                    <select
+                                        id="foms-role"
+                                        value={form.fomsRole || 'Accountant'}
+                                        onChange={e => {
+                                            setDirty(true);
+                                            setForm(prev => ({ ...prev, fomsRole: e.target.value }));
+                                        }}
+                                        className="fm-select"
+                                    >
+                                        <option value="Accountant">Accountant</option>
+                                        <option value="Financial Analyst">Financial Analyst</option>
+                                        <option value="Auditor">Financial Auditor</option>
+                                    </select>
+                                </div>
+                                <div className="fm-field">
+                                    <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP)</label>
+                                    <input
+                                        id="foms-salary"
+                                        type="number"
+                                        placeholder="25000"
+                                        value={form.fomsSalaryRate ?? 25000}
+                                        onChange={e => {
+                                            setDirty(true);
+                                            setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
+                                        }}
+                                        className="fm-input"
+                                        min={0}
+                                        step={500}
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
                 <div className="fm-section">
                     <h5 className="fm-section-title">Account Information</h5>
                     <div className="fm-field-grid">

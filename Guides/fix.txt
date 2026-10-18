@@ -1,3 +1,0 @@
-If dotnet is having some troubles finding it in the VS Code Powershell, use this fix in the terminal.
-
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User"); dotnet ef --version
