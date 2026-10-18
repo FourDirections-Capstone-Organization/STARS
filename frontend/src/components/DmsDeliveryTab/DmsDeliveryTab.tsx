@@ -19,11 +19,19 @@ import {
     X,
     Filter,
     Activity,
+    Download,
+    FileText,
+    ChevronDown,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
+import DeliveryAnalyticsCharts from './DeliveryAnalyticsCharts';
+import {
+    downloadDeliveryPdfReport,
+    downloadDeliveryCsvReport,
+} from './DeliveryReportExport';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -80,10 +88,28 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
     const [copiedWaybill, setCopiedWaybill] = useState<string | null>(null);
     const [autoSync, setAutoSync] = useState(true);
     const [syncingId, setSyncingId] = useState<string | null>(null);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const exportMenuRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, statusFilter]);
+
+    // Close export dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+                setShowExportMenu(false);
+            }
+        };
+        if (showExportMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showExportMenu]);
 
     const { success: toastSuccess, error: toastError } = useToast();
 
@@ -308,6 +334,89 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                 </div>
 
                 <div className="dms-tab-actions">
+                    {/* Download Report Button & Dropdown */}
+                    <div className="dms-export-wrapper" ref={exportMenuRef}>
+                        <button
+                            type="button"
+                            className="dms-export-btn"
+                            onClick={() => setShowExportMenu(v => !v)}
+                            disabled={isExporting}
+                            title="Download Delivery Summary Report"
+                        >
+                            <Download size={13} />
+                            <span>Download Report</span>
+                            <ChevronDown
+                                size={12}
+                                style={{
+                                    transform: showExportMenu ? 'rotate(180deg)' : 'none',
+                                    transition: 'transform 0.15s ease',
+                                }}
+                            />
+                        </button>
+
+                        {showExportMenu && (
+                            <div className="dms-export-dropdown">
+                                <button
+                                    type="button"
+                                    className="dms-export-item"
+                                    onClick={() => {
+                                        try {
+                                            setIsExporting(true);
+                                            const targetList = filteredDeliveries.length > 0 ? filteredDeliveries : deliveries;
+                                            const scope = filteredDeliveries.length < deliveries.length && filteredDeliveries.length > 0
+                                                ? `Filtered (${filteredDeliveries.length} items)`
+                                                : `All (${deliveries.length} items)`;
+                                            downloadDeliveryPdfReport(targetList, performance, stats, scope);
+                                            toastSuccess('Delivery summary PDF report downloaded successfully!');
+                                        } catch (err) {
+                                            toastError('Failed to generate PDF report.');
+                                        } finally {
+                                            setIsExporting(false);
+                                            setShowExportMenu(false);
+                                        }
+                                    }}
+                                >
+                                    <div className="dms-export-icon-box pdf">
+                                        <FileText size={15} />
+                                    </div>
+                                    <div className="dms-export-text">
+                                        <span className="dms-export-title">Executive PDF Report</span>
+                                        <span className="dms-export-desc">Formatted document with KPIs & tables</span>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="dms-export-item"
+                                    onClick={() => {
+                                        try {
+                                            setIsExporting(true);
+                                            const targetList = filteredDeliveries.length > 0 ? filteredDeliveries : deliveries;
+                                            const scope = filteredDeliveries.length < deliveries.length && filteredDeliveries.length > 0
+                                                ? `Filtered (${filteredDeliveries.length} items)`
+                                                : `All (${deliveries.length} items)`;
+                                            downloadDeliveryCsvReport(targetList, performance, stats, scope);
+                                            toastSuccess('Delivery summary CSV report downloaded successfully!');
+                                        } catch (err) {
+                                            toastError('Failed to generate CSV report.');
+                                        } finally {
+                                            setIsExporting(false);
+                                            setShowExportMenu(false);
+                                        }
+                                    }}
+                                >
+                                    <div className="dms-export-icon-box csv">
+                                        <FileText size={15} />
+                                    </div>
+                                    <div className="dms-export-text">
+                                        <span className="dms-export-title">Spreadsheet CSV Data</span>
+                                        <span className="dms-export-desc">Full shipment registry for Excel</span>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         type="button"
                         className={`dms-action-btn ${autoSync ? 'active' : ''}`}
@@ -360,6 +469,13 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                     subtext="DMS SLA Performance Target"
                 />
             </div>
+
+            {/* ── Delivery Analytics & Visual Graphs ── */}
+            <DeliveryAnalyticsCharts
+                deliveries={deliveries}
+                performance={performance}
+                stats={stats}
+            />
 
             {/* ── Filters & Search ── */}
             <div className="dms-controls-bar">

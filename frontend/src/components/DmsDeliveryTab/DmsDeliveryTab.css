@@ -742,11 +742,119 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s ease;
 }
 
-.dms-modal-primary-btn:hover {
-    opacity: 0.92;
+/* ── Export Report Dropdown ── */
+.dms-export-wrapper {
+    position: relative;
+}
+
+.dms-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--primary, #00A99D);
+    border: 1px solid var(--primary, #00A99D);
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 169, 157, 0.2);
+}
+
+.dms-export-btn:hover {
+    background: #009388;
+    border-color: #009388;
+    box-shadow: 0 2px 6px rgba(0, 169, 157, 0.3);
+}
+
+.dms-export-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.dms-export-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 260px;
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    padding: 6px;
+    z-index: 100;
+    animation: dms-menu-in 0.15s ease-out;
+}
+
+@keyframes dms-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dms-export-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.dms-export-item:hover {
+    background: #f8fafc;
+}
+
+.dms-export-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dms-export-icon-box.pdf {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.dms-export-icon-box.csv {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+}
+
+.dms-export-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.dms-export-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+}
+
+.dms-export-desc {
+    font-size: 11px;
+    color: var(--sidebar-text, #64748b);
+    margin-top: 2px;
 }
 
 @media (max-width: 768px) {
@@ -759,3 +867,4 @@
         gap: 12px;
     }
 }
+
