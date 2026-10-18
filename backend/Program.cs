@@ -35,8 +35,9 @@ builder.Services.AddCors(options =>
             {
                 var uri = new Uri(origin);
                 return uri.Host == "localhost"
-                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase);
+                    || uri.Host == "127.0.0.1"
+                    || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.Equals("speedex-system.vercel.app", StringComparison.OrdinalIgnoreCase);
             }
             catch
             {
@@ -114,7 +115,11 @@ builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSet
 builder.Services.Configure<SessionSettings>(builder.Configuration.GetSection("SessionSettings"));
 builder.Services.Configure<FileStorageSettings>(builder.Configuration.GetSection("FileStorageSettings"));
 
-var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()!;
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
+if (jwtSettings == null || string.IsNullOrWhiteSpace(jwtSettings.SecretKey) || jwtSettings.SecretKey.Length < 32)
+{
+    throw new InvalidOperationException("CRITICAL: JwtSettings:SecretKey is missing or shorter than 32 characters.");
+}
 
 // Configure JWT Authentication
 builder.Services.AddAuthentication(options =>
@@ -132,7 +137,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings.Issuer,
         ValidAudience = jwtSettings.Audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSettings.SecretKey)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
         ClockSkew = TimeSpan.Zero // No tolerance for expiration
     };
 });
@@ -318,40 +323,15 @@ using (var scope = app.Services.CreateScope())
             Console.WriteLine($"[STARTUP MIGRATION WARNING] Standard migrate exception: {migEx.Message}");
         }
 
-        // Seed default departments and positions
+        // Seed default departments, positions, and notification settings if needed
         var departmentService = scope.ServiceProvider.GetRequiredService<IDepartmentService>();
         await departmentService.SeedDefaultDepartmentsAsync();
         await departmentService.SeedDefaultPositionsAsync();
 
-        // Seed default manager
-        var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-        await userService.SeedDefaultManagerAsync();
-
-        // Seeds test accounts: 2x Coordinator, 2x Dispatcher, 2x Encoder, 2x Courier
-        await userService.SeedTestAccountsAsync();
-
-        // Seed default notification settings
         var notificationSettingsService = scope.ServiceProvider.GetRequiredService<INotificationSettingsService>();
         await notificationSettingsService.SeedDefaultSettingsAsync();
-
-        // Seed demo tasks for presentation
-        var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
-        await taskService.SeedDemoTasksAsync();
-
-        // Reactivate any deactivated Manager accounts (safety net)
-        var deactivatedManagers = await db.Users
-            .Where(u => u.Role == UserRole.Manager && (u.IsDeactivated || !u.IsActive))
-            .ToListAsync();
-        foreach (var mgr in deactivatedManagers)
-        {
-            mgr.IsDeactivated = false;
-            mgr.IsActive = true;
-            mgr.UpdatedAt = DateTime.UtcNow;
-        }
-        if (deactivatedManagers.Count > 0)
-            await db.SaveChangesAsync();
         
-        Console.WriteLine("[STARTUP] All initial seeds completed successfully.");
+        Console.WriteLine("[STARTUP] Canonical department, position, and notification settings verified.");
     }
     catch (Exception ex)
     {
@@ -415,13 +395,27 @@ else
     app.UseHttpsRedirection();
 }
 
-// Get session settings for middleware
-var sessionSettings = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SessionSettings>>().Value;
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("GlobalExceptionHandler");
+        var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        if (feature?.Error != null)
+        {
+            logger.LogError(feature.Error, "Unhandled exception on {Path}", context.Request.Path);
+        }
+        await context.Response.WriteAsJsonAsync(ApiResponseDTO<object>.Failure("An unexpected server error occurred. Please try again later."));
+    });
+});
 
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuditLogAccessLogging();
 app.UseAuthorization();
+var sessionSettings = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SessionSettings>>().Value;
 app.UseSessionTimeout(sessionSettings);
 app.MapControllers();
 

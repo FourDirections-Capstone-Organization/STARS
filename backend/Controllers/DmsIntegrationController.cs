@@ -17,15 +17,18 @@ public class DmsIntegrationController : ControllerBase
     private readonly IDmsIntegrationService _dmsService;
     private readonly AppDbContext _db;
     private readonly DmsIntegrationSettings _settings;
+    private readonly ILogger<DmsIntegrationController> _logger;
 
     public DmsIntegrationController(
         IDmsIntegrationService dmsService,
         AppDbContext db,
-        IOptions<DmsIntegrationSettings> settings)
+        IOptions<DmsIntegrationSettings> settings,
+        ILogger<DmsIntegrationController> logger)
     {
         _dmsService = dmsService;
         _db = db;
         _settings = settings.Value;
+        _logger = logger;
     }
 
     private Guid? GetUserId()
@@ -184,30 +187,11 @@ public class DmsIntegrationController : ControllerBase
             else
             {
                 var existingTask = await _db.Tasks.FirstOrDefaultAsync();
-                if (existingTask != null)
+                if (existingTask == null)
                 {
-                    targetTaskId = existingTask.Id;
+                    return BadRequest(ApiResponseDTO<object>.Failure("No tasks available in database to dispatch. Please specify a valid TaskId."));
                 }
-                else
-                {
-                    var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
-                    var newTask = new Backend.Models.Task
-                    {
-                        Id = Guid.NewGuid(),
-                        TaskNumber = Backend.Modules.Utilities.TaskNumberGenerator.Generate(8),
-                        Title = "STARS-DMS Integration Verification Task",
-                        Description = "Auto-generated task for live API transmission testing",
-                        PriorityLevel = Backend.Models.Enums.PriorityLevel.Urgent,
-                        Status = Backend.Models.Enums.TaskStatus.Completed,
-                        Classification = Backend.Models.Enums.TaskClassification.SpecialTask,
-                        CreatedById = creatorId,
-                        Deadline = DateTime.UtcNow.AddHours(4),
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _db.Tasks.Add(newTask);
-                    await _db.SaveChangesAsync();
-                    targetTaskId = newTask.Id;
-                }
+                targetTaskId = existingTask.Id;
             }
 
             var result = await _dmsService.CreateDeliveryOrderForTaskAsync(targetTaskId);
@@ -215,7 +199,8 @@ public class DmsIntegrationController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponseDTO<object>.Failure($"TriggerDispatch error: {ex.Message} -> {ex.InnerException?.Message}"));
+            _logger.LogError(ex, "TriggerDispatch failed for taskId");
+            return StatusCode(500, ApiResponseDTO<object>.Failure("An unexpected error occurred while processing dispatch."));
         }
     }
 
