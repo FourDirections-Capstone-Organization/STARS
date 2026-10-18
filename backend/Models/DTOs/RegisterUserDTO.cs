@@ -42,4 +42,25 @@ public class RegisterUserDTO
 
     [MaxLength(50)]
     public string? EmploymentStatus { get; set; }
+
+    /// <summary>
+    /// Target System: "STARS" (default), "DMS", or "FOMS"
+    /// </summary>
+    [MaxLength(20)]
+    public string? TargetSystem { get; set; }
+
+    // ── DMS Provisioning Fields ──
+    [MaxLength(50)]
+    public string? DmsRole { get; set; }
+
+    [MaxLength(50)]
+    public string? DmsSystemAccess { get; set; }
+
+    public List<string>? DmsAreas { get; set; }
+
+    // ── FOMS Provisioning Fields ──
+    [MaxLength(50)]
+    public string? FomsRole { get; set; }
+
+    public decimal? FomsSalaryRate { get; set; }
 }

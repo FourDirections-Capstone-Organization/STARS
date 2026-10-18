@@ -636,4 +636,58 @@ public class DmsIntegrationService : IDmsIntegrationService
     };
 
     private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];
+
+    public async Task<ApiResponseDTO<bool>> ProvisionEmployeeAsync(
+        string employeeId,
+        string name,
+        string? role,
+        string? systemAccess,
+        string? temporaryPassword,
+        List<string>? areas)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("DMS integration is not configured, skipping employee dispatch for {EmployeeId}", employeeId);
+            return ApiResponseDTO<bool>.Failure("DMS integration is not configured");
+        }
+
+        var payload = new
+        {
+            employeeId,
+            name,
+            role = string.IsNullOrWhiteSpace(role) ? "Driver" : role,
+            systemAccess = string.IsNullOrWhiteSpace(systemAccess) ? "Both" : systemAccess,
+            status = "Active",
+            temporaryPassword,
+            areas = areas ?? new List<string>()
+        };
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/provision-employee")
+            {
+                Content = JsonContent.Create(payload)
+            };
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("DMS employee provision failed for {EmployeeId}: {Status} {Body}", employeeId, (int)response.StatusCode, Truncate(responseBody));
+                return ApiResponseDTO<bool>.Failure($"DMS provision failed: {(int)response.StatusCode}");
+            }
+
+            _logger.LogInformation("Successfully provisioned employee {EmployeeId} to DMS", employeeId);
+            return ApiResponseDTO<bool>.Success(true, "Employee provisioned to DMS successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while provisioning employee {EmployeeId} to DMS", employeeId);
+            return ApiResponseDTO<bool>.Failure($"DMS provision error: {ex.Message}");
+        }
+    }
 }

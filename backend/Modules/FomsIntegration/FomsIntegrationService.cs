@@ -573,4 +573,65 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         return ApiResponseDTO<TaskFomsInvoiceDetail>.Success(detail, "Signed endorsement recorded successfully");
     }
+
+    public async Task<ApiResponseDTO<bool>> ProvisionUserAsync(
+        string employeeId,
+        string username,
+        string? fullName,
+        string? email,
+        string? password,
+        string? role,
+        string? phone,
+        decimal? salaryRate,
+        DateTime? dateHired)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("FOMS integration is not configured, skipping user dispatch for {EmployeeId}", employeeId);
+            return ApiResponseDTO<bool>.Failure("FOMS integration is not configured");
+        }
+
+        var payload = new
+        {
+            employeeId,
+            username = string.IsNullOrWhiteSpace(username) ? employeeId : username,
+            fullName,
+            email,
+            password,
+            role = string.IsNullOrWhiteSpace(role) ? "Accountant" : role,
+            phone,
+            salaryRate,
+            dateHired
+        };
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/provision-user")
+            {
+                Content = JsonContent.Create(payload)
+            };
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("FOMS user provision failed for {EmployeeId}: {Status} {Body}", employeeId, (int)response.StatusCode, Truncate(responseBody));
+                return ApiResponseDTO<bool>.Failure($"FOMS provision failed: {(int)response.StatusCode}");
+            }
+
+            _logger.LogInformation("Successfully provisioned user {EmployeeId} to FOMS", employeeId);
+            return ApiResponseDTO<bool>.Success(true, "User provisioned to FOMS successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while provisioning user {EmployeeId} to FOMS", employeeId);
+            return ApiResponseDTO<bool>.Failure($"FOMS provision error: {ex.Message}");
+        }
+    }
+
+    private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];
 }
