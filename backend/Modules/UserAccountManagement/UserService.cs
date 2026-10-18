@@ -59,6 +59,17 @@ public class UserService : IUserService
         if (emailExists)
             return ApiResponseDTO<UserResponseDTO>.Failure("Email already exists");
 
+        // Check cross-system email uniqueness against FOMS
+        if (_fomsService != null && _fomsService.IsConfigured && !string.IsNullOrWhiteSpace(dto.Email))
+        {
+            var fomsCheck = await _fomsService.CheckUserExistsInFomsAsync(dto.Email, dto.EmployeeNumber);
+            if (fomsCheck.IsSuccess && fomsCheck.Data)
+            {
+                return ApiResponseDTO<UserResponseDTO>.Failure(
+                    $"Email '{dto.Email}' is already registered to an account in FOMS. Each email must exist only once across Speedex.");
+            }
+        }
+
         // Validate department if provided
         if (dto.DepartmentId.HasValue)
         {

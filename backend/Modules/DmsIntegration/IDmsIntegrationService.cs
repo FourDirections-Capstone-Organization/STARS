@@ -63,4 +63,9 @@ public interface IDmsIntegrationService
         string? systemAccess,
         string? temporaryPassword,
         List<string>? areas);
+
+    /// <summary>
+    /// Checks whether an employee ID already exists in DMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> CheckEmployeeExistsInDmsAsync(string employeeId);
 }

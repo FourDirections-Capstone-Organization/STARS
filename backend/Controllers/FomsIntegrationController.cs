@@ -177,4 +177,37 @@ public class FomsIntegrationController : ControllerBase
         var result = await _fomsService.SendInvoiceEndorsementCompletionAsync(dto.TaskId, null, explicitSubmission);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
+
+    /// <summary>
+    /// Cross-system uniqueness probe: checks whether an email or employee number is already in use in STARS.
+    /// Authenticated by shared X-Api-Key.
+    /// </summary>
+    [HttpGet("api/integration/check-user-exists")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CheckUserExists([FromQuery] string? email, [FromQuery] string? employeeNumber)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(employeeNumber))
+            return BadRequest(new { exists = false, message = "Either email or employeeNumber must be provided." });
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var emailLower = email.Trim().ToLower();
+            var existsByEmail = await _db.Users.AnyAsync(u => u.Email.ToLower() == emailLower);
+            if (existsByEmail)
+                return Ok(new { exists = true, system = "STARS", matchedBy = "email" });
+        }
+
+        if (!string.IsNullOrWhiteSpace(employeeNumber))
+        {
+            var empLower = employeeNumber.Trim().ToLower();
+            var existsByEmp = await _db.Users.AnyAsync(u => u.EmployeeNumber.ToLower() == empLower);
+            if (existsByEmp)
+                return Ok(new { exists = true, system = "STARS", matchedBy = "employeeNumber" });
+        }
+
+        return Ok(new { exists = false, system = "STARS", matchedBy = "none" });
+    }
 }
