@@ -443,3 +443,6 @@ neo4j-data/
 
 # Windows system file
 desktop.ini
+
+# Kilo Code editor directory
+.kilo/
