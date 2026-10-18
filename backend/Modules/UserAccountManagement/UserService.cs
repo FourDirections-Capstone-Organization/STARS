@@ -5,6 +5,8 @@ using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Backend.Modules.AuthenticationAndCredentials;
 using Backend.Modules.TaskManagement;
+using Backend.Modules.DmsIntegration;
+using Backend.Modules.FomsIntegration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 
@@ -16,6 +18,8 @@ public class UserService : IUserService
     private readonly IEmailService _emailService;
     private readonly IEmailVerificationService _emailVerificationService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IDmsIntegrationService _dmsService;
+    private readonly IFomsIntegrationService _fomsService;
     private readonly string _frontendUrl;
     private readonly ILogger<UserService> _logger;
 
@@ -24,6 +28,8 @@ public class UserService : IUserService
         IEmailService emailService,
         IEmailVerificationService emailVerificationService,
         IAuditLogService auditLogService,
+        IDmsIntegrationService dmsService,
+        IFomsIntegrationService fomsService,
         IConfiguration configuration,
         ILogger<UserService> logger)
     {
@@ -31,6 +37,8 @@ public class UserService : IUserService
         _emailService = emailService;
         _emailVerificationService = emailVerificationService;
         _auditLogService = auditLogService;
+        _dmsService = dmsService;
+        _fomsService = fomsService;
         _frontendUrl = configuration["AppSettings:FrontendUrl"] ?? "http://localhost:5173";
         _logger = logger;
     }
@@ -123,8 +131,41 @@ public class UserService : IUserService
             $"User {fullName} ({user.EmployeeNumber}) registered",
             "UserManagement");
 
+        // Cross-system provisioning dispatch
+        string provisioningNotice = string.Empty;
+        var targetSys = (dto.TargetSystem ?? "STARS").Trim().ToUpperInvariant();
+        if (targetSys == "DMS")
+        {
+            var dmsRes = await _dmsService.ProvisionEmployeeAsync(
+                user.EmployeeNumber,
+                fullName,
+                dto.DmsRole,
+                dto.DmsSystemAccess,
+                tempPassword,
+                dto.DmsAreas);
+            provisioningNotice = dmsRes.IsSuccess
+                ? " (Provisioned to DMS successfully)"
+                : $" (Note: DMS provisioning returned: {dmsRes.Message})";
+        }
+        else if (targetSys == "FOMS")
+        {
+            var fomsRes = await _fomsService.ProvisionUserAsync(
+                user.EmployeeNumber,
+                user.EmployeeNumber,
+                fullName,
+                user.Email,
+                tempPassword,
+                dto.FomsRole,
+                user.ContactNumber,
+                dto.FomsSalaryRate,
+                user.HireDate);
+            provisioningNotice = fomsRes.IsSuccess
+                ? " (Provisioned to FOMS successfully)"
+                : $" (Note: FOMS provisioning returned: {fomsRes.Message})";
+        }
+
         var response = MapToResponseDTO(user);
-        return ApiResponseDTO<UserResponseDTO>.Success(response, "User registered successfully. Verification email sent.");
+        return ApiResponseDTO<UserResponseDTO>.Success(response, $"User registered successfully. Verification email sent.{provisioningNotice}");
     }
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<UserResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 10, string? search = null, string? role = null, Guid? departmentId = null)

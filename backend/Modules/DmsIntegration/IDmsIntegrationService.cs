@@ -52,4 +52,15 @@ public interface IDmsIntegrationService
     /// Retrieves delivery orders from DMS that have not yet been assigned to an operational task in STARS.
     /// </summary>
     Task<ApiResponseDTO<List<DmsPendingOrderDTO>>> GetPendingOrdersAsync();
+
+    /// <summary>
+    /// Multi-system Provisioning: Provisions a new employee/driver from STARS into DMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> ProvisionEmployeeAsync(
+        string employeeId,
+        string name,
+        string? role,
+        string? systemAccess,
+        string? temporaryPassword,
+        List<string>? areas);
 }
