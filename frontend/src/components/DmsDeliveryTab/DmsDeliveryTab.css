@@ -431,6 +431,24 @@
     text-align: center;
 }
 
+/* ── Pagination Bar ── */
+.dms-pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+    background: #ffffff;
+}
+
+.dms-pagination-info {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
 /* ── Modal / Stepper Drawer ── */
 .dms-modal-overlay {
     position: fixed;
@@ -449,7 +467,7 @@
     background: #ffffff;
     border-radius: 14px;
     width: 100%;
-    max-width: 560px;
+    max-width: 640px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
     border: 1px solid var(--border);
     overflow: hidden;
@@ -512,59 +530,137 @@
 }
 
 /* Stepper */
+.dms-stepper-container {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 16px 14px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
 .dms-stepper {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     position: relative;
-    padding-bottom: 8px;
+    width: 100%;
+}
+
+.dms-stepper-track {
+    position: absolute;
+    top: 15px;
+    left: 45px;
+    right: 45px;
+    height: 3px;
+    background: #e2e8f0;
+    z-index: 1;
+    border-radius: 4px;
+}
+
+.dms-stepper-progress {
+    height: 100%;
+    background: linear-gradient(90deg, #059669 0%, var(--primary, #00A99D) 100%);
+    border-radius: 4px;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dms-step {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 6px;
     position: relative;
+    z-index: 2;
+    padding: 0 4px;
 }
 
 .dms-step-dot {
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: #e2e8f0;
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
     color: #64748b;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
-    z-index: 1;
+    transition: all 0.25s ease;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .dms-step.done .dms-step-dot {
     background: #059669;
+    border-color: #059669;
     color: #ffffff;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
 }
 
 .dms-step.current .dms-step-dot {
     background: var(--primary, #00A99D);
+    border-color: var(--primary, #00A99D);
     color: #ffffff;
-    box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.15);
+    box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.18), 0 3px 8px rgba(0, 169, 157, 0.35);
+}
+
+.dms-step-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
 }
 
 .dms-step-title {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
-    line-height: 1.2;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+.dms-step.current .dms-step-title {
+    color: var(--primary, #00A99D);
+}
+
+.dms-step.upcoming .dms-step-title {
+    color: var(--text-muted, #94a3b8);
 }
 
 .dms-step-desc {
+    font-size: 11px;
+    color: var(--sidebar-text, #64748b);
+    line-height: 1.35;
+    font-weight: 400;
+}
+
+.dms-step.upcoming .dms-step-desc {
+    color: var(--text-muted, #94a3b8);
+}
+
+.dms-step-status-tag {
+    margin-top: 4px;
     font-size: 9.5px;
-    color: var(--sidebar-text);
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: inline-block;
+}
+
+.dms-step.done .dms-step-status-tag {
+    background: rgba(5, 150, 105, 0.12);
+    color: #059669;
+}
+
+.dms-step.current .dms-step-status-tag {
+    background: rgba(0, 169, 157, 0.15);
+    color: var(--primary, #00A99D);
 }
 
 .dms-modal-alert {

@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
+import StatusCard from '../StatusCard/StatusCard';
+import Pagination from '../ui/Pagination';
 import './PreDeliveryTab.css';
 
 export interface DmsPendingOrder {
@@ -142,6 +144,28 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         });
     }, [operationalValidationTasks, priorityFilter, searchQuery]);
 
+    const [pendingPage, setPendingPage] = useState(1);
+    const [validationPage, setValidationPage] = useState(1);
+    const pageSize = 10;
+
+    useEffect(() => {
+        setPendingPage(1);
+        setValidationPage(1);
+    }, [searchQuery, priorityFilter, activeSubTab]);
+
+    const pendingTotalPages = Math.max(1, Math.ceil(filteredPending.length / pageSize));
+    const validationTotalPages = Math.max(1, Math.ceil(filteredValidationTasks.length / pageSize));
+
+    const pagedPending = useMemo(() => {
+        const start = (pendingPage - 1) * pageSize;
+        return filteredPending.slice(start, start + pageSize);
+    }, [filteredPending, pendingPage, pageSize]);
+
+    const pagedValidationTasks = useMemo(() => {
+        const start = (validationPage - 1) * pageSize;
+        return filteredValidationTasks.slice(start, start + pageSize);
+    }, [filteredValidationTasks, validationPage, pageSize]);
+
     // Stats calculations
     const stats = useMemo(() => {
         const totalPending = pendingOrders.length;
@@ -196,46 +220,35 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
             </div>
 
             {/* Quick Stats */}
-            <div className="pre-delivery-stats-row">
-                <div className="pre-delivery-stat-card">
-                    <div className="pre-delivery-stat-icon-box" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#ca8a04' }}>
-                        <Clock size={24} />
-                    </div>
-                    <div className="pre-delivery-stat-info">
-                        <span className="pre-delivery-stat-value">{stats.totalPending}</span>
-                        <span className="pre-delivery-stat-label">Pending Validation Orders</span>
-                    </div>
-                </div>
-
-                <div className="pre-delivery-stat-card">
-                    <div className="pre-delivery-stat-icon-box" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
-                        <ShieldAlert size={24} />
-                    </div>
-                    <div className="pre-delivery-stat-info">
-                        <span className="pre-delivery-stat-value">{stats.urgentOrHigh}</span>
-                        <span className="pre-delivery-stat-label">Urgent / High Priority</span>
-                    </div>
-                </div>
-
-                <div className="pre-delivery-stat-card">
-                    <div className="pre-delivery-stat-icon-box" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb' }}>
-                        <ClipboardCheck size={24} />
-                    </div>
-                    <div className="pre-delivery-stat-info">
-                        <span className="pre-delivery-stat-value">{stats.inValidationCount}</span>
-                        <span className="pre-delivery-stat-label">Tasks in Validation</span>
-                    </div>
-                </div>
-
-                <div className="pre-delivery-stat-card">
-                    <div className="pre-delivery-stat-icon-box" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a' }}>
-                        <CheckCircle2 size={24} />
-                    </div>
-                    <div className="pre-delivery-stat-info">
-                        <span className="pre-delivery-stat-value">{stats.completedValidationCount}</span>
-                        <span className="pre-delivery-stat-label">Validated & Dispatched</span>
-                    </div>
-                </div>
+            <div className="pre-delivery-kpi-grid">
+                <StatusCard
+                    icon={<Clock size={20} strokeWidth={2.3} />}
+                    variant="warning"
+                    label="Pending Validation"
+                    value={stats.totalPending}
+                    subtext="DMS orders awaiting STARS task"
+                />
+                <StatusCard
+                    icon={<ShieldAlert size={20} strokeWidth={2.3} />}
+                    variant="danger"
+                    label="Urgent / High Priority"
+                    value={stats.urgentOrHigh}
+                    subtext="Requires immediate dispatch"
+                />
+                <StatusCard
+                    icon={<ClipboardCheck size={20} strokeWidth={2.3} />}
+                    variant="teal"
+                    label="Tasks in Validation"
+                    value={stats.inValidationCount}
+                    subtext="Active operational validation"
+                />
+                <StatusCard
+                    icon={<CheckCircle2 size={20} strokeWidth={2.3} />}
+                    variant="success"
+                    label="Validated & Dispatched"
+                    value={stats.completedValidationCount}
+                    subtext="Completed validation tasks"
+                />
             </div>
 
             {/* Sub-navigation Tabs */}
@@ -299,7 +312,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                 </p>
                             </div>
                         ) : (
-                            <table className="pre-delivery-table">
+                            <>
+                                <table className="pre-delivery-table">
                                 <thead>
                                     <tr>
                                         <th>Waybill No</th>
@@ -313,7 +327,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredPending.map(order => (
+                                    {pagedPending.map(order => (
                                         <tr key={order.orderId || order.waybillNo}>
                                             <td>
                                                 <div className="waybill-cell">
@@ -374,6 +388,19 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                     ))}
                                 </tbody>
                             </table>
+                            {filteredPending.length > 0 && (
+                                <div className="pre-delivery-pagination-bar">
+                                    <span className="pre-delivery-pagination-info">
+                                        Showing {filteredPending.length === 0 ? 0 : (pendingPage - 1) * pageSize + 1}–{Math.min(pendingPage * pageSize, filteredPending.length)} of {filteredPending.length} orders
+                                    </span>
+                                    <Pagination
+                                        currentPage={pendingPage}
+                                        totalPages={pendingTotalPages}
+                                        onPageChange={setPendingPage}
+                                    />
+                                </div>
+                            )}
+                            </>
                         )}
                     </div>
                 ) : (
@@ -388,67 +415,81 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                 </p>
                             </div>
                         ) : (
-                            <table className="pre-delivery-table">
-                                <thead>
-                                    <tr>
-                                        <th>Task Number</th>
-                                        <th>Title & Details</th>
-                                        <th>Assigned Employee</th>
-                                        <th>Priority</th>
-                                        <th>Status</th>
-                                        <th>Due Date</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredValidationTasks.map(t => (
-                                        <tr key={t.taskId || t.id}>
-                                            <td>
-                                                <span style={{ fontWeight: 600, color: '#2563eb', fontFamily: 'monospace' }}>
-                                                    {t.taskNumber || t.taskReferenceNumber || t.taskId?.slice(0, 8)}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div style={{ fontWeight: 600 }}>{t.taskTitle || t.title}</div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                    {t.taskCategory || 'Delivery Operations'}
-                                                </div>
-                                            </td>
-                                            <td>
-                                                {t.assignedEmployee || t.assignedTo ? (
-                                                    <span>{t.assignedEmployee || 'Assigned'}</span>
-                                                ) : (
-                                                    <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Unassigned</span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <span className={`priority-badge ${getPriorityClass(t.priority)}`}>
-                                                    {t.priority || 'Medium'}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span className="status-badge-active">
-                                                    {t.status || 'Active'}
-                                                </span>
-                                            </td>
-                                            <td style={{ fontSize: '0.8125rem' }}>
-                                                {t.dueAt ? new Date(t.dueAt).toLocaleString() : 'N/A'}
-                                            </td>
-                                            <td>
-                                                {onViewTask && (
-                                                    <button
-                                                        className="pre-delivery-btn pre-delivery-btn-secondary"
-                                                        style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                                                        onClick={() => onViewTask(t.taskId || t.id)}
-                                                    >
-                                                        <ExternalLink size={13} /> View Task
-                                                    </button>
-                                                )}
-                                            </td>
+                            <>
+                                <table className="pre-delivery-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Task Number</th>
+                                            <th>Title & Details</th>
+                                            <th>Assigned Employee</th>
+                                            <th>Priority</th>
+                                            <th>Status</th>
+                                            <th>Due Date</th>
+                                            <th>Action</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {pagedValidationTasks.map(t => (
+                                            <tr key={t.taskId || t.id}>
+                                                <td>
+                                                    <span style={{ fontWeight: 600, color: 'var(--teal, #00A99D)', fontFamily: 'monospace' }}>
+                                                        {t.taskNumber || t.taskReferenceNumber || t.taskId?.slice(0, 8)}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontWeight: 600 }}>{t.taskTitle || t.title}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                        {t.taskCategory || 'Delivery Operations'}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {t.assignedEmployee || t.assignedTo ? (
+                                                        <span>{t.assignedEmployee || 'Assigned'}</span>
+                                                    ) : (
+                                                        <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Unassigned</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <span className={`priority-badge ${getPriorityClass(t.priority)}`}>
+                                                        {t.priority || 'Medium'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className="status-badge-active">
+                                                        {t.status || 'Active'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ fontSize: '0.8125rem' }}>
+                                                    {t.dueAt ? new Date(t.dueAt).toLocaleString() : 'N/A'}
+                                                </td>
+                                                <td>
+                                                    {onViewTask && (
+                                                        <button
+                                                            className="pre-delivery-btn pre-delivery-btn-secondary"
+                                                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                                                            onClick={() => onViewTask(t.taskId || t.id)}
+                                                        >
+                                                            <ExternalLink size={13} /> View Task
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {filteredValidationTasks.length > 0 && (
+                                    <div className="pre-delivery-pagination-bar">
+                                        <span className="pre-delivery-pagination-info">
+                                            Showing {filteredValidationTasks.length === 0 ? 0 : (validationPage - 1) * pageSize + 1}–{Math.min(validationPage * pageSize, filteredValidationTasks.length)} of {filteredValidationTasks.length} tasks
+                                        </span>
+                                        <Pagination
+                                            currentPage={validationPage}
+                                            totalPages={validationTotalPages}
+                                            onPageChange={setValidationPage}
+                                        />
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

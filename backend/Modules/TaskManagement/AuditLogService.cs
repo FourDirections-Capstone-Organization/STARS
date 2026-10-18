@@ -101,7 +101,23 @@ public class AuditLogService : IAuditLogService
             .Take(pageSize)
             .ToListAsync();
 
-        var response = entries.Select(MapToResponseDTO).ToList();
+        var guidRegex = new System.Text.RegularExpressions.Regex(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+        var referencedGuids = entries
+            .Where(e => !string.IsNullOrEmpty(e.Description) && e.Description.Contains("user ", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(e => guidRegex.Matches(e.Description!).Select(m => Guid.TryParse(m.Value, out var g) ? g : Guid.Empty))
+            .Where(g => g != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, string> userMap = new();
+        if (referencedGuids.Count > 0)
+        {
+            userMap = await _db.Users
+                .Where(u => referencedGuids.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
+        }
+
+        var response = entries.Select(e => MapToResponseDTO(e, userMap)).ToList();
 
         var paginatedResult = new PaginatedResponseDTO<AuditLogResponseDTO>
         {
@@ -123,7 +139,25 @@ public class AuditLogService : IAuditLogService
         if (entry is null)
             return ApiResponseDTO<AuditLogResponseDTO>.Failure("Audit log entry not found.");
 
-        return ApiResponseDTO<AuditLogResponseDTO>.Success(MapToResponseDTO(entry));
+        Dictionary<Guid, string> userMap = new();
+        if (!string.IsNullOrEmpty(entry.Description) && entry.Description.Contains("user ", StringComparison.OrdinalIgnoreCase))
+        {
+            var guidRegex = new System.Text.RegularExpressions.Regex(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+            var guids = guidRegex.Matches(entry.Description)
+                .Select(m => Guid.TryParse(m.Value, out var g) ? g : Guid.Empty)
+                .Where(g => g != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (guids.Count > 0)
+            {
+                userMap = await _db.Users
+                    .Where(u => guids.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
+            }
+        }
+
+        return ApiResponseDTO<AuditLogResponseDTO>.Success(MapToResponseDTO(entry, userMap));
     }
 
     public async Task LogAccessAsync(Guid userId, string? ipAddress)
@@ -198,8 +232,40 @@ public class AuditLogService : IAuditLogService
             "AuditLog");
     }
 
-    private AuditLogResponseDTO MapToResponseDTO(AuditLog entry)
+    private AuditLogResponseDTO MapToResponseDTO(AuditLog entry, Dictionary<Guid, string>? userMap = null)
     {
+        var description = entry.Description;
+        if (!string.IsNullOrEmpty(description))
+        {
+            if (entry.User != null && entry.UserId.HasValue)
+            {
+                var actorName = $"{entry.User.FirstName} {entry.User.LastName}".Trim();
+                if (!string.IsNullOrEmpty(actorName))
+                {
+                    description = System.Text.RegularExpressions.Regex.Replace(
+                        description,
+                        $@"user\s+{System.Text.RegularExpressions.Regex.Escape(entry.UserId.Value.ToString())}",
+                        actorName,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+            }
+
+            if (userMap != null)
+            {
+                foreach (var (userId, name) in userMap)
+                {
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        description = System.Text.RegularExpressions.Regex.Replace(
+                            description,
+                            $@"user\s+{System.Text.RegularExpressions.Regex.Escape(userId.ToString())}",
+                            name,
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    }
+                }
+            }
+        }
+
         return new AuditLogResponseDTO
         {
             Id = entry.Id,
@@ -215,7 +281,7 @@ public class AuditLogService : IAuditLogService
             IpAddress = entry.IpAddress,
             OldValue = entry.OldValue,
             NewValue = entry.NewValue,
-            Description = entry.Description,
+            Description = description,
             Module = entry.Module
         };
     }

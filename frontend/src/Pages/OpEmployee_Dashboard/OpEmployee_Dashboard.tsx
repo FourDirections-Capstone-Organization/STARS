@@ -63,6 +63,7 @@ import axios from 'axios';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskCharts from '../../components/TaskCharts/TaskCharts';
+import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 import { BarChart2 } from 'lucide-react';
 
 // --- Helpers ------------------------------------------------------------------
@@ -277,9 +278,9 @@ const fmtChangeValue = (v?: string | null): string => {
 const renderChanges = (oldValue?: string | null, newValue?: string | null) => {
     if (!oldValue && !newValue) return '—';
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-            {oldValue ? <span title={String(oldValue)}>Old: {fmtChangeValue(oldValue)}</span> : null}
-            {newValue ? <span title={String(newValue)}>New: {fmtChangeValue(newValue)}</span> : null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+            {oldValue ? <span title={String(oldValue)} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>Old: {fmtChangeValue(oldValue)}</span> : null}
+            {newValue ? <span title={String(newValue)} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>New: {fmtChangeValue(newValue)}</span> : null}
         </div>
     );
 };
@@ -2770,8 +2771,8 @@ export default function EmployeeDashboard() {
                                             </div>
                                         )}
                                     </td>
-                                    <td style={{ fontSize: 13, color: 'var(--text-primary)' }}>{log.description}</td>
-                                    <td style={{ color: 'var(--text-primary)' }}>{renderChanges(log.oldValue, log.newValue)}</td>
+                                    <td style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: 340 }}>{log.description}</td>
+                                    <td style={{ color: 'var(--text-primary)', wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: 220 }}>{renderChanges(log.oldValue, log.newValue)}</td>
                                 </tr>
                                 );
                             })}
@@ -2785,57 +2786,12 @@ export default function EmployeeDashboard() {
                 )}
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content" style={{ padding: '0 28px 28px' }}>
-                        <div className="card">
-                            <div className="card-header-layout">
-                                <h3 style={{ fontSize: 0, margin: 0, padding: 0, visibility: 'hidden', height: 0, overflow: 'hidden' }}>Notifications</h3>
-                            </div>
-                            {notifLoading ? (
-                                <div className="empty-state"><Loader2 size={22} className="spin" /><p>Loading notifications...</p></div>
-                            ) : mergedAllNotifications.length === 0 ? (
-                                <div className="empty-state"><Bell size={22} /><p>No notifications</p></div>
-                            ) : (
-                                <DataTable
-                                    headers={['Date', 'Type', 'Message', 'Status']}
-                                    loading={false}
-                                    emptyMessage="No notifications"
-                                    currentPage={notifPage}
-                                    totalPages={notifTotalPages}
-                                    onPageChange={p => fetchAllNotifications(p)}
-                                    totalRecords={notifTotalRecords}
-                                    pageSize={NOTIF_PAGE_SIZE}
-                                >
-                                    {mergedAllNotifications.map(n => {
-                                        const badge = (() => {
-                                            switch (n.notificationType) {
-                                                case 'TaskAssigned': return { label: 'Assigned', cls: 'task-assigned' };
-                                                case 'TaskUpdated': return { label: 'Updated', cls: 'task-assigned' };
-                                                case 'TaskOverdue': return { label: 'Overdue', cls: 'deadline' };
-                                                case 'DeadlineWarning': return { label: 'Deadline', cls: 'deadline' };
-                                                case 'PushBack': return { label: 'Pushed back', cls: 'default' };
-                                                case 'TaskCancelled': return { label: 'Cancelled', cls: 'default' };
-                                                case 'TaskAwaitingReview': return { label: 'Awaiting Review', cls: 'task-assigned' };
-                                                default: return { label: n.notificationType, cls: 'default' };
-                                            }
-                                        })();
-                                        return (
-                                            <tr key={n.notificationId} onClick={() => {
-                                                if (n.taskId) {
-                                                    const found = tasks.find(t => t.id === n.taskId);
-                                                    if (found) setViewingId(found.id);
-                                                }
-                                            }} style={{ cursor: n.taskId ? 'pointer' : 'default' }}>
-                                                <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                                    {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                </td>
-                                                <td><span className={`badge ${badge.cls}`} style={{ fontSize: 11 }}>{badge.label}</span></td>
-                                                <td style={{ fontSize: 13, fontWeight: n.isRead ? 400 : 600 }}>{n.message}</td>
-                                                <td>{n.isRead ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Read</span> : <span className="badge badge-blue" style={{ fontSize: 11 }}>New</span>}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </DataTable>
-                            )}
-                        </div>
+                        <NotificationsTab
+                            onViewTask={(taskId) => {
+                                const found = tasks.find(t => t.id === taskId);
+                                if (found) setViewingId(found.id);
+                            }}
+                        />
                     </div>
                 )}
             </main>

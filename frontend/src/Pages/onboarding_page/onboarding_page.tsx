@@ -7,8 +7,8 @@ import { getStoredRedirectUri, redirectToExternalPortal } from '../../components
 
 type Step = 'profile' | 'password' | 'done';
 
-const NAME_REGEX = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF\s'\-\.]+$/;
-const SUFFIX_REGEX = /^[A-Za-z.\s]+$/;
+const NAME_REGEX = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF\s'\-\.\/]+$/;
+const SUFFIX_REGEX = /^[A-Za-z.\s\/]+$/;
 const PH_MOBILE_REGEX = /^09\d{9}$/;
 
 const passwordRules = [
@@ -186,24 +186,45 @@ export default function OnboardingPage() {
     const [showConfirm, setShowConfirm] = useState(false);
 
     const validateField = (key: string, value: string): string => {
-        if ((key === 'firstName' || key === 'lastName') && !value.trim()) {
-            return `${key === 'firstName' ? 'First name' : 'Last name'} is required.`;
+        const trimmed = value.trim();
+        if (!trimmed) {
+            const labels: Record<string, string> = {
+                firstName: 'First name',
+                middleName: 'Middle name',
+                lastName: 'Last name',
+                suffix: 'Suffix',
+                contactNumber: 'Contact number',
+            };
+            return `${labels[key] || 'This field'} is required.`;
         }
-        if (key !== 'contactNumber' && value.trim() && !NAME_REGEX.test(value.trim())) return 'Invalid characters.';
+        if (key === 'contactNumber') {
+            if (!PH_MOBILE_REGEX.test(trimmed)) return 'Enter a valid 11-digit mobile number (09XXXXXXXXX).';
+            return '';
+        }
+        if (!NAME_REGEX.test(trimmed)) return 'Invalid characters.';
         return '';
     };
 
+    const isProfileComplete = Boolean(
+        profile.firstName.trim() &&
+        profile.middleName.trim() &&
+        profile.lastName.trim() &&
+        profile.suffix.trim() &&
+        profile.contactNumber.trim() &&
+        PH_MOBILE_REGEX.test(profile.contactNumber.trim()) &&
+        NAME_REGEX.test(profile.firstName.trim()) &&
+        NAME_REGEX.test(profile.middleName.trim()) &&
+        NAME_REGEX.test(profile.lastName.trim()) &&
+        NAME_REGEX.test(profile.suffix.trim())
+    );
+
     const handleProfileSave = async () => {
         const errs: Record<string, string> = {};
-        (['firstName', 'lastName', 'contactNumber'] as const).forEach(k => {
+        (['firstName', 'middleName', 'lastName', 'suffix', 'contactNumber'] as const).forEach(k => {
             const err = validateField(k, profile[k]);
             if (err) errs[k] = err;
         });
         if (Object.keys(errs).length > 0) { setProfileErrors(errs); return; }
-        if (profile.contactNumber && !PH_MOBILE_REGEX.test(profile.contactNumber)) {
-            setProfileErrors(p => ({ ...p, contactNumber: 'Enter a valid 11-digit mobile number (09XXXXXXXXX).' }));
-            return;
-        }
         setSaving(true);
         setApiError('');
         try {
@@ -296,6 +317,13 @@ export default function OnboardingPage() {
 
     const allChecksPassed = passwordRules.every(r => r.test(pw.next));
     const passwordStrength = passwordRules.filter(r => r.test(pw.next)).length;
+    const isPasswordComplete = Boolean(
+        pw.current.trim() &&
+        pw.next &&
+        pw.confirm &&
+        allChecksPassed &&
+        pw.next === pw.confirm
+    );
 
     return (
         <div style={{
@@ -376,28 +404,28 @@ export default function OnboardingPage() {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                     <div>
-                                        <FieldLabel label="Middle Name" />
+                                        <FieldLabel label="Middle Name" required />
                                         <StyledInput icon={<User size={15} />} value={profile.middleName}
                                             onChange={e => { setProfile(p => ({ ...p, middleName: e.target.value })); setProfileErrors(prev => ({ ...prev, middleName: validateField('middleName', e.target.value) })); }}
-                                            placeholder="Santos" error={profileErrors.middleName} />
+                                            placeholder="Santos or N/A" error={profileErrors.middleName} />
                                         <FieldError msg={profileErrors.middleName} />
                                     </div>
                                     <div>
-                                        <FieldLabel label="Suffix" />
+                                        <FieldLabel label="Suffix" required />
                                         <StyledInput value={profile.suffix}
                                             onChange={e => { setProfile(p => ({ ...p, suffix: e.target.value })); setProfileErrors(prev => ({ ...prev, suffix: validateField('suffix', e.target.value) })); }}
-                                            placeholder="Jr., III" error={profileErrors.suffix} />
+                                            placeholder="Jr., III, or N/A" error={profileErrors.suffix} />
                                         <FieldError msg={profileErrors.suffix} />
                                     </div>
                                 </div>
                                 <div>
                                     <FieldLabel label="Contact Number" required />
                                     <StyledInput icon={<Phone size={15} />} type="tel" value={profile.contactNumber}
-                                        onChange={e => { const val = e.target.value.replace(/\D/g, ''); setProfile(p => ({ ...p, contactNumber: val })); setProfileErrors(p => ({ ...p, contactNumber: val && !PH_MOBILE_REGEX.test(val) ? 'Enter a valid 11-digit mobile number (09XXXXXXXXX).' : '' })); }}
+                                        onChange={e => { const val = e.target.value.replace(/\D/g, ''); setProfile(p => ({ ...p, contactNumber: val })); setProfileErrors(p => ({ ...p, contactNumber: val ? (PH_MOBILE_REGEX.test(val) ? '' : 'Enter a valid 11-digit mobile number (09XXXXXXXXX).') : 'Contact number is required.' })); }}
                                         placeholder="09123456789" maxLength={11} error={profileErrors.contactNumber} />
                                     <FieldError msg={profileErrors.contactNumber} />
                                 </div>
-                                <PrimaryButton onClick={handleProfileSave} disabled={saving}>
+                                <PrimaryButton onClick={handleProfileSave} disabled={saving || !isProfileComplete}>
                                     {saving ? <><Loader2 size={16} className="spin-icon" /> Saving…</> : <>Save & Continue <ArrowRight size={16} /></>}
                                 </PrimaryButton>
                             </div>
@@ -485,7 +513,7 @@ export default function OnboardingPage() {
                                     )}
                                     <FieldError msg={pwErrors.confirm} />
                                 </div>
-                                <PrimaryButton onClick={handlePasswordSave} disabled={saving || !allChecksPassed}>
+                                <PrimaryButton onClick={handlePasswordSave} disabled={saving || !isPasswordComplete}>
                                     {saving
                                         ? <><Loader2 size={16} className="spin-icon" /> Setting password…</>
                                         : <><Sparkles size={16} /> Set Password & Enter Dashboard <ArrowRight size={16} /></>}
