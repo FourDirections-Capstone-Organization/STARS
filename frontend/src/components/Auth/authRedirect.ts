@@ -94,6 +94,25 @@ export function getPublicWebsiteUrl(): string {
 }
 
 /**
+ * Resolves the Speedex Central Login URL from stored redirect_uri or default domain.
+ */
+export function getCentralLoginUrl(): string {
+    const stored = getStoredRedirectUri();
+    if (stored) {
+        try {
+            const u = new URL(stored);
+            return `${u.origin}/login`;
+        } catch {
+            // fallback
+        }
+    }
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        return 'http://localhost:5173/login';
+    }
+    return 'https://speedex-system.vercel.app/login';
+}
+
+/**
  * Resolves the Speedex Central Portal URL from stored redirect_uri or default portal URL.
  */
 export function getSystemPortalUrl(): string {
@@ -142,7 +161,7 @@ export function navigateToSystemPortal(): void {
 /**
  * Performs a complete logout across STARS and initiates Single Logout (SLO) with Speedex Central Portal.
  */
-export async function performLogout(options?: { redirectToPortal?: boolean; fallbackUrl?: string }): Promise<void> {
+export async function performLogout(options?: { redirectToPortal?: boolean; fallbackUrl?: string; reason?: string }): Promise<void> {
     const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
 
     if (token) {
@@ -154,7 +173,8 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
     }
 
     if (typeof window !== 'undefined') {
-        const portalUrl = getSystemPortalUrl();
+        const loginUrl = getCentralLoginUrl();
+        const reason = options?.reason || 'logged_out';
         
         // Clear all session and authentication storage
         [
@@ -166,9 +186,8 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
         clearStoredRedirectUri();
 
         if (options?.redirectToPortal !== false) {
-            // Direct to the speedex-system portal with action=logout in both query and hash for universal SLO support
-            const basePortal = portalUrl.split('#')[0].split('?')[0];
-            window.location.href = `${basePortal}?action=logout#action=logout&logout=true`;
+            // Direct to the Central One-Login with action=logout and reason
+            window.location.href = `${loginUrl}?action=logout&reason=${encodeURIComponent(reason)}&system=stars`;
         } else {
             window.location.href = options?.fallbackUrl || '/';
         }

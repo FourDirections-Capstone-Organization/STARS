@@ -29,6 +29,7 @@ public class SessionTimeoutMiddleware
         var path = context.Request.Path.Value?.ToLower() ?? "";
         if (path.StartsWith("/api/auth/login") ||
             path.StartsWith("/api/auth/refresh") ||
+            path.StartsWith("/api/auth/logout") ||
             path.StartsWith("/api/auth/forgot-password") ||
             path.StartsWith("/api/auth/reset-password"))
         {
@@ -59,6 +60,24 @@ public class SessionTimeoutMiddleware
         {
             context.Response.StatusCode = 401;
             await context.Response.WriteAsJsonAsync(new { message = "Account is deactivated" });
+            return;
+        }
+
+        // Check if session timed out due to inactivity
+        if (user.LastActivityAt.HasValue &&
+            (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes > _sessionSettings.InactivityTimeoutInMinutes)
+        {
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.LastActivityAt = null;
+            await db.SaveChangesAsync();
+
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "Session expired due to inactivity. Please log in again.",
+                code = "SESSION_TIMEOUT"
+            });
             return;
         }
 
