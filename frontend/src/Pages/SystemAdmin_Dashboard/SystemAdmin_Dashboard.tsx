@@ -115,6 +115,7 @@ interface EmployeeRegisterDTO {
     role: string;
     employmentStatus: string;
     hireDate: string;
+    targetSystems: string[];
     targetSystem?: string;
     dmsRole?: string;
     dmsSystemAccess?: string;
@@ -133,6 +134,11 @@ interface FieldError {
     contactNumber?: string;
     employmentStatus?: string;
     hireDate?: string;
+    targetSystems?: string;
+    dmsRole?: string;
+    dmsAreas?: string;
+    fomsRole?: string;
+    fomsSalaryRate?: string;
 }
 
 type FormState = EmployeeRegisterDTO;
@@ -150,6 +156,7 @@ const EMPTY_FORM: FormState = {
     role: '',
     employmentStatus: 'Regular',
     hireDate: new Date().toISOString().split('T')[0],
+    targetSystems: ['STARS'],
     targetSystem: 'STARS',
     dmsRole: 'Driver',
     dmsSystemAccess: 'Both',
@@ -455,15 +462,33 @@ function validate(form: FormState): FieldError {
         errs.email = 'Enter a valid email address.';
     }
 
-    // Department
-    if (!form.departmentId) errs.departmentId = 'Please select a department.';
+    // Target Systems Validation
+    const selectedSystems = form.targetSystems || [];
+    if (selectedSystems.length === 0) {
+        errs.targetSystems = 'Please select at least one operational system.';
+    }
 
-    // Position
-    if (!form.jobPositionId) errs.jobPositionId = 'Please select a position.';
+    // STARS specific validations
+    if (selectedSystems.includes('STARS')) {
+        if (!form.departmentId) errs.departmentId = 'Please select a department for STARS.';
+        if (!form.jobPositionId) errs.jobPositionId = 'Please select a position for STARS.';
+        if (!form.role) errs.role = 'Please select a system role for STARS.';
+    }
 
-    // Role
-    if (!form.role) {
-        errs.role = 'Please select a system role.';
+    // DMS specific validations
+    if (selectedSystems.includes('DMS')) {
+        if (!form.dmsRole) errs.dmsRole = 'Please select a DMS role.';
+        if (!form.dmsAreas || form.dmsAreas.length === 0 || !form.dmsAreas[0]?.trim()) {
+            errs.dmsAreas = 'At least one delivery hub / service area is required.';
+        }
+    }
+
+    // FOMS specific validations
+    if (selectedSystems.includes('FOMS')) {
+        if (!form.fomsRole) errs.fomsRole = 'Please select a FOMS role.';
+        if (form.fomsSalaryRate === undefined || form.fomsSalaryRate === null || isNaN(form.fomsSalaryRate) || form.fomsSalaryRate < 0) {
+            errs.fomsSalaryRate = 'Please enter a valid salary rate (>= 0).';
+        }
     }
 
     // Contact Number
@@ -666,11 +691,11 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 return '';
             }
             case 'departmentId':
-                return !value ? 'Please select a department.' : '';
+                return (form.targetSystems?.includes('STARS') && !value) ? 'Please select a department.' : '';
             case 'jobPositionId':
-                return !value ? 'Please select a position.' : '';
+                return (form.targetSystems?.includes('STARS') && !value) ? 'Please select a position.' : '';
             case 'role':
-                return !value ? 'Please select a system role.' : '';
+                return (form.targetSystems?.includes('STARS') && !value) ? 'Please select a system role.' : '';
             case 'hireDate':
                 return !value ? 'Hire date is required.' : '';
             case 'contactNumber': {
@@ -727,6 +752,14 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         setSubmitting(true);
         setApiError('');
         try {
+            const targetSystems = (form.targetSystems && form.targetSystems.length > 0)
+                ? form.targetSystems
+                : [form.targetSystem || 'STARS'];
+
+            const isStars = targetSystems.includes('STARS');
+            const isDms = targetSystems.includes('DMS');
+            const isFoms = targetSystems.includes('FOMS');
+
             const res = await api.post('/api/User/register', {
                 employeeNumber: form.employeeNumber,
                 firstName: form.firstName.trim() || 'New',
@@ -734,18 +767,20 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 lastName: form.lastName.trim() || 'Employee',
                 suffix: form.suffix.trim() || null,
                 contactNumber: form.contactNumber || null,
-                role: toBackendRole(form.role),
+                role: isStars ? toBackendRole(form.role) : 3,
+                starsRole: isStars ? form.role : null,
                 email: form.email.trim(),
-                departmentId: form.departmentId || null,
-                jobPositionId: form.jobPositionId || null,
+                departmentId: isStars ? (form.departmentId || null) : null,
+                jobPositionId: isStars ? (form.jobPositionId || null) : null,
                 employmentStatus: form.employmentStatus || 'Regular',
                 hireDate: form.hireDate ? new Date(form.hireDate).toISOString() : null,
-                targetSystem: form.targetSystem || 'STARS',
-                dmsRole: form.targetSystem === 'DMS' ? (form.dmsRole || 'Driver') : undefined,
-                dmsSystemAccess: form.targetSystem === 'DMS' ? (form.dmsSystemAccess || 'Both') : undefined,
-                dmsAreas: form.targetSystem === 'DMS' ? (form.dmsAreas || ['Manila']) : undefined,
-                fomsRole: form.targetSystem === 'FOMS' ? (form.fomsRole || 'Accountant') : undefined,
-                fomsSalaryRate: form.targetSystem === 'FOMS' ? Number(form.fomsSalaryRate || 0) : undefined,
+                targetSystems: targetSystems,
+                targetSystem: targetSystems.join(','),
+                dmsRole: isDms ? (form.dmsRole || 'Driver') : undefined,
+                dmsSystemAccess: isDms ? (form.dmsSystemAccess || 'Both') : undefined,
+                dmsAreas: isDms ? (form.dmsAreas || ['Manila']) : undefined,
+                fomsRole: isFoms ? (form.fomsRole || 'Accountant') : undefined,
+                fomsSalaryRate: isFoms ? Number(form.fomsSalaryRate || 0) : undefined,
             });
 
             const responseData = res.data;
@@ -845,127 +880,76 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     badgeStatus: 'Pending',
                 } : undefined}
             >
+                {/* ── Section 1: Target Systems & Ecosystem ── */}
                 <div className="fm-section">
-                    <h5 className="fm-section-title">Target Operational System & Ecosystem</h5>
-                    <div className="fm-field-grid">
-                        <div className="fm-field" style={{ gridColumn: 'span 2' }}>
-                            <label className="fm-label" htmlFor="emp-target-system">
-                                Target System Destination <span style={{ color: 'var(--primary)' }}>★</span>
-                            </label>
-                            <select
-                                id="emp-target-system"
-                                value={form.targetSystem || 'STARS'}
-                                onChange={e => {
-                                    setDirty(true);
-                                    const val = e.target.value;
-                                    setForm(prev => ({ ...prev, targetSystem: val }));
-                                }}
-                                className="fm-select"
-                                style={{ fontWeight: 600 }}
-                            >
-                                <option value="STARS">STARS — Speedex Task Allocation & Review System (HQ & Operations)</option>
-                                <option value="DMS">DMS — Delivery Management System (Fleet, Drivers & Couriers)</option>
-                                <option value="FOMS">FOMS — Financial & Order Management System (Accounting & Billing)</option>
-                            </select>
-                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>
-                                Account credentials will be synchronized across the ecosystem and provisioned into the selected system.
-                            </span>
-                        </div>
+                    <h5 className="fm-section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Target Operational Systems & Access Provisioning <span style={{ color: 'var(--primary)' }}>★</span>
+                    </h5>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, marginTop: -4 }}>
+                        Select all operational platforms this employee is authorized to access. Credentials will automatically synchronize across all selected systems.
+                    </p>
 
-                        {form.targetSystem === 'DMS' && (
-                            <>
-                                <div className="fm-field">
-                                    <label className="fm-label" htmlFor="dms-role">DMS Operational Role</label>
-                                    <select
-                                        id="dms-role"
-                                        value={form.dmsRole || 'Driver'}
-                                        onChange={e => {
-                                            setDirty(true);
-                                            setForm(prev => ({ ...prev, dmsRole: e.target.value }));
-                                        }}
-                                        className="fm-select"
-                                    >
-                                        <option value="Driver">Driver / Rider</option>
-                                        <option value="Dispatcher">Dispatcher</option>
-                                        <option value="Admin">Fleet Administrator</option>
-                                    </select>
-                                </div>
-                                <div className="fm-field">
-                                    <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
-                                    <select
-                                        id="dms-access"
-                                        value={form.dmsSystemAccess || 'Both'}
-                                        onChange={e => {
-                                            setDirty(true);
-                                            setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
-                                        }}
-                                        className="fm-select"
-                                    >
-                                        <option value="Both">Both (Mobile App & Web Portal)</option>
-                                        <option value="Mobile">Mobile Application Only</option>
-                                        <option value="Web">Web Portal Only</option>
-                                    </select>
-                                </div>
-                                <div className="fm-field" style={{ gridColumn: 'span 2' }}>
-                                    <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 8 }}>
+                        {[
+                            { id: 'STARS', name: 'STARS', label: 'HQ & Task Review', desc: 'Task allocation, operational review, workflow control', icon: '⭐' },
+                            { id: 'DMS', name: 'DMS', label: 'Delivery & Fleet System', desc: 'Driver routing, parcel dispatch, courier management', icon: '🚚' },
+                            { id: 'FOMS', name: 'FOMS', label: 'Finance & Billing System', desc: 'Financial accounting, audits, payroll, order ledger', icon: '💰' },
+                        ].map(sys => {
+                            const isChecked = form.targetSystems?.includes(sys.id);
+                            return (
+                                <label
+                                    key={sys.id}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: 12,
+                                        padding: '12px 14px',
+                                        borderRadius: 8,
+                                        border: isChecked ? '2px solid var(--primary, #3b82f6)' : '1px solid var(--border)',
+                                        background: isChecked ? 'rgba(59, 130, 246, 0.06)' : 'var(--bg-card, transparent)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
                                     <input
-                                        id="dms-areas"
-                                        type="text"
-                                        placeholder="e.g. Manila, Quezon City, Makati"
-                                        value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        style={{ marginTop: 3, width: 16, height: 16, accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
                                         onChange={e => {
                                             setDirty(true);
-                                            const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                            setForm(prev => ({ ...prev, dmsAreas: areas }));
+                                            const current = form.targetSystems || [];
+                                            const next = e.target.checked
+                                                ? [...current, sys.id]
+                                                : current.filter(s => s !== sys.id);
+                                            setForm(prev => ({
+                                                ...prev,
+                                                targetSystems: next,
+                                                targetSystem: next.join(','),
+                                            }));
+                                            setErrors(prev => ({
+                                                ...prev,
+                                                targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
+                                            }));
                                         }}
-                                        className="fm-input"
                                     />
-                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
-                                </div>
-                            </>
-                        )}
-
-                        {form.targetSystem === 'FOMS' && (
-                            <>
-                                <div className="fm-field">
-                                    <label className="fm-label" htmlFor="foms-role">FOMS Finance Role</label>
-                                    <select
-                                        id="foms-role"
-                                        value={form.fomsRole || 'Accountant'}
-                                        onChange={e => {
-                                            setDirty(true);
-                                            setForm(prev => ({ ...prev, fomsRole: e.target.value }));
-                                        }}
-                                        className="fm-select"
-                                    >
-                                        <option value="Accountant">Accountant</option>
-                                        <option value="Financial Analyst">Financial Analyst</option>
-                                        <option value="Auditor">Financial Auditor</option>
-                                    </select>
-                                </div>
-                                <div className="fm-field">
-                                    <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP)</label>
-                                    <input
-                                        id="foms-salary"
-                                        type="number"
-                                        placeholder="25000"
-                                        value={form.fomsSalaryRate ?? 25000}
-                                        onChange={e => {
-                                            setDirty(true);
-                                            setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
-                                        }}
-                                        className="fm-input"
-                                        min={0}
-                                        step={500}
-                                    />
-                                </div>
-                            </>
-                        )}
+                                    <div>
+                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span>{sys.icon}</span> {sys.name} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• {sys.label}</span>
+                                        </div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.3 }}>
+                                            {sys.desc}
+                                        </div>
+                                    </div>
+                                </label>
+                            );
+                        })}
                     </div>
+                    <FieldErr msg={errors.targetSystems} />
                 </div>
 
+                {/* ── Section 2: General Profile & Employment Info ── */}
                 <div className="fm-section">
-                    <h5 className="fm-section-title">Account Information</h5>
+                    <h5 className="fm-section-title">General Employee Profile & Employment Details</h5>
                     <div className="fm-field-grid">
                         {/* Employee Number */}
                         <div className="fm-field">
@@ -1069,93 +1053,6 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                 className="fm-input" style={inputStyle(errors.contactNumber)} maxLength={11} />
                             <FieldErr msg={errors.contactNumber} />
                         </div>
-                    </div>
-                </div>
-
-                <div className="fm-section">
-                    <h5 className="fm-section-title">Department & Position</h5>
-                    <div className="fm-field-grid">
-                        {/* Department */}
-                        <div className="fm-field">
-                            <label className="fm-label" htmlFor="emp-dept">
-                                Department <span style={{ color: 'var(--status-failed)' }}>*</span>
-                            </label>
-                            <select
-                                id="emp-dept"
-                                value={form.departmentId}
-                                onChange={handleChange('departmentId')}
-                                className="fm-select"
-                                style={inputStyle(errors.departmentId)}
-                                disabled={loadingOrg}
-                            >
-                                <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
-                                {departments.map(d => <option key={d.departmentId} value={d.departmentId}>{d.name}</option>)}
-                            </select>
-                            <FieldErr msg={errors.departmentId} />
-                        </div>
-
-                        {/* Position */}
-                        <div className="fm-field">
-                            <label className="fm-label" htmlFor="emp-position">
-                                Position <span style={{ color: 'var(--status-failed)' }}>*</span>
-                            </label>
-                            <select
-                                id="emp-position"
-                                value={form.jobPositionId}
-                                onChange={handleChange('jobPositionId')}
-                                className="fm-select"
-                                style={{
-                                    ...inputStyle(errors.jobPositionId),
-                                    opacity: !form.departmentId ? 0.6 : 1,
-                                    cursor: !form.departmentId ? 'not-allowed' : 'pointer',
-                                }}
-                                disabled={!form.departmentId || loadingOrg}
-                            >
-                                <option value="">
-                                    {form.departmentId ? 'Select a position' : 'Select department first'}
-                                </option>
-                                {availablePositions.map(p => <option key={p.jobPositionId} value={p.jobPositionId}>{p.name}</option>)}
-                            </select>
-                            <FieldErr msg={errors.jobPositionId} />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="fm-section">
-                    <h5 className="fm-section-title">Role, Employment & Hire Date</h5>
-                    <div className="fm-field-grid">
-                        {/* System Role */}
-                        <div className="fm-field">
-                            <label className="fm-label" htmlFor="emp-role">
-                                System Role <span style={{ color: 'var(--status-failed)' }}>*</span>
-                            </label>
-                            <select
-                                id="emp-role"
-                                value={form.role}
-                                onChange={handleChange('role')}
-                                className="fm-select"
-                                style={{
-                                    ...inputStyle(errors.role),
-                                    opacity: !form.jobPositionId ? 0.6 : 1,
-                                    cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
-                                }}
-                                disabled={!form.jobPositionId || loadingOrg}
-                            >
-                                <option value="">
-                                    {!form.departmentId
-                                        ? 'Select department first'
-                                        : !form.jobPositionId
-                                            ? 'Select position first'
-                                            : 'Select a role'}
-                                </option>
-                                {allowedRoles.map(r => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
-                            <FieldErr msg={errors.role} />
-                        </div>
 
                         {/* Employment Status */}
                         <div className="fm-field">
@@ -1194,6 +1091,199 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                         </div>
                     </div>
                 </div>
+
+                {/* ── Section 3: STARS Operational Configuration ── */}
+                {form.targetSystems?.includes('STARS') && (
+                    <div className="fm-section" style={{ borderLeft: '3px solid var(--primary, #3b82f6)', paddingLeft: 16 }}>
+                        <h5 className="fm-section-title" style={{ color: 'var(--primary, #3b82f6)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            ⭐ STARS Operational Configuration
+                        </h5>
+                        <div className="fm-field-grid">
+                            {/* Department */}
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="emp-dept">
+                                    Department <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                </label>
+                                <select
+                                    id="emp-dept"
+                                    value={form.departmentId}
+                                    onChange={handleChange('departmentId')}
+                                    className="fm-select"
+                                    style={inputStyle(errors.departmentId)}
+                                    disabled={loadingOrg}
+                                >
+                                    <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
+                                    {departments.map(d => <option key={d.departmentId} value={d.departmentId}>{d.name}</option>)}
+                                </select>
+                                <FieldErr msg={errors.departmentId} />
+                            </div>
+
+                            {/* Position */}
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="emp-position">
+                                    Position <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                </label>
+                                <select
+                                    id="emp-position"
+                                    value={form.jobPositionId}
+                                    onChange={handleChange('jobPositionId')}
+                                    className="fm-select"
+                                    style={{
+                                        ...inputStyle(errors.jobPositionId),
+                                        opacity: !form.departmentId ? 0.6 : 1,
+                                        cursor: !form.departmentId ? 'not-allowed' : 'pointer',
+                                    }}
+                                    disabled={!form.departmentId || loadingOrg}
+                                >
+                                    <option value="">
+                                        {form.departmentId ? 'Select a position' : 'Select department first'}
+                                    </option>
+                                    {availablePositions.map(p => <option key={p.jobPositionId} value={p.jobPositionId}>{p.name}</option>)}
+                                </select>
+                                <FieldErr msg={errors.jobPositionId} />
+                            </div>
+
+                            {/* System Role */}
+                            <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                                <label className="fm-label" htmlFor="emp-role">
+                                    STARS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                </label>
+                                <select
+                                    id="emp-role"
+                                    value={form.role}
+                                    onChange={handleChange('role')}
+                                    className="fm-select"
+                                    style={{
+                                        ...inputStyle(errors.role),
+                                        opacity: !form.jobPositionId ? 0.6 : 1,
+                                        cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
+                                    }}
+                                    disabled={!form.jobPositionId || loadingOrg}
+                                >
+                                    <option value="">
+                                        {!form.departmentId
+                                            ? 'Select department first'
+                                            : !form.jobPositionId
+                                                ? 'Select position first'
+                                                : 'Select a role'}
+                                    </option>
+                                    {allowedRoles.map(r => (
+                                        <option key={r} value={r}>
+                                            {r}
+                                        </option>
+                                    ))}
+                                </select>
+                                <FieldErr msg={errors.role} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Section 4: DMS Operational Configuration ── */}
+                {form.targetSystems?.includes('DMS') && (
+                    <div className="fm-section" style={{ borderLeft: '3px solid #10b981', paddingLeft: 16 }}>
+                        <h5 className="fm-section-title" style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            🚚 DMS Operational Configuration
+                        </h5>
+                        <div className="fm-field-grid">
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="dms-role">DMS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <select
+                                    id="dms-role"
+                                    value={form.dmsRole || 'Driver'}
+                                    onChange={e => {
+                                        setDirty(true);
+                                        setForm(prev => ({ ...prev, dmsRole: e.target.value }));
+                                    }}
+                                    className="fm-select"
+                                >
+                                    <option value="Driver">Driver / Rider</option>
+                                    <option value="Dispatcher">Dispatcher</option>
+                                    <option value="Admin">Fleet Administrator</option>
+                                </select>
+                                <FieldErr msg={errors.dmsRole} />
+                            </div>
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
+                                <select
+                                    id="dms-access"
+                                    value={form.dmsSystemAccess || 'Both'}
+                                    onChange={e => {
+                                        setDirty(true);
+                                        setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
+                                    }}
+                                    className="fm-select"
+                                >
+                                    <option value="Both">Both (Mobile App & Web Portal)</option>
+                                    <option value="Mobile">Mobile Application Only</option>
+                                    <option value="Web">Web Portal Only</option>
+                                </select>
+                            </div>
+                            <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                                <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <input
+                                    id="dms-areas"
+                                    type="text"
+                                    placeholder="e.g. Manila, Quezon City, Makati"
+                                    value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
+                                    onChange={e => {
+                                        setDirty(true);
+                                        const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                        setForm(prev => ({ ...prev, dmsAreas: areas }));
+                                    }}
+                                    className="fm-input"
+                                />
+                                <FieldErr msg={errors.dmsAreas} />
+                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Section 5: FOMS Financial Configuration ── */}
+                {form.targetSystems?.includes('FOMS') && (
+                    <div className="fm-section" style={{ borderLeft: '3px solid #f59e0b', paddingLeft: 16 }}>
+                        <h5 className="fm-section-title" style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            💰 FOMS Financial Configuration
+                        </h5>
+                        <div className="fm-field-grid">
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="foms-role">FOMS Finance Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <select
+                                    id="foms-role"
+                                    value={form.fomsRole || 'Accountant'}
+                                    onChange={e => {
+                                        setDirty(true);
+                                        setForm(prev => ({ ...prev, fomsRole: e.target.value }));
+                                    }}
+                                    className="fm-select"
+                                >
+                                    <option value="Accountant">Accountant</option>
+                                    <option value="Financial Analyst">Financial Analyst</option>
+                                    <option value="Auditor">Financial Auditor</option>
+                                </select>
+                                <FieldErr msg={errors.fomsRole} />
+                            </div>
+                            <div className="fm-field">
+                                <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP) <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                <input
+                                    id="foms-salary"
+                                    type="number"
+                                    placeholder="25000"
+                                    value={form.fomsSalaryRate ?? 25000}
+                                    onChange={e => {
+                                        setDirty(true);
+                                        setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
+                                    }}
+                                    className="fm-input"
+                                    min={0}
+                                    step={500}
+                                />
+                                <FieldErr msg={errors.fomsSalaryRate} />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </FormModal>
 
             {/* ── Registration Confirmation ── */}
@@ -1229,9 +1319,20 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                             { label: 'Name', value: [form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(' ') },
                             { label: 'Email', value: form.email },
                             { label: 'Contact', value: form.contactNumber },
-                            { label: 'Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || form.departmentId },
-                            { label: 'Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name || form.jobPositionId },
-                            { label: 'Role', value: form.role },
+                            { label: 'Authorized Systems', value: form.targetSystems?.join(', ') || form.targetSystem },
+                            ...(form.targetSystems?.includes('STARS') ? [
+                                { label: 'STARS Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || form.departmentId },
+                                { label: 'STARS Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name || form.jobPositionId },
+                                { label: 'STARS Role', value: form.role },
+                            ] : []),
+                            ...(form.targetSystems?.includes('DMS') ? [
+                                { label: 'DMS Role', value: `${form.dmsRole || 'Driver'} (${form.dmsSystemAccess || 'Both'})` },
+                                { label: 'DMS Hubs', value: form.dmsAreas?.join(', ') || 'Manila' },
+                            ] : []),
+                            ...(form.targetSystems?.includes('FOMS') ? [
+                                { label: 'FOMS Role', value: form.fomsRole || 'Accountant' },
+                                { label: 'FOMS Salary Rate', value: `PHP ${Number(form.fomsSalaryRate || 0).toLocaleString()}` },
+                            ] : []),
                             { label: 'Employment Status', value: form.employmentStatus },
                             { label: 'Hire Date', value: fmtDate(form.hireDate) },
                         ].map(item => (
@@ -1300,16 +1401,23 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--status-active-bg)', border: '1px solid rgba(5,150,105,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13 }}>
                             <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 1 }} color="var(--status-active)" />
                             <span style={{ color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                Login credentials have been sent to <strong>{form.email.trim()}</strong>. Ask the employee to check their inbox to activate their account.
+                                Login credentials and activation link have been sent to <strong>{form.email.trim()}</strong>.
                             </span>
                         </div>
 
                         <div style={{ background: 'var(--bg-input)', borderRadius: 10, border: '1px solid var(--border)', padding: '12px 16px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {[
                                 { label: 'Employee ID', value: successData.employeeNumber },
-                                { label: 'Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name },
-                                { label: 'Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name },
-                                { label: 'Role', value: form.role },
+                                { label: 'Authorized Systems', value: form.targetSystems?.join(', ') || form.targetSystem },
+                                ...(form.targetSystems?.includes('STARS') ? [
+                                    { label: 'STARS Role', value: form.role },
+                                ] : []),
+                                ...(form.targetSystems?.includes('DMS') ? [
+                                    { label: 'DMS Role', value: form.dmsRole || 'Driver' },
+                                ] : []),
+                                ...(form.targetSystems?.includes('FOMS') ? [
+                                    { label: 'FOMS Role', value: form.fomsRole || 'Accountant' },
+                                ] : []),
                                 { label: 'Status', value: form.employmentStatus },
                                 { label: 'Hire Date', value: fmtDate(form.hireDate) },
                                 { label: 'Email', value: form.email.trim() },

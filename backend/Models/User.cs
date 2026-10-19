@@ -61,6 +61,8 @@ public class User
     public bool IsDeactivated { get; set; } = false;
     public bool IsEmailVerified { get; set; } = false;
     public bool IsPasswordChanged { get; set; } = false;
+    [MaxLength(100)]
+    public string AllowedSystems { get; set; } = "STARS";
 
     // Terms & Conditions
     public bool HasAcceptedTerms { get; set; } = false;

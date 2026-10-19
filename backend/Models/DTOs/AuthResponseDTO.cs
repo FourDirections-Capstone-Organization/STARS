@@ -17,4 +17,5 @@ public class AuthResponseDTO
     public string? TermsVersionAccepted { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime RefreshTokenExpiresAt { get; set; }
-}
+    public string AllowedSystems { get; set; } = "STARS";
+}

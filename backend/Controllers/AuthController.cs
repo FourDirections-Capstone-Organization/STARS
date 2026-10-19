@@ -131,6 +131,28 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("onboarding-status/{employeeNumber}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetOnboardingStatus(string employeeNumber)
+    {
+        var result = await _authService.GetOnboardingStatusAsync(employeeNumber);
+        if (!result.IsSuccess)
+            return NotFound(result);
+
+        return Ok(result);
+    }
+
+    [HttpPost("complete-onboarding")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingDTO dto)
+    {
+        var result = await _authService.CompleteOnboardingAsync(dto);
+        if (!result.IsSuccess)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
     private Guid? GetUserIdFromClaims()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

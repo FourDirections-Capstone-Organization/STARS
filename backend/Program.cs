@@ -304,8 +304,10 @@ using (var scope = app.Services.CreateScope())
                 INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
                 VALUES ('20261016061728_AddTaskFomsIntegrationModels', '9.0.0')
                 ON CONFLICT (""MigrationId"") DO NOTHING;
+
+                ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""AllowedSystems"" character varying(100) NOT NULL DEFAULT 'STARS';
             ");
-            Console.WriteLine("[STARTUP] FOMS Integration tables and columns verified/created.");
+            Console.WriteLine("[STARTUP] FOMS Integration tables and AllowedSystems column verified/created.");
         }
         catch (Exception ddlEx)
         {

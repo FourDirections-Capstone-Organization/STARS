@@ -31,8 +31,9 @@ public class RegisterUserDTO
     [MaxLength(20)]
     public string? ContactNumber { get; set; }
 
-    [Required]
-    public UserRole Role { get; set; }
+    public UserRole Role { get; set; } = UserRole.Encoder;
+
+    public string? StarsRole { get; set; }
 
     public Guid? DepartmentId { get; set; }
 
@@ -44,10 +45,15 @@ public class RegisterUserDTO
     public string? EmploymentStatus { get; set; }
 
     /// <summary>
-    /// Target System: "STARS" (default), "DMS", or "FOMS"
+    /// Legacy Single Target System: "STARS", "DMS", or "FOMS"
     /// </summary>
     [MaxLength(20)]
     public string? TargetSystem { get; set; }
+
+    /// <summary>
+    /// Multi-System Target selection: e.g. ["STARS", "DMS", "FOMS"]
+    /// </summary>
+    public List<string>? TargetSystems { get; set; }
 
     // ── DMS Provisioning Fields ──
     [MaxLength(50)]
@@ -64,3 +70,4 @@ public class RegisterUserDTO
 
     public decimal? FomsSalaryRate { get; set; }
 }
+

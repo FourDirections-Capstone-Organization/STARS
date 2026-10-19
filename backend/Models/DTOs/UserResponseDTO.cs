@@ -28,4 +28,6 @@ public class UserResponseDTO
     public string FullName { get; set; } = string.Empty;
     /// <summary>Online/Offline derived from the user's active session activity.</summary>
     public string PresenceStatus { get; set; } = "Offline";
+    public string AllowedSystems { get; set; } = "STARS";
 }
+

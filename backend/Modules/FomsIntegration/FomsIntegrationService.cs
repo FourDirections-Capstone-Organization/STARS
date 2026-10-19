@@ -677,5 +677,49 @@ public class FomsIntegrationService : IFomsIntegrationService
         }
     }
 
+    public async Task<ApiResponseDTO<bool>> SyncPasswordAsync(string employeeId, string newPassword)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("FOMS integration is not configured, skipping password sync for {EmployeeId}", employeeId);
+            return ApiResponseDTO<bool>.Failure("FOMS integration is not configured");
+        }
+
+        var payload = new
+        {
+            employeeId = employeeId.Trim(),
+            newPassword
+        };
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/sync-password")
+            {
+                Content = JsonContent.Create(payload)
+            };
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("FOMS password sync failed for {EmployeeId}: {Status} {Body}", employeeId, (int)response.StatusCode, Truncate(responseBody));
+                return ApiResponseDTO<bool>.Failure($"FOMS password sync failed: {(int)response.StatusCode}");
+            }
+
+            _logger.LogInformation("Successfully synchronized password to FOMS for employee {EmployeeId}", employeeId);
+            return ApiResponseDTO<bool>.Success(true, "Password synchronized to FOMS successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while synchronizing password for {EmployeeId} to FOMS", employeeId);
+            return ApiResponseDTO<bool>.Failure($"FOMS password sync error: {ex.Message}");
+        }
+    }
+
     private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];
 }
+

@@ -14,4 +14,6 @@ public interface IAuthService
     Task<ApiResponseDTO<UserResponseDTO>> GetCurrentUserAsync(Guid userId);
     Task<ApiResponseDTO<bool>> VerifyPasswordAsync(VerifyPasswordDTO dto);
     Task<ApiResponseDTO<bool>> AcceptTermsAsync(Guid userId, string termsVersion);
-}
+    Task<ApiResponseDTO<OnboardingStatusDTO>> GetOnboardingStatusAsync(string employeeNumber);
+    Task<ApiResponseDTO<bool>> CompleteOnboardingAsync(CompleteOnboardingDTO dto);
+}

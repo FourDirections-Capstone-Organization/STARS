@@ -15,6 +15,7 @@ using Backend.Modules.Email;
 using Backend.Modules.TaskManagement;
 using Backend.Modules.Utilities;
 using Backend.Modules.DmsIntegration;
+using Backend.Modules.FomsIntegration;
 
 namespace Backend.Modules.AuthenticationAndCredentials;
 
@@ -26,6 +27,7 @@ public class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
     private readonly IAuditLogService _auditLogService;
     private readonly IDmsIntegrationService? _dmsService;
+    private readonly IFomsIntegrationService? _fomsService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(
@@ -34,7 +36,8 @@ public class AuthService : IAuthService
         IEmailService emailService,
         IAuditLogService auditLogService,
         ILogger<AuthService> logger,
-        IDmsIntegrationService? dmsService = null)
+        IDmsIntegrationService? dmsService = null,
+        IFomsIntegrationService? fomsService = null)
     {
         _db = db;
         _jwtSettings = jwtSettings.Value;
@@ -42,6 +45,7 @@ public class AuthService : IAuthService
         _auditLogService = auditLogService;
         _logger = logger;
         _dmsService = dmsService;
+        _fomsService = fomsService;
     }
 
     public async Task<ApiResponseDTO<AuthResponseDTO>> LoginAsync(LoginDTO dto, string? ipAddress = null)
@@ -62,6 +66,17 @@ public class AuthService : IAuthService
         // Check if user is active
         if (!user.IsActive)
             return ApiResponseDTO<AuthResponseDTO>.Failure("Account is inactive. Please contact your administrator.");
+
+        // Check if account has access to STARS
+        var allowedSystems = (user.AllowedSystems ?? "STARS")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToUpperInvariant())
+            .ToList();
+
+        if (allowedSystems.Any() && !allowedSystems.Contains("STARS"))
+        {
+            return ApiResponseDTO<AuthResponseDTO>.Failure("This account does not have access permissions for STARS.");
+        }
 
         // Verify password using PBKDF2 (PasswordHasher)
         if (!await VerifyPasswordAndRehashIfNeeded(user, dto.Password))
@@ -103,6 +118,7 @@ public class AuthService : IAuthService
             IsEmailVerified = user.IsEmailVerified,
             HasAcceptedTerms = user.HasAcceptedTerms,
             TermsVersionAccepted = user.TermsVersionAccepted,
+            AllowedSystems = user.AllowedSystems ?? "STARS",
             ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
             RefreshTokenExpiresAt = user.RefreshTokenExpiry!.Value
         };
@@ -231,6 +247,24 @@ public class AuthService : IAuthService
             }
         }
 
+        // Cross-system Password Synchronization: if employee exists in FOMS, sync new password to FOMS
+        if (_fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                var fomsCheck = await _fomsService.CheckUserExistsInFomsAsync(user.Email, user.EmployeeNumber);
+                if (fomsCheck.IsSuccess && fomsCheck.Data)
+                {
+                    await _fomsService.SyncPasswordAsync(user.EmployeeNumber, dto.NewPassword);
+                    _logger.LogInformation("Password reset successfully synchronized to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize password reset to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
         _logger.LogInformation("Password reset completed for employee {EmployeeNumber} ({Email})", user.EmployeeNumber, user.Email);
 
         await _auditLogService.LogAsync(
@@ -294,6 +328,24 @@ public class AuthService : IAuthService
             }
         }
 
+        // Cross-system Password Synchronization: if employee exists in FOMS, sync new password to FOMS
+        if (_fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                var fomsCheck = await _fomsService.CheckUserExistsInFomsAsync(user.Email, user.EmployeeNumber);
+                if (fomsCheck.IsSuccess && fomsCheck.Data)
+                {
+                    await _fomsService.SyncPasswordAsync(user.EmployeeNumber, dto.NewPassword);
+                    _logger.LogInformation("Password change successfully synchronized to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize password change to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
         _logger.LogInformation("Password changed for user: {UserId}", userId);
 
         await _auditLogService.LogAsync(
@@ -307,6 +359,7 @@ public class AuthService : IAuthService
 
         return ApiResponseDTO<bool>.Success(true, "Password changed successfully");
     }
+
 
     public async Task<ApiResponseDTO<bool>> LogoutAsync(Guid userId)
     {
@@ -525,8 +578,126 @@ public class AuthService : IAuthService
             .TrimEnd('=');
     }
 
+    public async Task<ApiResponseDTO<OnboardingStatusDTO>> GetOnboardingStatusAsync(string employeeNumber)
+    {
+        if (string.IsNullOrWhiteSpace(employeeNumber))
+            return ApiResponseDTO<OnboardingStatusDTO>.Failure("Employee number is required");
+
+        var cleanId = employeeNumber.Trim().ToLowerInvariant();
+        var user = await _db.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.EmployeeNumber.ToLower() == cleanId || (u.Username != null && u.Username.ToLower() == cleanId));
+
+        if (user is null)
+            return ApiResponseDTO<OnboardingStatusDTO>.Failure("Employee not found");
+
+        var systems = (user.AllowedSystems ?? "STARS")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToUpperInvariant())
+            .Distinct()
+            .ToList();
+
+        var dto = new OnboardingStatusDTO
+        {
+            EmployeeNumber = user.EmployeeNumber,
+            IsPasswordChanged = user.IsPasswordChanged,
+            IsEmailVerified = user.IsEmailVerified,
+            HasAcceptedTerms = user.HasAcceptedTerms,
+            AllowedSystems = systems
+        };
+
+        return ApiResponseDTO<OnboardingStatusDTO>.Success(dto);
+    }
+
+    public async Task<ApiResponseDTO<bool>> CompleteOnboardingAsync(CompleteOnboardingDTO dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.EmployeeNumber))
+            return ApiResponseDTO<bool>.Failure("Employee number is required");
+
+        var cleanId = dto.EmployeeNumber.Trim().ToLowerInvariant();
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.EmployeeNumber.ToLower() == cleanId || (u.Username != null && u.Username.ToLower() == cleanId));
+
+        if (user is null)
+            return ApiResponseDTO<bool>.Failure("Employee not found");
+
+        // Verify temporary password
+        if (!await VerifyPasswordAndRehashIfNeeded(user, dto.CurrentPassword))
+            return ApiResponseDTO<bool>.Failure("Current temporary password is incorrect");
+
+        // Validate new password meets OWASP requirements
+        var (isValid, errors) = PasswordValidator.Validate(dto.NewPassword);
+        if (!isValid)
+            return ApiResponseDTO<bool>.Failure(string.Join(" ", errors));
+
+        if (dto.NewPassword == dto.CurrentPassword)
+            return ApiResponseDTO<bool>.Failure("New password must be different from your temporary password.");
+
+        // Update profile fields if provided
+        if (!string.IsNullOrWhiteSpace(dto.FirstName)) user.FirstName = dto.FirstName.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.MiddleName)) user.MiddleName = dto.MiddleName.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.LastName)) user.LastName = dto.LastName.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Suffix)) user.Suffix = dto.Suffix.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.ContactNumber)) user.ContactNumber = dto.ContactNumber.Trim();
+
+        // Update password and onboarding flag
+        user.PasswordHash = _passwordHasher.HashPassword(user, dto.NewPassword);
+        user.IsPasswordChanged = true;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var fullName = GetFullName(user);
+
+        // Cascade permanent password to DMS
+        if (_dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                await _dmsService.ProvisionEmployeeAsync(
+                    user.EmployeeNumber,
+                    fullName,
+                    null,
+                    null,
+                    dto.NewPassword,
+                    null);
+                _logger.LogInformation("Onboarding permanent password synchronized to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize onboarding password to DMS for {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
+        // Cascade permanent password to FOMS
+        if (_fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                await _fomsService.SyncPasswordAsync(user.EmployeeNumber, dto.NewPassword);
+                _logger.LogInformation("Onboarding permanent password synchronized to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize onboarding password to FOMS for {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
+        await _auditLogService.LogAsync(
+            user.Id,
+            AuditActionType.Update,
+            "User",
+            user.Id,
+            null,
+            $"Onboarding completed and permanent password set for {fullName} ({user.EmployeeNumber})",
+            "Authentication");
+
+        return ApiResponseDTO<bool>.Success(true, "Onboarding completed successfully. Permanent password saved.");
+    }
+
     private async Task<User?> FindUserByIdentifier(string identifier)
     {
+
         var normalizedIdentifier = identifier.Trim().ToLower();
         
         return await _db.Users

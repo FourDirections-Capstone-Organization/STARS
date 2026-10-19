@@ -45,22 +45,32 @@ public class UserService : IUserService
 
     public async Task<ApiResponseDTO<UserResponseDTO>> RegisterAsync(RegisterUserDTO dto)
     {
-        // Check if employee number already exists
+        // 1. Determine target systems
+        var targetSystems = (dto.TargetSystems != null && dto.TargetSystems.Any())
+            ? dto.TargetSystems.Select(s => s.Trim().ToUpperInvariant()).Distinct().ToList()
+            : new List<string> { (dto.TargetSystem ?? "STARS").Trim().ToUpperInvariant() };
+
+        if (!targetSystems.Any())
+        {
+            return ApiResponseDTO<UserResponseDTO>.Failure("At least one target operational system must be selected.");
+        }
+
+        // 2. Check if employee number already exists
         var empNumExists = await _db.Users
             .AnyAsync(u => u.EmployeeNumber == dto.EmployeeNumber);
 
         if (empNumExists)
             return ApiResponseDTO<UserResponseDTO>.Failure("Employee number already exists");
 
-        // Check if email already exists
+        // 3. Check if email already exists
         var emailExists = await _db.Users
             .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower());
 
         if (emailExists)
             return ApiResponseDTO<UserResponseDTO>.Failure("Email already exists");
 
-        // Check cross-system email uniqueness against FOMS
-        if (_fomsService != null && _fomsService.IsConfigured && !string.IsNullOrWhiteSpace(dto.Email))
+        // 4. Cross-system uniqueness checks
+        if (targetSystems.Contains("FOMS") && _fomsService != null && _fomsService.IsConfigured && !string.IsNullOrWhiteSpace(dto.Email))
         {
             var fomsCheck = await _fomsService.CheckUserExistsInFomsAsync(dto.Email, dto.EmployeeNumber);
             if (fomsCheck.IsSuccess && fomsCheck.Data)
@@ -70,7 +80,17 @@ public class UserService : IUserService
             }
         }
 
-        // Validate department if provided
+        if (targetSystems.Contains("DMS") && _dmsService != null && _dmsService.IsConfigured && !string.IsNullOrWhiteSpace(dto.EmployeeNumber))
+        {
+            var dmsCheck = await _dmsService.CheckEmployeeExistsInDmsAsync(dto.EmployeeNumber);
+            if (dmsCheck.IsSuccess && dmsCheck.Data)
+            {
+                return ApiResponseDTO<UserResponseDTO>.Failure(
+                    $"Employee ID '{dto.EmployeeNumber}' is already registered in DMS.");
+            }
+        }
+
+        // 5. Validate department if provided
         if (dto.DepartmentId.HasValue)
         {
             var deptExists = await _db.Departments
@@ -90,7 +110,14 @@ public class UserService : IUserService
                 return ApiResponseDTO<UserResponseDTO>.Failure("Job position not found or is inactive");
         }
 
-        // Create user object first
+        // Resolve STARS Role if specified
+        var resolvedRole = dto.Role;
+        if (!string.IsNullOrWhiteSpace(dto.StarsRole) && Enum.TryParse<UserRole>(dto.StarsRole, true, out var parsedRole))
+        {
+            resolvedRole = parsedRole;
+        }
+
+        // 6. Create user object
         var user = new User
         {
             EmployeeNumber = dto.EmployeeNumber,
@@ -100,11 +127,12 @@ public class UserService : IUserService
             LastName = dto.LastName,
             Suffix = dto.Suffix,
             ContactNumber = dto.ContactNumber,
-            Role = dto.Role,
+            Role = resolvedRole,
             DepartmentId = dto.DepartmentId,
             JobPositionId = dto.JobPositionId,
             HireDate = dto.HireDate,
             EmploymentStatus = dto.EmploymentStatus ?? "Regular",
+            AllowedSystems = string.Join(",", targetSystems),
             IsActive = false,
             IsDeactivated = false,
             IsEmailVerified = false,
@@ -121,8 +149,8 @@ public class UserService : IUserService
         await _db.SaveChangesAsync();
 
         // Load related data for response
-        await _db.Entry(user).Reference(u => u.Department).LoadAsync();
-        await _db.Entry(user).Reference(u => u.JobPosition).LoadAsync();
+        if (user.DepartmentId.HasValue) await _db.Entry(user).Reference(u => u.Department).LoadAsync();
+        if (user.JobPositionId.HasValue) await _db.Entry(user).Reference(u => u.JobPosition).LoadAsync();
 
         var verificationUrl = $"{_frontendUrl}/verify-email";
         await _emailVerificationService.SendVerificationEmailForUserAsync(user.Id, verificationUrl);
@@ -131,7 +159,8 @@ public class UserService : IUserService
         var fullName = $"{user.FirstName} {user.MiddleName} {user.LastName} {user.Suffix}".Replace("  ", " ").Trim();
         await _emailService.SendWelcomeEmailAsync(user.Email, fullName, user.EmployeeNumber, tempPassword);
 
-        _logger.LogInformation("New user registered: {EmployeeNumber} - {Email}", user.EmployeeNumber, user.Email);
+        _logger.LogInformation("New user registered: {EmployeeNumber} - {Email} (Systems: {AllowedSystems})", 
+            user.EmployeeNumber, user.Email, user.AllowedSystems);
 
         await _auditLogService.LogAsync(
             null,
@@ -139,13 +168,13 @@ public class UserService : IUserService
             "User",
             user.Id,
             null,
-            $"User {fullName} ({user.EmployeeNumber}) registered",
+            $"User {fullName} ({user.EmployeeNumber}) registered for systems [{user.AllowedSystems}]",
             "UserManagement");
 
-        // Cross-system provisioning dispatch
-        string provisioningNotice = string.Empty;
-        var targetSys = (dto.TargetSystem ?? "STARS").Trim().ToUpperInvariant();
-        if (targetSys == "DMS")
+        // 7. Multi-System Cross-System Provisioning Dispatch
+        var notices = new List<string>();
+
+        if (targetSystems.Contains("DMS"))
         {
             var dmsRes = await _dmsService.ProvisionEmployeeAsync(
                 user.EmployeeNumber,
@@ -154,11 +183,12 @@ public class UserService : IUserService
                 dto.DmsSystemAccess,
                 tempPassword,
                 dto.DmsAreas);
-            provisioningNotice = dmsRes.IsSuccess
-                ? " (Provisioned to DMS successfully)"
-                : $" (Note: DMS provisioning returned: {dmsRes.Message})";
+            notices.Add(dmsRes.IsSuccess
+                ? "DMS provisioned"
+                : $"DMS notice: {dmsRes.Message}");
         }
-        else if (targetSys == "FOMS")
+
+        if (targetSystems.Contains("FOMS"))
         {
             var fomsRes = await _fomsService.ProvisionUserAsync(
                 user.EmployeeNumber,
@@ -170,14 +200,21 @@ public class UserService : IUserService
                 user.ContactNumber,
                 dto.FomsSalaryRate,
                 user.HireDate);
-            provisioningNotice = fomsRes.IsSuccess
-                ? " (Provisioned to FOMS successfully)"
-                : $" (Note: FOMS provisioning returned: {fomsRes.Message})";
+            notices.Add(fomsRes.IsSuccess
+                ? "FOMS provisioned"
+                : $"FOMS notice: {fomsRes.Message}");
         }
 
+        if (targetSystems.Contains("STARS"))
+        {
+            notices.Add("STARS provisioned");
+        }
+
+        string provisioningNotice = notices.Any() ? $" ({string.Join("; ", notices)})" : string.Empty;
         var response = MapToResponseDTO(user);
         return ApiResponseDTO<UserResponseDTO>.Success(response, $"User registered successfully. Verification email sent.{provisioningNotice}");
     }
+
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<UserResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 10, string? search = null, string? role = null, Guid? departmentId = null)
     {
@@ -537,9 +574,11 @@ public class UserService : IUserService
             PresenceStatus = user.LastActivityAt.HasValue
                 && (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes <= 15
                 ? "Online"
-                : "Offline"
+                : "Offline",
+            AllowedSystems = user.AllowedSystems ?? "STARS"
         };
     }
+
 
     public async System.Threading.Tasks.Task SeedDefaultManagerAsync()
     {

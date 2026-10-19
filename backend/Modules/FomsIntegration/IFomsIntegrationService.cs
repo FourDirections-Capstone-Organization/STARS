@@ -65,4 +65,10 @@ public interface IFomsIntegrationService
     /// Integration Check: Queries FOMS to check if an email or employee ID already exists in FOMS.
     /// </summary>
     Task<ApiResponseDTO<bool>> CheckUserExistsInFomsAsync(string? email, string? employeeId = null);
+
+    /// <summary>
+    /// Synchronizes a user's updated password to FOMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> SyncPasswordAsync(string employeeId, string newPassword);
 }
+
