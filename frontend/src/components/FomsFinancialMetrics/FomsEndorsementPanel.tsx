@@ -29,6 +29,7 @@ import {
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import { FomsEndorsementItem, SubmitSignedEndorsementPayload } from './types';
+import FormModal from '../FormModal/FormModal';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
@@ -945,157 +946,151 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
             {/* ── Modal: Record Signed Endorsement Copy ── */}
             {signingItem && (
-                <div className="foms-modal-overlay" onClick={() => !submittingSign && setSigningItem(null)}>
-                    <div className="foms-simulator-modal" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div className="foms-modal-icon-badge">
-                                        <FileCheck size={18} />
-                                    </div>
-                                    <h3 className="foms-modal-title">Record Client Receiving Endorsement</h3>
-                                </div>
-                                <p className="foms-modal-subtitle">
-                                    Submitting the signed copy and actual received date automatically activates the official 30-day payment term in FOMS.
-                                </p>
+                <FormModal
+                    isOpen={!!signingItem}
+                    onClose={() => !submittingSign && setSigningItem(null)}
+                    title="Record Client Receiving Endorsement"
+                    subtitle="Submitting the signed copy and actual received date automatically activates the official 30-day payment term in FOMS."
+                    size="lg"
+                >
+                    <form onSubmit={handleSubmitSignedCopy}>
+                        <div className="foms-sim-form-grid">
+                            <div className="foms-form-group">
+                                <label className="foms-label">Invoice Number</label>
+                                <input
+                                    type="text"
+                                    className="foms-input"
+                                    disabled
+                                    value={signingItem.invoiceNumber}
+                                />
                             </div>
-                            <button
-                                type="button"
-                                className="foms-btn-close"
-                                onClick={() => !submittingSign && setSigningItem(null)}
-                                disabled={submittingSign}
-                            >
-                                <X size={18} />
-                            </button>
+
+                            <div className="foms-form-group">
+                                <label className="foms-label">Client Name</label>
+                                <input
+                                    type="text"
+                                    className="foms-input"
+                                    disabled
+                                    value={signingItem.clientName}
+                                />
+                            </div>
+
+                            <div className="foms-form-group">
+                                <label className="foms-label">Actual Received Date (Wet Signature Date) *</label>
+                                <input
+                                    type="date"
+                                    className="foms-input"
+                                    required
+                                    value={signForm.actualReceivedDate}
+                                    onChange={e => setSignForm({ ...signForm, actualReceivedDate: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="foms-form-group">
+                                <label className="foms-label">Calculated 30-Day Payment Due Date</label>
+                                <div className="foms-calc-due-box">
+                                    <Calendar size={13} color="#00A99D" />
+                                    <span>
+                                        {signForm.actualReceivedDate
+                                            ? new Date(new Date(signForm.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString('en-US', {
+                                                  month: 'short',
+                                                  day: 'numeric',
+                                                  year: 'numeric',
+                                              })
+                                            : '—'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
+                                <label className="foms-label">Signed Receiving Copy Document URL *</label>
+                                <input
+                                    type="url"
+                                    className="foms-input"
+                                    required
+                                    placeholder="https://stars.blob.core.windows.net/signed-receipts/..."
+                                    value={signForm.signedCopyUrl}
+                                    onChange={e => setSignForm({ ...signForm, signedCopyUrl: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
+                                <label className="foms-label">Delivery Remarks &amp; Receiving Officer Notes</label>
+                                <textarea
+                                    className="foms-textarea"
+                                    rows={2}
+                                    value={signForm.deliveryRemarks}
+                                    onChange={e => setSignForm({ ...signForm, deliveryRemarks: e.target.value })}
+                                />
+                            </div>
                         </div>
 
-                        <form onSubmit={handleSubmitSignedCopy}>
-                            <div className="foms-sim-form-grid">
-                                <div className="foms-form-group">
-                                    <label className="foms-label">Invoice Number</label>
-                                    <input
-                                        type="text"
-                                        className="foms-input"
-                                        disabled
-                                        value={signingItem.invoiceNumber}
-                                    />
-                                </div>
-
-                                <div className="foms-form-group">
-                                    <label className="foms-label">Client Name</label>
-                                    <input
-                                        type="text"
-                                        className="foms-input"
-                                        disabled
-                                        value={signingItem.clientName}
-                                    />
-                                </div>
-
-                                <div className="foms-form-group">
-                                    <label className="foms-label">Actual Received Date (Wet Signature Date) *</label>
-                                    <input
-                                        type="date"
-                                        className="foms-input"
-                                        required
-                                        value={signForm.actualReceivedDate}
-                                        onChange={e => setSignForm({ ...signForm, actualReceivedDate: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="foms-form-group">
-                                    <label className="foms-label">Calculated 30-Day Payment Due Date</label>
-                                    <div className="foms-calc-due-box">
-                                        <Calendar size={13} color="#00A99D" />
-                                        <span>
-                                            {signForm.actualReceivedDate
-                                                ? new Date(new Date(signForm.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString('en-US', {
-                                                      month: 'short',
-                                                      day: 'numeric',
-                                                      year: 'numeric',
-                                                  })
-                                                : '—'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                    <label className="foms-label">Signed Receiving Copy Document URL *</label>
-                                    <input
-                                        type="url"
-                                        className="foms-input"
-                                        required
-                                        placeholder="https://stars.blob.core.windows.net/signed-receipts/..."
-                                        value={signForm.signedCopyUrl}
-                                        onChange={e => setSignForm({ ...signForm, signedCopyUrl: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                    <label className="foms-label">Delivery Remarks &amp; Receiving Officer Notes</label>
-                                    <textarea
-                                        className="foms-textarea"
-                                        rows={2}
-                                        value={signForm.deliveryRemarks}
-                                        onChange={e => setSignForm({ ...signForm, deliveryRemarks: e.target.value })}
-                                    />
-                                </div>
+                        <div className="foms-modal-advice-box risk-ok" style={{ margin: '0 1.5rem 1rem 1.5rem' }}>
+                            <Sparkles size={16} style={{ flexShrink: 0 }} />
+                            <div style={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
+                                <strong>FOMS Integration Callback:</strong> Upon submitting, STARS will notify FOMS at <code>POST /api/integration/stars/invoice-endorsed</code> with the receiving date and signed copy URL to begin the 30-day payment term calculation.
                             </div>
+                        </div>
 
-                            <div className="foms-modal-advice-box risk-ok" style={{ margin: '0 1.5rem 1rem 1.5rem' }}>
-                                <Sparkles size={16} style={{ flexShrink: 0 }} />
-                                <div style={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
-                                    <strong>FOMS Integration Callback:</strong> Upon submitting, STARS will notify FOMS at <code>POST /api/integration/stars/invoice-endorsed</code> with the receiving date and signed copy URL to begin the 30-day payment term calculation.
-                                </div>
-                            </div>
-
-                            <div className="foms-modal-actions">
-                                <button
-                                    type="button"
-                                    className="foms-btn-outline"
-                                    onClick={() => setSigningItem(null)}
-                                    disabled={submittingSign}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="foms-btn-primary"
-                                    disabled={submittingSign}
-                                >
-                                    <FileCheck size={14} />
-                                    <span>{submittingSign ? 'Transmitting Endorsement...' : 'Confirm Endorsement & Sync to FOMS'}</span>
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                        <div className="foms-modal-actions">
+                            <button
+                                type="button"
+                                className="fm-btn fm-btn-cancel"
+                                onClick={() => setSigningItem(null)}
+                                disabled={submittingSign}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="fm-btn fm-btn-primary"
+                                disabled={submittingSign}
+                            >
+                                <FileCheck size={14} />
+                                <span>{submittingSign ? 'Transmitting Endorsement...' : 'Confirm Endorsement & Sync to FOMS'}</span>
+                            </button>
+                        </div>
+                    </form>
+                </FormModal>
             )}
 
             {/* ── Modal: Simulate Incoming FOMS Endorsement Request ── */}
             {showSimModal && (
-                <div className="foms-modal-overlay" onClick={() => !simSubmitting && setShowSimModal(false)}>
-                    <div className="foms-simulator-modal" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div className="foms-modal-icon-badge">
-                                        <Play size={18} />
-                                    </div>
-                                    <h3 className="foms-modal-title">Simulate FOMS Finalized Invoice Endorsement Request</h3>
-                                </div>
-                                <p className="foms-modal-subtitle">
-                                    Simulate incoming M2M webhook from FOMS when an invoice is finalized and requires physical delivery in STARS.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                className="foms-btn-close"
-                                onClick={() => !simSubmitting && setShowSimModal(false)}
-                                disabled={simSubmitting}
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
+                <FormModal
+                    isOpen={showSimModal}
+                    onClose={() => !simSubmitting && setShowSimModal(false)}
+                    title="Simulate FOMS Finalized Invoice Endorsement Request"
+                    subtitle="Simulate incoming M2M webhook from FOMS when an invoice is finalized and requires physical delivery in STARS."
+                    size="lg"
+                    footer={
+                        simSuccessResult ? (
+                            <>
+                                <button
+                                    type="button"
+                                    className="fm-btn fm-btn-cancel"
+                                    onClick={() => {
+                                        setSimSuccessResult(null);
+                                    }}
+                                >
+                                    Simulate Another Request
+                                </button>
+                                {onOpenTask && simSuccessResult.taskId && (
+                                    <button
+                                        type="button"
+                                        className="fm-btn fm-btn-primary"
+                                        onClick={() => {
+                                            setShowSimModal(false);
+                                            onOpenTask(simSuccessResult.taskId);
+                                        }}
+                                    >
+                                        <ExternalLink size={14} />
+                                        <span>Open Delivery Task View</span>
+                                    </button>
+                                )}
+                            </>
+                        ) : undefined
+                    }
+                >
 
                         {simSuccessResult ? (
                             <div className="foms-sim-success-card">
@@ -1131,31 +1126,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                         <span className="foms-meta-label">STATUS</span>
                                         <span className="foms-status-pill pending">Pending Client Endorsement</span>
                                     </div>
-                                </div>
-
-                                <div className="foms-modal-actions" style={{ marginTop: 20 }}>
-                                    <button
-                                        type="button"
-                                        className="foms-btn-outline"
-                                        onClick={() => {
-                                            setSimSuccessResult(null);
-                                        }}
-                                    >
-                                        Simulate Another Request
-                                    </button>
-                                    {onOpenTask && simSuccessResult.taskId && (
-                                        <button
-                                            type="button"
-                                            className="foms-btn-primary"
-                                            onClick={() => {
-                                                setShowSimModal(false);
-                                                onOpenTask(simSuccessResult.taskId);
-                                            }}
-                                        >
-                                            <ExternalLink size={14} />
-                                            <span>Open Delivery Task View</span>
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -1279,7 +1249,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                 <div className="foms-modal-actions">
                                     <button
                                         type="button"
-                                        className="foms-btn-outline"
+                                        className="fm-btn fm-btn-cancel"
                                         onClick={() => setShowSimModal(false)}
                                         disabled={simSubmitting}
                                     >
@@ -1287,7 +1257,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                     </button>
                                     <button
                                         type="submit"
-                                        className="foms-btn-primary"
+                                        className="fm-btn fm-btn-primary"
                                         disabled={simSubmitting}
                                     >
                                         <Play size={14} fill="currentColor" />
@@ -1296,92 +1266,73 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                 </div>
                             </form>
                         )}
-                    </div>
-                </div>
+                </FormModal>
             )}
 
             {/* ── Architecture Diagram Modal ── */}
             {showArchModal && (
-                <div className="foms-modal-overlay" onClick={() => setShowArchModal(false)}>
-                    <div className="foms-simulator-modal" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div className="foms-modal-icon-badge">
-                                        <Sparkles size={18} />
-                                    </div>
-                                    <h3 className="foms-modal-title">FOMS Integration 1: Endorsement &amp; 30-Day Term Flow</h3>
-                                </div>
-                                <p className="foms-modal-subtitle">
-                                    How STARS and FOMS exchange invoice receiving data to compute accurate 30-day payment deadlines.
-                                </p>
+                <FormModal
+                    isOpen={showArchModal}
+                    onClose={() => setShowArchModal(false)}
+                    title="FOMS Integration 1: Endorsement & 30-Day Term Flow"
+                    subtitle="How STARS and FOMS exchange invoice receiving data to compute accurate 30-day payment deadlines."
+                    size="lg"
+                    footer={
+                        <button
+                            type="button"
+                            className="fm-btn fm-btn-primary"
+                            onClick={() => setShowArchModal(false)}
+                        >
+                            Close Architecture
+                        </button>
+                    }
+                >
+                    <div className="foms-trace-graph-card">
+                        <h4 className="foms-trace-title">End-to-End Delivery Architecture</h4>
+                        <div className="foms-trace-steps">
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">1. FOMS Invoice Finalized</div>
+                                <span className="foms-trace-detail">
+                                    FOMS pushes <code>POST /api/integration/foms/endorsement-request</code>
+                                </span>
                             </div>
-                            <button
-                                type="button"
-                                className="foms-btn-close"
-                                onClick={() => setShowArchModal(false)}
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <div className="foms-trace-graph-card">
-                            <h4 className="foms-trace-title">End-to-End Delivery Architecture</h4>
-                            <div className="foms-trace-steps">
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">1. FOMS Invoice Finalized</div>
-                                    <span className="foms-trace-detail">
-                                        FOMS pushes <code>POST /api/integration/foms/endorsement-request</code>
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">2. STARS Task Created</div>
-                                    <span className="foms-trace-detail">
-                                        <code>[FOMS Endorsement]</code> assigned to Coordinator/Courier
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step optimal">
-                                    <div className="foms-trace-badge">3. Wet-Ink Sign-off</div>
-                                    <span className="foms-trace-detail">
-                                        Assignee collects client signature and logs Actual Received Date
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">4. 30-Day Term Starts</div>
-                                    <span className="foms-trace-detail">
-                                        STARS calls FOMS <code>/api/integration/stars/invoice-endorsed</code>
-                                    </span>
-                                </div>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">2. STARS Task Created</div>
+                                <span className="foms-trace-detail">
+                                    <code>[FOMS Endorsement]</code> assigned to Coordinator/Courier
+                                </span>
                             </div>
-                        </div>
-
-                        <div className="foms-meta-inspection-grid">
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">PAYMENT TERM RULE</span>
-                                <span className="foms-meta-val">Due Date = ActualReceivedDate + 30 Days</span>
-                                <span className="foms-client-id">Standard commercial 30-day credit term (FR-028)</span>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step optimal">
+                                <div className="foms-trace-badge">3. Wet-Ink Sign-off</div>
+                                <span className="foms-trace-detail">
+                                    Assignee collects client signature and logs Actual Received Date
+                                </span>
                             </div>
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">LEGAL EVIDENCE</span>
-                                <span className="foms-meta-val">Signed Receiving Copy PDF</span>
-                                <span className="foms-client-id">Preserved in Azure Blob Storage &amp; STARS database</span>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">4. 30-Day Term Starts</div>
+                                <span className="foms-trace-detail">
+                                    STARS calls FOMS <code>/api/integration/stars/invoice-endorsed</code>
+                                </span>
                             </div>
-                        </div>
-
-                        <div className="foms-modal-actions">
-                            <button
-                                type="button"
-                                className="foms-btn-primary"
-                                onClick={() => setShowArchModal(false)}
-                            >
-                                Close Architecture
-                            </button>
                         </div>
                     </div>
-                </div>
+
+                    <div className="foms-meta-inspection-grid">
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">PAYMENT TERM RULE</span>
+                            <span className="foms-meta-val">Due Date = ActualReceivedDate + 30 Days</span>
+                            <span className="foms-client-id">Standard commercial 30-day credit term (FR-028)</span>
+                        </div>
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">LEGAL EVIDENCE</span>
+                            <span className="foms-meta-val">Signed Receiving Copy PDF</span>
+                            <span className="foms-client-id">Preserved in Azure Blob Storage &amp; STARS database</span>
+                        </div>
+                    </div>
+                </FormModal>
             )}
         </div>
     );

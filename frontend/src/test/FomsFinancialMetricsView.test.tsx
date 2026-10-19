@@ -191,15 +191,15 @@ describe('FomsFinancialMetricsView', () => {
         expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
     });
 
-    it('filters collection alerts by aging status chips in Graph Routing tab', async () => {
+    it('filters collection alerts by aging status dropdown in Graph Routing tab', async () => {
         render(<FomsFinancialMetricsView initialTab="routing" />);
 
         expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
         expect(screen.getByText('Horizon Retail Holdings Inc.')).toBeInTheDocument();
 
-        // Click "31-60 Days" filter chip
-        const chip3160 = screen.getByRole('button', { name: /31-60 Days/i });
-        fireEvent.click(chip3160);
+        // Select "31-60 Days Overdue" from dropdown
+        const select = screen.getByRole('combobox', { name: /filter by aging status/i });
+        fireEvent.change(select, { target: { value: '31_60' } });
 
         // Trans-Pacific is 35 days (31-60), Horizon is 15 days (1-30)
         expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();

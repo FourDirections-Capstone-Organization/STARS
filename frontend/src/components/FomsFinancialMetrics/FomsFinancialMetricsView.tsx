@@ -29,6 +29,7 @@ import api from '../../api';
 import { FomsDashboardFinancialSummary, FomsClientFinancialSummaryItem, FomsFinancialMetricsViewProps } from './types';
 import FomsGraphRoutingPanel from './FomsGraphRoutingPanel';
 import FomsEndorsementPanel from './FomsEndorsementPanel';
+import FormModal from '../FormModal/FormModal';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
@@ -418,7 +419,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
             ) : (
                 <>
                     {/* ── 6 Status KPI Cards Grid ── */}
-                    <div className="foms-kpi-grid">
+                    <div className="foms-kpi-grid foms-balances-kpi-grid">
                 {/* 1. Total Outstanding Balance */}
                 <div className="foms-kpi-card variant-outstanding">
                     <div className="foms-kpi-top">
@@ -490,7 +491,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
 
                 {/* 5. Paid Invoices Count */}
-                <div className="foms-kpi-card variant-paid">
+                <div className="foms-kpi-card variant-paid foms-kpi-card-expanded">
                     <div className="foms-kpi-top">
                         <span className="foms-kpi-label">Settled / Paid</span>
                         <div className="foms-kpi-icon">
@@ -508,7 +509,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
 
                 {/* 6. Pending Invoices Count */}
-                <div className="foms-kpi-card variant-pending">
+                <div className="foms-kpi-card variant-pending foms-kpi-card-expanded">
                     <div className="foms-kpi-top">
                         <span className="foms-kpi-label">In-Term / Pending</span>
                         <div className="foms-kpi-icon">
@@ -954,92 +955,17 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
 
             {/* ── Client Detail Modal / Drawer ── */}
             {selectedClient && (
-                <div className="foms-modal-overlay" onClick={() => setSelectedClient(null)}>
-                    <div className="foms-modal-content" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--tp, #0F172A)' }}>
-                                    {selectedClient.clientName}
-                                </h3>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)', fontFamily: 'monospace' }}>
-                                    Account ID: {selectedClient.clientAccountId}
-                                </span>
-                            </div>
+                <FormModal
+                    isOpen={!!selectedClient}
+                    onClose={() => setSelectedClient(null)}
+                    title={selectedClient.clientName}
+                    subtitle={`Account #${selectedClient.clientAccountId} • Real-time Financial Exposure`}
+                    size="md"
+                    footer={
+                        <>
                             <button
                                 type="button"
-                                className="foms-modal-close-btn"
-                                onClick={() => setSelectedClient(null)}
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <div className="foms-modal-body">
-                            <div className="foms-modal-grid-2">
-                                <div className="foms-modal-metric-card">
-                                    <span className="foms-modal-label">Outstanding Balance</span>
-                                    <div className="foms-modal-val" style={{ color: 'var(--teal, #00A99D)' }}>
-                                        {formatCurrency(selectedClient.outstandingBalance)}
-                                    </div>
-                                </div>
-                                <div className="foms-modal-metric-card">
-                                    <span className="foms-modal-label">Overdue Invoices</span>
-                                    <div
-                                        className="foms-modal-val"
-                                        style={{ color: selectedClient.overdueInvoicesCount > 0 ? '#DC2626' : '#059669' }}
-                                    >
-                                        {selectedClient.overdueInvoicesCount}
-                                    </div>
-                                </div>
-                                <div className="foms-modal-metric-card">
-                                    <span className="foms-modal-label">Payment Status</span>
-                                    <div className="foms-modal-val" style={{ fontSize: '0.95rem' }}>
-                                        {selectedClient.latestStatus}
-                                    </div>
-                                </div>
-                                <div className="foms-modal-metric-card">
-                                    <span className="foms-modal-label">Next Payment Due</span>
-                                    <div className="foms-modal-val" style={{ fontSize: '0.95rem' }}>
-                                        {selectedClient.nextDueDate
-                                            ? new Date(selectedClient.nextDueDate).toLocaleDateString('en-US', {
-                                                month: 'short',
-                                                day: 'numeric',
-                                                year: 'numeric',
-                                            })
-                                            : 'None / Settled'}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Operational Recommendation Box */}
-                            {selectedClient.overdueInvoicesCount > 0 ? (
-                                <div className="foms-modal-advice-box risk-high">
-                                    <ShieldAlert size={20} style={{ flexShrink: 0, marginTop: 2 }} />
-                                    <div>
-                                        <div style={{ fontWeight: 700, marginBottom: 2 }}>High Exposure Alert</div>
-                                        <div>
-                                            This client has {selectedClient.overdueInvoicesCount} overdue invoice(s) totaling{' '}
-                                            <strong>{formatCurrency(selectedClient.outstandingBalance)}</strong>. A Collection Follow-up task in STARS may be required or already routed to an Operations Coordinator.
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="foms-modal-advice-box risk-ok">
-                                    <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: 2 }} />
-                                    <div>
-                                        <div style={{ fontWeight: 700, marginBottom: 2 }}>Good Financial Standing</div>
-                                        <div>
-                                            Account has 0 overdue invoices. Outstanding amounts are within standard settlement credit terms.
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="foms-modal-footer">
-                            <button
-                                type="button"
-                                className="foms-chip"
+                                className="fm-btn fm-btn-cancel"
                                 onClick={() => setSelectedClient(null)}
                             >
                                 Close
@@ -1047,7 +973,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             {onViewClientTasks && (
                                 <button
                                     type="button"
-                                    className="foms-btn-sync"
+                                    className="fm-btn fm-btn-primary"
                                     onClick={() => {
                                         onViewClientTasks(selectedClient.clientName, selectedClient.clientAccountId);
                                         setSelectedClient(null);
@@ -1057,9 +983,72 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                                     <span>Find Related Tasks</span>
                                 </button>
                             )}
+                        </>
+                    }
+                >
+                    <div className="view-modal-meta foms-view-modal-meta">
+                        <div className="view-modal-meta-item">
+                            <span className="view-modal-label">Outstanding Balance</span>
+                            <span className="view-modal-meta-value" style={{ color: 'var(--teal, #00A99D)', fontSize: '1.05rem' }}>
+                                {formatCurrency(selectedClient.outstandingBalance)}
+                            </span>
+                        </div>
+                        <div className="view-modal-meta-item">
+                            <span className="view-modal-label">Overdue Invoices</span>
+                            <span
+                                className="view-modal-meta-value"
+                                style={{
+                                    color: selectedClient.overdueInvoicesCount > 0 ? 'var(--status-failed, #DC2626)' : 'var(--status-active, #059669)',
+                                    fontSize: '1.05rem',
+                                }}
+                            >
+                                {selectedClient.overdueInvoicesCount}
+                            </span>
+                        </div>
+                        <div className="view-modal-meta-item">
+                            <span className="view-modal-label">Payment Status</span>
+                            <span className="view-modal-meta-value">
+                                {selectedClient.latestStatus}
+                            </span>
+                        </div>
+                        <div className="view-modal-meta-item">
+                            <span className="view-modal-label">Next Payment Due</span>
+                            <span className="view-modal-meta-value">
+                                {selectedClient.nextDueDate
+                                    ? new Date(selectedClient.nextDueDate).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                    })
+                                    : 'None / Settled'}
+                            </span>
                         </div>
                     </div>
-                </div>
+
+                    {/* Operational Recommendation Box */}
+                    {selectedClient.overdueInvoicesCount > 0 ? (
+                        <div className="foms-modal-advice-box risk-high" style={{ marginTop: 14 }}>
+                            <ShieldAlert size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                            <div>
+                                <div style={{ fontWeight: 700, marginBottom: 2 }}>High Exposure Alert</div>
+                                <div>
+                                    This client has {selectedClient.overdueInvoicesCount} overdue invoice(s) totaling{' '}
+                                    <strong>{formatCurrency(selectedClient.outstandingBalance)}</strong>. A Collection Follow-up task in STARS may be required or already routed to an Operations Coordinator.
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="foms-modal-advice-box risk-ok" style={{ marginTop: 14 }}>
+                            <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                            <div>
+                                <div style={{ fontWeight: 700, marginBottom: 2 }}>Good Financial Standing</div>
+                                <div>
+                                    Account has 0 overdue invoices. Outstanding amounts are within standard settlement credit terms.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </FormModal>
             )}
                 </>
             )}

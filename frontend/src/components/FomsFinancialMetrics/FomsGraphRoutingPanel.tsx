@@ -24,11 +24,13 @@ import {
     Filter,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     CheckCheck,
     TrendingDown,
 } from 'lucide-react';
 import api from '../../api';
 import { FomsOverdueAlertItem, CoordinatorWorkloadItem } from './types';
+import FormModal from '../FormModal/FormModal';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
@@ -861,37 +863,27 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                         )}
                     </div>
 
-                    {/* Aging filter pills */}
-                    <div className="foms-filter-chips">
-                        {[
-                            { key: 'all', label: 'All Alerts', count: agingCounts.all },
-                            { key: 'due_soon', label: 'Due Soon', count: agingCounts.due_soon },
-                            { key: '1_30', label: '1-30 Days', count: agingCounts['1_30'] },
-                            { key: '31_60', label: '31-60 Days', count: agingCounts['31_60'] },
-                            { key: '61_90', label: '61-90 Days', count: agingCounts['61_90'] },
-                            { key: '90_plus', label: '90+ Days', count: agingCounts['90_plus'] },
-                        ].map(filter => {
-                            const isOverdue = filter.key === '31_60' || filter.key === '61_90' || filter.key === '90_plus';
-                            const isWarning = filter.key === '1_30';
-                            let variantClass = '';
-                            if (isOverdue) variantClass = 'chip-overdue';
-                            else if (isWarning) variantClass = 'chip-warning';
-
-                            return (
-                                <button
-                                    key={filter.key}
-                                    type="button"
-                                    className={`foms-filter-chip ${variantClass} ${agingFilter === filter.key ? 'active' : ''}`}
-                                    onClick={() => {
-                                        setAgingFilter(filter.key);
-                                        setCurrentPage(1);
-                                    }}
-                                >
-                                    <span>{filter.label}</span>
-                                    <span className="foms-filter-chip-count">{filter.count}</span>
-                                </button>
-                            );
-                        })}
+                    {/* Aging filter dropdown */}
+                    <div className="foms-filter-dropdown-wrap">
+                        <Filter size={13} className="foms-filter-icon" />
+                        <select
+                            className="foms-filter-dropdown-select"
+                            value={agingFilter}
+                            onChange={e => {
+                                setAgingFilter(e.target.value);
+                                setCurrentPage(1);
+                            }}
+                            aria-label="Filter by Aging Status"
+                            title="Filter by Aging Status"
+                        >
+                            <option value="all">All Alerts ({agingCounts.all})</option>
+                            <option value="due_soon">Due Soon ({agingCounts.due_soon})</option>
+                            <option value="1_30">1-30 Days Overdue ({agingCounts['1_30']})</option>
+                            <option value="31_60">31-60 Days Overdue ({agingCounts['31_60']})</option>
+                            <option value="61_90">61-90 Days Overdue ({agingCounts['61_90']})</option>
+                            <option value="90_plus">90+ Days Overdue ({agingCounts['90_plus']})</option>
+                        </select>
+                        <ChevronDown size={14} className="foms-filter-chevron" />
                     </div>
                 </div>
 
@@ -1099,29 +1091,42 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
 
             {/* ── Interactive FOMS Alert Simulator Drawer / Modal ── */}
             {showSimulator && (
-                <div className="foms-modal-overlay" onClick={() => !simSubmitting && setShowSimulator(false)}>
-                    <div className="foms-simulator-modal" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div className="foms-modal-icon-badge">
-                                        <Zap size={18} />
-                                    </div>
-                                    <h3 className="foms-modal-title">FOMS Alert Interception &amp; Graph Routing Simulator</h3>
-                                </div>
-                                <p className="foms-modal-subtitle">
-                                    Simulate incoming automated finance alerts from FOMS to test webhook interception, task generation, and Coordinator workload balancing.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                className="foms-btn-close"
-                                onClick={() => !simSubmitting && setShowSimulator(false)}
-                                disabled={simSubmitting}
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
+                <FormModal
+                    isOpen={showSimulator}
+                    onClose={() => !simSubmitting && setShowSimulator(false)}
+                    title="FOMS Alert Interception & Graph Routing Simulator"
+                    subtitle="Simulate incoming automated finance alerts from FOMS to test webhook interception, task generation, and Coordinator workload balancing."
+                    size="lg"
+                    footer={
+                        simSuccessResult ? (
+                            <>
+                                <button
+                                    type="button"
+                                    className="fm-btn fm-btn-cancel"
+                                    onClick={() => {
+                                        setSimSuccessResult(null);
+                                        setSimStep(0);
+                                    }}
+                                >
+                                    Simulate Another Alert
+                                </button>
+                                {onOpenTask && simSuccessResult.taskId && (
+                                    <button
+                                        type="button"
+                                        className="fm-btn fm-btn-primary"
+                                        onClick={() => {
+                                            setShowSimulator(false);
+                                            onOpenTask(simSuccessResult.taskId);
+                                        }}
+                                    >
+                                        <ExternalLink size={14} />
+                                        <span>Open Collection Task View</span>
+                                    </button>
+                                )}
+                            </>
+                        ) : undefined
+                    }
+                >
 
                         {simStep > 0 && simStep < 5 && (
                             <div className="foms-sim-progress-box">
@@ -1184,32 +1189,6 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                         <span className="foms-meta-label">AMOUNT DUE</span>
                                         <span className="foms-meta-val">{formatCurrency(simSuccessResult.amount)}</span>
                                     </div>
-                                </div>
-
-                                <div className="foms-modal-actions" style={{ marginTop: 20 }}>
-                                    <button
-                                        type="button"
-                                        className="foms-btn-outline"
-                                        onClick={() => {
-                                            setSimSuccessResult(null);
-                                            setSimStep(0);
-                                        }}
-                                    >
-                                        Simulate Another Alert
-                                    </button>
-                                    {onOpenTask && simSuccessResult.taskId && (
-                                        <button
-                                            type="button"
-                                            className="foms-btn-primary"
-                                            onClick={() => {
-                                                setShowSimulator(false);
-                                                onOpenTask(simSuccessResult.taskId);
-                                            }}
-                                        >
-                                            <ExternalLink size={14} />
-                                            <span>Open Collection Task View</span>
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -1376,7 +1355,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                 <div className="foms-modal-actions">
                                     <button
                                         type="button"
-                                        className="foms-btn-outline"
+                                        className="fm-btn fm-btn-cancel"
                                         onClick={() => setShowSimulator(false)}
                                         disabled={simSubmitting}
                                     >
@@ -1384,7 +1363,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                     </button>
                                     <button
                                         type="submit"
-                                        className="foms-btn-primary"
+                                        className="fm-btn fm-btn-primary"
                                         disabled={simSubmitting}
                                     >
                                         <Play size={14} fill="currentColor" />
@@ -1393,98 +1372,22 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                 </div>
                             </form>
                         )}
-                    </div>
-                </div>
+                </FormModal>
             )}
 
             {/* ── Graph Routing Decision Inspector Modal ── */}
             {inspectAlert && (
-                <div className="foms-modal-overlay" onClick={() => setInspectAlert(null)}>
-                    <div className="foms-simulator-modal" onClick={e => e.stopPropagation()}>
-                        <div className="foms-modal-header">
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div className="foms-modal-icon-badge">
-                                        <Sparkles size={18} />
-                                    </div>
-                                    <h3 className="foms-modal-title">Graph Routing Engine Decision Trace</h3>
-                                </div>
-                                <p className="foms-modal-subtitle">
-                                    Detailed execution graph and workload evaluation metrics for invoice <strong>{inspectAlert.invoiceNumber}</strong>
-                                </p>
-                            </div>
+                <FormModal
+                    isOpen={!!inspectAlert}
+                    onClose={() => setInspectAlert(null)}
+                    title="Graph Routing Engine Decision Trace"
+                    subtitle={`Detailed execution graph and workload evaluation metrics for invoice ${inspectAlert.invoiceNumber}`}
+                    size="lg"
+                    footer={
+                        <>
                             <button
                                 type="button"
-                                className="foms-btn-close"
-                                onClick={() => setInspectAlert(null)}
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <div className="foms-trace-graph-card">
-                            <h4 className="foms-trace-title">Execution Graph Architecture</h4>
-                            <div className="foms-trace-steps">
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">FOMS Aging Engine</div>
-                                    <span className="foms-trace-detail">
-                                        Pushed alert: ₱{inspectAlert.amountDue.toLocaleString()} overdue ({inspectAlert.daysOverdue} days)
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">STARS Webhook Interceptor</div>
-                                    <span className="foms-trace-detail">
-                                        POST /api/integration/foms/overdue-alert
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step optimal">
-                                    <div className="foms-trace-badge">Graph Routing Engine</div>
-                                    <span className="foms-trace-detail">
-                                        Matched: {inspectAlert.assignedCoordinatorName} (Workload: {inspectAlert.workloadAtRouting ?? 2} tasks)
-                                    </span>
-                                </div>
-                                <ArrowRight size={16} className="foms-trace-arrow" />
-                                <div className="foms-trace-step">
-                                    <div className="foms-trace-badge">Generated Task</div>
-                                    <span className="foms-trace-detail">
-                                        #{inspectAlert.starsTaskNumber} [{inspectAlert.priorityLevel || 'Urgent'}]
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="foms-meta-inspection-grid">
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">CLIENT COMPANY</span>
-                                <span className="foms-meta-val">{inspectAlert.clientName}</span>
-                                <span className="foms-client-id">{inspectAlert.clientAccountId}</span>
-                            </div>
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">ASSIGNED COORDINATOR</span>
-                                <span className="foms-meta-val" style={{ color: '#00A99D' }}>
-                                    {inspectAlert.assignedCoordinatorName || 'Optimal Coordinator'}
-                                </span>
-                                <span className="foms-client-id">Selection Method: Minimum Active Workload</span>
-                            </div>
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">CONTACT PERSON &amp; PHONE</span>
-                                <span className="foms-meta-val">
-                                    {inspectAlert.clientContactPerson || 'N/A'} • {inspectAlert.clientContactNumber || 'N/A'}
-                                </span>
-                                <span className="foms-client-id">{inspectAlert.clientEmail || 'No email registered'}</span>
-                            </div>
-                            <div className="foms-inspection-item">
-                                <span className="foms-meta-label">SERVICE ADDRESS</span>
-                                <span className="foms-meta-val">{inspectAlert.clientAddress || 'Metro Manila Hub'}</span>
-                            </div>
-                        </div>
-
-                        <div className="foms-modal-actions">
-                            <button
-                                type="button"
-                                className="foms-btn-outline"
+                                className="fm-btn fm-btn-cancel"
                                 onClick={() => setInspectAlert(null)}
                             >
                                 Close Trace
@@ -1492,7 +1395,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                             {inspectAlert.starsTaskId && onOpenTask && (
                                 <button
                                     type="button"
-                                    className="foms-btn-primary"
+                                    className="fm-btn fm-btn-primary"
                                     onClick={() => {
                                         const taskId = inspectAlert.starsTaskId;
                                         setInspectAlert(null);
@@ -1503,9 +1406,68 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                     <span>Open Task #{inspectAlert.starsTaskNumber}</span>
                                 </button>
                             )}
+                        </>
+                    }
+                >
+                    <div className="foms-trace-graph-card">
+                        <h4 className="foms-trace-title">Execution Graph Architecture</h4>
+                        <div className="foms-trace-steps">
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">FOMS Aging Engine</div>
+                                <span className="foms-trace-detail">
+                                    Pushed alert: ₱{inspectAlert.amountDue.toLocaleString()} overdue ({inspectAlert.daysOverdue} days)
+                                </span>
+                            </div>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">STARS Webhook Interceptor</div>
+                                <span className="foms-trace-detail">
+                                    POST /api/integration/foms/overdue-alert
+                                </span>
+                            </div>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step optimal">
+                                <div className="foms-trace-badge">Graph Routing Engine</div>
+                                <span className="foms-trace-detail">
+                                    Matched: {inspectAlert.assignedCoordinatorName} (Workload: {inspectAlert.workloadAtRouting ?? 2} tasks)
+                                </span>
+                            </div>
+                            <ArrowRight size={16} className="foms-trace-arrow" />
+                            <div className="foms-trace-step">
+                                <div className="foms-trace-badge">Generated Task</div>
+                                <span className="foms-trace-detail">
+                                    #{inspectAlert.starsTaskNumber} [{inspectAlert.priorityLevel || 'Urgent'}]
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <div className="foms-meta-inspection-grid">
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">CLIENT COMPANY</span>
+                            <span className="foms-meta-val">{inspectAlert.clientName}</span>
+                            <span className="foms-client-id">{inspectAlert.clientAccountId}</span>
+                        </div>
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">ASSIGNED COORDINATOR</span>
+                            <span className="foms-meta-val" style={{ color: '#00A99D' }}>
+                                {inspectAlert.assignedCoordinatorName || 'Optimal Coordinator'}
+                            </span>
+                            <span className="foms-client-id">Selection Method: Minimum Active Workload</span>
+                        </div>
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">CONTACT PERSON &amp; PHONE</span>
+                            <span className="foms-meta-val">
+                                {inspectAlert.clientContactPerson || 'N/A'} • {inspectAlert.clientContactNumber || 'N/A'}
+                            </span>
+                            <span className="foms-client-id">{inspectAlert.clientEmail || 'No email registered'}</span>
+                        </div>
+                        <div className="foms-inspection-item">
+                            <span className="foms-meta-label">SERVICE ADDRESS</span>
+                            <span className="foms-meta-val">{inspectAlert.clientAddress || 'Metro Manila Hub'}</span>
+                        </div>
+                    </div>
+                </FormModal>
             )}
         </div>
     );
