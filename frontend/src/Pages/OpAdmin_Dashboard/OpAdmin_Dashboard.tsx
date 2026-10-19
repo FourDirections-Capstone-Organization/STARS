@@ -85,6 +85,7 @@ import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
+import { FomsFinancialMetricsView } from '../../components/FomsFinancialMetrics';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -179,6 +180,7 @@ type NavTab =
     | 'team'
     | 'delivery'
     | 'pre_delivery'
+    | 'finance'
     | 'reports'
     | 'profile'
     | 'reopen'
@@ -2145,6 +2147,7 @@ const DashboardTab: React.FC<{
 }> = ({ dashboardData, dashboardEmployees, dashboardDepartments, dashboardLoading, dashboardError, filters, onFilterChange, onClearFilters, onNewTask, tasks, onViewTask }) => {
     // Local filters for Workload Summary only — does NOT trigger full dashboard re-fetch
     const [wlFilters, setWlFilters] = useState({ employeeId: '', departmentId: '', assignmentScope: '', taskStatus: '', dateStart: '', dateEnd: '' });
+    const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
     const hasAnyFilter = wlFilters.employeeId || wlFilters.departmentId || wlFilters.assignmentScope || wlFilters.taskStatus || wlFilters.dateStart || wlFilters.dateEnd;
     const td = dashboardData;
 
@@ -2265,6 +2268,74 @@ const DashboardTab: React.FC<{
                             <Plus size={14} /> New Task
                         </button>
                     </div>
+
+                    {/* ── Sub-Nav: Operations vs FOMS Financial Metrics View ── */}
+                    <div style={{ marginBottom: 14 }}>
+                        <SubTabNav
+                            className="dashboard-metrics-subtab-nav"
+                            tabs={[
+                                { key: 'workload', label: 'Operations & Workload Overview' },
+                                { key: 'foms', label: 'FOMS Client Financial Status & Invoices' },
+                            ]}
+                            activeTab={dashboardMetricsMode}
+                            onTabChange={key => setDashboardMetricsMode(key as 'workload' | 'foms')}
+                        />
+                    </div>
+
+                    {dashboardMetricsMode === 'foms' ? (
+                        <FomsFinancialMetricsView
+                            embedded={true}
+                            onViewClientTasks={() => {
+                                onNewTask ? onNewTask() : null;
+                            }}
+                        />
+                    ) : (
+                        <>
+                            {/* FOMS Live Stream Quick Summary Strip */}
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '8px 14px',
+                                    marginBottom: 14,
+                                    background: 'linear-gradient(135deg, rgba(27,37,75,0.03) 0%, rgba(0,169,157,0.07) 100%)',
+                                    border: '1px solid rgba(0,169,157,0.2)',
+                                    borderRadius: 10,
+                                    fontSize: 12,
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: 'var(--teal, #00A99D)' }}>
+                                        <Activity size={13} /> FOMS Financial Integration
+                                    </span>
+                                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>
+                                        Real-time invoice settlement and client balances connected
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setDashboardMetricsMode('foms')}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'var(--teal, #00A99D)',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        fontSize: 12,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        padding: 0,
+                                    }}
+                                >
+                                    <span>Monitor Client Financial Statuses</span>
+                                    <ChevronRight size={13} />
+                                </button>
+                            </div>
                     {td ? (
                         <div className="coordinator-stats-row-6 stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
@@ -2590,6 +2661,8 @@ const DashboardTab: React.FC<{
                                 );
                             })}
                         </DataTable>
+                    )}
+                        </>
                     )}
                 </>
             )}
@@ -7694,6 +7767,13 @@ export default function OpsAdminDashboard() {
                     ],
                 },
                 {
+                    label: 'Financial Management System (FOMS)',
+                    icon: 'ti ti-currency-dollar',
+                    subItems: [
+                        { label: 'Client Financial Status', onClick: () => handleNavChange('finance'), active: activeTab === 'finance' },
+                    ],
+                },
+                {
                     label: 'General',
                     icon: 'ti ti-settings',
                     subItems: [
@@ -8831,6 +8911,8 @@ export default function OpsAdminDashboard() {
         tasks: 'Task Management',
         team: 'Team Management',
         delivery: 'Delivery Tracking (DMS)',
+        pre_delivery: 'Pre-Delivery Validation',
+        finance: 'FOMS Financial & Client Status',
         reports: 'Performance Reports',
         profile: 'My Profile',
         reopen: 'Reopen Requests',
@@ -9247,6 +9329,16 @@ export default function OpsAdminDashboard() {
                                     setActiveTab('tasks');
                                     setDetailTask(found as any);
                                 }
+                            }}
+                        />
+                    </div>
+                )}
+                {activeTab === 'finance' && (
+                    <div className="dashboard-content">
+                        <FomsFinancialMetricsView
+                            onViewClientTasks={() => {
+                                handleNavChange('tasks');
+                                setTaskTab('all');
                             }}
                         />
                     </div>

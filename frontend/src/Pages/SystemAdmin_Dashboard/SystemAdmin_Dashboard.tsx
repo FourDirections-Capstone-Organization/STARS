@@ -80,6 +80,7 @@ import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
+import { FomsFinancialMetricsView } from '../../components/FomsFinancialMetrics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1774,9 +1775,10 @@ interface DashboardTabProps {
     activityLogPage?: number;
     activityLogTotalPages?: number;
     onActivityLogPageChange?: (page: number) => void;
+    onNavigateToFinance?: () => void;
 }
 
-function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange }: DashboardTabProps) {
+function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance }: DashboardTabProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const activeCount = (employees || []).filter(e => e.accountStatus === 'Active').length;
     const deactivatedCount = (employees || []).filter(e => e.accountStatus === 'Deactivated').length;
@@ -1821,6 +1823,54 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
 
     return (
         <div className="dashboard-content">
+            {/* Live FOMS Financial Integration Ribbon */}
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '9px 16px',
+                    marginBottom: 16,
+                    background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 169, 157, 0.07) 100%)',
+                    border: '1px solid rgba(0, 169, 157, 0.22)',
+                    borderRadius: 10,
+                    fontSize: 12,
+                    flexWrap: 'wrap',
+                    gap: 8,
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #00A99D)' }}>
+                        <Activity size={14} /> FOMS Real-Time Stream
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                        Live invoice payment status updates & client balance monitoring connected
+                    </span>
+                </div>
+                {onNavigateToFinance && (
+                    <button
+                        type="button"
+                        onClick={onNavigateToFinance}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--teal, #00A99D)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: 0,
+                        }}
+                    >
+                        <span>View FOMS Financial Overview</span>
+                        <ChevronRight size={13} />
+                    </button>
+                )}
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
                 <div className="header-search-wrap" style={{ margin: 0, width: 300 }}>
                     <Search size={14} className="header-search-icon" />
@@ -3797,6 +3847,7 @@ export default function Dashboard() {
                             onEditEmployee={emp => { setEmpModalEditMode(true); setSelectedEmployee(emp); }}
                             onViewAll={() => { handleNavChange('employees'); setSelectedPanelEmployee(null); }}
                             onAddEmployee={() => setShowAddModal(true)}
+                            onNavigateToFinance={() => handleNavChange('finance')}
                             rolesCount={rolesList.length}
                             activityLogPage={activityLogPage}
                             activityLogTotalPages={activityLogTotalPages}
@@ -3987,7 +4038,15 @@ export default function Dashboard() {
                         />
                     </div>
                 )}
-                {activeTab === 'finance' && <div className="dashboard-content"><div className="card"><EmptyState icon={<BarChart3 size={32} />} message="Finance module coming soon." /></div></div>}
+                {activeTab === 'finance' && (
+                    <div className="dashboard-content">
+                        <FomsFinancialMetricsView
+                            onViewClientTasks={() => {
+                                handleNavChange('tasks');
+                            }}
+                        />
+                    </div>
+                )}
 
                 {activeTab === 'activity_logs' && (
                     <div className="dashboard-content" style={{ padding: 0 }}>
