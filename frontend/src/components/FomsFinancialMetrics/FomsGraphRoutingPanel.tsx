@@ -405,6 +405,15 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
     const dueSoonCount = alerts.filter(a => a.daysOverdue <= 0 || a.agingStatus.includes('Due Soon')).length;
     const totalAmountTracked = alerts.reduce((acc, a) => acc + (a.amountDue || 0), 0);
 
+    const agingCounts = useMemo(() => ({
+        all: alerts.length,
+        due_soon: alerts.filter(a => a.agingStatus.toLowerCase().includes('due') || a.daysOverdue <= 0).length,
+        '1_30': alerts.filter(a => a.agingStatus.includes('1-30') || (a.daysOverdue >= 1 && a.daysOverdue <= 30)).length,
+        '31_60': alerts.filter(a => a.agingStatus.includes('31-60') || (a.daysOverdue >= 31 && a.daysOverdue <= 60)).length,
+        '61_90': alerts.filter(a => a.agingStatus.includes('61-90') || (a.daysOverdue >= 61 && a.daysOverdue <= 90)).length,
+        '90_plus': alerts.filter(a => a.agingStatus.includes('90+') || a.daysOverdue > 90).length,
+    }), [alerts]);
+
     // Preset selection helper for simulator
     const applySimulatorPreset = (preset: 'duesoon' | 'aging15' | 'aging35' | 'critical75') => {
         const randId = Math.floor(1000 + Math.random() * 9000);
@@ -589,76 +598,74 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
         <div className="foms-graph-panel">
             {/* ── Top Graph Routing Operations Hub Banner ── */}
             <div className="foms-graph-hero">
-                <div className="foms-graph-hero-content">
-                    <div className="foms-graph-pill">
-                        <Zap size={12} className="foms-pulse-icon" />
-                        <span>INTEGRATION 3 • GRAPH ROUTING ENGINE ACTIVE</span>
+                <div className="foms-graph-hero-top">
+                    <div className="foms-graph-hero-content">
+                        <h2 className="foms-graph-hero-title">
+                            Automated Collection Alerts &amp; Workload Routing
+                        </h2>
+                        <p className="foms-graph-hero-desc">
+                            STARS intercepts real-time FOMS finance alerts for overdue &amp; due-soon accounts,
+                            automatically compiles a <strong>Collection Follow-up</strong> task, and uses the
+                            Graph Routing Engine to assign it to the optimal Coordinator based on live workload availability.
+                        </p>
                     </div>
-                    <h2 className="foms-graph-hero-title">
-                        Automated Collection Alerts & Workload Routing
-                    </h2>
-                    <p className="foms-graph-hero-desc">
-                        STARS intercepts real-time FOMS finance alerts for overdue &amp; due-soon accounts,
-                        automatically compiles a <strong>Collection Follow-up</strong> task, and uses the
-                        Graph Routing Engine to assign it to the optimal Coordinator based on live workload availability.
-                    </p>
 
-                    <div className="foms-graph-pipeline">
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">1</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">FOMS Alert Intercepted</span>
-                                <span className="foms-step-sub">Overdue Aging Logic</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">2</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">Priority Assessment</span>
-                                <span className="foms-step-sub">Urgent vs High</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">3</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">Workload Graph Evaluator</span>
-                                <span className="foms-step-sub">Min Active Tasks Matrix</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step active">
-                            <div className="foms-pipeline-dot">4</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">Coordinator Assignment</span>
-                                <span className="foms-step-sub">Task Created &amp; Notified</span>
-                            </div>
-                        </div>
+                    <div className="foms-graph-hero-actions">
+                        <button
+                            type="button"
+                            className="foms-btn-primary"
+                            onClick={() => {
+                                setSimStep(0);
+                                setSimSuccessResult(null);
+                                setShowSimulator(true);
+                            }}
+                        >
+                            <Play size={14} fill="currentColor" />
+                            <span>Simulate FOMS Alert</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="foms-btn-outline"
+                            onClick={() => setInspectAlert(alerts[0] || null)}
+                        >
+                            <Sparkles size={14} />
+                            <span>Routing Architecture Trace</span>
+                        </button>
                     </div>
                 </div>
 
-                <div className="foms-graph-hero-actions">
-                    <button
-                        type="button"
-                        className="foms-btn-primary"
-                        onClick={() => {
-                            setSimStep(0);
-                            setSimSuccessResult(null);
-                            setShowSimulator(true);
-                        }}
-                    >
-                        <Play size={14} fill="currentColor" />
-                        <span>Simulate FOMS Alert</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="foms-btn-outline"
-                        onClick={() => setInspectAlert(alerts[0] || null)}
-                    >
-                        <Sparkles size={14} />
-                        <span>Routing Architecture</span>
-                    </button>
+                <div className="foms-graph-pipeline">
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">1</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">FOMS Alert Intercepted</span>
+                            <span className="foms-step-sub">Overdue Aging Logic</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">2</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">Priority Assessment</span>
+                            <span className="foms-step-sub">Urgent vs High</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">3</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">Workload Graph Evaluator</span>
+                            <span className="foms-step-sub">Min Active Tasks Matrix</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step active">
+                        <div className="foms-pipeline-dot">4</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">Coordinator Assignment</span>
+                            <span className="foms-step-sub">Task Created &amp; Notified</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -857,25 +864,34 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                     {/* Aging filter pills */}
                     <div className="foms-filter-chips">
                         {[
-                            { key: 'all', label: 'All Alerts' },
-                            { key: 'due_soon', label: 'Due Soon' },
-                            { key: '1_30', label: '1-30 Days' },
-                            { key: '31_60', label: '31-60 Days' },
-                            { key: '61_90', label: '61-90 Days' },
-                            { key: '90_plus', label: '90+ Days' },
-                        ].map(filter => (
-                            <button
-                                key={filter.key}
-                                type="button"
-                                className={`foms-filter-chip ${agingFilter === filter.key ? 'active' : ''}`}
-                                onClick={() => {
-                                    setAgingFilter(filter.key);
-                                    setCurrentPage(1);
-                                }}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
+                            { key: 'all', label: 'All Alerts', count: agingCounts.all },
+                            { key: 'due_soon', label: 'Due Soon', count: agingCounts.due_soon },
+                            { key: '1_30', label: '1-30 Days', count: agingCounts['1_30'] },
+                            { key: '31_60', label: '31-60 Days', count: agingCounts['31_60'] },
+                            { key: '61_90', label: '61-90 Days', count: agingCounts['61_90'] },
+                            { key: '90_plus', label: '90+ Days', count: agingCounts['90_plus'] },
+                        ].map(filter => {
+                            const isOverdue = filter.key === '31_60' || filter.key === '61_90' || filter.key === '90_plus';
+                            const isWarning = filter.key === '1_30';
+                            let variantClass = '';
+                            if (isOverdue) variantClass = 'chip-overdue';
+                            else if (isWarning) variantClass = 'chip-warning';
+
+                            return (
+                                <button
+                                    key={filter.key}
+                                    type="button"
+                                    className={`foms-filter-chip ${variantClass} ${agingFilter === filter.key ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setAgingFilter(filter.key);
+                                        setCurrentPage(1);
+                                    }}
+                                >
+                                    <span>{filter.label}</span>
+                                    <span className="foms-filter-chip-count">{filter.count}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 

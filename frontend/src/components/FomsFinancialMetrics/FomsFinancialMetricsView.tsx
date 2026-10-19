@@ -714,44 +714,47 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     <div className="foms-filter-chips">
                         <button
                             type="button"
-                            className={`foms-chip ${statusFilter === 'all' ? 'active' : ''}`}
+                            className={`foms-filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
                             onClick={() => {
                                 setStatusFilter('all');
                                 setCurrentPage(1);
                             }}
                         >
-                            All ({activeSummary.topOutstandingClients.length})
+                            <span>All</span>
+                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.length}</span>
                         </button>
                         <button
                             type="button"
-                            className={`foms-chip ${statusFilter === 'overdue' ? 'active' : ''}`}
+                            className={`foms-filter-chip chip-overdue ${statusFilter === 'overdue' ? 'active' : ''}`}
                             onClick={() => {
                                 setStatusFilter('overdue');
                                 setCurrentPage(1);
                             }}
-                            style={statusFilter === 'overdue' ? { background: '#DC2626', borderColor: '#DC2626', color: '#ffffff' } : {}}
                         >
-                            Overdue Only ({activeSummary.topOutstandingClients.filter(c => c.overdueInvoicesCount > 0).length})
+                            <span>Overdue Only</span>
+                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.overdueInvoicesCount > 0).length}</span>
                         </button>
                         <button
                             type="button"
-                            className={`foms-chip ${statusFilter === 'with_balance' ? 'active' : ''}`}
+                            className={`foms-filter-chip ${statusFilter === 'with_balance' ? 'active' : ''}`}
                             onClick={() => {
                                 setStatusFilter('with_balance');
                                 setCurrentPage(1);
                             }}
                         >
-                            With Balance ({activeSummary.topOutstandingClients.filter(c => c.outstandingBalance > 0).length})
+                            <span>With Balance</span>
+                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.outstandingBalance > 0).length}</span>
                         </button>
                         <button
                             type="button"
-                            className={`foms-chip ${statusFilter === 'paid' ? 'active' : ''}`}
+                            className={`foms-filter-chip chip-success ${statusFilter === 'paid' ? 'active' : ''}`}
                             onClick={() => {
                                 setStatusFilter('paid');
                                 setCurrentPage(1);
                             }}
                         >
-                            Paid / Settled ({activeSummary.topOutstandingClients.filter(c => c.latestStatus.toLowerCase() === 'paid').length})
+                            <span>Paid / Settled</span>
+                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.latestStatus.toLowerCase() === 'paid').length}</span>
                         </button>
                     </div>
 

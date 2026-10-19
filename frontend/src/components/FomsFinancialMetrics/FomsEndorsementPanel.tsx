@@ -490,75 +490,73 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         <div className="foms-graph-panel">
             {/* ── Top Hero Banner & 4-Stage Endorsement Lifecycle ── */}
             <div className="foms-graph-hero">
-                <div className="foms-graph-hero-content">
-                    <div className="foms-graph-pill">
-                        <FileCheck size={12} className="foms-pulse-icon" />
-                        <span>INTEGRATION 1 • PHYSICAL INVOICE DELIVERY &amp; 30-DAY PAYMENT TERM</span>
+                <div className="foms-graph-hero-top">
+                    <div className="foms-graph-hero-content">
+                        <h2 className="foms-graph-hero-title">
+                            Finalized Invoice Endorsement &amp; Physical Delivery
+                        </h2>
+                        <p className="foms-graph-hero-desc">
+                            STARS receives finalized invoice endorsement requests from FOMS, automatically creates and assigns a
+                            task for physical invoice delivery to the client, and upon completion, returns the signed receiving copy
+                            and actual received date to FOMS to trigger the <strong>30-day payment term calculation</strong>.
+                        </p>
                     </div>
-                    <h2 className="foms-graph-hero-title">
-                        Finalized Invoice Endorsement &amp; Physical Delivery
-                    </h2>
-                    <p className="foms-graph-hero-desc">
-                        STARS receives finalized invoice endorsement requests from FOMS, automatically creates and assigns a
-                        task for physical invoice delivery to the client, and upon completion, returns the signed receiving copy
-                        and actual received date to FOMS to trigger the <strong>30-day payment term calculation</strong>.
-                    </p>
 
-                    <div className="foms-graph-pipeline">
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">1</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">FOMS Finalized Invoice</span>
-                                <span className="foms-step-sub">Endorsement Webhook</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">2</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">Physical Delivery Task</span>
-                                <span className="foms-step-sub">Auto-Assigned in STARS</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step done">
-                            <div className="foms-pipeline-dot">3</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">Client Wet Signature</span>
-                                <span className="foms-step-sub">Actual Received Date</span>
-                            </div>
-                        </div>
-                        <ChevronRight size={16} className="foms-pipeline-arrow" />
-                        <div className="foms-pipeline-step active">
-                            <div className="foms-pipeline-dot">4</div>
-                            <div className="foms-pipeline-text">
-                                <span className="foms-step-title">30-Day Payment Clock</span>
-                                <span className="foms-step-sub">Synced Back to FOMS</span>
-                            </div>
-                        </div>
+                    <div className="foms-graph-hero-actions">
+                        <button
+                            type="button"
+                            className="foms-btn-primary"
+                            onClick={() => {
+                                setSimSuccessResult(null);
+                                setShowSimModal(true);
+                            }}
+                        >
+                            <Play size={14} fill="currentColor" />
+                            <span>Simulate Endorsement Request</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="foms-btn-outline"
+                            onClick={() => setShowArchModal(true)}
+                        >
+                            <Sparkles size={14} />
+                            <span>30-Day Term Architecture</span>
+                        </button>
                     </div>
                 </div>
 
-                <div className="foms-graph-hero-actions">
-                    <button
-                        type="button"
-                        className="foms-btn-primary"
-                        onClick={() => {
-                            setSimSuccessResult(null);
-                            setShowSimModal(true);
-                        }}
-                    >
-                        <Play size={14} fill="currentColor" />
-                        <span>Simulate Endorsement Request</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="foms-btn-outline"
-                        onClick={() => setShowArchModal(true)}
-                    >
-                        <Sparkles size={14} />
-                        <span>30-Day Term Architecture</span>
-                    </button>
+                <div className="foms-graph-pipeline">
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">1</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">FOMS Finalized Invoice</span>
+                            <span className="foms-step-sub">Endorsement Webhook</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">2</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">Physical Delivery Task</span>
+                            <span className="foms-step-sub">Auto-Assigned in STARS</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step done">
+                        <div className="foms-pipeline-dot">3</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">Client Wet Signature</span>
+                            <span className="foms-step-sub">Actual Received Date</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="foms-pipeline-arrow" />
+                    <div className="foms-pipeline-step active">
+                        <div className="foms-pipeline-dot">4</div>
+                        <div className="foms-pipeline-text">
+                            <span className="foms-step-title">30-Day Payment Clock</span>
+                            <span className="foms-step-sub">Synced Back to FOMS</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -634,7 +632,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             <FileText size={18} style={{ color: 'var(--teal, #008B8B)' }} />
                             <h3 className="table-card-title">Physical Invoice Delivery &amp; Receiving Register</h3>
                             <span className="foms-live-beacon" style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}>
-                                <span className="foms-beacon-dot" /> Live FOMS Integration 1
+                                <span className="foms-beacon-dot" /> Live FOMS Sync
                             </span>
                         </div>
                         <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
@@ -678,20 +676,21 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     {/* Status Filter Chips */}
                     <div className="foms-filter-chips">
                         {[
-                            { key: 'all', label: 'All Invoices' },
-                            { key: 'pending', label: 'Pending Sign-off' },
-                            { key: 'endorsed', label: 'Endorsed & Synced' },
+                            { key: 'all', label: 'All Invoices', count: endorsements.length },
+                            { key: 'pending', label: 'Pending Sign-off', count: pendingCount, variantClass: 'chip-warning' },
+                            { key: 'endorsed', label: 'Endorsed & Synced', count: endorsedCount, variantClass: 'chip-success' },
                         ].map(filter => (
                             <button
                                 key={filter.key}
                                 type="button"
-                                className={`foms-filter-chip ${statusFilter === filter.key ? 'active' : ''}`}
+                                className={`foms-filter-chip ${filter.variantClass || ''} ${statusFilter === filter.key ? 'active' : ''}`}
                                 onClick={() => {
                                     setStatusFilter(filter.key as any);
                                     setCurrentPage(1);
                                 }}
                             >
-                                {filter.label}
+                                <span>{filter.label}</span>
+                                <span className="foms-filter-chip-count">{filter.count}</span>
                             </button>
                         ))}
                     </div>

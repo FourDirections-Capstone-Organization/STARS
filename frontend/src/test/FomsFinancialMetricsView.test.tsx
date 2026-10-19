@@ -177,7 +177,6 @@ describe('FomsFinancialMetricsView', () => {
 
         // Verify Hero & Pipeline
         expect(screen.getByText('Automated Collection Alerts & Workload Routing')).toBeInTheDocument();
-        expect(screen.getByText('INTEGRATION 3 • GRAPH ROUTING ENGINE ACTIVE')).toBeInTheDocument();
         expect(screen.getByText('FOMS Alert Intercepted')).toBeInTheDocument();
         expect(screen.getByText('Workload Graph Evaluator')).toBeInTheDocument();
 
