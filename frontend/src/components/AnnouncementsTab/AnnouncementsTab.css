@@ -121,9 +121,9 @@
 }
 
 .ann-chip.urgent.active {
-    background: #ef4444;
-    border-color: #ef4444;
-    box-shadow: 0 3px 10px rgba(239, 68, 68, 0.3);
+    background: var(--urgent, #FF6D00);
+    border-color: var(--urgent, #FF6D00);
+    box-shadow: 0 3px 10px rgba(255, 109, 0, 0.35);
 }
 
 .ann-chip.important.active {
@@ -181,13 +181,13 @@
 
 /* Priority Card Accents */
 .ann-card.urgent {
-    border-left: 5px solid #ef4444;
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.03) 0%, var(--bg-card, #ffffff) 100%);
+    border-left: 5px solid var(--urgent, #FF6D00);
+    background: linear-gradient(135deg, rgba(255, 109, 0, 0.04) 0%, var(--bg-card, #ffffff) 100%);
 }
 
 .ann-card.urgent:hover {
-    box-shadow: 0 8px 28px rgba(239, 68, 68, 0.12);
-    border-color: rgba(239, 68, 68, 0.35);
+    box-shadow: 0 8px 28px rgba(255, 109, 0, 0.16);
+    border-color: rgba(255, 109, 0, 0.45);
 }
 
 .ann-card.important {
@@ -241,9 +241,9 @@
 }
 
 .ann-badge-priority.urgent {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: var(--urgent-bg, rgba(255, 109, 0, 0.12));
+    color: var(--urgent, #FF6D00);
+    border: 1px solid var(--urgent-border, rgba(255, 109, 0, 0.35));
     animation: annPulse 2s infinite ease-in-out;
 }
 

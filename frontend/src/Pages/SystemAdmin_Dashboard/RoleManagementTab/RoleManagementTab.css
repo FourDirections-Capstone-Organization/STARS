@@ -40,14 +40,14 @@
 }
 
 .rm2-subtab-btn:not(.rm2-subtab-btn--active):hover {
-    color: var(--text-primary, #1B254B);
+    color: var(--navy, #1A2238);
     background: var(--bg-main, #F4F7FE);
 }
 
 /* Active button — no hover shift, stays consistent */
 .rm2-subtab-btn--active,
 .rm2-subtab-btn--active:hover {
-    background: var(--primary, #00A99D) !important;
+    background: var(--primary, #008B8B) !important;
     color: #fff !important;
     box-shadow: 0 4px 12px rgba(0, 169, 157, 0.25);
 }

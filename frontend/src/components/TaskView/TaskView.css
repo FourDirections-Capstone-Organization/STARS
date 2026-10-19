@@ -1666,4 +1666,367 @@
     background: var(--primary, #00A99D);
     color: #ffffff;
 }
+
+/* ---------------------------------------------
+   FOMS Collection Follow-up & Graph Routing (Integration 3)
+--------------------------------------------- */
+.tv-foms-collection-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 169, 157, 0.25);
+    padding: 14px 16px;
+    margin-top: 12px;
+    box-shadow: 0 4px 16px -2px rgba(0, 169, 157, 0.06);
+    position: relative;
+    overflow: hidden;
+}
+
+.tv-foms-collection-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #1A2238 0%, #008B8B 100%);
+}
+
+.tv-foms-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tv-foms-header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--navy, #1A2238);
+    font-family: var(--fh, 'Montserrat', sans-serif);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tv-foms-icon {
+    color: #DC2626;
+}
+
+.tv-foms-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 9999px;
+}
+
+.tv-foms-pill-routed {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+
+.tv-foms-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tv-foms-stats-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid var(--secondary, #293652);
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+
+.tv-foms-stat-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tv-foms-stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tv-foms-stat-amount {
+    font-family: var(--fh, 'Montserrat', sans-serif);
+    font-size: 14px;
+    font-weight: 800;
+    color: #DC2626;
+}
+
+.tv-foms-stat-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tv-foms-invoice-num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--navy, #1A2238);
+}
+
+.tv-foms-copy-btn {
+    padding: 2px 5px !important;
+    height: auto !important;
+}
+
+.tv-foms-aging-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    width: fit-content;
+}
+
+.tv-foms-aging-tag.critical {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.tv-foms-aging-tag.moderate {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.tv-foms-routing-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: linear-gradient(90deg, rgba(0, 169, 157, 0.07) 0%, rgba(27, 37, 75, 0.04) 100%);
+    border: 1px solid rgba(0, 169, 157, 0.25);
+    border-radius: 8px;
+}
+
+.tv-foms-routing-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--primary, #00A99D);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tv-foms-routing-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tv-foms-routing-label {
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--primary, #00A99D);
+}
+
+.tv-foms-routing-desc {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.tv-foms-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.tv-foms-grid-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.tv-foms-grid-full {
+    grid-column: 1 / -1;
+}
+
+.tv-foms-grid-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.tv-foms-grid-value {
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.tv-foms-sub-val {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.tv-foms-action-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary, #00A99D);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: none;
+    margin-top: 2px;
+}
+
+.tv-foms-action-link:hover {
+    text-decoration: underline;
+}
+
+.tv-foms-gps-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-primary);
+    font-size: 11.5px;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.tv-foms-gps-link:hover {
+    color: var(--primary, #00A99D);
+}
+
+.tv-foms-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+}
+
+.tv-foms-action-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.tv-foms-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* ---------------------------------------------
+   FOMS Physical Invoice Endorsement & 30-Day Term (Integration 1)
+--------------------------------------------- */
+.tv-foms-endorsement-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(79, 70, 229, 0.25);
+    padding: 14px 16px;
+    margin-top: 12px;
+    box-shadow: 0 4px 16px -2px rgba(79, 70, 229, 0.06);
+    position: relative;
+    overflow: hidden;
+}
+
+.tv-foms-endorsement-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4F46E5 0%, #00A99D 100%);
+}
+
+.tv-foms-icon-endorsement {
+    color: #4F46E5;
+}
+
+.tv-foms-pill-endorsed {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+
+.tv-foms-pill-pending {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.tv-foms-calc-term {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(79, 70, 229, 0.08);
+    color: #4338CA;
+    border: 1px solid rgba(79, 70, 229, 0.2);
+    width: fit-content;
+}
+
+.tv-btn-primary-sm {
+    padding: 4px 10px;
+    font-size: 11.5px;
+    border-radius: 6px;
+    font-weight: 600;
+    background: var(--primary, #00A99D);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.tv-btn-primary-sm:hover {
+    background: var(--teal-hover, #009189);
+}
+
+.tv-modal-calc-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(79, 70, 229, 0.06);
+    border: 1px dashed rgba(79, 70, 229, 0.35);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4338CA;
+}
+
 

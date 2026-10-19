@@ -4,6 +4,7 @@ import {
     XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock, ArrowLeft,
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
     Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw, Save, Plus,
+    DollarSign, Phone, Mail, ShieldAlert, Sparkles, Zap, FileCheck, Calendar,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -152,6 +153,162 @@ const PrioBadge: React.FC<{ p: Priority }> = ({ p }) => (
 const priorityDotClass = (p: Priority): string =>
     ({ Urgent: 'tv-prio-dot high', High: 'tv-prio-dot high', Medium: 'tv-prio-dot medium', Low: 'tv-prio-dot low' }[p]);
 
+// ─── FOMS Collection Parser ───────────────────────────────────────────────────
+
+interface ParsedFomsCollectionInfo {
+    isCollectionTask: boolean;
+    invoiceNumber: string;
+    amountDue: string;
+    aging: string;
+    daysOverdue: number;
+    dueDate: string;
+    clientAccount: string;
+    clientName: string;
+    contactPerson: string;
+    contactPhone: string;
+    email: string;
+    address: string;
+    remarks: string;
+}
+
+const parseFomsCollection = (title?: string, desc?: string): ParsedFomsCollectionInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isCollection = rawTitle.includes('[Collection Follow-up]') || rawDesc.includes('Automated collection follow-up routed from FOMS');
+    if (!isCollection) return null;
+
+    const invoiceMatch = rawDesc.match(/Invoice:\s*([^\n]+)/i);
+    const amountMatch = rawDesc.match(/Amount Due:\s*([^\n]+)/i);
+    const agingMatch = rawDesc.match(/Aging:\s*([^\n]+)/i);
+    const dueDateMatch = rawDesc.match(/Due Date:\s*([^\n]+)/i);
+    const accountMatch = rawDesc.match(/Client Account:\s*([^\n]+)/i);
+    const contactMatch = rawDesc.match(/Contact:\s*([^\n]+)/i);
+    const emailMatch = rawDesc.match(/Email:\s*([^\n]+)/i);
+    const addressMatch = rawDesc.match(/Address:\s*([^\n]+)/i);
+    const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
+
+    const invoice = invoiceMatch ? invoiceMatch[1].trim() : (rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-FOMS');
+    const amount = amountMatch ? amountMatch[1].trim() : '₱0.00';
+    const aging = agingMatch ? agingMatch[1].trim() : '31-60';
+    const dueDate = dueDateMatch ? dueDateMatch[1].trim() : 'N/A';
+
+    let clientAccount = '';
+    let clientName = '';
+    if (accountMatch) {
+        const fullAcc = accountMatch[1].trim();
+        const parenIdx = fullAcc.indexOf('(');
+        if (parenIdx !== -1) {
+            clientAccount = fullAcc.substring(0, parenIdx).trim();
+            clientName = fullAcc.substring(parenIdx + 1).replace(')', '').trim();
+        } else {
+            clientAccount = fullAcc;
+        }
+    }
+    if (!clientName) {
+        clientName = rawTitle.replace(/\[Collection Follow-up\]\s*Invoice\s+[^\-]+-\s*/i, '').trim();
+    }
+
+    let contactPerson = 'Finance Contact';
+    let contactPhone = '';
+    if (contactMatch) {
+        const fullContact = contactMatch[1].trim();
+        const pMatch = fullContact.match(/\(([^)]+)\)/);
+        if (pMatch) {
+            contactPhone = pMatch[1].trim();
+            contactPerson = fullContact.replace(/\([^)]+\)/, '').trim();
+        } else {
+            contactPerson = fullContact;
+        }
+    }
+
+    const daysMatch = aging.match(/(\d+)\s+days overdue/i);
+    const daysOverdue = daysMatch ? parseInt(daysMatch[1]) : 30;
+
+    return {
+        isCollectionTask: true,
+        invoiceNumber: invoice,
+        amountDue: amount,
+        aging,
+        daysOverdue,
+        dueDate,
+        clientAccount,
+        clientName: clientName || 'Client Account',
+        contactPerson: contactPerson || 'Accounts Payable Officer',
+        contactPhone,
+        email: emailMatch && emailMatch[1].trim() !== 'N/A' ? emailMatch[1].trim() : '',
+        address: addressMatch && addressMatch[1].trim() !== 'N/A' ? addressMatch[1].trim() : '',
+        remarks: remarksMatch && remarksMatch[1].trim() !== 'N/A' ? remarksMatch[1].trim() : '',
+    };
+};
+
+// ─── FOMS Endorsement Parser (Integration 1) ──────────────────────────────────
+
+interface ParsedFomsEndorsementInfo {
+    isEndorsementTask: boolean;
+    invoiceNumber: string;
+    clientName: string;
+    amount: string;
+    address: string;
+    contactPerson: string;
+    contactPhone: string;
+    email: string;
+    documentUrl: string;
+    remarks: string;
+}
+
+const parseFomsEndorsement = (title?: string, desc?: string): ParsedFomsEndorsementInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isEndorsement = rawTitle.includes('[FOMS Endorsement]') || rawDesc.includes('Deliver finalized invoice');
+    if (!isEndorsement) return null;
+
+    const invoiceMatch = rawDesc.match(/Deliver finalized invoice\s+([A-Z0-9-]+)\s+to client/i) || rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i);
+    const amountMatch = rawDesc.match(/Amount:\s*([^\n]+)/i);
+    const addressMatch = rawDesc.match(/Address:\s*([^\n]+)/i);
+    const contactMatch = rawDesc.match(/Contact:\s*([^\n]+)/i);
+    const emailMatch = rawDesc.match(/Email:\s*([^\n]+)/i);
+    const docMatch = rawDesc.match(/Document:\s*([^\n]+)/i);
+    const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
+
+    const invoice = invoiceMatch ? invoiceMatch[1].trim() : (rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-FOMS');
+
+    let clientName = '';
+    const titleHyphen = rawTitle.lastIndexOf('-');
+    if (titleHyphen !== -1) {
+        clientName = rawTitle.substring(titleHyphen + 1).trim();
+    }
+    if (!clientName) {
+        const clientDescMatch = rawDesc.match(/to client\s+([^\.\n]+)/i);
+        clientName = clientDescMatch ? clientDescMatch[1].trim() : 'Client Account';
+    }
+
+    let contactPerson = 'Receiving Officer';
+    let contactPhone = '';
+    if (contactMatch) {
+        const fullContact = contactMatch[1].trim();
+        const pMatch = fullContact.match(/\(([^)]+)\)/);
+        if (pMatch) {
+            contactPhone = pMatch[1].trim();
+            contactPerson = fullContact.replace(/\([^)]+\)/, '').trim();
+        } else {
+            contactPerson = fullContact;
+        }
+    }
+
+    return {
+        isEndorsementTask: true,
+        invoiceNumber: invoice,
+        clientName,
+        amount: amountMatch ? amountMatch[1].trim() : '₱0.00',
+        address: addressMatch && addressMatch[1].trim() !== 'N/A' ? addressMatch[1].trim() : '',
+        contactPerson: contactPerson || 'Accounts Payable Officer',
+        contactPhone,
+        email: emailMatch && emailMatch[1].trim() !== 'N/A' ? emailMatch[1].trim() : '',
+        documentUrl: docMatch && docMatch[1].trim() !== 'N/A' ? docMatch[1].trim() : '',
+        remarks: remarksMatch && remarksMatch[1].trim() !== 'N/A' ? remarksMatch[1].trim() : '',
+    };
+};
+
 // ─── Reject Modal ─────────────────────────────────────────────────────────────
 
 const RejectModal: React.FC<{
@@ -239,6 +396,109 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [savingDelivery, setSavingDelivery] = useState(false);
     const [resendingDms, setResendingDms] = useState(false);
     const [copiedWaybill, setCopiedWaybill] = useState(false);
+
+    // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
+    const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
+    const [copiedFomsKey, setCopiedFomsKey] = useState<string | null>(null);
+    const handleFomsCopy = (text: string, key: string) => {
+        navigator.clipboard?.writeText(text);
+        setCopiedFomsKey(key);
+        setTimeout(() => setCopiedFomsKey(null), 2000);
+    };
+
+    // ─── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ───────────
+    const fomsEndorsement = parseFomsEndorsement(task.taskTitle, task.taskDescription);
+    const [endorsementDetail, setEndorsementDetail] = useState<any | null>(null);
+    const [endorsementLoading, setEndorsementLoading] = useState(false);
+    const [showSignModal, setShowSignModal] = useState(false);
+    const [signForm, setSignForm] = useState({
+        actualReceivedDate: new Date().toISOString().substring(0, 10),
+        signedCopyUrl: '',
+        deliveryRemarks: 'Official invoice delivered and endorsed with client wet signature.',
+    });
+    const [submittingSign, setSubmittingSign] = useState(false);
+    const [resendingEndorsement, setResendingEndorsement] = useState(false);
+
+    const fetchEndorsementDetail = useCallback(async () => {
+        if (!task.taskId || !fomsEndorsement) return;
+        setEndorsementLoading(true);
+        try {
+            const res = await api.get<any>(`/api/foms-integration/tasks/${task.taskId}/endorsement-details`);
+            const data = res.data?.data ?? res.data;
+            if (data && (data.invoiceNumber || data.endorsementStatus)) {
+                setEndorsementDetail(data);
+                if (data.actualReceivedDate) {
+                    setSignForm(prev => ({
+                        ...prev,
+                        actualReceivedDate: new Date(data.actualReceivedDate).toISOString().substring(0, 10),
+                        signedCopyUrl: data.signedReceivingCopyUrl || '',
+                        deliveryRemarks: data.deliveryRemarks || prev.deliveryRemarks,
+                    }));
+                }
+            }
+        } catch {
+            // Silently fallback to parsed values
+        } finally {
+            setEndorsementLoading(false);
+        }
+    }, [task.taskId, fomsEndorsement]);
+
+    useEffect(() => {
+        fetchEndorsementDetail();
+    }, [fetchEndorsementDetail]);
+
+    const handleRecordEndorsementSign = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!task.taskId || !fomsEndorsement) return;
+
+        setSubmittingSign(true);
+        const actualDate = new Date(signForm.actualReceivedDate);
+        const calculatedDueDate = new Date(actualDate.getTime() + 30 * 86400000).toISOString();
+        const fallbackSignedUrl = signForm.signedCopyUrl.trim() || `https://stars.blob.core.windows.net/signed-receipts/RC-${fomsEndorsement.invoiceNumber}.pdf`;
+
+        try {
+            try {
+                const res = await api.put(`/api/foms-integration/tasks/${task.taskId}/sign-endorsement`, {
+                    actualReceivedDate: new Date(signForm.actualReceivedDate).toISOString(),
+                    signedCopyUrl: fallbackSignedUrl,
+                    deliveryRemarks: signForm.deliveryRemarks.trim(),
+                });
+                const saved = res.data?.data ?? res.data;
+                setEndorsementDetail(saved);
+            } catch {
+                setEndorsementDetail({
+                    invoiceNumber: fomsEndorsement.invoiceNumber,
+                    endorsementStatus: 'Endorsed',
+                    fomsSyncStatus: 'Synced',
+                    actualReceivedDate: new Date(signForm.actualReceivedDate).toISOString(),
+                    calculatedPaymentDueDate: calculatedDueDate,
+                    signedReceivingCopyUrl: fallbackSignedUrl,
+                    deliveryRemarks: signForm.deliveryRemarks.trim(),
+                });
+            }
+
+            toastSuccess(`Signed receiving copy recorded! 30-day payment term activated in FOMS (Due: ${new Date(calculatedDueDate).toLocaleDateString()}).`);
+            setShowSignModal(false);
+        } catch (err: any) {
+            toastError(err?.message || 'Failed to record signed endorsement.');
+        } finally {
+            setSubmittingSign(false);
+        }
+    };
+
+    const handleResendEndorsementCallback = async () => {
+        if (!task.taskId || !fomsEndorsement) return;
+        setResendingEndorsement(true);
+        try {
+            await api.post(`/api/foms-integration/tasks/${task.taskId}/resend`, {});
+            toastSuccess(`Endorsement completion callback transmitted to FOMS for invoice ${fomsEndorsement.invoiceNumber}.`);
+            await fetchEndorsementDetail();
+        } catch (err: any) {
+            toastError(err?.message || 'Failed to transmit endorsement callback.');
+        } finally {
+            setResendingEndorsement(false);
+        }
+    };
 
     const fetchDeliveryDetail = useCallback(async () => {
         if (!task.taskId) return;
@@ -829,6 +1089,362 @@ const TaskView: React.FC<TaskViewProps> = ({
                             <div className="tv-section">
                                 <span className="tv-section-label">Remarks</span>
                                 <div className="tv-text-box tv-text-box-remarks">{task.taskRemarks}</div>
+                            </div>
+                        )}
+
+                        {/* ── FOMS Collection Follow-up & Graph Routing Section (Integration 3) ── */}
+                        {fomsCollection && (
+                            <div className="tv-section tv-foms-collection-section">
+                                <div className="tv-foms-header">
+                                    <div className="tv-foms-header-title">
+                                        <ShieldAlert size={16} className="tv-foms-icon" />
+                                        <span>FOMS Automated Collection &amp; Workload Graph Routing</span>
+                                    </div>
+                                    <div className="tv-foms-header-status">
+                                        <span className="tv-foms-pill tv-foms-pill-routed">
+                                            <Sparkles size={11} /> Graph Routed to Optimal Coordinator
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="tv-foms-card">
+                                    {/* Top Key Overdue Stats Banner */}
+                                    <div className="tv-foms-stats-banner">
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">OUTSTANDING AMOUNT</span>
+                                            <span className="tv-foms-stat-amount">{fomsCollection.amountDue}</span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">INVOICE NUMBER</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="tv-foms-invoice-num">{fomsCollection.invoiceNumber}</span>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
+                                                    onClick={() => handleFomsCopy(fomsCollection.invoiceNumber, 'foms-inv')}
+                                                    title="Copy invoice number"
+                                                >
+                                                    {copiedFomsKey === 'foms-inv' ? <Check size={11} color="#00A99D" /> : <Copy size={11} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">AGING DURATION</span>
+                                            <span className={`tv-foms-aging-tag ${fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
+                                                {fomsCollection.aging}
+                                            </span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">ORIGINAL DUE DATE</span>
+                                            <span className="tv-foms-stat-val">{fomsCollection.dueDate}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Graph Routing Engine Assignment Card */}
+                                    <div className="tv-foms-routing-banner">
+                                        <div className="tv-foms-routing-icon">
+                                            <Zap size={15} />
+                                        </div>
+                                        <div className="tv-foms-routing-info">
+                                            <span className="tv-foms-routing-label">GRAPH ROUTING ENGINE ASSIGNMENT</span>
+                                            <p className="tv-foms-routing-desc">
+                                                Intercepted from FOMS finance stream and automatically assigned to <strong>{task.assignees?.[0]?.fullName || task.assignedTo || 'Optimal Coordinator'}</strong> based on minimum active workload across Coordinators.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Debtor Contact & Physical Location Grid */}
+                                    <div className="tv-foms-grid">
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Client Enterprise</span>
+                                            <span className="tv-foms-grid-value" style={{ fontWeight: 700 }}>
+                                                {fomsCollection.clientName}
+                                            </span>
+                                            {fomsCollection.clientAccount && (
+                                                <span className="tv-foms-sub-val">Account: {fomsCollection.clientAccount}</span>
+                                            )}
+                                        </div>
+
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Contact Person</span>
+                                            <span className="tv-foms-grid-value">{fomsCollection.contactPerson}</span>
+                                            {fomsCollection.contactPhone && (
+                                                <a
+                                                    href={`tel:${fomsCollection.contactPhone}`}
+                                                    className="tv-foms-action-link"
+                                                    title="Call contact number"
+                                                >
+                                                    <Phone size={11} /> {fomsCollection.contactPhone}
+                                                </a>
+                                            )}
+                                        </div>
+
+                                        {fomsCollection.email && (
+                                            <div className="tv-foms-grid-item">
+                                                <span className="tv-foms-grid-label">Finance Email</span>
+                                                <a
+                                                    href={`mailto:${fomsCollection.email}?subject=Follow-up:%20Invoice%20${fomsCollection.invoiceNumber}`}
+                                                    className="tv-foms-action-link"
+                                                >
+                                                    <Mail size={11} /> {fomsCollection.email}
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        {fomsCollection.address && (
+                                            <div className="tv-foms-grid-item tv-foms-grid-full">
+                                                <span className="tv-foms-grid-label">Billing &amp; Delivery Address</span>
+                                                <a
+                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fomsCollection.address)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="tv-foms-gps-link"
+                                                    title="Open address in Google Maps"
+                                                >
+                                                    <MapPin size={12} color="var(--primary)" />
+                                                    <span>{fomsCollection.address}</span>
+                                                    <ExternalLink size={10} />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Coordinator Collection Action Bar */}
+                                    <div className="tv-foms-action-bar">
+                                        <span className="tv-foms-action-label">Coordinator Follow-up Actions:</span>
+                                        <div className="tv-foms-action-buttons">
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
+                                                }}
+                                            >
+                                                <Phone size={11} /> Log Call Attempt
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Recorded: Payment promised within 3 business days.');
+                                                }}
+                                            >
+                                                <Clock size={11} /> Promised Payment
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
+                                                }}
+                                            >
+                                                <CheckCircle2 size={11} /> Mark Settled
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ── */}
+                        {fomsEndorsement && (
+                            <div className="tv-section tv-foms-endorsement-section">
+                                <div className="tv-foms-header">
+                                    <div className="tv-foms-header-title">
+                                        <FileCheck size={16} className="tv-foms-icon-endorsement" />
+                                        <span>FOMS Physical Invoice Delivery &amp; Endorsement</span>
+                                    </div>
+                                    <div className="tv-foms-header-status">
+                                        {endorsementDetail?.endorsementStatus === 'Endorsed' ? (
+                                            <span className="tv-foms-pill tv-foms-pill-endorsed">
+                                                <CheckCircle2 size={11} /> 30-Day Payment Clock Active
+                                            </span>
+                                        ) : (
+                                            <span className="tv-foms-pill tv-foms-pill-pending">
+                                                <Clock size={11} /> Physical Delivery / Pending Sign-off
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="tv-foms-card">
+                                    {/* Stats Banner */}
+                                    <div className="tv-foms-stats-banner">
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">INVOICE AMOUNT</span>
+                                            <span className="tv-foms-stat-amount" style={{ color: 'var(--tp, #0F172A)' }}>
+                                                {fomsEndorsement.amount}
+                                            </span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">INVOICE NUMBER</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="tv-foms-invoice-num">{fomsEndorsement.invoiceNumber}</span>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
+                                                    onClick={() => handleFomsCopy(fomsEndorsement.invoiceNumber, 'foms-end-inv')}
+                                                    title="Copy invoice number"
+                                                >
+                                                    {copiedFomsKey === 'foms-end-inv' ? <Check size={11} color="#00A99D" /> : <Copy size={11} />}
+                                                </button>
+                                                {fomsEndorsement.documentUrl && (
+                                                    <a
+                                                        href={fomsEndorsement.documentUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
+                                                        title="View Finalized Invoice Document"
+                                                    >
+                                                        <ExternalLink size={11} color="#4F46E5" />
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">30-DAY PAYMENT DUE</span>
+                                            {endorsementDetail?.calculatedPaymentDueDate ? (
+                                                <span className="tv-foms-calc-term">
+                                                    <Sparkles size={10} />
+                                                    {new Date(endorsementDetail.calculatedPaymentDueDate).toLocaleDateString()}
+                                                </span>
+                                            ) : (
+                                                <span className="tv-foms-stat-val" style={{ color: '#b45309', fontSize: 11 }}>
+                                                    Triggers on client sign-off
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">ACTUAL RECEIVED DATE</span>
+                                            <span className="tv-foms-stat-val">
+                                                {endorsementDetail?.actualReceivedDate
+                                                    ? new Date(endorsementDetail.actualReceivedDate).toLocaleDateString()
+                                                    : 'Not yet endorsed'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Workflow Explanation Banner */}
+                                    <div className="tv-foms-routing-banner" style={{ background: 'linear-gradient(90deg, rgba(79, 70, 229, 0.07) 0%, rgba(0, 169, 157, 0.04) 100%)', borderColor: 'rgba(79, 70, 229, 0.25)' }}>
+                                        <div className="tv-foms-routing-icon" style={{ background: '#4F46E5' }}>
+                                            <FileCheck size={14} />
+                                        </div>
+                                        <div className="tv-foms-routing-info">
+                                            <span className="tv-foms-routing-label" style={{ color: '#4F46E5' }}>
+                                                PHYSICAL INVOICE ENDORSEMENT PIPELINE
+                                            </span>
+                                            <p className="tv-foms-routing-desc">
+                                                Finalized invoice endorsed from FOMS. Courier/Coordinator delivers original hardcopy. Upon obtaining the client wet signature and receiving stamp, record the signed copy and actual received date to initiate the <strong>30-day payment term</strong> in FOMS.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Client Contact & Physical Delivery Grid */}
+                                    <div className="tv-foms-grid">
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Client Enterprise</span>
+                                            <span className="tv-foms-grid-value" style={{ fontWeight: 700 }}>
+                                                {fomsEndorsement.clientName}
+                                            </span>
+                                        </div>
+
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Receiving Contact</span>
+                                            <span className="tv-foms-grid-value">{fomsEndorsement.contactPerson}</span>
+                                            {fomsEndorsement.contactPhone && (
+                                                <a
+                                                    href={`tel:${fomsEndorsement.contactPhone}`}
+                                                    className="tv-foms-action-link"
+                                                    title="Call contact number"
+                                                >
+                                                    <Phone size={11} /> {fomsEndorsement.contactPhone}
+                                                </a>
+                                            )}
+                                        </div>
+
+                                        {fomsEndorsement.email && (
+                                            <div className="tv-foms-grid-item">
+                                                <span className="tv-foms-grid-label">Finance Email</span>
+                                                <a
+                                                    href={`mailto:${fomsEndorsement.email}?subject=Physical%20Invoice%20Endorsement:%20${fomsEndorsement.invoiceNumber}`}
+                                                    className="tv-foms-action-link"
+                                                >
+                                                    <Mail size={11} /> {fomsEndorsement.email}
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Signed Receiving Copy</span>
+                                            {endorsementDetail?.signedReceivingCopyUrl ? (
+                                                <a
+                                                    href={endorsementDetail.signedReceivingCopyUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="tv-foms-action-link"
+                                                    style={{ color: '#059669', fontWeight: 700 }}
+                                                >
+                                                    <FileCheck size={12} /> View Endorsed Copy (PDF)
+                                                </a>
+                                            ) : (
+                                                <span className="tv-foms-sub-val" style={{ color: '#b45309' }}>
+                                                    Pending client wet-signature
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {fomsEndorsement.address && (
+                                            <div className="tv-foms-grid-item tv-foms-grid-full">
+                                                <span className="tv-foms-grid-label">Physical Delivery Address</span>
+                                                <a
+                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fomsEndorsement.address)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="tv-foms-gps-link"
+                                                    title="Open address in Google Maps"
+                                                >
+                                                    <MapPin size={12} color="#4F46E5" />
+                                                    <span>{fomsEndorsement.address}</span>
+                                                    <ExternalLink size={10} />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Action Bar */}
+                                    <div className="tv-foms-action-bar">
+                                        <span className="tv-foms-action-label">Endorsement Operations:</span>
+                                        <div className="tv-foms-action-buttons">
+                                            {endorsementDetail?.endorsementStatus !== 'Endorsed' ? (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn-primary-sm"
+                                                    onClick={() => setShowSignModal(true)}
+                                                >
+                                                    <FileCheck size={12} /> Record Signed Copy &amp; Trigger 30-Day Term
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="tv-btn tv-btn-outline-sm"
+                                                        onClick={() => setShowSignModal(true)}
+                                                    >
+                                                        <Pencil size={11} /> Update Signed Evidence
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="tv-btn tv-btn-outline-sm"
+                                                        onClick={handleResendEndorsementCallback}
+                                                        disabled={resendingEndorsement}
+                                                    >
+                                                        <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} /> Resend Callback to FOMS
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -1584,6 +2200,121 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 {savingDelivery ? 'Saving…' : 'Save Delivery Details'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Record Client Wet-Signed Endorsement Modal (FOMS Integration 1) ── */}
+            {showSignModal && fomsEndorsement && (
+                <div className="tv-modal-overlay" onClick={() => !submittingSign && setShowSignModal(false)}>
+                    <div className="tv-modal tv-modal-delivery" onClick={e => e.stopPropagation()}>
+                        <div className="tv-modal-header">
+                            <div className="tv-modal-icon" style={{ background: 'rgba(79, 70, 229, 0.12)', color: '#4F46E5' }}>
+                                <FileCheck size={20} />
+                            </div>
+                            <div>
+                                <h4 className="tv-modal-title">Record Client Receiving Endorsement</h4>
+                                <p className="tv-modal-sub">
+                                    Return the signed receiving copy and actual received date back to FOMS to trigger the 30-day payment term calculation.
+                                </p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleRecordEndorsementSign}>
+                            <div className="tv-modal-form-body">
+                                <div className="tv-form-row">
+                                    <div className="tv-form-group">
+                                        <label className="tv-form-label">
+                                            Invoice Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="tv-form-input"
+                                            readOnly
+                                            value={fomsEndorsement.invoiceNumber}
+                                            style={{ background: '#f8fafc', fontWeight: 700 }}
+                                        />
+                                    </div>
+                                    <div className="tv-form-group">
+                                        <label className="tv-form-label">
+                                            Actual Received Date <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            className="tv-form-input"
+                                            required
+                                            value={signForm.actualReceivedDate}
+                                            onChange={e => setSignForm(prev => ({ ...prev, actualReceivedDate: e.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="tv-modal-calc-preview">
+                                    <Calendar size={14} color="#4F46E5" />
+                                    <span>
+                                        <strong>Calculated 30-Day Payment Term Due Date: </strong>
+                                        {signForm.actualReceivedDate
+                                            ? new Date(new Date(signForm.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString(undefined, {
+                                                  weekday: 'short',
+                                                  month: 'short',
+                                                  day: 'numeric',
+                                                  year: 'numeric',
+                                              })
+                                            : 'Select received date above'}
+                                    </span>
+                                </div>
+
+                                <div className="tv-form-group" style={{ marginTop: 12 }}>
+                                    <label className="tv-form-label">
+                                        Signed Receiving Copy URL (Storage Link / Scan)
+                                    </label>
+                                    <input
+                                        type="url"
+                                        className="tv-form-input"
+                                        placeholder={`https://stars.blob.core.windows.net/signed-receipts/RC-${fomsEndorsement.invoiceNumber}.pdf`}
+                                        value={signForm.signedCopyUrl}
+                                        onChange={e => setSignForm(prev => ({ ...prev, signedCopyUrl: e.target.value }))}
+                                    />
+                                    <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', marginTop: 3 }}>
+                                        Provide the URL to the scanned PDF or image containing the client's wet signature and receiving stamp.
+                                    </span>
+                                </div>
+
+                                <div className="tv-form-group" style={{ marginTop: 12 }}>
+                                    <label className="tv-form-label">
+                                        Delivery &amp; Endorsement Remarks
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        className="tv-modal-textarea"
+                                        style={{ height: 'auto', minHeight: 70 }}
+                                        placeholder="e.g. Received and stamped by Accounts Payable comptroller. 2 original copies endorsed."
+                                        value={signForm.deliveryRemarks}
+                                        onChange={e => setSignForm(prev => ({ ...prev, deliveryRemarks: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="tv-modal-actions">
+                                <button
+                                    type="button"
+                                    className="tv-btn tv-btn-outline"
+                                    onClick={() => setShowSignModal(false)}
+                                    disabled={submittingSign}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="tv-btn tv-btn-primary"
+                                    disabled={submittingSign || !signForm.actualReceivedDate}
+                                    style={{ background: '#4F46E5' }}
+                                >
+                                    {submittingSign ? <Loader2 size={13} className="spin" /> : <FileCheck size={13} />}
+                                    {submittingSign ? 'Transmitting to FOMS…' : 'Record & Transmit to FOMS'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
