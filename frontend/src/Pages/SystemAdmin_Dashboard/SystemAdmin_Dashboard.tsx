@@ -598,6 +598,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
     const [errors, setErrors] = useState<FieldError>({});
     const [dirty, setDirty] = useState(false);
     const [systemAccessCollapsed, setSystemAccessCollapsed] = useState(false);
+    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [apiError, setApiError] = useState('');
     const [successData, setSuccessData] = useState<{ employeeNumber: string } | null>(null);
@@ -867,21 +868,90 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         border: hasErr ? '1px solid var(--status-failed)' : '1px solid var(--border)',
     });
 
+    // Detect if user has entered or modified any form fields
+    const hasEnteredFormValues = useMemo(() => {
+        if (dirty) return true;
+        if (form.firstName.trim().length > 0) return true;
+        if (form.lastName.trim().length > 0) return true;
+        if (form.middleName.trim().length > 0) return true;
+        if (form.suffix?.trim().length > 0) return true;
+        if (form.email.trim().length > 0) return true;
+        if (form.contactNumber.trim().length > 0) return true;
+        if (form.departmentId) return true;
+        if (form.jobPositionId) return true;
+        if (form.role) return true;
+        if (form.targetSystems && (form.targetSystems.length !== 1 || form.targetSystems[0] !== 'STARS')) return true;
+        if (form.dmsRole && form.dmsRole !== 'Driver') return true;
+        if (form.dmsAreas && form.dmsAreas.join(',') !== 'Manila') return true;
+        if (form.fomsRole && form.fomsRole !== 'Accountant') return true;
+        if (form.fomsSalaryRate && form.fomsSalaryRate !== 25000) return true;
+        if (form.employmentStatus && form.employmentStatus !== 'Regular') return true;
+        return false;
+    }, [form, dirty]);
+
+    // Validate that all required fields across system configurations and general profile are filled
+    const isFormValidForRegistration = useMemo(() => {
+        if (empNumLoading || !!empNumError || !form.employeeNumber || loadingOrg || submitting) {
+            return false;
+        }
+
+        // At least one system must be selected
+        const selectedSystems = form.targetSystems || [];
+        if (selectedSystems.length === 0) return false;
+
+        // STARS requirements if selected
+        if (selectedSystems.includes('STARS')) {
+            if (!form.departmentId || !form.jobPositionId || !form.role) return false;
+        }
+
+        // DMS requirements if selected
+        if (selectedSystems.includes('DMS')) {
+            if (!form.dmsRole || !form.dmsAreas || form.dmsAreas.length === 0 || !form.dmsAreas.some(a => a.trim().length > 0)) {
+                return false;
+            }
+        }
+
+        // FOMS requirements if selected
+        if (selectedSystems.includes('FOMS')) {
+            if (!form.fomsRole || form.fomsSalaryRate === undefined || form.fomsSalaryRate === null || isNaN(form.fomsSalaryRate) || form.fomsSalaryRate < 0) {
+                return false;
+            }
+        }
+
+        // General Employee Profile required fields
+        if (!form.firstName.trim()) return false;
+        if (!form.lastName.trim()) return false;
+        if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return false;
+        if (!form.contactNumber.trim() || !/^09\d{9}$/.test(form.contactNumber.trim())) return false;
+        if (!form.employmentStatus) return false;
+        if (!form.hireDate) return false;
+
+        return true;
+    }, [form, empNumLoading, empNumError, loadingOrg, submitting]);
+
+    const handleRequestClose = () => {
+        if (hasEnteredFormValues) {
+            setShowDiscardConfirm(true);
+        } else {
+            onClose();
+        }
+    };
+
     return (
         <div style={{ display: 'contents' }}>
             <FormModal
                 isOpen={true}
-                onClose={() => { setDirty(false); onClose(); }}
+                onClose={handleRequestClose}
                 title="Add New Employee"
                 subtitle="Fill in all details to register a new employee account."
                 apiError={apiError}
                 onSubmit={handleSubmit}
                 isSubmitting={submitting}
-                submitDisabled={empNumLoading || !!empNumError || loadingOrg}
+                submitDisabled={!isFormValidForRegistration}
                 submitLabel="Register Employee"
                 size="lg"
-                confirmOnCancel={true}
-                dirty={dirty}
+                confirmOnCancel={false}
+                dirty={hasEnteredFormValues}
                 infoCard={form.employeeNumber ? {
                     avatarText: form.employeeNumber.slice(-4),
                     title: `Employee #${form.employeeNumber}`,
@@ -1520,6 +1590,23 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
 
 
             </FormModal>
+
+            {/* ── Discard Registration Confirmation Modal ── */}
+            <ConfirmationModal
+                isOpen={showDiscardConfirm}
+                variant="warning"
+                title="Discard Employee Registration?"
+                description="You have entered information in this registration form. If you close now, all unsaved details will be lost."
+                notice="Unsaved form data will not be saved."
+                confirmLabel="Discard"
+                cancelLabel="Keep Editing"
+                onConfirm={() => {
+                    setShowDiscardConfirm(false);
+                    setDirty(false);
+                    onClose();
+                }}
+                onCancel={() => setShowDiscardConfirm(false)}
+            />
 
             {/* ── Registration Confirmation ── */}
             <FormModal isOpen={showRegisterConfirm} onClose={() => setShowRegisterConfirm(false)}
