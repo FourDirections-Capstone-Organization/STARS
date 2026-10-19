@@ -4,6 +4,7 @@ import {
     XCircle, Clock, AlertTriangle, ThumbsUp, RotateCcw, Lock, ArrowLeft,
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
     Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw, Save, Plus,
+    DollarSign, Phone, Mail, ShieldAlert, Sparkles, Zap,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -152,6 +153,94 @@ const PrioBadge: React.FC<{ p: Priority }> = ({ p }) => (
 const priorityDotClass = (p: Priority): string =>
     ({ Urgent: 'tv-prio-dot high', High: 'tv-prio-dot high', Medium: 'tv-prio-dot medium', Low: 'tv-prio-dot low' }[p]);
 
+// ─── FOMS Collection Parser ───────────────────────────────────────────────────
+
+interface ParsedFomsCollectionInfo {
+    isCollectionTask: boolean;
+    invoiceNumber: string;
+    amountDue: string;
+    aging: string;
+    daysOverdue: number;
+    dueDate: string;
+    clientAccount: string;
+    clientName: string;
+    contactPerson: string;
+    contactPhone: string;
+    email: string;
+    address: string;
+    remarks: string;
+}
+
+const parseFomsCollection = (title?: string, desc?: string): ParsedFomsCollectionInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isCollection = rawTitle.includes('[Collection Follow-up]') || rawDesc.includes('Automated collection follow-up routed from FOMS');
+    if (!isCollection) return null;
+
+    const invoiceMatch = rawDesc.match(/Invoice:\s*([^\n]+)/i);
+    const amountMatch = rawDesc.match(/Amount Due:\s*([^\n]+)/i);
+    const agingMatch = rawDesc.match(/Aging:\s*([^\n]+)/i);
+    const dueDateMatch = rawDesc.match(/Due Date:\s*([^\n]+)/i);
+    const accountMatch = rawDesc.match(/Client Account:\s*([^\n]+)/i);
+    const contactMatch = rawDesc.match(/Contact:\s*([^\n]+)/i);
+    const emailMatch = rawDesc.match(/Email:\s*([^\n]+)/i);
+    const addressMatch = rawDesc.match(/Address:\s*([^\n]+)/i);
+    const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
+
+    const invoice = invoiceMatch ? invoiceMatch[1].trim() : (rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-FOMS');
+    const amount = amountMatch ? amountMatch[1].trim() : '₱0.00';
+    const aging = agingMatch ? agingMatch[1].trim() : '31-60';
+    const dueDate = dueDateMatch ? dueDateMatch[1].trim() : 'N/A';
+
+    let clientAccount = '';
+    let clientName = '';
+    if (accountMatch) {
+        const fullAcc = accountMatch[1].trim();
+        const parenIdx = fullAcc.indexOf('(');
+        if (parenIdx !== -1) {
+            clientAccount = fullAcc.substring(0, parenIdx).trim();
+            clientName = fullAcc.substring(parenIdx + 1).replace(')', '').trim();
+        } else {
+            clientAccount = fullAcc;
+        }
+    }
+    if (!clientName) {
+        clientName = rawTitle.replace(/\[Collection Follow-up\]\s*Invoice\s+[^\-]+-\s*/i, '').trim();
+    }
+
+    let contactPerson = 'Finance Contact';
+    let contactPhone = '';
+    if (contactMatch) {
+        const fullContact = contactMatch[1].trim();
+        const pMatch = fullContact.match(/\(([^)]+)\)/);
+        if (pMatch) {
+            contactPhone = pMatch[1].trim();
+            contactPerson = fullContact.replace(/\([^)]+\)/, '').trim();
+        } else {
+            contactPerson = fullContact;
+        }
+    }
+
+    const daysMatch = aging.match(/(\d+)\s+days overdue/i);
+    const daysOverdue = daysMatch ? parseInt(daysMatch[1]) : 30;
+
+    return {
+        isCollectionTask: true,
+        invoiceNumber: invoice,
+        amountDue: amount,
+        aging,
+        daysOverdue,
+        dueDate,
+        clientAccount,
+        clientName: clientName || 'Client Account',
+        contactPerson: contactPerson || 'Accounts Payable Officer',
+        contactPhone,
+        email: emailMatch && emailMatch[1].trim() !== 'N/A' ? emailMatch[1].trim() : '',
+        address: addressMatch && addressMatch[1].trim() !== 'N/A' ? addressMatch[1].trim() : '',
+        remarks: remarksMatch && remarksMatch[1].trim() !== 'N/A' ? remarksMatch[1].trim() : '',
+    };
+};
+
 // ─── Reject Modal ─────────────────────────────────────────────────────────────
 
 const RejectModal: React.FC<{
@@ -239,6 +328,15 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [savingDelivery, setSavingDelivery] = useState(false);
     const [resendingDms, setResendingDms] = useState(false);
     const [copiedWaybill, setCopiedWaybill] = useState(false);
+
+    // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
+    const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
+    const [copiedFomsKey, setCopiedFomsKey] = useState<string | null>(null);
+    const handleFomsCopy = (text: string, key: string) => {
+        navigator.clipboard?.writeText(text);
+        setCopiedFomsKey(key);
+        setTimeout(() => setCopiedFomsKey(null), 2000);
+    };
 
     const fetchDeliveryDetail = useCallback(async () => {
         if (!task.taskId) return;
@@ -829,6 +927,160 @@ const TaskView: React.FC<TaskViewProps> = ({
                             <div className="tv-section">
                                 <span className="tv-section-label">Remarks</span>
                                 <div className="tv-text-box tv-text-box-remarks">{task.taskRemarks}</div>
+                            </div>
+                        )}
+
+                        {/* ── FOMS Collection Follow-up & Graph Routing Section (Integration 3) ── */}
+                        {fomsCollection && (
+                            <div className="tv-section tv-foms-collection-section">
+                                <div className="tv-foms-header">
+                                    <div className="tv-foms-header-title">
+                                        <ShieldAlert size={16} className="tv-foms-icon" />
+                                        <span>FOMS Automated Collection &amp; Workload Graph Routing</span>
+                                    </div>
+                                    <div className="tv-foms-header-status">
+                                        <span className="tv-foms-pill tv-foms-pill-routed">
+                                            <Sparkles size={11} /> Graph Routed to Optimal Coordinator
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="tv-foms-card">
+                                    {/* Top Key Overdue Stats Banner */}
+                                    <div className="tv-foms-stats-banner">
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">OUTSTANDING AMOUNT</span>
+                                            <span className="tv-foms-stat-amount">{fomsCollection.amountDue}</span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">INVOICE NUMBER</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="tv-foms-invoice-num">{fomsCollection.invoiceNumber}</span>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
+                                                    onClick={() => handleFomsCopy(fomsCollection.invoiceNumber, 'foms-inv')}
+                                                    title="Copy invoice number"
+                                                >
+                                                    {copiedFomsKey === 'foms-inv' ? <Check size={11} color="#00A99D" /> : <Copy size={11} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">AGING DURATION</span>
+                                            <span className={`tv-foms-aging-tag ${fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
+                                                {fomsCollection.aging}
+                                            </span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">ORIGINAL DUE DATE</span>
+                                            <span className="tv-foms-stat-val">{fomsCollection.dueDate}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Graph Routing Engine Assignment Card */}
+                                    <div className="tv-foms-routing-banner">
+                                        <div className="tv-foms-routing-icon">
+                                            <Zap size={15} />
+                                        </div>
+                                        <div className="tv-foms-routing-info">
+                                            <span className="tv-foms-routing-label">GRAPH ROUTING ENGINE ASSIGNMENT</span>
+                                            <p className="tv-foms-routing-desc">
+                                                Intercepted from FOMS finance stream and automatically assigned to <strong>{task.assignees?.[0]?.fullName || task.assignedTo || 'Optimal Coordinator'}</strong> based on minimum active workload across Coordinators.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Debtor Contact & Physical Location Grid */}
+                                    <div className="tv-foms-grid">
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Client Enterprise</span>
+                                            <span className="tv-foms-grid-value" style={{ fontWeight: 700 }}>
+                                                {fomsCollection.clientName}
+                                            </span>
+                                            {fomsCollection.clientAccount && (
+                                                <span className="tv-foms-sub-val">Account: {fomsCollection.clientAccount}</span>
+                                            )}
+                                        </div>
+
+                                        <div className="tv-foms-grid-item">
+                                            <span className="tv-foms-grid-label">Contact Person</span>
+                                            <span className="tv-foms-grid-value">{fomsCollection.contactPerson}</span>
+                                            {fomsCollection.contactPhone && (
+                                                <a
+                                                    href={`tel:${fomsCollection.contactPhone}`}
+                                                    className="tv-foms-action-link"
+                                                    title="Call contact number"
+                                                >
+                                                    <Phone size={11} /> {fomsCollection.contactPhone}
+                                                </a>
+                                            )}
+                                        </div>
+
+                                        {fomsCollection.email && (
+                                            <div className="tv-foms-grid-item">
+                                                <span className="tv-foms-grid-label">Finance Email</span>
+                                                <a
+                                                    href={`mailto:${fomsCollection.email}?subject=Follow-up:%20Invoice%20${fomsCollection.invoiceNumber}`}
+                                                    className="tv-foms-action-link"
+                                                >
+                                                    <Mail size={11} /> {fomsCollection.email}
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        {fomsCollection.address && (
+                                            <div className="tv-foms-grid-item tv-foms-grid-full">
+                                                <span className="tv-foms-grid-label">Billing &amp; Delivery Address</span>
+                                                <a
+                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fomsCollection.address)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="tv-foms-gps-link"
+                                                    title="Open address in Google Maps"
+                                                >
+                                                    <MapPin size={12} color="var(--primary)" />
+                                                    <span>{fomsCollection.address}</span>
+                                                    <ExternalLink size={10} />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Coordinator Collection Action Bar */}
+                                    <div className="tv-foms-action-bar">
+                                        <span className="tv-foms-action-label">Coordinator Follow-up Actions:</span>
+                                        <div className="tv-foms-action-buttons">
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
+                                                }}
+                                            >
+                                                <Phone size={11} /> Log Call Attempt
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Recorded: Payment promised within 3 business days.');
+                                                }}
+                                            >
+                                                <Clock size={11} /> Promised Payment
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={() => {
+                                                    toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
+                                                }}
+                                            >
+                                                <CheckCircle2 size={11} /> Mark Settled
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 

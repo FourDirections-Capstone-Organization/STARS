@@ -4044,6 +4044,10 @@ export default function Dashboard() {
                             onViewClientTasks={() => {
                                 handleNavChange('tasks');
                             }}
+                            onOpenTask={(taskId) => {
+                                handleManagerTaskView(taskId);
+                                handleNavChange('tasks');
+                            }}
                         />
                     </div>
                 )}

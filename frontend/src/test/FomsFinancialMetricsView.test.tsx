@@ -167,4 +167,85 @@ describe('FomsFinancialMetricsView', () => {
 
         expect(api.get).toHaveBeenCalledWith('/api/integration/foms/dashboard-summary');
     });
+
+    it('switches to Collection Alerts & Graph Routing tab and renders workload matrix', async () => {
+        render(<FomsFinancialMetricsView />);
+
+        // Click the Graph Routing tab in the hub navigation
+        const routingTab = screen.getByRole('button', { name: /collection alerts & graph routing/i });
+        fireEvent.click(routingTab);
+
+        // Verify Hero & Pipeline
+        expect(screen.getByText('Automated Collection Alerts & Workload Routing')).toBeInTheDocument();
+        expect(screen.getByText('INTEGRATION 3 • GRAPH ROUTING ENGINE ACTIVE')).toBeInTheDocument();
+        expect(screen.getByText('FOMS Alert Intercepted')).toBeInTheDocument();
+        expect(screen.getByText('Workload Graph Evaluator')).toBeInTheDocument();
+
+        // Verify Coordinator Workload Matrix
+        expect(screen.getByText('Real-Time Coordinator Workload Matrix')).toBeInTheDocument();
+        expect(screen.getAllByText(/Jane Coordinator/i).length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText(/Optimal Workload Match/i).length).toBeGreaterThanOrEqual(1);
+
+        // Verify Intercepted Overdue Accounts Table
+        expect(screen.getByText('Intercepted Overdue Accounts & Generated Tasks')).toBeInTheDocument();
+        expect(screen.getByText('INV-2026-9481')).toBeInTheDocument();
+        expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+    });
+
+    it('filters collection alerts by aging status chips in Graph Routing tab', async () => {
+        render(<FomsFinancialMetricsView initialTab="routing" />);
+
+        expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        expect(screen.getByText('Horizon Retail Holdings Inc.')).toBeInTheDocument();
+
+        // Click "31-60 Days" filter chip
+        const chip3160 = screen.getByRole('button', { name: /31-60 Days/i });
+        fireEvent.click(chip3160);
+
+        // Trans-Pacific is 35 days (31-60), Horizon is 15 days (1-30)
+        expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        expect(screen.queryByText('Horizon Retail Holdings Inc.')).not.toBeInTheDocument();
+    });
+
+    it('opens the FOMS Alert Simulator modal and applies preset scenarios', async () => {
+        render(<FomsFinancialMetricsView initialTab="routing" />);
+
+        const simBtn = screen.getByRole('button', { name: /simulate foms alert/i });
+        fireEvent.click(simBtn);
+
+        // Modal should be open
+        expect(screen.getByText(/FOMS Alert Interception & Graph Routing Simulator/i)).toBeInTheDocument();
+        expect(screen.getByText(/Quick Scenario Presets:/i)).toBeInTheDocument();
+
+        // Apply a preset
+        const criticalPreset = screen.getByRole('button', { name: /Critical 61-90/i });
+        fireEvent.click(criticalPreset);
+
+        // Amount due should be updated to 340000
+        const amountInput = screen.getByDisplayValue('340000');
+        expect(amountInput).toBeInTheDocument();
+    });
+
+    it('opens Graph Routing Engine Decision Trace modal', async () => {
+        render(<FomsFinancialMetricsView initialTab="routing" />);
+
+        const traceBtns = screen.getAllByRole('button', { name: /trace/i });
+        fireEvent.click(traceBtns[0]);
+
+        // Inspector modal open
+        expect(screen.getByText(/Graph Routing Engine Decision Trace/i)).toBeInTheDocument();
+        expect(screen.getByText('Execution Graph Architecture')).toBeInTheDocument();
+        expect(screen.getByText('FOMS Aging Engine')).toBeInTheDocument();
+        expect(screen.getByText('STARS Webhook Interceptor')).toBeInTheDocument();
+    });
+
+    it('calls onOpenTask when clicking View Task in the alerts stream', async () => {
+        const handleOpenTask = vi.fn();
+        render(<FomsFinancialMetricsView initialTab="routing" onOpenTask={handleOpenTask} />);
+
+        const viewTaskBtns = screen.getAllByRole('button', { name: /view task/i });
+        fireEvent.click(viewTaskBtns[0]);
+
+        expect(handleOpenTask).toHaveBeenCalledWith('c102a9e3-4f2b-42e1-884b-703c90e21a01');
+    });
 });

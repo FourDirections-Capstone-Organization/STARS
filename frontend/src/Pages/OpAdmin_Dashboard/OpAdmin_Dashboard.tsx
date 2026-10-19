@@ -2288,6 +2288,22 @@ const DashboardTab: React.FC<{
                             onViewClientTasks={() => {
                                 onNewTask ? onNewTask() : null;
                             }}
+                            onOpenTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                } else {
+                                    api.get(`/api/Task/${taskId}`).then(res => {
+                                        if (res.data?.data) {
+                                            setActiveTab('tasks');
+                                            setDetailTask(mapTaskDetailToTaskView(res.data.data));
+                                        }
+                                    }).catch(() => {
+                                        setActiveTab('tasks');
+                                    });
+                                }
+                            }}
                         />
                     ) : (
                         <>
@@ -9339,6 +9355,22 @@ export default function OpsAdminDashboard() {
                             onViewClientTasks={() => {
                                 handleNavChange('tasks');
                                 setTaskTab('all');
+                            }}
+                            onOpenTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                } else {
+                                    api.get(`/api/Task/${taskId}`).then(res => {
+                                        if (res.data?.data) {
+                                            setActiveTab('tasks');
+                                            setDetailTask(mapTaskDetailToTaskView(res.data.data));
+                                        }
+                                    }).catch(() => {
+                                        setActiveTab('tasks');
+                                    });
+                                }
                             }}
                         />
                     </div>

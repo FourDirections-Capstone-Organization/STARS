@@ -19,10 +19,12 @@ import {
     ShieldAlert,
     CreditCard,
     ExternalLink,
+    Zap,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
 import { FomsDashboardFinancialSummary, FomsClientFinancialSummaryItem, FomsFinancialMetricsViewProps } from './types';
+import FomsGraphRoutingPanel from './FomsGraphRoutingPanel';
 import './FomsFinancialMetricsView.css';
 
 // Realistic fallback preview dataset when FOMS database has no webhook updates yet
@@ -106,8 +108,11 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     embedded = false,
     showHeader = true,
     pollingInterval = 30000,
+    initialTab = 'balances',
     onViewClientTasks,
+    onOpenTask,
 }) => {
+    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing'>(initialTab || 'balances');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -348,8 +353,36 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
             )}
 
-            {/* ── 6 Status KPI Cards Grid ── */}
-            <div className="foms-kpi-grid">
+            {/* ── Sub-Navigation Tab Bar: Balances vs Collection Graph Routing ── */}
+            <div className="foms-hub-nav">
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'balances' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('balances')}
+                >
+                    <Building size={14} />
+                    <span>Client Financial Balances</span>
+                </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'routing' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('routing')}
+                >
+                    <Zap size={14} className="foms-pulse-icon" />
+                    <span>Collection Alerts &amp; Graph Routing</span>
+                    <span className="foms-tab-badge">Automated</span>
+                </button>
+            </div>
+
+            {activeHubTab === 'routing' ? (
+                <FomsGraphRoutingPanel
+                    onOpenTask={onOpenTask}
+                    onViewClientTasks={onViewClientTasks}
+                />
+            ) : (
+                <>
+                    {/* ── 6 Status KPI Cards Grid ── */}
+                    <div className="foms-kpi-grid">
                 {/* 1. Total Outstanding Balance */}
                 <div className="foms-kpi-card variant-outstanding">
                     <div className="foms-kpi-top">
@@ -922,6 +955,8 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         </div>
                     </div>
                 </div>
+            )}
+                </>
             )}
         </div>
     );
