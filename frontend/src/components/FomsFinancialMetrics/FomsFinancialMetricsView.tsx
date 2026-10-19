@@ -21,12 +21,15 @@ import {
     ExternalLink,
     Zap,
     FileCheck,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
 import { FomsDashboardFinancialSummary, FomsClientFinancialSummaryItem, FomsFinancialMetricsViewProps } from './types';
 import FomsGraphRoutingPanel from './FomsGraphRoutingPanel';
 import FomsEndorsementPanel from './FomsEndorsementPanel';
+import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
 // Realistic fallback preview dataset when FOMS database has no webhook updates yet
@@ -126,6 +129,10 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'with_balance' | 'paid' | 'pending'>('all');
     const [sortBy, setSortBy] = useState<'balance_desc' | 'balance_asc' | 'overdue_desc' | 'name_asc' | 'date_asc'>('balance_desc');
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const pageSize = 8;
 
     // UI Interactive States
     const [selectedClient, setSelectedClient] = useState<FomsClientFinancialSummaryItem | null>(null);
@@ -273,6 +280,19 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 return 0;
             });
     }, [activeSummary, searchQuery, statusFilter, sortBy]);
+
+    // Pagination calculations
+    const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
+    const paginatedClients = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredClients.slice(startIndex, startIndex + pageSize);
+    }, [filteredClients, currentPage, pageSize]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(1);
+        }
+    }, [totalPages, currentPage]);
 
     // Donut Chart Data for Invoice Statuses
     const chartData = useMemo(() => {
@@ -659,32 +679,35 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
             </div>
 
             {/* ── Client Financial Statuses Monitoring Table ── */}
-            <div className="foms-table-card">
-                <div className="foms-panel-header" style={{ borderBottom: 'none', paddingBottom: 0, marginBottom: '0.75rem' }}>
+            <div className="table-card foms-table-card">
+                <div className="table-card-header">
                     <div>
-                        <h3 className="foms-panel-title">
-                            <Building size={16} style={{ color: 'var(--teal, #00A99D)' }} />
-                            <span>Client Financial Statuses & Aging Monitor</span>
+                        <h3 className="table-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Building size={18} style={{ color: 'var(--teal, #008B8B)' }} />
+                            <span>Client Financial Statuses &amp; Aging Monitor</span>
                         </h3>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)', margin: '0.2rem 0 0' }}>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
                             Live account balances, payment status tags, and overdue alerts routed from FOMS
                         </p>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)', fontWeight: 600 }}>
+                    <span className="table-card-results-info">
                         {filteredClients.length} of {activeSummary.topOutstandingClients.length} accounts
                     </span>
                 </div>
 
-                {/* Toolbar */}
-                <div className="foms-table-toolbar">
-                    <div className="foms-search-wrap">
-                        <Search size={14} className="foms-search-icon" />
+                {/* Toolbar using standard filter bar */}
+                <div className="table-card-filter-bar" style={{ padding: '0 20px 14px' }}>
+                    <div className="table-card-search-input-wrap">
+                        <Search size={14} className="table-card-search-icon" />
                         <input
                             type="text"
-                            className="foms-search-input"
+                            className="table-card-search-input"
                             placeholder="Search client name or account ID..."
                             value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
+                            onChange={e => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1);
+                            }}
                         />
                     </div>
 
@@ -692,38 +715,54 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         <button
                             type="button"
                             className={`foms-chip ${statusFilter === 'all' ? 'active' : ''}`}
-                            onClick={() => setStatusFilter('all')}
+                            onClick={() => {
+                                setStatusFilter('all');
+                                setCurrentPage(1);
+                            }}
                         >
                             All ({activeSummary.topOutstandingClients.length})
                         </button>
                         <button
                             type="button"
                             className={`foms-chip ${statusFilter === 'overdue' ? 'active' : ''}`}
-                            onClick={() => setStatusFilter('overdue')}
-                            style={statusFilter === 'overdue' ? { background: '#DC2626', borderColor: '#DC2626' } : {}}
+                            onClick={() => {
+                                setStatusFilter('overdue');
+                                setCurrentPage(1);
+                            }}
+                            style={statusFilter === 'overdue' ? { background: '#DC2626', borderColor: '#DC2626', color: '#ffffff' } : {}}
                         >
                             Overdue Only ({activeSummary.topOutstandingClients.filter(c => c.overdueInvoicesCount > 0).length})
                         </button>
                         <button
                             type="button"
                             className={`foms-chip ${statusFilter === 'with_balance' ? 'active' : ''}`}
-                            onClick={() => setStatusFilter('with_balance')}
+                            onClick={() => {
+                                setStatusFilter('with_balance');
+                                setCurrentPage(1);
+                            }}
                         >
                             With Balance ({activeSummary.topOutstandingClients.filter(c => c.outstandingBalance > 0).length})
                         </button>
                         <button
                             type="button"
                             className={`foms-chip ${statusFilter === 'paid' ? 'active' : ''}`}
-                            onClick={() => setStatusFilter('paid')}
+                            onClick={() => {
+                                setStatusFilter('paid');
+                                setCurrentPage(1);
+                            }}
                         >
                             Paid / Settled ({activeSummary.topOutstandingClients.filter(c => c.latestStatus.toLowerCase() === 'paid').length})
                         </button>
                     </div>
 
                     <select
-                        className="foms-sort-select"
+                        className="dt-filter-select"
                         value={sortBy}
-                        onChange={e => setSortBy(e.target.value as any)}
+                        onChange={e => {
+                            setSortBy(e.target.value as any);
+                            setCurrentPage(1);
+                        }}
+                        style={{ marginLeft: 'auto' }}
                     >
                         <option value="balance_desc">Highest Outstanding Balance</option>
                         <option value="balance_asc">Lowest Outstanding Balance</option>
@@ -734,8 +773,8 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
 
                 {/* Table */}
-                <div className="foms-table-wrapper">
-                    <table className="foms-table">
+                <div className="table-card-wrap">
+                    <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 800 }}>
                         <thead>
                             <tr>
                                 <th>Client / Account</th>
@@ -747,7 +786,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredClients.length === 0 ? (
+                            {paginatedClients.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--tt, #6B7280)' }}>
                                         <AlertCircle size={24} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.5 }} />
@@ -755,7 +794,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                                     </td>
                                 </tr>
                             ) : (
-                                filteredClients.map(client => {
+                                paginatedClients.map(client => {
                                     const statusLower = client.latestStatus.toLowerCase();
                                     const dueMeta = formatDueDateRelative(client.nextDueDate);
                                     const hasOverdue = client.overdueInvoicesCount > 0;
@@ -861,6 +900,53 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Bar */}
+                {filteredClients.length > 0 && (
+                    <div className="table-card-pagination-bar">
+                        <span className="table-card-pagination-info">
+                            Showing {Math.min((currentPage - 1) * pageSize + 1, filteredClients.length)} to {Math.min(currentPage * pageSize, filteredClients.length)} of {filteredClients.length} accounts
+                        </span>
+                        <div className="table-card-pagination-controls">
+                            <div className="dt-page-btns" role="group" aria-label="Page navigation">
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === 1}
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    aria-label="Previous page"
+                                    title="Previous page"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="dt-page-btns-inner">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                                        <button
+                                            key={pageNum}
+                                            type="button"
+                                            className={`dt-page-btn ${currentPage === pageNum ? 'dt-page-btn--active' : ''}`}
+                                            onClick={() => setCurrentPage(pageNum)}
+                                            aria-label={`Page ${pageNum}`}
+                                            aria-current={currentPage === pageNum ? 'page' : undefined}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    ))}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === totalPages}
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    aria-label="Next page"
+                                    title="Next page"
+                                >
+                                    <ChevronRight size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ── Client Detail Modal / Drawer ── */}

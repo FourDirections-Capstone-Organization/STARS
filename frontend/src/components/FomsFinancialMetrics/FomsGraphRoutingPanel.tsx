@@ -22,12 +22,14 @@ import {
     DollarSign,
     X,
     Filter,
+    ChevronLeft,
     ChevronRight,
     CheckCheck,
     TrendingDown,
 } from 'lucide-react';
 import api from '../../api';
 import { FomsOverdueAlertItem, CoordinatorWorkloadItem } from './types';
+import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
 // Realistic pre-seeded collection alerts intercepted from FOMS aging logic
@@ -197,6 +199,10 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [agingFilter, setAgingFilter] = useState<string>('all');
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const pageSize = 6;
 
     // Simulator Drawer State
     const [showSimulator, setShowSimulator] = useState(false);
@@ -379,6 +385,19 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
             return true;
         });
     }, [alerts, searchQuery, agingFilter]);
+
+    // Pagination calculations
+    const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / pageSize));
+    const paginatedAlerts = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredAlerts.slice(startIndex, startIndex + pageSize);
+    }, [filteredAlerts, currentPage, pageSize]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(1);
+        }
+    }, [totalPages, currentPage]);
 
     // KPI Counters
     const totalAlertsCount = alerts.length;
@@ -787,85 +806,100 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
             </div>
 
             {/* ── Intercepted Alerts Stream Table ── */}
-            <div className="foms-card">
-                <div className="foms-card-header">
+            <div className="table-card foms-table-card">
+                <div className="table-card-header">
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <ShieldAlert size={18} style={{ color: '#DC2626' }} />
-                            <h3 className="foms-card-title">Intercepted Overdue Accounts &amp; Generated Tasks</h3>
+                            <ShieldAlert size={18} style={{ color: 'var(--urgent, #FF6D00)' }} />
+                            <h3 className="table-card-title">Intercepted Overdue Accounts &amp; Generated Tasks</h3>
                             <span className="foms-live-beacon" style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}>
                                 <span className="foms-beacon-dot" /> Live Stream
                             </span>
                         </div>
-                        <p className="foms-card-subtitle">
+                        <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
                             Finance alerts captured from FOMS aging logic, automatically bound to STARS collection tasks and optimal Coordinators.
                         </p>
                     </div>
 
-                    <div className="foms-table-controls">
-                        {/* Search */}
-                        <div className="foms-search-wrap">
-                            <Search size={14} className="foms-search-icon" />
-                            <input
-                                type="text"
-                                className="foms-search-input"
-                                placeholder="Search invoice, client, or coordinator..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    className="foms-search-clear"
-                                    onClick={() => setSearchQuery('')}
-                                >
-                                    <X size={12} />
-                                </button>
-                            )}
-                        </div>
+                    <span className="table-card-results-info">
+                        {filteredAlerts.length} total alert{filteredAlerts.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
 
-                        {/* Aging filter pills */}
-                        <div className="foms-filter-chips">
-                            {[
-                                { key: 'all', label: 'All Alerts' },
-                                { key: 'due_soon', label: 'Due Soon' },
-                                { key: '1_30', label: '1-30 Days' },
-                                { key: '31_60', label: '31-60 Days' },
-                                { key: '61_90', label: '61-90 Days' },
-                                { key: '90_plus', label: '90+ Days' },
-                            ].map(filter => (
-                                <button
-                                    key={filter.key}
-                                    type="button"
-                                    className={`foms-filter-chip ${agingFilter === filter.key ? 'active' : ''}`}
-                                    onClick={() => setAgingFilter(filter.key)}
-                                >
-                                    {filter.label}
-                                </button>
-                            ))}
-                        </div>
+                <div className="table-card-filter-bar" style={{ padding: '0 20px 14px' }}>
+                    {/* Search */}
+                    <div className="table-card-search-input-wrap">
+                        <Search size={14} className="table-card-search-icon" />
+                        <input
+                            type="text"
+                            className="table-card-search-input"
+                            placeholder="Search invoice, client, or coordinator..."
+                            value={searchQuery}
+                            onChange={e => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1);
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                className="foms-search-clear"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Aging filter pills */}
+                    <div className="foms-filter-chips">
+                        {[
+                            { key: 'all', label: 'All Alerts' },
+                            { key: 'due_soon', label: 'Due Soon' },
+                            { key: '1_30', label: '1-30 Days' },
+                            { key: '31_60', label: '31-60 Days' },
+                            { key: '61_90', label: '61-90 Days' },
+                            { key: '90_plus', label: '90+ Days' },
+                        ].map(filter => (
+                            <button
+                                key={filter.key}
+                                type="button"
+                                className={`foms-filter-chip ${agingFilter === filter.key ? 'active' : ''}`}
+                                onClick={() => {
+                                    setAgingFilter(filter.key);
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                {filter.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {filteredAlerts.length === 0 ? (
-                    <div className="foms-empty-state">
-                        <AlertCircle size={32} className="foms-empty-icon" />
-                        <h4 className="foms-empty-title">No matching collection alerts found</h4>
-                        <p className="foms-empty-desc">Try clearing your search query or trigger a simulated FOMS transaction alert.</p>
+                    <div className="table-card-empty-state">
+                        <AlertCircle size={32} style={{ opacity: 0.5, color: 'var(--tt, #6B7280)' }} />
+                        <h4 style={{ margin: '8px 0 4px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>No matching collection alerts found</h4>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>Try clearing your search query or trigger a simulated FOMS transaction alert.</p>
                         <button
                             type="button"
                             className="foms-btn-primary"
+                            style={{ marginTop: 12 }}
                             onClick={() => {
                                 setAgingFilter('all');
                                 setSearchQuery('');
+                                setCurrentPage(1);
                             }}
                         >
                             Reset Filters
                         </button>
                     </div>
                 ) : (
-                    <div className="foms-table-wrap">
-                        <table className="foms-table">
+                    <div className="table-card-wrap">
+                        <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 900 }}>
                             <thead>
                                 <tr>
                                     <th>INVOICE &amp; CLIENT</th>
@@ -877,7 +911,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredAlerts.map(alert => {
+                                {paginatedAlerts.map(alert => {
                                     const isCritical = alert.daysOverdue >= 30 || alert.agingStatus.includes('60') || alert.agingStatus.includes('90');
                                     const isDueSoon = alert.daysOverdue <= 0 || alert.agingStatus.toLowerCase().includes('due');
 
@@ -894,7 +928,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                                             title="Copy Invoice Number"
                                                             onClick={() => handleCopy(alert.invoiceNumber, `inv-${alert.id}`)}
                                                         >
-                                                            {copiedKey === `inv-${alert.id}` ? <Check size={12} color="#00A99D" /> : <Copy size={12} />}
+                                                            {copiedKey === `inv-${alert.id}` ? <Check size={12} color="#008B8B" /> : <Copy size={12} />}
                                                         </button>
                                                     </div>
                                                     <span className="foms-client-name" title={alert.clientName}>
@@ -996,6 +1030,53 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {/* Pagination Bar */}
+                {filteredAlerts.length > 0 && (
+                    <div className="table-card-pagination-bar">
+                        <span className="table-card-pagination-info">
+                            Showing {Math.min((currentPage - 1) * pageSize + 1, filteredAlerts.length)} to {Math.min(currentPage * pageSize, filteredAlerts.length)} of {filteredAlerts.length} alerts
+                        </span>
+                        <div className="table-card-pagination-controls">
+                            <div className="dt-page-btns" role="group" aria-label="Page navigation">
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === 1}
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    aria-label="Previous page"
+                                    title="Previous page"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="dt-page-btns-inner">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                                        <button
+                                            key={pageNum}
+                                            type="button"
+                                            className={`dt-page-btn ${currentPage === pageNum ? 'dt-page-btn--active' : ''}`}
+                                            onClick={() => setCurrentPage(pageNum)}
+                                            aria-label={`Page ${pageNum}`}
+                                            aria-current={currentPage === pageNum ? 'page' : undefined}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    ))}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === totalPages}
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    aria-label="Next page"
+                                    title="Next page"
+                                >
+                                    <ChevronRight size={14} />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

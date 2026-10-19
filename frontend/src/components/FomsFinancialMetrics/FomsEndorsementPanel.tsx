@@ -17,6 +17,7 @@ import {
     DollarSign,
     X,
     Filter,
+    ChevronLeft,
     ChevronRight,
     AlertCircle,
     Calendar,
@@ -28,6 +29,7 @@ import {
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import { FomsEndorsementItem, SubmitSignedEndorsementPayload } from './types';
+import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
 // Realistic pre-seeded endorsement tasks received from FOMS
@@ -148,6 +150,10 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'endorsed' | 'failed'>('all');
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const pageSize = 6;
 
     // Modal state for Submitting Signed Endorsement Copy
     const [signingItem, setSigningItem] = useState<FomsEndorsementItem | null>(null);
@@ -272,6 +278,19 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             return true;
         });
     }, [endorsements, searchQuery, statusFilter]);
+
+    // Pagination calculations
+    const totalPages = Math.max(1, Math.ceil(filteredEndorsements.length / pageSize));
+    const paginatedEndorsements = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredEndorsements.slice(startIndex, startIndex + pageSize);
+    }, [filteredEndorsements, currentPage, pageSize]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(1);
+        }
+    }, [totalPages, currentPage]);
 
     // KPI Counters
     const totalCount = endorsements.length;
@@ -608,82 +627,97 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             </div>
 
             {/* ── Endorsement Delivery Tasks Table ── */}
-            <div className="foms-card">
-                <div className="foms-card-header">
+            <div className="table-card foms-table-card">
+                <div className="table-card-header">
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <FileText size={18} style={{ color: 'var(--teal, #00A99D)' }} />
-                            <h3 className="foms-card-title">Physical Invoice Delivery &amp; Receiving Register</h3>
+                            <FileText size={18} style={{ color: 'var(--teal, #008B8B)' }} />
+                            <h3 className="table-card-title">Physical Invoice Delivery &amp; Receiving Register</h3>
                             <span className="foms-live-beacon" style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}>
                                 <span className="foms-beacon-dot" /> Live FOMS Integration 1
                             </span>
                         </div>
-                        <p className="foms-card-subtitle">
+                        <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
                             Physical invoice deliveries in progress. Submitting the signed receiving copy transmits the exact receipt date to FOMS to begin the 30-day term.
                         </p>
                     </div>
 
-                    <div className="foms-table-controls">
-                        {/* Search */}
-                        <div className="foms-search-wrap">
-                            <Search size={14} className="foms-search-icon" />
-                            <input
-                                type="text"
-                                className="foms-search-input"
-                                placeholder="Search invoice, client, or courier..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    className="foms-search-clear"
-                                    onClick={() => setSearchQuery('')}
-                                >
-                                    <X size={12} />
-                                </button>
-                            )}
-                        </div>
+                    <span className="table-card-results-info">
+                        {filteredEndorsements.length} total invoice{filteredEndorsements.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
 
-                        {/* Status Filter Chips */}
-                        <div className="foms-filter-chips">
-                            {[
-                                { key: 'all', label: 'All Invoices' },
-                                { key: 'pending', label: 'Pending Sign-off' },
-                                { key: 'endorsed', label: 'Endorsed & Synced' },
-                            ].map(filter => (
-                                <button
-                                    key={filter.key}
-                                    type="button"
-                                    className={`foms-filter-chip ${statusFilter === filter.key ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter(filter.key as any)}
-                                >
-                                    {filter.label}
-                                </button>
-                            ))}
-                        </div>
+                <div className="table-card-filter-bar" style={{ padding: '0 20px 14px' }}>
+                    {/* Search */}
+                    <div className="table-card-search-input-wrap">
+                        <Search size={14} className="table-card-search-icon" />
+                        <input
+                            type="text"
+                            className="table-card-search-input"
+                            placeholder="Search invoice, client, or courier..."
+                            value={searchQuery}
+                            onChange={e => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1);
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                className="foms-search-clear"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Status Filter Chips */}
+                    <div className="foms-filter-chips">
+                        {[
+                            { key: 'all', label: 'All Invoices' },
+                            { key: 'pending', label: 'Pending Sign-off' },
+                            { key: 'endorsed', label: 'Endorsed & Synced' },
+                        ].map(filter => (
+                            <button
+                                key={filter.key}
+                                type="button"
+                                className={`foms-filter-chip ${statusFilter === filter.key ? 'active' : ''}`}
+                                onClick={() => {
+                                    setStatusFilter(filter.key as any);
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                {filter.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {filteredEndorsements.length === 0 ? (
-                    <div className="foms-empty-state">
-                        <AlertCircle size={32} className="foms-empty-icon" />
-                        <h4 className="foms-empty-title">No invoice endorsement tasks found</h4>
-                        <p className="foms-empty-desc">Try adjusting your search criteria or trigger a simulated FOMS endorsement request.</p>
+                    <div className="table-card-empty-state">
+                        <AlertCircle size={32} style={{ opacity: 0.5, color: 'var(--tt, #6B7280)' }} />
+                        <h4 style={{ margin: '8px 0 4px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>No invoice endorsement tasks found</h4>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>Try adjusting your search criteria or trigger a simulated FOMS endorsement request.</p>
                         <button
                             type="button"
                             className="foms-btn-primary"
+                            style={{ marginTop: 12 }}
                             onClick={() => {
                                 setStatusFilter('all');
                                 setSearchQuery('');
+                                setCurrentPage(1);
                             }}
                         >
                             Reset Filters
                         </button>
                     </div>
                 ) : (
-                    <div className="foms-table-wrap">
-                        <table className="foms-table">
+                    <div className="table-card-wrap">
+                        <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 950 }}>
                             <thead>
                                 <tr>
                                     <th>INVOICE &amp; CLIENT</th>
@@ -696,7 +730,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredEndorsements.map(item => {
+                                {paginatedEndorsements.map(item => {
                                     const isSigned = item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || !!item.actualReceivedDate;
 
                                     return (
@@ -859,6 +893,53 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {/* Pagination Bar */}
+                {filteredEndorsements.length > 0 && (
+                    <div className="table-card-pagination-bar">
+                        <span className="table-card-pagination-info">
+                            Showing {Math.min((currentPage - 1) * pageSize + 1, filteredEndorsements.length)} to {Math.min(currentPage * pageSize, filteredEndorsements.length)} of {filteredEndorsements.length} invoices
+                        </span>
+                        <div className="table-card-pagination-controls">
+                            <div className="dt-page-btns" role="group" aria-label="Page navigation">
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === 1}
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    aria-label="Previous page"
+                                    title="Previous page"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="dt-page-btns-inner">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                                        <button
+                                            key={pageNum}
+                                            type="button"
+                                            className={`dt-page-btn ${currentPage === pageNum ? 'dt-page-btn--active' : ''}`}
+                                            onClick={() => setCurrentPage(pageNum)}
+                                            aria-label={`Page ${pageNum}`}
+                                            aria-current={currentPage === pageNum ? 'page' : undefined}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    ))}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="dt-page-btn dt-page-btn--icon"
+                                    disabled={currentPage === totalPages}
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    aria-label="Next page"
+                                    title="Next page"
+                                >
+                                    <ChevronRight size={14} />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

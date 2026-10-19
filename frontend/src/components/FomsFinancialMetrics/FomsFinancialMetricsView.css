@@ -1,3 +1,5 @@
+@import '../ui/DataTable.css';
+
 /* ================================================================
    FOMS Financial & Client Status Metrics View
    Part of Speedex STARS OneUI Design System
@@ -858,12 +860,13 @@
 .foms-hub-nav {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    background: #f1f5f9;
+    gap: 0.35rem;
+    background: var(--bg-card, #ffffff);
     padding: 0.35rem;
-    border-radius: 12px;
+    border-radius: var(--r-md, 12px);
     border: 1px solid var(--border, #E2E8F0);
     width: fit-content;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .foms-hub-tab {
@@ -873,23 +876,24 @@
     padding: 0.55rem 1.15rem;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--ts, #4B5563);
+    font-family: inherit;
+    color: var(--text-secondary, #64748B);
     background: transparent;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--r-sm, 8px);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .foms-hub-tab:hover {
-    color: var(--tp, #0F172A);
-    background: rgba(255, 255, 255, 0.6);
+    color: var(--text-primary, #0F172A);
+    background: var(--bg-main, #F8FAFC);
 }
 
 .foms-hub-tab.active {
-    color: var(--navy, #1A2238);
-    background: #ffffff;
-    box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.08);
+    color: #ffffff;
+    background: var(--navy, #1A2238);
+    box-shadow: 0 2px 8px -1px rgba(26, 34, 56, 0.25);
 }
 
 .foms-tab-badge {
@@ -901,6 +905,17 @@
     border-radius: 9999px;
     background: rgba(0, 169, 157, 0.12);
     color: var(--teal, #008B8B);
+    transition: all 0.2s ease;
+}
+
+.foms-hub-tab.active .foms-tab-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+.foms-hub-tab.active .foms-tab-badge.badge-endorsement {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
 }
 
 .foms-pulse-icon {
@@ -929,11 +944,11 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 1.5rem;
-    padding: 1.5rem 1.8rem;
-    background: linear-gradient(135deg, rgba(27, 37, 75, 0.05) 0%, rgba(0, 169, 157, 0.08) 100%), #ffffff;
-    border: 1px solid rgba(0, 169, 157, 0.25);
-    border-radius: 16px;
-    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+    padding: 1.5rem 1.75rem;
+    background: linear-gradient(135deg, rgba(26, 34, 56, 0.03) 0%, rgba(0, 139, 139, 0.05) 100%), var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-lg, 16px);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
 }
 
 .foms-graph-hero-content {
@@ -962,7 +977,7 @@
 .foms-graph-hero-title {
     font-size: 1.35rem;
     font-weight: 800;
-    color: var(--tp, #0F172A);
+    color: var(--navy, #1A2238);
     letter-spacing: -0.02em;
     margin: 0;
 }
@@ -970,7 +985,7 @@
 .foms-graph-hero-desc {
     font-size: 0.88rem;
     line-height: 1.5;
-    color: var(--tt, #4B5563);
+    color: var(--text-secondary, #4B5563);
     margin: 0;
 }
 
@@ -1652,4 +1667,198 @@
     font-weight: 600;
     color: var(--navy, #1A2238);
 }
+
+/* ================================================================
+   FOMS General Buttons, Cards & OneUI Polish
+   ================================================================ */
+.foms-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-lg, 16px);
+    padding: 1.25rem 1.4rem;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.04));
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.foms-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.foms-card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary, #0F172A);
+    margin: 0;
+}
+
+.foms-card-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #6B7280);
+    margin: 0.25rem 0 0;
+}
+
+.foms-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.15rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: #ffffff;
+    background: var(--teal, #008B8B);
+    border: none;
+    border-radius: var(--r-sm, 8px);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 139, 139, 0.25);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+}
+
+.foms-btn-primary:hover:not(:disabled) {
+    background: #007777;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 139, 139, 0.35);
+}
+
+.foms-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.foms-btn-outline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.15rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--navy, #1A2238);
+    background: #ffffff;
+    border: 1.5px solid var(--border, #CBD5E1);
+    border-radius: var(--r-sm, 8px);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+}
+
+.foms-btn-outline:hover:not(:disabled) {
+    border-color: var(--teal, #008B8B);
+    color: var(--teal, #008B8B);
+    background: rgba(0, 139, 139, 0.04);
+}
+
+.foms-btn-action-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-secondary, #475569);
+    background: transparent;
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-sm, 6px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.foms-btn-action-outline:hover {
+    border-color: var(--teal, #008B8B);
+    color: var(--teal, #008B8B);
+    background: rgba(0, 139, 139, 0.05);
+}
+
+.foms-btn-resend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--teal, #008B8B);
+    background: rgba(0, 139, 139, 0.08);
+    border: 1px solid rgba(0, 139, 139, 0.25);
+    border-radius: var(--r-sm, 6px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.foms-btn-resend:hover {
+    background: var(--teal, #008B8B);
+    color: #ffffff;
+}
+
+.foms-btn-icon-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary, #94A3B8);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.foms-btn-icon-sm:hover {
+    background: rgba(0, 139, 139, 0.08);
+    color: var(--teal, #008B8B);
+}
+
+.foms-search-clear {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease;
+}
+
+.foms-search-clear:hover {
+    background: #cbd5e1;
+    color: #0f172a;
+}
+
+/* Ensure TableCard blended with FOMS works cleanly */
+.table-card.foms-table-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-lg, 16px);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.04));
+    overflow: hidden;
+}
+
+.table-card.foms-table-card:hover {
+    box-shadow: var(--shadow-md, 0 4px 14px rgba(15, 23, 42, 0.06));
+}
+
+.table-card.foms-table-card .table-card-data-table td {
+    vertical-align: middle;
+}
+
 
