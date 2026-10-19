@@ -22,6 +22,8 @@ import {
     Hash,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Lock,
     Eye,
     EyeOff,
@@ -595,6 +597,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
     const [form, setForm] = useState<FormState>({ ...EMPTY_FORM });
     const [errors, setErrors] = useState<FieldError>({});
     const [dirty, setDirty] = useState(false);
+    const [systemAccessCollapsed, setSystemAccessCollapsed] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [apiError, setApiError] = useState('');
     const [successData, setSuccessData] = useState<{ employeeNumber: string } | null>(null);
@@ -822,7 +825,13 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
     const handleSubmit = () => {
         if (submitting || empNumLoading || !form.employeeNumber) return;
         const errs = validate(form);
-        if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+        if (Object.keys(errs).length > 0) {
+            setErrors(errs);
+            if (errs.targetSystems || errs.departmentId || errs.jobPositionId || errs.role || errs.dmsRole || errs.dmsAreas || errs.fomsRole || errs.fomsSalaryRate) {
+                setSystemAccessCollapsed(false);
+            }
+            return;
+        }
         setGatePassword('');
         setGateError('');
         setShowRegisterConfirm(true);
@@ -881,71 +890,487 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     badgeStatus: 'Pending',
                 } : undefined}
             >
-                {/* ── Section 1: Target Systems & Ecosystem ── */}
-                <div className="fm-section">
-                    <h5 className="fm-section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        Target Operational Systems & Access Provisioning <span style={{ color: 'var(--primary)' }}>★</span>
-                    </h5>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, marginTop: -4 }}>
-                        Select all operational platforms this employee is authorized to access. Credentials will automatically synchronize across all selected systems.
-                    </p>
+                {/* ── Section 1: System Access & Role Configuration (Collapsible) ── */}
+                <div className="fm-section" style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    background: 'var(--bg-card, #ffffff)',
+                    overflow: 'hidden',
+                    marginBottom: 20,
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
+                }}>
+                    <div
+                        onClick={() => setSystemAccessCollapsed(prev => !prev)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            background: 'rgba(248, 250, 252, 0.85)',
+                            borderBottom: systemAccessCollapsed ? 'none' : '1px solid var(--border)',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            transition: 'background 0.15s ease'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--primary, #3b82f6)'
+                            }}>
+                                <Shield size={16} />
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span>System Access & Role Configuration</span>
+                                    <span style={{
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        padding: '2px 8px',
+                                        borderRadius: 12,
+                                        background: (form.targetSystems?.length || 0) > 0 ? 'rgba(59, 130, 246, 0.12)' : 'var(--status-pending-bg, #f1f5f9)',
+                                        color: (form.targetSystems?.length || 0) > 0 ? 'var(--primary, #3b82f6)' : 'var(--text-secondary, #64748b)'
+                                    }}>
+                                        {(form.targetSystems?.length || 0)} of 3 Selected
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                                    Authorize operational platforms and configure employee roles directly
+                                </div>
+                            </div>
+                        </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 8 }}>
-                        {[
-                            { id: 'STARS', name: 'STARS', label: 'HQ & Task Review', desc: 'Task allocation, operational review, workflow control', icon: '⭐' },
-                            { id: 'DMS', name: 'DMS', label: 'Delivery & Fleet System', desc: 'Driver routing, parcel dispatch, courier management', icon: '🚚' },
-                            { id: 'FOMS', name: 'FOMS', label: 'Finance & Billing System', desc: 'Financial accounting, audits, payroll, order ledger', icon: '💰' },
-                        ].map(sys => {
-                            const isChecked = form.targetSystems?.includes(sys.id);
-                            return (
-                                <label
-                                    key={sys.id}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: 12,
-                                        padding: '12px 14px',
-                                        borderRadius: 8,
-                                        border: isChecked ? '2px solid var(--primary, #3b82f6)' : '1px solid var(--border)',
-                                        background: isChecked ? 'rgba(59, 130, 246, 0.06)' : 'var(--bg-card, transparent)',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.15s ease'
-                                    }}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        style={{ marginTop: 3, width: 16, height: 16, accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
-                                        onChange={e => {
-                                            setDirty(true);
-                                            const current = form.targetSystems || [];
-                                            const next = e.target.checked
-                                                ? [...current, sys.id]
-                                                : current.filter(s => s !== sys.id);
-                                            setForm(prev => ({
-                                                ...prev,
-                                                targetSystems: next,
-                                                targetSystem: next.join(','),
-                                            }));
-                                            setErrors(prev => ({
-                                                ...prev,
-                                                targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
-                                            }));
-                                        }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <span>{sys.icon}</span> {sys.name} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• {sys.label}</span>
-                                        </div>
-                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.3 }}>
-                                            {sys.desc}
-                                        </div>
-                                    </div>
-                                </label>
-                            );
-                        })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>
+                                {systemAccessCollapsed ? 'Expand' : 'Collapse'}
+                            </span>
+                            {systemAccessCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                        </div>
                     </div>
-                    <FieldErr msg={errors.targetSystems} />
+
+                    {!systemAccessCollapsed && (
+                        <div style={{ padding: '16px' }}>
+                            {/* STARS System Card */}
+                            {(() => {
+                                const isChecked = form.targetSystems?.includes('STARS');
+                                return (
+                                    <div style={{
+                                        borderRadius: 8,
+                                        border: isChecked ? '1.5px solid var(--primary, #3b82f6)' : '1px solid var(--border)',
+                                        background: isChecked ? 'rgba(59, 130, 246, 0.02)' : 'var(--bg-card, transparent)',
+                                        marginBottom: 12,
+                                        overflow: 'hidden',
+                                        transition: 'all 0.15s ease'
+                                    }}>
+                                        <label style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '12px 14px',
+                                            cursor: 'pointer',
+                                            background: isChecked ? 'rgba(59, 130, 246, 0.06)' : 'transparent',
+                                            userSelect: 'none'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    style={{ width: 17, height: 17, accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
+                                                    onChange={e => {
+                                                        setDirty(true);
+                                                        const current = form.targetSystems || [];
+                                                        const next = e.target.checked
+                                                            ? [...current, 'STARS']
+                                                            : current.filter(s => s !== 'STARS');
+                                                        setForm(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next,
+                                                            targetSystem: next.join(','),
+                                                        }));
+                                                        setErrors(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
+                                                        }));
+                                                    }}
+                                                />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <Shield size={16} style={{ color: 'var(--primary, #3b82f6)' }} />
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                                                            STARS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Head Office & Operations Review</span>
+                                                        </div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                            Task allocation, operational review, workflow control
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span style={{
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                padding: '2px 8px',
+                                                borderRadius: 4,
+                                                background: isChecked ? 'rgba(59, 130, 246, 0.15)' : 'rgba(100, 116, 139, 0.1)',
+                                                color: isChecked ? 'var(--primary, #3b82f6)' : 'var(--text-secondary)'
+                                            }}>
+                                                {isChecked ? 'Active' : 'Not Granted'}
+                                            </span>
+                                        </label>
+
+                                        {isChecked && (
+                                            <div style={{
+                                                padding: '14px 16px',
+                                                borderTop: '1px solid rgba(59, 130, 246, 0.15)',
+                                                background: 'var(--s0, #ffffff)'
+                                            }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary, #3b82f6)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    STARS Role & Department Assignment
+                                                </div>
+                                                <div className="fm-field-grid">
+                                                    {/* Department */}
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="emp-dept">
+                                                            Department <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                                        </label>
+                                                        <select
+                                                            id="emp-dept"
+                                                            value={form.departmentId}
+                                                            onChange={handleChange('departmentId')}
+                                                            className="fm-select"
+                                                            style={inputStyle(errors.departmentId)}
+                                                            disabled={loadingOrg}
+                                                        >
+                                                            <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
+                                                            {departments.map(d => <option key={d.departmentId} value={d.departmentId}>{d.name}</option>)}
+                                                        </select>
+                                                        <FieldErr msg={errors.departmentId} />
+                                                    </div>
+
+                                                    {/* Position */}
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="emp-position">
+                                                            Position <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                                        </label>
+                                                        <select
+                                                            id="emp-position"
+                                                            value={form.jobPositionId}
+                                                            onChange={handleChange('jobPositionId')}
+                                                            className="fm-select"
+                                                            style={{
+                                                                ...inputStyle(errors.jobPositionId),
+                                                                opacity: !form.departmentId ? 0.6 : 1,
+                                                                cursor: !form.departmentId ? 'not-allowed' : 'pointer',
+                                                            }}
+                                                            disabled={!form.departmentId || loadingOrg}
+                                                        >
+                                                            <option value="">
+                                                                {form.departmentId ? 'Select a position' : 'Select department first'}
+                                                            </option>
+                                                            {availablePositions.map(p => <option key={p.jobPositionId} value={p.jobPositionId}>{p.name}</option>)}
+                                                        </select>
+                                                        <FieldErr msg={errors.jobPositionId} />
+                                                    </div>
+
+                                                    {/* System Role */}
+                                                    <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                                                        <label className="fm-label" htmlFor="emp-role">
+                                                            STARS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span>
+                                                        </label>
+                                                        <select
+                                                            id="emp-role"
+                                                            value={form.role}
+                                                            onChange={handleChange('role')}
+                                                            className="fm-select"
+                                                            style={{
+                                                                ...inputStyle(errors.role),
+                                                                opacity: !form.jobPositionId ? 0.6 : 1,
+                                                                cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
+                                                            }}
+                                                            disabled={!form.jobPositionId || loadingOrg}
+                                                        >
+                                                            <option value="">
+                                                                {!form.departmentId
+                                                                    ? 'Select department first'
+                                                                    : !form.jobPositionId
+                                                                        ? 'Select position first'
+                                                                        : 'Select a role'}
+                                                            </option>
+                                                            {allowedRoles.map(r => (
+                                                                <option key={r} value={r}>
+                                                                    {r}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <FieldErr msg={errors.role} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* DMS System Card */}
+                            {(() => {
+                                const isChecked = form.targetSystems?.includes('DMS');
+                                return (
+                                    <div style={{
+                                        borderRadius: 8,
+                                        border: isChecked ? '1.5px solid #10b981' : '1px solid var(--border)',
+                                        background: isChecked ? 'rgba(16, 185, 129, 0.02)' : 'var(--bg-card, transparent)',
+                                        marginBottom: 12,
+                                        overflow: 'hidden',
+                                        transition: 'all 0.15s ease'
+                                    }}>
+                                        <label style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '12px 14px',
+                                            cursor: 'pointer',
+                                            background: isChecked ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
+                                            userSelect: 'none'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    style={{ width: 17, height: 17, accentColor: '#10b981', cursor: 'pointer' }}
+                                                    onChange={e => {
+                                                        setDirty(true);
+                                                        const current = form.targetSystems || [];
+                                                        const next = e.target.checked
+                                                            ? [...current, 'DMS']
+                                                            : current.filter(s => s !== 'DMS');
+                                                        setForm(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next,
+                                                            targetSystem: next.join(','),
+                                                        }));
+                                                        setErrors(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
+                                                        }));
+                                                    }}
+                                                />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <Truck size={16} style={{ color: '#10b981' }} />
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                                                            DMS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Delivery & Fleet System</span>
+                                                        </div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                            Driver routing, parcel dispatch, courier management
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span style={{
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                padding: '2px 8px',
+                                                borderRadius: 4,
+                                                background: isChecked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.1)',
+                                                color: isChecked ? '#059669' : 'var(--text-secondary)'
+                                            }}>
+                                                {isChecked ? 'Active' : 'Not Granted'}
+                                            </span>
+                                        </label>
+
+                                        {isChecked && (
+                                            <div style={{
+                                                padding: '14px 16px',
+                                                borderTop: '1px solid rgba(16, 185, 129, 0.15)',
+                                                background: 'var(--s0, #ffffff)'
+                                            }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#059669', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    DMS Fleet & Dispatch Assignment
+                                                </div>
+                                                <div className="fm-field-grid">
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="dms-role">DMS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                                        <select
+                                                            id="dms-role"
+                                                            value={form.dmsRole || 'Driver'}
+                                                            onChange={e => {
+                                                                setDirty(true);
+                                                                setForm(prev => ({ ...prev, dmsRole: e.target.value }));
+                                                            }}
+                                                            className="fm-select"
+                                                        >
+                                                            <option value="Driver">Driver / Rider</option>
+                                                            <option value="Dispatcher">Dispatcher</option>
+                                                            <option value="Admin">Fleet Administrator</option>
+                                                        </select>
+                                                        <FieldErr msg={errors.dmsRole} />
+                                                    </div>
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
+                                                        <select
+                                                            id="dms-access"
+                                                            value={form.dmsSystemAccess || 'Both'}
+                                                            onChange={e => {
+                                                                setDirty(true);
+                                                                setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
+                                                            }}
+                                                            className="fm-select"
+                                                        >
+                                                            <option value="Both">Both (Mobile App & Web Portal)</option>
+                                                            <option value="Mobile">Mobile Application Only</option>
+                                                            <option value="Web">Web Portal Only</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="fm-field" style={{ gridColumn: 'span 2' }}>
+                                                        <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                                        <input
+                                                            id="dms-areas"
+                                                            type="text"
+                                                            placeholder="e.g. Manila, Quezon City, Makati"
+                                                            value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
+                                                            onChange={e => {
+                                                                setDirty(true);
+                                                                const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                                                setForm(prev => ({ ...prev, dmsAreas: areas }));
+                                                            }}
+                                                            className="fm-input"
+                                                        />
+                                                        <FieldErr msg={errors.dmsAreas} />
+                                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* FOMS System Card */}
+                            {(() => {
+                                const isChecked = form.targetSystems?.includes('FOMS');
+                                return (
+                                    <div style={{
+                                        borderRadius: 8,
+                                        border: isChecked ? '1.5px solid #f59e0b' : '1px solid var(--border)',
+                                        background: isChecked ? 'rgba(245, 158, 11, 0.02)' : 'var(--bg-card, transparent)',
+                                        marginBottom: 4,
+                                        overflow: 'hidden',
+                                        transition: 'all 0.15s ease'
+                                    }}>
+                                        <label style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '12px 14px',
+                                            cursor: 'pointer',
+                                            background: isChecked ? 'rgba(245, 158, 11, 0.06)' : 'transparent',
+                                            userSelect: 'none'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    style={{ width: 17, height: 17, accentColor: '#f59e0b', cursor: 'pointer' }}
+                                                    onChange={e => {
+                                                        setDirty(true);
+                                                        const current = form.targetSystems || [];
+                                                        const next = e.target.checked
+                                                            ? [...current, 'FOMS']
+                                                            : current.filter(s => s !== 'FOMS');
+                                                        setForm(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next,
+                                                            targetSystem: next.join(','),
+                                                        }));
+                                                        setErrors(prev => ({
+                                                            ...prev,
+                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
+                                                        }));
+                                                    }}
+                                                />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <FileText size={16} style={{ color: '#f59e0b' }} />
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                                                            FOMS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Finance & Billing System</span>
+                                                        </div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+                                                            Financial accounting, audits, payroll, order ledger
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span style={{
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                padding: '2px 8px',
+                                                borderRadius: 4,
+                                                background: isChecked ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.1)',
+                                                color: isChecked ? '#d97706' : 'var(--text-secondary)'
+                                            }}>
+                                                {isChecked ? 'Active' : 'Not Granted'}
+                                            </span>
+                                        </label>
+
+                                        {isChecked && (
+                                            <div style={{
+                                                padding: '14px 16px',
+                                                borderTop: '1px solid rgba(245, 158, 11, 0.15)',
+                                                background: 'var(--s0, #ffffff)'
+                                            }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d97706', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    FOMS Finance & Payroll Assignment
+                                                </div>
+                                                <div className="fm-field-grid">
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="foms-role">FOMS Finance Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                                        <select
+                                                            id="foms-role"
+                                                            value={form.fomsRole || 'Accountant'}
+                                                            onChange={e => {
+                                                                setDirty(true);
+                                                                setForm(prev => ({ ...prev, fomsRole: e.target.value }));
+                                                            }}
+                                                            className="fm-select"
+                                                        >
+                                                            <option value="Accountant">Accountant</option>
+                                                            <option value="Financial Analyst">Financial Analyst</option>
+                                                            <option value="Auditor">Financial Auditor</option>
+                                                        </select>
+                                                        <FieldErr msg={errors.fomsRole} />
+                                                    </div>
+                                                    <div className="fm-field">
+                                                        <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP) <span style={{ color: 'var(--status-failed)' }}>*</span></label>
+                                                        <input
+                                                            id="foms-salary"
+                                                            type="number"
+                                                            placeholder="25000"
+                                                            value={form.fomsSalaryRate ?? 25000}
+                                                            onChange={e => {
+                                                                setDirty(true);
+                                                                setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
+                                                            }}
+                                                            className="fm-input"
+                                                            min={0}
+                                                            step={500}
+                                                        />
+                                                        <FieldErr msg={errors.fomsSalaryRate} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            <FieldErr msg={errors.targetSystems} />
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Section 2: General Profile & Employment Info ── */}
@@ -1093,198 +1518,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     </div>
                 </div>
 
-                {/* ── Section 3: STARS Operational Configuration ── */}
-                {form.targetSystems?.includes('STARS') && (
-                    <div className="fm-section" style={{ borderLeft: '3px solid var(--primary, #3b82f6)', paddingLeft: 16 }}>
-                        <h5 className="fm-section-title" style={{ color: 'var(--primary, #3b82f6)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            ⭐ STARS Operational Configuration
-                        </h5>
-                        <div className="fm-field-grid">
-                            {/* Department */}
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="emp-dept">
-                                    Department <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                </label>
-                                <select
-                                    id="emp-dept"
-                                    value={form.departmentId}
-                                    onChange={handleChange('departmentId')}
-                                    className="fm-select"
-                                    style={inputStyle(errors.departmentId)}
-                                    disabled={loadingOrg}
-                                >
-                                    <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
-                                    {departments.map(d => <option key={d.departmentId} value={d.departmentId}>{d.name}</option>)}
-                                </select>
-                                <FieldErr msg={errors.departmentId} />
-                            </div>
 
-                            {/* Position */}
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="emp-position">
-                                    Position <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                </label>
-                                <select
-                                    id="emp-position"
-                                    value={form.jobPositionId}
-                                    onChange={handleChange('jobPositionId')}
-                                    className="fm-select"
-                                    style={{
-                                        ...inputStyle(errors.jobPositionId),
-                                        opacity: !form.departmentId ? 0.6 : 1,
-                                        cursor: !form.departmentId ? 'not-allowed' : 'pointer',
-                                    }}
-                                    disabled={!form.departmentId || loadingOrg}
-                                >
-                                    <option value="">
-                                        {form.departmentId ? 'Select a position' : 'Select department first'}
-                                    </option>
-                                    {availablePositions.map(p => <option key={p.jobPositionId} value={p.jobPositionId}>{p.name}</option>)}
-                                </select>
-                                <FieldErr msg={errors.jobPositionId} />
-                            </div>
-
-                            {/* System Role */}
-                            <div className="fm-field" style={{ gridColumn: 'span 2' }}>
-                                <label className="fm-label" htmlFor="emp-role">
-                                    STARS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                </label>
-                                <select
-                                    id="emp-role"
-                                    value={form.role}
-                                    onChange={handleChange('role')}
-                                    className="fm-select"
-                                    style={{
-                                        ...inputStyle(errors.role),
-                                        opacity: !form.jobPositionId ? 0.6 : 1,
-                                        cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
-                                    }}
-                                    disabled={!form.jobPositionId || loadingOrg}
-                                >
-                                    <option value="">
-                                        {!form.departmentId
-                                            ? 'Select department first'
-                                            : !form.jobPositionId
-                                                ? 'Select position first'
-                                                : 'Select a role'}
-                                    </option>
-                                    {allowedRoles.map(r => (
-                                        <option key={r} value={r}>
-                                            {r}
-                                        </option>
-                                    ))}
-                                </select>
-                                <FieldErr msg={errors.role} />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ── Section 4: DMS Operational Configuration ── */}
-                {form.targetSystems?.includes('DMS') && (
-                    <div className="fm-section" style={{ borderLeft: '3px solid #10b981', paddingLeft: 16 }}>
-                        <h5 className="fm-section-title" style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            🚚 DMS Operational Configuration
-                        </h5>
-                        <div className="fm-field-grid">
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="dms-role">DMS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <select
-                                    id="dms-role"
-                                    value={form.dmsRole || 'Driver'}
-                                    onChange={e => {
-                                        setDirty(true);
-                                        setForm(prev => ({ ...prev, dmsRole: e.target.value }));
-                                    }}
-                                    className="fm-select"
-                                >
-                                    <option value="Driver">Driver / Rider</option>
-                                    <option value="Dispatcher">Dispatcher</option>
-                                    <option value="Admin">Fleet Administrator</option>
-                                </select>
-                                <FieldErr msg={errors.dmsRole} />
-                            </div>
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
-                                <select
-                                    id="dms-access"
-                                    value={form.dmsSystemAccess || 'Both'}
-                                    onChange={e => {
-                                        setDirty(true);
-                                        setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
-                                    }}
-                                    className="fm-select"
-                                >
-                                    <option value="Both">Both (Mobile App & Web Portal)</option>
-                                    <option value="Mobile">Mobile Application Only</option>
-                                    <option value="Web">Web Portal Only</option>
-                                </select>
-                            </div>
-                            <div className="fm-field" style={{ gridColumn: 'span 2' }}>
-                                <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <input
-                                    id="dms-areas"
-                                    type="text"
-                                    placeholder="e.g. Manila, Quezon City, Makati"
-                                    value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
-                                    onChange={e => {
-                                        setDirty(true);
-                                        const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                        setForm(prev => ({ ...prev, dmsAreas: areas }));
-                                    }}
-                                    className="fm-input"
-                                />
-                                <FieldErr msg={errors.dmsAreas} />
-                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ── Section 5: FOMS Financial Configuration ── */}
-                {form.targetSystems?.includes('FOMS') && (
-                    <div className="fm-section" style={{ borderLeft: '3px solid #f59e0b', paddingLeft: 16 }}>
-                        <h5 className="fm-section-title" style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            💰 FOMS Financial Configuration
-                        </h5>
-                        <div className="fm-field-grid">
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="foms-role">FOMS Finance Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <select
-                                    id="foms-role"
-                                    value={form.fomsRole || 'Accountant'}
-                                    onChange={e => {
-                                        setDirty(true);
-                                        setForm(prev => ({ ...prev, fomsRole: e.target.value }));
-                                    }}
-                                    className="fm-select"
-                                >
-                                    <option value="Accountant">Accountant</option>
-                                    <option value="Financial Analyst">Financial Analyst</option>
-                                    <option value="Auditor">Financial Auditor</option>
-                                </select>
-                                <FieldErr msg={errors.fomsRole} />
-                            </div>
-                            <div className="fm-field">
-                                <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP) <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                <input
-                                    id="foms-salary"
-                                    type="number"
-                                    placeholder="25000"
-                                    value={form.fomsSalaryRate ?? 25000}
-                                    onChange={e => {
-                                        setDirty(true);
-                                        setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
-                                    }}
-                                    className="fm-input"
-                                    min={0}
-                                    step={500}
-                                />
-                                <FieldErr msg={errors.fomsSalaryRate} />
-                            </div>
-                        </div>
-                    </div>
-                )}
             </FormModal>
 
             {/* ── Registration Confirmation ── */}
