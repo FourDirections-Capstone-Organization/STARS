@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Modules.RoleBasedAccessControl;
@@ -39,10 +39,11 @@ public class UserController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string? search = null,
         [FromQuery] string? role = null,
-        [FromQuery] Guid? departmentId = null
+        [FromQuery] Guid? departmentId = null,
+        [FromQuery] string? status = null
     )
     {
-        var result = await _userService.GetAllAsync(pageNumber, pageSize, search, role, departmentId);
+        var result = await _userService.GetAllAsync(pageNumber, pageSize, search, role, departmentId, status);
         return Ok(result);
     }
 

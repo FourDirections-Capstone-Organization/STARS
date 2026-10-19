@@ -9354,7 +9354,7 @@ export default function OpsAdminDashboard() {
                         <FomsFinancialMetricsView
                             onViewClientTasks={() => {
                                 handleNavChange('tasks');
-                                setTaskTab('all');
+                                setTaskTab('active');
                             }}
                             onOpenTask={(taskId) => {
                                 const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);

@@ -805,7 +805,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 suffix: '',
                 contactNumber: '',
                 role: data.role ?? form.role,
-                accountStatus: 'Pending Verification',
+                accountStatus: 'Inactive',
                 email: form.email.trim(),
             });
             onClose();
@@ -2072,6 +2072,7 @@ const gateConsentRef = useRef(false);
                                     <label className="fm-label">Account Status</label>
                                     <select value={form.accountStatus} onChange={handleChange('accountStatus')} className="fm-select">
                                         <option value="Active">Active</option>
+                                        <option value="Inactive">Inactive</option>
                                         <option value="Deactivated">Deactivated</option>
                                         {employee.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
                                     </select>
@@ -2230,6 +2231,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
 
     const PIE_COLORS: Record<string, string> = {
         Active: '#059669',
+        Inactive: '#64748B',
         Deactivated: '#DC2626',
         'On Leave': '#D97706',
         Locked: '#D97706',
@@ -2516,7 +2518,7 @@ interface ManageEmployeesTabProps {
     rolesList?: string[];
 }
 
-function ManageEmployeesTab({
+export function ManageEmployeesTab({
     employees, loading, onSelectEmployee, onAddEmployee,
     empPage, empTotalPages, onEmpPageChange,
     onEditEmployee, onArchiveEmployee, onViewEmployee,
@@ -2554,7 +2556,11 @@ function ManageEmployeesTab({
                             <Select value={filterRole} onChange={setFilterRole} placeholder="All Roles"
                                 options={rolesList.map(r => ({ value: r, label: r }))} />
                             <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
-                                options={[{ value: 'Active', label: 'Active' }, { value: 'Deactivated', label: 'Deactivated' }]} />
+                                options={[
+                                    { value: 'Active', label: 'Active' },
+                                    { value: 'Inactive', label: 'Inactive' },
+                                    { value: 'Deactivated', label: 'Deactivated' }
+                                ]} />
                         </>
                     }
                     actionButton={{ label: 'Add Employee', icon: <Plus size={14} />, onClick: onAddEmployee }}
@@ -4130,14 +4136,20 @@ export default function Dashboard() {
                     employeeName: e.employeeName ?? buildDisplayName(e.firstName ?? '', e.middleName ?? '', e.lastName ?? '', e.suffix ?? ''),
                     contactNumber: e.contactNumber,
                     role: e.role,
-                    accountStatus: e.isDeactivated ? 'Deactivated' : (e.isActive !== false ? 'Active' : 'Inactive'),
+                    accountStatus: e.accountStatus || (e.isDeactivated ? 'Deactivated' : (e.isActive ? 'Active' : 'Inactive')),
                     presenceStatus: e.presenceStatus ?? 'Offline',
                     email: e.email ?? '',
                     departmentName: e.departmentName ?? e.DepartmentName ?? '',
                     employmentStatus: e.employmentStatus ?? 'Regular',
                     hireDate: e.hireDate ?? null,
                     attachments: e.attachments ?? [],
-                })).filter((e: RecentEmployee) => e.accountStatus !== 'Deleted' && e.employeeNumber !== currentEmployeeId);
+                })).filter((e: RecentEmployee) => {
+                    if (e.accountStatus === 'Deleted' || e.employeeNumber === currentEmployeeId) return false;
+                    if (filters.status && e.accountStatus.toLowerCase() !== filters.status.toLowerCase()) {
+                        return false;
+                    }
+                    return true;
+                });
                 setEmployees(list);
                 setRecentEmployees(list);
                 setEmpTotalPages(result.data?.totalPages ?? 1);

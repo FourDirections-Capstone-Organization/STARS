@@ -461,6 +461,9 @@ export default function TaskManager({
         const next = key as TabType;
         setPage(1);
         setInternalFilterStatus('');
+        if (next !== 'active') {
+            setViewMode('table');
+        }
         if (onFilterStatusChange) onFilterStatusChange('');
         if (controlledTabChange) controlledTabChange(next);
         else setInternalTab(next);

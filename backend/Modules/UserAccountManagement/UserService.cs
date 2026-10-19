@@ -216,7 +216,7 @@ public class UserService : IUserService
     }
 
 
-    public async Task<ApiResponseDTO<PaginatedResponseDTO<UserResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 10, string? search = null, string? role = null, Guid? departmentId = null)
+    public async Task<ApiResponseDTO<PaginatedResponseDTO<UserResponseDTO>>> GetAllAsync(int pageNumber = 1, int pageSize = 10, string? search = null, string? role = null, Guid? departmentId = null, string? status = null)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -245,6 +245,22 @@ public class UserService : IUserService
         if (departmentId.HasValue)
         {
             query = query.Where(u => u.DepartmentId == departmentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (status.Equals("Active", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(u => u.IsActive && !u.IsDeactivated);
+            }
+            else if (status.Equals("Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(u => !u.IsActive && !u.IsDeactivated);
+            }
+            else if (status.Equals("Deactivated", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(u => u.IsDeactivated);
+            }
         }
 
         var totalCount = await query.CountAsync();
@@ -450,7 +466,7 @@ public class UserService : IUserService
         if (user is null)
             return ApiResponseDTO<bool>.Failure("User not found");
         
-        if (!user.IsDeactivated)
+        if (user.IsActive && !user.IsDeactivated)
             return ApiResponseDTO<bool>.Failure("User is already active");
 
         if (requestUserId.HasValue && requestUserId.Value == id)

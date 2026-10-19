@@ -629,8 +629,8 @@ export default function DataTable<T extends Record<string, any>>({
                 <table className="table-card-data-table">
                     <thead>
                         <tr>
-                            {(isLegacyMode ? headers! : columns ?? []).map((col: any) =>
-                                <th key={typeof col === 'string' ? col : col.header}
+                            {(isLegacyMode ? headers! : columns ?? []).map((col: any, idx: number) =>
+                                <th key={typeof col === 'string' ? `${col}-${idx}` : (col.key ?? `${col.header}-${idx}`)}
                                     className={`${typeof col !== 'string' && col.sortable ? 'dt-th--sortable' : ''} ${typeof col !== 'string' && sortKey === String(col.accessor) ? 'dt-th--sorted' : ''}`}
                                     style={typeof col !== 'string' && col.width ? { width: col.width } : {}}
                                     onClick={typeof col !== 'string' && col.sortable ? () => handleSort(String(col.accessor)) : undefined}

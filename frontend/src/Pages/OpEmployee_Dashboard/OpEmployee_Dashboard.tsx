@@ -858,15 +858,30 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onView, onUpdate }) => {
             <div className="tc-top">
                 <span className={`prio-strip ${pm.cls}`} />
                 <div className="tc-header">
-                    <h4 className="tc-name">{task.name}</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            #{task.referenceNumber || task.id.slice(0, 8).toUpperCase()}
+                        </span>
+                        <h4 className="tc-name">{task.name}</h4>
+                    </div>
                     {task.isConfidential && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--status-failed)', background: 'rgba(238,93,80,0.08)', padding: '1px 5px', borderRadius: 3, marginLeft: 6, whiteSpace: 'nowrap' }}>CONFIDENTIAL</span>}
                     <span className={`badge ${sm.cls}`}>{sm.icon}{sm.label}</span>
                 </div>
             </div>
             <p className="tc-desc">{task.description}</p>
+            {task.status === 'on-hold' && task.holdReason && (
+                <div style={{ fontSize: 11.5, color: '#64748b', background: 'rgba(100, 116, 139, 0.08)', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    <strong style={{ color: '#475569' }}>Hold Reason:</strong> {task.holdReason}
+                </div>
+            )}
+            {task.status === 'cancelled' && task.cancellationReason && (
+                <div style={{ fontSize: 11.5, color: '#b91c1c', background: 'rgba(239, 68, 68, 0.08)', padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <strong style={{ color: '#991b1b' }}>Cancellation Reason:</strong> {task.cancellationReason}
+                </div>
+            )}
             <div className="tc-meta">
                 <span className={`tc-deadline${od ? ' overdue-text' : daysLeft !== null && daysLeft <= 2 ? ' warning-text' : ''}`}>
-                    {od ? '? Overdue'
+                    {od ? '• Overdue'
                         : daysLeft !== null
                             ? daysLeft === 0 ? 'Due today'
                                 : daysLeft === 1 ? 'Due tomorrow'
@@ -1371,8 +1386,11 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
         { key: 'on-hold', label: 'On Hold', count: tasks.filter(t => t.status === 'on-hold').length },
         { key: 'completed', label: 'Completed', count: tasks.filter(t => t.status === 'completed').length },
         { key: 'overdue', label: 'Overdue', count: tasks.filter(t => effectiveStatus(t) === 'overdue').length },
-        { key: 'cancelled', label: 'Cancelled', count: tasks.filter(t => t.status === 'cancelled').length },
+        { key: 'cancelled', label: 'Bin', count: tasks.filter(t => t.status === 'cancelled').length },
     ];
+
+    const isBoardDisallowed = filter === 'on-hold' || filter === 'completed' || filter === 'cancelled';
+    const showBoard = viewMode === 'board' && !isBoardDisallowed;
 
     const baseFiltered = filter === 'all'
         ? tasks.filter(t => t.status !== 'cancelled' && t.status !== 'on-hold')
@@ -1435,25 +1453,27 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                     ))}
                 </div>
 
-                {/* View Switcher: Board vs Grid */}
-                <div className="tm-view-toggle-group">
-                    <button
-                        type="button"
-                        className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
-                        onClick={() => setViewMode('board')}
-                        title="Board View"
-                    >
-                        <Kanban size={13} /> Board
-                    </button>
-                    <button
-                        type="button"
-                        className={`tm-view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                        onClick={() => setViewMode('grid')}
-                        title="Grid View"
-                    >
-                        <LayoutGrid size={13} /> Grid
-                    </button>
-                </div>
+                {/* View Switcher: Board vs Grid (only available on tabs where board is allowed) */}
+                {!isBoardDisallowed && (
+                    <div className="tm-view-toggle-group">
+                        <button
+                            type="button"
+                            className={`tm-view-toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
+                            onClick={() => setViewMode('board')}
+                            title="Board View"
+                        >
+                            <Kanban size={13} /> Board
+                        </button>
+                        <button
+                            type="button"
+                            className={`tm-view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                            onClick={() => setViewMode('grid')}
+                            title="Grid View"
+                        >
+                            <LayoutGrid size={13} /> Grid
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Search by title + urgency filter */}
@@ -1492,9 +1512,17 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
 
             {filtered.length === 0 ? (
                 <div className="card">
-                    <div className="empty-state"><ClipboardList size={22} /><p>No tasks match your filters</p></div>
+                    <div className="empty-state">
+                        <ClipboardList size={22} />
+                        <p>
+                            {filter === 'on-hold' ? 'No tasks on hold' :
+                             filter === 'completed' ? 'No completed tasks' :
+                             filter === 'cancelled' ? 'Bin is empty' :
+                             'No tasks match your filters'}
+                        </p>
+                    </div>
                 </div>
-            ) : viewMode === 'board' ? (
+            ) : showBoard ? (
                 <EmployeeKanbanBoard
                     tasks={filtered}
                     onView={onView}

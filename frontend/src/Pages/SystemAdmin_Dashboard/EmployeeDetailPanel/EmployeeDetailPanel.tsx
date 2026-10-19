@@ -464,6 +464,7 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                             <label className="fm-label">Account Status</label>
                             <select value={form.accountStatus} onChange={set('accountStatus')} className="fm-select">
                                 <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
                                 <option value="Deactivated">Deactivated</option>
                                 {profile.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
                                 {profile.accountStatus === 'Emergency Overriden' && <option value="Emergency Overriden">Emergency Overriden</option>}

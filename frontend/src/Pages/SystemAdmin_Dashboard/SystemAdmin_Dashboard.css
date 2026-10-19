@@ -530,6 +530,11 @@
     color: var(--status-active);
 }
 
+.status-badge.inactive {
+    background: rgba(148, 163, 184, 0.15);
+    color: #64748b;
+}
+
 .status-badge.deactivated {
     background: var(--status-failed-bg);
     color: var(--status-failed);

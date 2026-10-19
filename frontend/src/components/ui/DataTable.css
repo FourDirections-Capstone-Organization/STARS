@@ -1359,6 +1359,8 @@
 .status-badge .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .status-badge.active { background: var(--status-active-bg); color: var(--status-active); }
 .status-badge.active .status-dot { background: var(--status-active); }
+.status-badge.inactive { background: var(--bg-hover, #f1f5f9); color: var(--text-secondary, #64748b); }
+.status-badge.inactive .status-dot { background: var(--text-secondary, #64748b); }
 .status-badge.pending { background: var(--status-pending-bg); color: var(--status-pending); }
 .status-badge.pending .status-dot { background: var(--status-pending); }
 .status-badge.locked { background: var(--status-failed-bg); color: var(--status-failed); }
