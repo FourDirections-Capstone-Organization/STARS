@@ -1561,3 +1561,88 @@
     padding: 0.85rem;
     border-radius: 8px;
 }
+
+/* ================================================================
+   FOMS Physical Endorsement Specific Styles
+   ================================================================ */
+.foms-tab-badge.badge-endorsement {
+    background: rgba(99, 102, 241, 0.12);
+    color: #4F46E5;
+}
+
+.foms-invoice-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--navy, #1B254B);
+    background: #f1f5f9;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+}
+
+.foms-doc-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--teal, #00A99D);
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.foms-doc-link:hover {
+    color: var(--teal-hover, #00887e);
+    background: rgba(0, 169, 157, 0.1);
+}
+
+.foms-term-highlight {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4F46E5;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    width: fit-content;
+}
+
+.foms-signed-receipt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #059669;
+    background: rgba(5, 150, 105, 0.08);
+    border: 1px solid rgba(5, 150, 105, 0.2);
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.foms-signed-receipt-badge:hover {
+    background: rgba(5, 150, 105, 0.16);
+    color: #047857;
+}
+
+.foms-calc-due-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--navy, #1B254B);
+}
+

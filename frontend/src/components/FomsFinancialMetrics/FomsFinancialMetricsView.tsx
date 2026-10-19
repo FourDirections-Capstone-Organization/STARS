@@ -20,11 +20,13 @@ import {
     CreditCard,
     ExternalLink,
     Zap,
+    FileCheck,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
 import { FomsDashboardFinancialSummary, FomsClientFinancialSummaryItem, FomsFinancialMetricsViewProps } from './types';
 import FomsGraphRoutingPanel from './FomsGraphRoutingPanel';
+import FomsEndorsementPanel from './FomsEndorsementPanel';
 import './FomsFinancialMetricsView.css';
 
 // Realistic fallback preview dataset when FOMS database has no webhook updates yet
@@ -112,7 +114,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     onViewClientTasks,
     onOpenTask,
 }) => {
-    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing'>(initialTab || 'balances');
+    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement'>(initialTab || 'balances');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -353,7 +355,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
             )}
 
-            {/* ── Sub-Navigation Tab Bar: Balances vs Collection Graph Routing ── */}
+            {/* ── Sub-Navigation Tab Bar: Balances vs Collection Graph Routing vs Physical Endorsement ── */}
             <div className="foms-hub-nav">
                 <button
                     type="button"
@@ -372,9 +374,23 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     <span>Collection Alerts &amp; Graph Routing</span>
                     <span className="foms-tab-badge">Automated</span>
                 </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'endorsement' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('endorsement')}
+                >
+                    <FileCheck size={14} />
+                    <span>Physical Invoice Endorsement</span>
+                    <span className="foms-tab-badge badge-endorsement">30-Day Term</span>
+                </button>
             </div>
 
-            {activeHubTab === 'routing' ? (
+            {activeHubTab === 'endorsement' ? (
+                <FomsEndorsementPanel
+                    onOpenTask={onOpenTask}
+                    onViewClientTasks={onViewClientTasks}
+                />
+            ) : activeHubTab === 'routing' ? (
                 <FomsGraphRoutingPanel
                     onOpenTask={onOpenTask}
                     onViewClientTasks={onViewClientTasks}

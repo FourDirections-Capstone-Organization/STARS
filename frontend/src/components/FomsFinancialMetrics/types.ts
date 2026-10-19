@@ -56,11 +56,43 @@ export interface CoordinatorWorkloadItem {
     capacityPercentage?: number;
 }
 
+export interface FomsEndorsementItem {
+    id: string;
+    taskId: string;
+    taskNumber: string;
+    invoiceNumber: string;
+    clientName: string;
+    clientAddress?: string;
+    clientContactPerson?: string;
+    clientContactNumber?: string;
+    clientEmail?: string;
+    invoiceAmount: number;
+    billingDate?: string | null;
+    dueDate?: string | null;
+    invoiceDocumentUrl?: string;
+    signedReceivingCopyUrl?: string | null;
+    actualReceivedDate?: string | null;
+    deliveryRemarks?: string | null;
+    endorsementStatus: 'PendingEndorsement' | 'Delivered' | 'Endorsed' | 'Completed' | string;
+    fomsSyncStatus: 'Pending' | 'Synced' | 'Failed' | string;
+    fomsSyncAttempts?: number;
+    lastSyncedAt?: string | null;
+    calculatedPaymentDueDate?: string | null;
+    assignedCoordinatorName?: string;
+    taskStatus?: string;
+}
+
+export interface SubmitSignedEndorsementPayload {
+    actualReceivedDate: string;
+    signedCopyUrl?: string;
+    deliveryRemarks?: string;
+}
+
 export interface FomsFinancialMetricsViewProps {
     embedded?: boolean;
     showHeader?: boolean;
     pollingInterval?: number;
-    initialTab?: 'balances' | 'routing';
+    initialTab?: 'balances' | 'routing' | 'endorsement';
     onViewClientTasks?: (clientName: string, accountId: string) => void;
     onOpenTask?: (taskId: string) => void;
 }
