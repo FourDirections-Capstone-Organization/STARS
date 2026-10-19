@@ -328,9 +328,9 @@ export default function OnboardingPage() {
     return (
         <div style={{
             minHeight: '100vh',
-            background: 'linear-gradient(135deg, #0B1437 0%, #1B254B 50%, #0B1437 100%)',
+            background: 'linear-gradient(135deg, #0B1437 0%, #1A2238 50%, #0B1437 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: "'Montserrat', 'Inter', sans-serif", padding: '24px 16px',
+            fontFamily: "var(--fb, 'Inter UI', 'Inter', sans-serif)", padding: '24px 16px',
             position: 'relative', overflow: 'hidden',
         }}>
             <style>{`
@@ -340,7 +340,7 @@ export default function OnboardingPage() {
                 .fade-in { animation: fadeIn 0.4s ease-out; }
             `}</style>
             <div style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400,
-                borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,169,157,0.08), transparent)', pointerEvents: 'none' }} />
+                borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,139,139,0.08), transparent)', pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', bottom: -100, left: -100, width: 400, height: 400,
                 borderRadius: '50%', background: 'radial-gradient(circle, rgba(79,70,229,0.08), transparent)', pointerEvents: 'none' }} />
 
@@ -357,7 +357,7 @@ export default function OnboardingPage() {
 
                 <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
                     {step !== 'done' && (
-                        <div style={{ background: 'linear-gradient(135deg, #0B1437 0%, #1B254B 100%)', padding: '24px 32px 22px' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #0B1437 0%, #1A2238 100%)', padding: '24px 32px 22px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, justifyContent: 'center' }}>
                                 <StepPill index={1} label="Profile" state={step === 'profile' ? 'active' : 'done'} />
                                 <div style={{ width: 28, height: 2, background: 'rgba(255,255,255,0.2)', borderRadius: 1 }} />

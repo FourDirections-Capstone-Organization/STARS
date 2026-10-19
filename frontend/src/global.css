@@ -10,20 +10,20 @@
 @layer base {
 
   :root {
-    font-family: var(--fb, 'Inter', -apple-system, sans-serif);
+    font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
     color: #111827;
     background: #f8fafc;
     font-size: 16px;
     line-height: 1.5;
 
     /* Speedex OneUI Brand Tokens */
-    --teal: #00A99D;
-    --teal-hover: #009189;
-    --teal-dark: #007A72;
-    --teal-bg: rgba(0, 169, 157, 0.08);
-    --teal-ring: rgba(0, 169, 157, 0.18);
-    --navy: #1B254B;
-    --navy-hover: #232E5C;
+    --teal: #008B8B;
+    --teal-hover: #007676;
+    --teal-dark: #006060;
+    --teal-bg: rgba(0, 139, 139, 0.08);
+    --teal-ring: rgba(0, 139, 139, 0.22);
+    --navy: #1A2238;
+    --navy-hover: #293652;
     --sidebar-bg: #0B1437;
     /* Surfaces */
     --s0: #FFFFFF;
@@ -35,9 +35,13 @@
     --ts: #374151;
     --tt: #6B7280;
     --tm: #9CA3AF;
-    /* Borders */
-    --border: #E2E8F0;
-    --border-h: #CBD5E1;
+    /* Secondary (Dividers / Borders) */
+    --secondary: #293652;
+    --secondary-hover: #37486B;
+    --divider: #293652;
+    --border: #293652;
+    --border-h: #1A2238;
+    --border-subtle: rgba(41, 54, 82, 0.2);
     /* Status */
     --ok: #059669;
     --ok-bg: rgba(5, 150, 105, 0.1);
@@ -48,6 +52,14 @@
     --err: #DC2626;
     --err-bg: rgba(220, 38, 38, 0.1);
     --err-r: rgba(220, 38, 38, 0.2);
+    /* Urgent Alerts (Accent) */
+    --accent: #FF6D00;
+    --urgent: #FF6D00;
+    --urgent-bg: rgba(255, 109, 0, 0.12);
+    --urgent-border: rgba(255, 109, 0, 0.35);
+    --urgent-ring: rgba(255, 109, 0, 0.25);
+    --status-urgent: #FF6D00;
+    --status-urgent-bg: rgba(255, 109, 0, 0.12);
     --info: #0284C7;
     --info-bg: rgba(2, 132, 199, 0.1);
     --info-r: rgba(2, 132, 199, 0.2);
@@ -96,16 +108,16 @@
     --chart-teal-200: #99EAE0;
     --chart-teal-300: #66E0D1;
     --chart-teal-400: #33D5C2;
-    --chart-teal-500: #00A99D;
-    /* Primary Teal */
-    --chart-teal-600: #009189;
-    --chart-teal-700: #007A72;
-    --chart-teal-800: #00625B;
-    --chart-teal-900: #004B46;
+    --chart-teal-500: #008B8B;
+    /* Primary Action Cyan */
+    --chart-teal-600: #007676;
+    --chart-teal-700: #006060;
+    --chart-teal-800: #004D4D;
+    --chart-teal-900: #003838;
 
     /* ── Fonts ── */
-    --fh: 'Montserrat', -apple-system, sans-serif;
-    --fb: 'Inter', -apple-system, sans-serif;
+    --fh: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --fb: 'Inter UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --fm: 'JetBrains Mono', Consolas, monospace;
 
     /* ── Shadows ── */
@@ -168,10 +180,12 @@
 
   
     /* ── Backward-compatible aliases (migrated from index.css) ── */
-    --primary-dark: var(--navy, #1B254B);
-    --primary-dark-hover: var(--navy-hover, #232E5C);
-    --primary-hover: var(--teal-hover, #009189);
-    --primary: var(--teal, #00A99D);
+    --primary-dark: var(--navy, #1A2238);
+    --primary-dark-hover: var(--navy-hover, #293652);
+    --primary-hover: var(--teal-hover, #007676);
+    --primary: var(--teal, #008B8B);
+    --action-btn: #008B8B;
+    --action-btn-hover: #007676;
     --text-white: #FFFFFF;
     --bg-main: var(--s2, #F0F4FF);
     --bg-card: var(--s0, #FFFFFF);
@@ -182,7 +196,7 @@
     --card-padding: 22px;
     --gap: 20px;
     --sidebar-bg-hover: rgba(255, 255, 255, 0.05);
-    --sidebar-active-accent: var(--teal, #00A99D);
+    --sidebar-active-accent: var(--teal, #008B8B);
     --sidebar-text: #A3AED0;
     --sidebar-text-active: #FFFFFF;
 
@@ -206,14 +220,14 @@
   [data-theme="dark"] {
     color-scheme: dark;
 
-    /* Brand (slightly brightened for dark bg readability) */
-    --teal: #00C4B7;
-    --teal-hover: #00AFA3;
-    --teal-dark: #009189;
-    --teal-bg: rgba(0, 196, 183, 0.12);
-    --teal-ring: rgba(0, 196, 183, 0.25);
-    --navy: #4A6FA5;
-    --navy-hover: #5A80B8;
+    /* Brand */
+    --teal: #00A3A3;
+    --teal-hover: #008B8B;
+    --teal-dark: #007373;
+    --teal-bg: rgba(0, 139, 139, 0.16);
+    --teal-ring: rgba(0, 139, 139, 0.35);
+    --navy: #1A2238;
+    --navy-hover: #293652;
     --sidebar-bg: #060D22;
 
     /* Surfaces (dark elevation scale) */
@@ -236,9 +250,22 @@
     --tm: #64748B;
     /* Muted text */
 
-    /* Borders */
-    --border: #1E293B;
-    --border-h: #334155;
+    /* Secondary (Dividers / Borders) */
+    --secondary: #293652;
+    --secondary-hover: #37486B;
+    --divider: #293652;
+    --border: #293652;
+    --border-h: #3B4D73;
+    --border-subtle: rgba(41, 54, 82, 0.4);
+
+    /* Urgent Alerts (Accent) */
+    --accent: #FF6D00;
+    --urgent: #FF6D00;
+    --urgent-bg: rgba(255, 109, 0, 0.18);
+    --urgent-border: rgba(255, 109, 0, 0.45);
+    --urgent-ring: rgba(255, 109, 0, 0.35);
+    --status-urgent: #FF6D00;
+    --status-urgent-bg: rgba(255, 109, 0, 0.18);
 
     /* Status (same hue, slightly brightened for dark bg) */
     --ok: #10B981;
@@ -302,7 +329,7 @@
   body {
     background: var(--s2);
     /* was: #eef2ff — now uses design token */
-    font-family: var(--fb, 'Inter', -apple-system, sans-serif);
+    font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
     color: var(--tp);
   }
 
@@ -314,6 +341,7 @@
   h6 {
     font-family: var(--fh, 'Montserrat', -apple-system, sans-serif);
     font-weight: 700;
+    color: var(--navy, #1A2238);
   }
 
   img {
@@ -360,7 +388,7 @@
   textarea:focus-visible,
   [tabindex]:focus-visible,
   summary:focus-visible {
-    outline: 2px solid var(--teal, #00A99D);
+    outline: 2px solid var(--teal, #008B8B);
     outline-offset: 2px;
     border-radius: var(--r-xs, 4px);
   }
@@ -490,55 +518,59 @@
     width: 100%;
   }
 
-  /* 1. Primary (Teal Brand Color) */
+  /* 1. Primary (Action Buttons - Dark Cyan #008B8B) */
   .btn-primary,
   .btn--primary,
-  .btn-teal {
-    background: var(--teal);
+  .btn-teal,
+  .btn-action,
+  .action-button {
+    background: var(--teal, #008B8B);
     color: #fff;
-    border-color: var(--teal);
+    border-color: var(--teal, #008B8B);
   }
 
   .btn-primary:hover:not(:disabled),
   .btn--primary:hover:not(:disabled),
-  .btn-teal:hover:not(:disabled) {
-    background: var(--teal-hover);
-    border-color: var(--teal-hover);
-    box-shadow: 0 4px 12px rgba(0, 169, 157, .22);
+  .btn-teal:hover:not(:disabled),
+  .btn-action:hover:not(:disabled),
+  .action-button:hover:not(:disabled) {
+    background: var(--teal-hover, #007676);
+    border-color: var(--teal-hover, #007676);
+    box-shadow: 0 4px 12px rgba(0, 139, 139, .25);
     transform: translateY(-1px);
   }
 
-  /* 2. Navy (Alternative Solid brand color) */
+  /* 2. Navy (Core UI Headers / Panels #1A2238) */
   .btn-navy,
   .btn--navy {
-    background: var(--navy);
+    background: var(--navy, #1A2238);
     color: #fff;
-    border-color: var(--navy);
+    border-color: var(--navy, #1A2238);
   }
 
   .btn-navy:hover:not(:disabled),
   .btn--navy:hover:not(:disabled) {
-    background: var(--navy-hover);
-    border-color: var(--navy-hover);
-    box-shadow: 0 4px 12px rgba(27, 37, 75, .22);
+    background: var(--navy-hover, #293652);
+    border-color: var(--navy-hover, #293652);
+    box-shadow: 0 4px 12px rgba(26, 34, 56, .25);
     transform: translateY(-1px);
   }
 
-  /* 3. Outline / Secondary (Gray border, teal text on hover) */
+  /* 3. Outline / Secondary (Dividers / Borders #293652) */
   .btn-outline,
   .btn-secondary,
   .btn--secondary {
     background: var(--s0, #fff);
-    color: var(--ts, #374151);
-    border-color: var(--border, #E2E8F0);
+    color: var(--secondary, #293652);
+    border-color: var(--secondary, #293652);
   }
 
   .btn-outline:hover:not(:disabled),
   .btn-secondary:hover:not(:disabled),
   .btn--secondary:hover:not(:disabled) {
     background: var(--s1, #F7F9FF);
-    border-color: var(--teal);
-    color: var(--teal);
+    border-color: var(--teal, #008B8B);
+    color: var(--teal, #008B8B);
   }
 
   /* 4. Ghost (Transparent, light gray on hover) */
@@ -632,11 +664,11 @@
     font-weight: 700;
   }
 
-  /* 8. Link (Inline text button — no background, teal underline on hover) */
+  /* 8. Link (Inline text button — no background, cyan underline on hover) */
   .btn-link,
   .btn--link {
     background: transparent;
-    color: var(--teal, #00A99D);
+    color: var(--teal, #008B8B);
     border-color: transparent;
     padding: 0;
     height: auto;
@@ -647,7 +679,7 @@
   .btn-link:hover:not(:disabled),
   .btn--link:hover:not(:disabled) {
     background: transparent;
-    color: var(--teal-dark, #007A72);
+    color: var(--teal-dark, #006060);
     text-decoration: underline;
     box-shadow: none;
     transform: none;
@@ -789,20 +821,20 @@
   .dd-divider {
     height: 1px;
     margin: 4px 6px;
-    background: var(--border, #e3e1d8);
+    background: var(--secondary, #293652);
   }
 
   /* ── Dropdown: Search filter input ────────────────────────────────── */
   .dd-search-wrap {
     padding: 4px 4px 2px;
-    border-bottom: 1px solid var(--border, #e3e1d8);
+    border-bottom: 1px solid var(--secondary, #293652);
     margin-bottom: 4px;
   }
 
   .dd-search-input {
     width: 100%;
     padding: 6px 10px;
-    border: 1px solid var(--border, #e3e1d8);
+    border: 1px solid var(--border, #293652);
     border-radius: 6px;
     font-size: 12px;
     background: var(--s1, #f7f9ff);
@@ -816,8 +848,8 @@
   }
 
   .dd-search-input:focus {
-    border-color: var(--teal, #00A99D);
-    box-shadow: 0 0 0 2px var(--teal-ring, rgba(0, 169, 157, 0.18));
+    border-color: var(--teal, #008B8B);
+    box-shadow: 0 0 0 2px var(--teal-ring, rgba(0, 139, 139, 0.22));
   }
 
   /* ── Dropdown: Scrollable items list ──────────────────────────────── */
@@ -1281,7 +1313,7 @@
   .dropdown-name {
     font-size: 13.5px;
     font-weight: 700;
-    color: var(--navy, #1B254B);
+    color: var(--navy, #1A2238);
   }
 
   .dropdown-role {
@@ -1291,7 +1323,7 @@
 
   .dropdown-divider {
     height: 1px;
-    background-color: var(--border, #E2E8F0);
+    background-color: var(--secondary, #293652);
     margin: 4px 6px;
   }
 
@@ -1314,7 +1346,7 @@
 
   .dropdown-option:hover {
     background-color: var(--s1, #F7F9FF);
-    color: var(--teal, #00A99D);
+    color: var(--teal, #008B8B);
   }
 
   .dropdown-option i {
@@ -1715,4 +1747,180 @@
     transform: translateX(0) scale(1);
   }
 
+}
+
+/* ================================================================
+   STARS SYSTEM-WIDE PRIMARY PALETTE & TYPOGRAPHY SYSTEM
+   Enforces canonical brand tokens across all pages, views & components:
+   - Primary Navy: #1A2238 (Core UI / Headers)
+   - Secondary: #293652 (Dividers / Borders)
+   - Dark Cyan: #008B8B (Action Buttons)
+   - Accent: #FF6D00 (Urgent Alerts)
+   - Typography:
+     - Headings & KPIs: Montserrat
+     - Body & Data: Inter UI / Inter
+   ================================================================ */
+
+/* ── 1. Core UI & Headers (Primary Navy #1A2238) ── */
+h1, h2, h3, h4, h5, h6,
+.header-title,
+.site-header,
+.page-title,
+.section-title,
+.card-title,
+.dashboard-title,
+.modal-title,
+.dialog-title,
+.foms-title {
+  color: var(--navy, #1A2238);
+  font-family: var(--fh, 'Montserrat', sans-serif);
+  font-weight: 700;
+}
+
+/* ── 2. Action Buttons (Dark Cyan #008B8B) ── */
+.btn-primary,
+.btn--primary,
+.btn-action,
+.btn-teal,
+.action-button,
+.tv-btn-primary,
+.foms-btn-primary,
+.foms-btn-sync,
+.quick-action-btn-header,
+.table-card .btn-primary,
+.fm-btn-primary {
+  background-color: var(--teal, #008B8B) !important;
+  border-color: var(--teal, #008B8B) !important;
+  color: #ffffff !important;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn--primary:hover:not(:disabled),
+.btn-action:hover:not(:disabled),
+.btn-teal:hover:not(:disabled),
+.action-button:hover:not(:disabled),
+.tv-btn-primary:hover:not(:disabled),
+.foms-btn-primary:hover:not(:disabled),
+.foms-btn-sync:hover:not(:disabled),
+.quick-action-btn-header:hover:not(:disabled),
+.table-card .btn-primary:hover:not(:disabled),
+.fm-btn-primary:hover:not(:disabled) {
+  background-color: var(--teal-hover, #007676) !important;
+  border-color: var(--teal-hover, #007676) !important;
+  box-shadow: 0 4px 14px rgba(0, 139, 139, 0.28) !important;
+}
+
+/* ── 3. Dividers & Borders (Secondary #293652) ── */
+.divider,
+.dd-divider,
+.dropdown-divider,
+.foms-divider,
+hr {
+  background-color: var(--secondary, #293652) !important;
+  border-color: var(--secondary, #293652) !important;
+  color: var(--secondary, #293652);
+}
+
+/* Subtle separator borders on cards, tables, headers, and panels */
+.site-header,
+.speedex-system-header,
+.foms-header-bar,
+.component-section,
+.dd-panel,
+.sidebar-profile-dropdown,
+.foms-table-wrapper {
+  border-color: var(--secondary, #293652);
+}
+
+/* ── 4. Urgent Alerts (Accent #FF6D00) ── */
+.urgent-alert,
+.alert-urgent,
+.foms-alert-urgent,
+.ann-card.urgent {
+  border-color: var(--urgent, #FF6D00) !important;
+}
+
+.prio-dot.urgent,
+.tv-prio-dot.urgent,
+.priority-dot-urgent {
+  background-color: var(--urgent, #FF6D00) !important;
+  box-shadow: 0 0 0 3px rgba(255, 109, 0, 0.25) !important;
+}
+
+.badge-urgent,
+.priority-urgent,
+.ai-priority-urgent,
+.ann-badge-priority.urgent {
+  background: var(--urgent-bg, rgba(255, 109, 0, 0.12)) !important;
+  color: var(--urgent, #FF6D00) !important;
+  border: 1px solid var(--urgent-border, rgba(255, 109, 0, 0.35)) !important;
+}
+
+.ann-chip.urgent.active {
+  background-color: var(--urgent, #FF6D00) !important;
+  border-color: var(--urgent, #FF6D00) !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 12px rgba(255, 109, 0, 0.35) !important;
+}
+
+/* ── 5. Typography: Montserrat for Headings & KPIs ── */
+.kpi-val,
+.kpi-value,
+.stat-value,
+.metric-value,
+.foms-kpi-value,
+.tv-foms-stat-amount,
+.foms-stat-amount,
+.foms-card-stat,
+.kpi-number,
+.stat-card-value,
+.stat-metric,
+.quick-stat-val,
+.ed-hero-stat-value,
+.rm2-role-view-stat-value,
+.foms-exposure-amount,
+.card-metric,
+.summary-stat-value,
+.task-stat-number,
+.analytics-stat,
+.stats-row .kpi-val,
+.stats-row-6 .kpi-val,
+.coordinator-stats-row-6 .kpi-val,
+.foms-kpi-card .foms-kpi-value {
+  font-family: var(--fh, 'Montserrat', sans-serif) !important;
+  font-weight: 700 !important;
+}
+
+/* ── 6. Typography: Inter UI for Body & Data ── */
+body,
+p,
+span,
+div,
+label,
+input,
+select,
+textarea,
+button {
+  font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
+}
+
+/* Data Tables, Cells, and Structured Data */
+table,
+thead,
+tbody,
+th,
+td,
+.table,
+.foms-table,
+.dt-table,
+.data-table,
+.data-cell,
+.table-cell,
+.data-row,
+.grid-cell,
+.dt-cell,
+.dt-th,
+.foms-table th,
+.foms-table td {
+  font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
 }

@@ -40,8 +40,8 @@
 
 .header-menu-btn:hover {
   background: var(--teal-bg, rgba(0, 169, 157, 0.08));
-  border-color: var(--teal, #00A99D);
-  color: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
+  color: var(--teal, #008B8B);
 }
 
 /* Page Title Typography */
@@ -50,7 +50,7 @@
   font-size: 24px;
   font-weight: 700;
   line-height: 1.3;
-  color: var(--navy, #1B254B);
+  color: var(--navy, #1A2238);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -87,12 +87,12 @@
 
 .header-icon-btn:hover {
   background: var(--teal-bg, rgba(0, 169, 157, 0.08));
-  border-color: var(--teal, #00A99D);
-  color: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
+  color: var(--teal, #008B8B);
 }
 
 .header-icon-btn:focus-visible {
-  border-color: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
   box-shadow: 0 0 0 3px var(--teal-ring, rgba(0, 169, 157, 0.18));
 }
 
@@ -181,14 +181,14 @@
 .notification-dropdown-title-group span:first-child {
   font-weight: 700;
   font-size: 14px;
-  color: var(--navy, #1B254B);
+  color: var(--navy, #1A2238);
 }
 
 .notification-unread-pill {
   font-size: 11px;
   font-weight: 700;
   background: var(--teal-bg, rgba(0, 169, 157, 0.08));
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   padding: 2px 8px;
   border-radius: 9999px;
 }
@@ -201,7 +201,7 @@
   border: none;
   font-size: 12px;
   font-weight: 600;
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
@@ -231,12 +231,12 @@
 }
 
 .notification-filter-tab:hover {
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 
 .notification-filter-tab.active {
   font-weight: 700;
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 
 .notification-filter-tab.active::after {
@@ -246,7 +246,7 @@
   left: 0;
   width: 100%;
   height: 2px;
-  background: var(--teal, #00A99D);
+  background: var(--teal, #008B8B);
 }
 
 .notification-dropdown-list {
@@ -289,7 +289,7 @@
 
 .notification-dropdown-item.unread {
   background: rgba(0, 169, 157, 0.02);
-  border-left: 3px solid var(--teal, #00A99D);
+  border-left: 3px solid var(--teal, #008B8B);
   padding-left: 13px;
 }
 
@@ -360,7 +360,7 @@
 .notification-dropdown-unread-dot {
   width: 6px;
   height: 6px;
-  background: var(--teal, #00A99D);
+  background: var(--teal, #008B8B);
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -395,7 +395,7 @@
   height: 48px;
   border-radius: 12px;
   background: var(--teal-bg, rgba(0, 169, 157, 0.08));
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -447,7 +447,7 @@
 
 .view-all-notifications-btn:hover {
   background-color: var(--s2, #F0F4FF);
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 
 .clear-all-notifications-btn {
@@ -485,7 +485,7 @@
 }
 
 .header-avatar-btn:hover {
-  border-color: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
   box-shadow: 0 0 0 3px var(--teal-ring, rgba(0, 169, 157, 0.18));
 }
 
@@ -493,7 +493,7 @@
   font-family: var(--fb, sans-serif);
   font-size: 14px;
   font-weight: 700;
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   text-transform: uppercase;
 }
 
@@ -554,7 +554,7 @@
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--teal, #00A99D) 0%, var(--navy, #1B254B) 100%);
+  background: linear-gradient(135deg, var(--teal, #008B8B) 0%, var(--navy, #1A2238) 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -575,7 +575,7 @@
 .profile-dropdown-name {
   font-size: 14px;
   font-weight: 700;
-  color: var(--navy, #1B254B);
+  color: var(--navy, #1A2238);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -633,7 +633,7 @@
 
 .status-btn.active {
   border-color: #ffffff;
-  box-shadow: 0 0 0 2px var(--teal, #00A99D);
+  box-shadow: 0 0 0 2px var(--teal, #008B8B);
 }
 
 /* Options Options List */
@@ -663,7 +663,7 @@
 
 .profile-dropdown-option:hover {
   background: var(--s1, #F7F9FF);
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 
 .profile-dropdown-divider {
@@ -730,7 +730,7 @@
 .workspace-name {
   font-size: 12px;
   font-weight: 700;
-  color: var(--navy, #1B254B);
+  color: var(--navy, #1A2238);
 }
 
 .workspace-item.active .workspace-name {
@@ -743,7 +743,7 @@
 }
 
 .active-check-icon {
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   flex-shrink: 0;
 }
 
@@ -808,13 +808,13 @@
   font-family: var(--fb, sans-serif);
 }
 .notification-cat-chip:hover {
-  border-color: var(--teal, #00A99D);
-  color: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
+  color: var(--teal, #008B8B);
   background: var(--teal-bg, rgba(0, 169, 157, 0.04));
 }
 .notification-cat-chip.active {
-  border-color: var(--teal, #00A99D);
-  background: var(--teal, #00A99D);
+  border-color: var(--teal, #008B8B);
+  background: var(--teal, #008B8B);
   color: #ffffff;
 }
 
@@ -829,14 +829,14 @@
 }
 .notification-dropdown-item.critical .notification-dropdown-item-title {
   font-weight: 800;
-  color: var(--navy, #1B254B);
+  color: var(--navy, #1A2238);
 }
 
 /* Action button inside critical notification */
 .notification-action-btn {
   background: var(--teal-bg, rgba(0, 169, 157, 0.08));
-  border: 1px solid var(--teal, #00A99D);
-  color: var(--teal, #00A99D);
+  border: 1px solid var(--teal, #008B8B);
+  color: var(--teal, #008B8B);
   font-size: 10px;
   font-weight: 700;
   padding: 4px 8px;
@@ -849,7 +849,7 @@
   outline: none;
 }
 .notification-action-btn:hover {
-  background: var(--teal, #00A99D);
+  background: var(--teal, #008B8B);
   color: #ffffff;
 }
 
@@ -897,7 +897,7 @@
 }
 
 .breadcrumb-link:hover {
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 
 .breadcrumb-current {
@@ -930,7 +930,7 @@
 }
 
 .header-datetime-icon {
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   flex-shrink: 0;
 }
 
@@ -994,7 +994,7 @@
 }
 .notification-category-badge.finance {
   background: var(--teal-bg, rgba(0, 169, 157, 0.06));
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
 }
 .notification-category-badge.driver {
   background: var(--warn-bg, rgba(217, 119, 6, 0.08));
@@ -1021,7 +1021,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--teal, #00A99D);
+  color: var(--teal, #008B8B);
   cursor: pointer;
   opacity: 0; /* Hidden by default, shown on hover like Gmail */
   transition: all 150ms ease;

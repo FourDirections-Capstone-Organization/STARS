@@ -6,12 +6,12 @@
     height: 38px;
     padding: 0 18px;
     border-radius: var(--r-sm, 8px);
-    font-family: var(--fb, 'Inter', sans-serif);
+    font-family: var(--fb, 'Inter UI', 'Inter', sans-serif);
     font-weight: 600;
     font-size: 13px;
-    background: var(--navy, #1B254B);
+    background: var(--teal, #008B8B);
     color: #fff;
-    border: 1.5px solid var(--navy, #1B254B);
+    border: 1.5px solid var(--teal, #008B8B);
     cursor: pointer;
     white-space: nowrap;
     transition: background .2s, color .2s, box-shadow .2s, transform .1s, border-color .2s;
@@ -21,9 +21,9 @@
 }
 
 .quick-action-btn-header:hover:not(:disabled) {
-    background: var(--navy-hover, #232E5C);
-    border-color: var(--navy-hover, #232E5C);
-    box-shadow: 0 4px 12px rgba(27, 37, 75, .22);
+    background: var(--teal-hover, #007676);
+    border-color: var(--teal-hover, #007676);
+    box-shadow: 0 4px 12px rgba(0, 139, 139, .28);
     transform: translateY(-1px);
 }
 

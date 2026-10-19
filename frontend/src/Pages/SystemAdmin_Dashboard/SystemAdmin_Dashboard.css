@@ -1888,7 +1888,7 @@
 .emp-picker-row.disabled { cursor: not-allowed; opacity: 0.45; }
 .emp-picker-row.selected {
     background: #ecfdf5;
-    border-left: 3px solid #00A99D;
+    border-left: 3px solid #008B8B;
 }
 .emp-picker-row.recommended {
     background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
@@ -1900,7 +1900,7 @@ input.emp-picker-checkbox {
     min-width: 16px;
     max-width: 16px;
     cursor: pointer;
-    accent-color: #00A99D;
+    accent-color: #008B8B;
     flex-shrink: 0;
     padding: 0 !important;
 }
@@ -1949,11 +1949,11 @@ input.emp-picker-checkbox {
 }
 .emp-picker-tag.best {
     background: #ecfdf5;
-    color: #00A99D;
+    color: #008B8B;
 }
 .emp-picker-tag.selected-tag {
     background: #ecfdf5;
-    color: #00A99D;
+    color: #008B8B;
 }
 .emp-picker-empty {
     padding: 24px 16px;
@@ -1967,13 +1967,13 @@ input.emp-picker-checkbox {
     gap: 8px;
     padding: 8px 12px;
     background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
-    border: 1px solid rgba(0, 169, 157, 0.15);
+    border: 1px solid rgba(0, 139, 139, 0.15);
     border-radius: 8px;
     margin-bottom: 10px;
     font-size: 12px;
     color: #111827;
 }
-.emp-picker-rec-banner strong { color: #00A99D; }
+.emp-picker-rec-banner strong { color: #008B8B; }
 .emp-picker-confirm {
     display: flex;
     align-items: center;

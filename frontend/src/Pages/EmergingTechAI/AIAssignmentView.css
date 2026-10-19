@@ -524,7 +524,8 @@
 }
 
 .ai-priority-urgent {
-    color: #7c1d1d;
+    color: var(--urgent, #FF6D00);
+    font-weight: 700;
 }
 
 .ai-priority-high {
@@ -541,7 +542,7 @@
 
 .ai-sla-badge {
     font-size: 11px;
-    color: #7c1d1d;
+    color: var(--urgent, #FF6D00);
     display: flex;
     align-items: center;
     gap: 4px;

@@ -326,8 +326,9 @@
 }
 
 .priority-urgent {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
+    background: var(--urgent-bg, rgba(255, 109, 0, 0.12));
+    color: var(--urgent, #FF6D00);
+    border: 1px solid var(--urgent-border, rgba(255, 109, 0, 0.35));
 }
 
 .priority-high {
@@ -336,8 +337,8 @@
 }
 
 .priority-medium {
-    background: rgba(0, 169, 157, 0.12);
-    color: var(--teal, #00A99D);
+    background: rgba(0, 139, 139, 0.12);
+    color: var(--teal, #008B8B);
 }
 
 .priority-low {

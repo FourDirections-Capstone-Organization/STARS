@@ -669,9 +669,9 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                         </div>
                     </div>
                     <div>
-                        <div className="foms-kpi-value" style={{ color: '#DC2626' }}>{urgentCount}</div>
+                        <div className="foms-kpi-value" style={{ color: 'var(--urgent, #FF6D00)' }}>{urgentCount}</div>
                         <div className="foms-kpi-subtext">
-                            <AlertCircle size={12} style={{ color: '#DC2626' }} />
+                            <AlertCircle size={12} style={{ color: 'var(--urgent, #FF6D00)' }} />
                             <span>&gt;= 30 days overdue (Priority: Urgent)</span>
                         </div>
                     </div>
@@ -935,7 +935,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                                         <span className="foms-task-num-badge">
                                                             #{alert.starsTaskNumber || 'TK-PENDING'}
                                                         </span>
-                                                        <span className={`foms-status-pill ${alert.priorityLevel === 'Urgent' ? 'overdue' : 'pending'}`}>
+                                                        <span className={`foms-status-pill ${alert.priorityLevel === 'Urgent' ? 'urgent' : 'pending'}`}>
                                                             {alert.priorityLevel || 'High'}
                                                         </span>
                                                     </div>
@@ -1079,7 +1079,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                     </div>
                                     <div className="foms-success-meta-item">
                                         <span className="foms-meta-label">PRIORITY CLASSIFICATION</span>
-                                        <span className={`foms-status-pill ${simSuccessResult.priority === 'Urgent' ? 'overdue' : 'pending'}`}>
+                                        <span className={`foms-status-pill ${simSuccessResult.priority === 'Urgent' ? 'urgent' : 'pending'}`}>
                                             {simSuccessResult.priority} Priority
                                         </span>
                                     </div>

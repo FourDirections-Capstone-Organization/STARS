@@ -203,7 +203,7 @@ const DonutChart: React.FC<{ slices: { label: string; value: number }[]; total: 
                     strokeDashoffset={seg.offset}
                     transform="rotate(-90 65 65)" />
             ))}
-            <text x="65" y="61" textAnchor="middle" fontSize="20" fontWeight="800" fill="#1B254B">{total}</text>
+            <text x="65" y="61" textAnchor="middle" fontSize="20" fontWeight="800" fill="#1A2238">{total}</text>
             <text x="65" y="77" textAnchor="middle" fontSize="9" fill="#A3AED0">Total</text>
         </svg>
     );

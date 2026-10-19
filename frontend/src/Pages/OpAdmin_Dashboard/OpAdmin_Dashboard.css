@@ -26,15 +26,7 @@
     display: flex;
     min-height: 100vh;
     background: var(--bg-main);
-    font-family: 'Montserrat', system-ui, sans-serif;
-    color: var(--text-primary);
-}
-
-.dashboard-container {
-    display: flex;
-    min-height: 100vh;
-    background: var(--bg-main);
-    font-family: 'Montserrat', system-ui, sans-serif;
+    font-family: var(--fb, 'Inter UI', 'Inter', system-ui, sans-serif);
     color: var(--text-primary);
 }
 
@@ -412,7 +404,8 @@
 }
 
     .prio-dot.urgent {
-        background: #7c1d1d;
+        background: var(--urgent, #FF6D00);
+        box-shadow: 0 0 0 3px rgba(255, 109, 0, 0.25);
     }
 
     .prio-dot.high {
@@ -1018,9 +1011,11 @@
     gap: 8px;
 }
 
-.badge-critical {
-    background: rgba(124, 29, 29, 0.1);
-    color: #7c1d1d;
+.badge-critical,
+.badge-urgent {
+    background: var(--urgent-bg, rgba(255, 109, 0, 0.12));
+    color: var(--urgent, #FF6D00);
+    border: 1px solid var(--urgent-border, rgba(255, 109, 0, 0.35));
 }
 
 .badge-gray {
