@@ -35,13 +35,13 @@
     --ts: #374151;
     --tt: #6B7280;
     --tm: #9CA3AF;
-    /* Secondary (Dividers / Borders) */
+    /* Secondary (Brand Accent Token) */
     --secondary: #293652;
     --secondary-hover: #37486B;
-    --divider: #293652;
-    --border: #293652;
-    --border-h: #1A2238;
-    --border-subtle: rgba(41, 54, 82, 0.2);
+    --divider: #E2E8F0;
+    /* Borders */
+    --border: #E2E8F0;
+    --border-h: #CBD5E1;
     /* Status */
     --ok: #059669;
     --ok-bg: rgba(5, 150, 105, 0.1);
@@ -250,13 +250,13 @@
     --tm: #64748B;
     /* Muted text */
 
-    /* Secondary (Dividers / Borders) */
+    /* Secondary (Brand Accent Token) */
     --secondary: #293652;
     --secondary-hover: #37486B;
-    --divider: #293652;
-    --border: #293652;
-    --border-h: #3B4D73;
-    --border-subtle: rgba(41, 54, 82, 0.4);
+    --divider: #1E293B;
+    /* Borders */
+    --border: #1E293B;
+    --border-h: #334155;
 
     /* Urgent Alerts (Accent) */
     --accent: #FF6D00;
@@ -329,7 +329,7 @@
   body {
     background: var(--s2);
     /* was: #eef2ff — now uses design token */
-    font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
+    font-family: var(--fb, 'Inter', -apple-system, sans-serif);
     color: var(--tp);
   }
 
@@ -341,7 +341,6 @@
   h6 {
     font-family: var(--fh, 'Montserrat', -apple-system, sans-serif);
     font-weight: 700;
-    color: var(--navy, #1A2238);
   }
 
   img {
@@ -556,13 +555,13 @@
     transform: translateY(-1px);
   }
 
-  /* 3. Outline / Secondary (Dividers / Borders #293652) */
+  /* 3. Outline / Secondary (Gray border, teal text on hover) */
   .btn-outline,
   .btn-secondary,
   .btn--secondary {
     background: var(--s0, #fff);
-    color: var(--secondary, #293652);
-    border-color: var(--secondary, #293652);
+    color: var(--ts, #374151);
+    border-color: var(--border, #E2E8F0);
   }
 
   .btn-outline:hover:not(:disabled),
@@ -821,20 +820,20 @@
   .dd-divider {
     height: 1px;
     margin: 4px 6px;
-    background: var(--secondary, #293652);
+    background: var(--border, #e3e1d8);
   }
 
   /* ── Dropdown: Search filter input ────────────────────────────────── */
   .dd-search-wrap {
     padding: 4px 4px 2px;
-    border-bottom: 1px solid var(--secondary, #293652);
+    border-bottom: 1px solid var(--border, #e3e1d8);
     margin-bottom: 4px;
   }
 
   .dd-search-input {
     width: 100%;
     padding: 6px 10px;
-    border: 1px solid var(--border, #293652);
+    border: 1px solid var(--border, #e3e1d8);
     border-radius: 6px;
     font-size: 12px;
     background: var(--s1, #f7f9ff);
@@ -1323,7 +1322,7 @@
 
   .dropdown-divider {
     height: 1px;
-    background-color: var(--secondary, #293652);
+    background-color: var(--border, #E2E8F0);
     margin: 4px 6px;
   }
 
@@ -1747,180 +1746,4 @@
     transform: translateX(0) scale(1);
   }
 
-}
-
-/* ================================================================
-   STARS SYSTEM-WIDE PRIMARY PALETTE & TYPOGRAPHY SYSTEM
-   Enforces canonical brand tokens across all pages, views & components:
-   - Primary Navy: #1A2238 (Core UI / Headers)
-   - Secondary: #293652 (Dividers / Borders)
-   - Dark Cyan: #008B8B (Action Buttons)
-   - Accent: #FF6D00 (Urgent Alerts)
-   - Typography:
-     - Headings & KPIs: Montserrat
-     - Body & Data: Inter UI / Inter
-   ================================================================ */
-
-/* ── 1. Core UI & Headers (Primary Navy #1A2238) ── */
-h1, h2, h3, h4, h5, h6,
-.header-title,
-.site-header,
-.page-title,
-.section-title,
-.card-title,
-.dashboard-title,
-.modal-title,
-.dialog-title,
-.foms-title {
-  color: var(--navy, #1A2238);
-  font-family: var(--fh, 'Montserrat', sans-serif);
-  font-weight: 700;
-}
-
-/* ── 2. Action Buttons (Dark Cyan #008B8B) ── */
-.btn-primary,
-.btn--primary,
-.btn-action,
-.btn-teal,
-.action-button,
-.tv-btn-primary,
-.foms-btn-primary,
-.foms-btn-sync,
-.quick-action-btn-header,
-.table-card .btn-primary,
-.fm-btn-primary {
-  background-color: var(--teal, #008B8B) !important;
-  border-color: var(--teal, #008B8B) !important;
-  color: #ffffff !important;
-}
-
-.btn-primary:hover:not(:disabled),
-.btn--primary:hover:not(:disabled),
-.btn-action:hover:not(:disabled),
-.btn-teal:hover:not(:disabled),
-.action-button:hover:not(:disabled),
-.tv-btn-primary:hover:not(:disabled),
-.foms-btn-primary:hover:not(:disabled),
-.foms-btn-sync:hover:not(:disabled),
-.quick-action-btn-header:hover:not(:disabled),
-.table-card .btn-primary:hover:not(:disabled),
-.fm-btn-primary:hover:not(:disabled) {
-  background-color: var(--teal-hover, #007676) !important;
-  border-color: var(--teal-hover, #007676) !important;
-  box-shadow: 0 4px 14px rgba(0, 139, 139, 0.28) !important;
-}
-
-/* ── 3. Dividers & Borders (Secondary #293652) ── */
-.divider,
-.dd-divider,
-.dropdown-divider,
-.foms-divider,
-hr {
-  background-color: var(--secondary, #293652) !important;
-  border-color: var(--secondary, #293652) !important;
-  color: var(--secondary, #293652);
-}
-
-/* Subtle separator borders on cards, tables, headers, and panels */
-.site-header,
-.speedex-system-header,
-.foms-header-bar,
-.component-section,
-.dd-panel,
-.sidebar-profile-dropdown,
-.foms-table-wrapper {
-  border-color: var(--secondary, #293652);
-}
-
-/* ── 4. Urgent Alerts (Accent #FF6D00) ── */
-.urgent-alert,
-.alert-urgent,
-.foms-alert-urgent,
-.ann-card.urgent {
-  border-color: var(--urgent, #FF6D00) !important;
-}
-
-.prio-dot.urgent,
-.tv-prio-dot.urgent,
-.priority-dot-urgent {
-  background-color: var(--urgent, #FF6D00) !important;
-  box-shadow: 0 0 0 3px rgba(255, 109, 0, 0.25) !important;
-}
-
-.badge-urgent,
-.priority-urgent,
-.ai-priority-urgent,
-.ann-badge-priority.urgent {
-  background: var(--urgent-bg, rgba(255, 109, 0, 0.12)) !important;
-  color: var(--urgent, #FF6D00) !important;
-  border: 1px solid var(--urgent-border, rgba(255, 109, 0, 0.35)) !important;
-}
-
-.ann-chip.urgent.active {
-  background-color: var(--urgent, #FF6D00) !important;
-  border-color: var(--urgent, #FF6D00) !important;
-  color: #ffffff !important;
-  box-shadow: 0 3px 12px rgba(255, 109, 0, 0.35) !important;
-}
-
-/* ── 5. Typography: Montserrat for Headings & KPIs ── */
-.kpi-val,
-.kpi-value,
-.stat-value,
-.metric-value,
-.foms-kpi-value,
-.tv-foms-stat-amount,
-.foms-stat-amount,
-.foms-card-stat,
-.kpi-number,
-.stat-card-value,
-.stat-metric,
-.quick-stat-val,
-.ed-hero-stat-value,
-.rm2-role-view-stat-value,
-.foms-exposure-amount,
-.card-metric,
-.summary-stat-value,
-.task-stat-number,
-.analytics-stat,
-.stats-row .kpi-val,
-.stats-row-6 .kpi-val,
-.coordinator-stats-row-6 .kpi-val,
-.foms-kpi-card .foms-kpi-value {
-  font-family: var(--fh, 'Montserrat', sans-serif) !important;
-  font-weight: 700 !important;
-}
-
-/* ── 6. Typography: Inter UI for Body & Data ── */
-body,
-p,
-span,
-div,
-label,
-input,
-select,
-textarea,
-button {
-  font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
-}
-
-/* Data Tables, Cells, and Structured Data */
-table,
-thead,
-tbody,
-th,
-td,
-.table,
-.foms-table,
-.dt-table,
-.data-table,
-.data-cell,
-.table-cell,
-.data-row,
-.grid-cell,
-.dt-cell,
-.dt-th,
-.foms-table th,
-.foms-table td {
-  font-family: var(--fb, 'Inter UI', 'Inter', -apple-system, sans-serif);
 }

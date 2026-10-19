@@ -1743,7 +1743,7 @@
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 10px;
     background: #f8fafc;
-    border: 1px solid var(--secondary, #293652);
+    border: 1px solid var(--border);
     padding: 10px 14px;
     border-radius: 10px;
 }
