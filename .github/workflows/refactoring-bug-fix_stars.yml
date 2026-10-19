@@ -26,6 +26,9 @@ jobs:
       - name: Build with dotnet
         run: dotnet build backend/Backend.csproj --configuration Release
 
+      - name: Run automated unit tests
+        run: dotnet test backend/Tests/Backend.Tests.csproj --configuration Release
+
       - name: dotnet publish
         run: dotnet publish backend/Backend.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
 

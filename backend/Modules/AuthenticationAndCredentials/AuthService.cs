@@ -14,6 +14,7 @@ using Backend.Modules.AuthenticationAndCredentials.Jwt;
 using Backend.Modules.Email;
 using Backend.Modules.TaskManagement;
 using Backend.Modules.Utilities;
+using Backend.Modules.DmsIntegration;
 
 namespace Backend.Modules.AuthenticationAndCredentials;
 
@@ -24,6 +25,7 @@ public class AuthService : IAuthService
     private readonly IEmailService _emailService;
     private readonly ILogger<AuthService> _logger;
     private readonly IAuditLogService _auditLogService;
+    private readonly IDmsIntegrationService? _dmsService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(
@@ -31,13 +33,15 @@ public class AuthService : IAuthService
         IOptions<JwtSettings> jwtSettings,
         IEmailService emailService,
         IAuditLogService auditLogService,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        IDmsIntegrationService? dmsService = null)
     {
         _db = db;
         _jwtSettings = jwtSettings.Value;
         _emailService = emailService;
         _auditLogService = auditLogService;
         _logger = logger;
+        _dmsService = dmsService;
     }
 
     public async Task<ApiResponseDTO<AuthResponseDTO>> LoginAsync(LoginDTO dto, string? ipAddress = null)
@@ -203,6 +207,30 @@ public class AuthService : IAuthService
 
         var fullName = GetFullName(user);
 
+        // Cross-system Password Synchronization: if employee exists in DMS, sync new password to DMS
+        if (_dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                var dmsCheck = await _dmsService.CheckEmployeeExistsInDmsAsync(user.EmployeeNumber);
+                if (dmsCheck.IsSuccess && dmsCheck.Data)
+                {
+                    await _dmsService.ProvisionEmployeeAsync(
+                        user.EmployeeNumber,
+                        fullName,
+                        null,
+                        null,
+                        dto.NewPassword,
+                        null);
+                    _logger.LogInformation("Password reset successfully synchronized to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize password reset to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
         _logger.LogInformation("Password reset completed for employee {EmployeeNumber} ({Email})", user.EmployeeNumber, user.Email);
 
         await _auditLogService.LogAsync(
@@ -241,6 +269,30 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         var fullName = GetFullName(user);
+
+        // Cross-system Password Synchronization: if employee exists in DMS, sync new password to DMS
+        if (_dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                var dmsCheck = await _dmsService.CheckEmployeeExistsInDmsAsync(user.EmployeeNumber);
+                if (dmsCheck.IsSuccess && dmsCheck.Data)
+                {
+                    await _dmsService.ProvisionEmployeeAsync(
+                        user.EmployeeNumber,
+                        fullName,
+                        null,
+                        null,
+                        dto.NewPassword,
+                        null);
+                    _logger.LogInformation("Password change successfully synchronized to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to synchronize password change to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
 
         _logger.LogInformation("Password changed for user: {UserId}", userId);
 

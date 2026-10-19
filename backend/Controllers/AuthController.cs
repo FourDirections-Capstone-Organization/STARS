@@ -148,18 +148,27 @@ public class AuthController : ControllerBase
         return HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
+    private static readonly HashSet<string> AllowedOriginHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "localhost",
+        "127.0.0.1",
+        "speedex-system.vercel.app",
+        "stars-two-chi.vercel.app"
+    };
+
     private string GetClientBaseUrl()
     {
+        // Prevent password-reset link poisoning: only allow configured frontend URL, Central portal, or localhost in dev
         if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
         {
-            return origin.ToString().TrimEnd('/');
-        }
-
-        if (Request.Headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
-        {
-            if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
+            if (Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var uri))
             {
-                return $"{uri.Scheme}://{uri.Authority}";
+                var configuredHost = Uri.TryCreate(_frontendUrl, UriKind.Absolute, out var fUri) ? fUri.Host : "";
+                if (AllowedOriginHosts.Contains(uri.Host) ||
+                    (!string.IsNullOrEmpty(configuredHost) && uri.Host.Equals(configuredHost, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return origin.ToString().TrimEnd('/');
+                }
             }
         }
 
