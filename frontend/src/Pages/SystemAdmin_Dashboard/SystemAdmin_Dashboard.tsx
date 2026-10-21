@@ -3327,27 +3327,47 @@ export default function Dashboard() {
         try {
             const res = await api.get('/api/Task/assignable-users?pageNumber=1&pageSize=50');
             const json = res.data;
-            const list: any[] = json.isSuccess && Array.isArray(json.data?.items) ? json.data.items : (json.isSuccess && Array.isArray(json.data) ? json.data : (Array.isArray(json.data?.data) ? json.data.data : []));
+            let list: any[] = json?.isSuccess && Array.isArray(json?.data?.items)
+                ? json.data.items
+                : (json?.isSuccess && Array.isArray(json?.data)
+                    ? json.data
+                    : (Array.isArray(json?.data?.data) ? json.data.data : (Array.isArray(json) ? json : [])));
+
+            // If empty, fallback to users endpoint
+            if (list.length === 0) {
+                try {
+                    const fallbackRes = await api.get('/api/User?pageNumber=1&pageSize=100');
+                    const fbJson = fallbackRes.data;
+                    const fbList: any[] = Array.isArray(fbJson?.data?.items) ? fbJson.data.items : (Array.isArray(fbJson?.data) ? fbJson.data : (Array.isArray(fbJson) ? fbJson : []));
+                    if (fbList.length > 0) {
+                        list = fbList;
+                    }
+                } catch {
+                    // ignore fallback failure
+                }
+            }
+
             if (list.length > 0) {
                 const sample = list[0];
-                console.debug('[TaskForm] ALL KEYS of first item:', Object.keys(sample));
-                console.debug('[TaskForm] Raw first item:', JSON.stringify(sample, null, 2));
-                console.debug('[TaskForm] Full JSON response (truncated):', JSON.stringify(json).slice(0, 2000));
                 setRawApiKeys(Object.keys(sample).join(', ') + '\n\n' + JSON.stringify(sample, null, 2).slice(0, 800));
                 const mapped: WorkloadInfo[] = list.map((emp: any) => ({
-                    employeeName: emp.fullName ?? emp.FullName ?? emp.employeeName ?? '',
-                    accountId: emp.userId ?? emp.UserId ?? emp.id ?? '',
-                    availabilityStatus: emp.availabilityStatus ?? emp.AvailabilityStatus ?? emp.status ?? 'Active',
-                    isAvailable: emp.isAvailable ?? emp.IsAvailable ?? emp.available ?? true,
-                    workload: typeof emp.workload === 'number' ? emp.workload : 0,
+                    employeeName: (emp.fullName ?? emp.FullName ?? emp.employeeName ?? emp.name ?? '').trim(),
+                    accountId: emp.userId ?? emp.UserId ?? emp.id ?? emp.accountId ?? '',
+                    availabilityStatus: typeof emp.availabilityStatus === 'object'
+                        ? (emp.availabilityStatus?.status ?? 'Active')
+                        : (emp.availabilityStatus ?? emp.AvailabilityStatus ?? emp.status ?? 'Active'),
+                    isAvailable: typeof emp.availabilityStatus === 'object'
+                        ? Boolean(emp.availabilityStatus?.isAvailable)
+                        : (emp.isAvailable ?? emp.IsAvailable ?? (emp.availabilityStatus !== 'Offline' && emp.availabilityStatus !== 'On Leave')),
+                    workload: typeof emp.workload === 'number' ? emp.workload : (emp.activeTaskCount ?? 0),
                     role: emp.role ?? emp.Role ?? '',
                     isRecommended: true,
                     recommendationReason: 'Available for assignment',
-                    departmentId: emp.departmentId ?? emp.DepartmentId ?? '',
+                    departmentId: emp.departmentId ? String(emp.departmentId) : (emp.DepartmentId ? String(emp.DepartmentId) : ''),
                     department: emp.department ?? emp.Department ?? emp.departmentName ?? emp.DepartmentName ?? '',
-                    teamId: emp.teamId ?? emp.TeamId ?? '',
+                    teamId: emp.teamId ? String(emp.teamId) : (emp.TeamId ? String(emp.TeamId) : ''),
                     teamName: emp.teamName ?? emp.TeamName ?? '',
-                }));
+                })).filter(e => e.accountId && e.employeeName);
                 setter(mapped);
                 const activeEmployees = mapped.filter(e => e.isAvailable);
                 if (activeEmployees.length > 0) {
@@ -3363,6 +3383,31 @@ export default function Dashboard() {
             }
         } catch (err) {
             console.warn('[TaskForm] fetchAssignableEmployees error:', err);
+            // Fallback attempt on error
+            try {
+                const fallbackRes = await api.get('/api/User?pageNumber=1&pageSize=100');
+                const fbJson = fallbackRes.data;
+                const fbList: any[] = Array.isArray(fbJson?.data?.items) ? fbJson.data.items : (Array.isArray(fbJson?.data) ? fbJson.data : (Array.isArray(fbJson) ? fbJson : []));
+                if (fbList.length > 0) {
+                    const mapped: WorkloadInfo[] = fbList.map((emp: any) => ({
+                        employeeName: (emp.fullName ?? emp.name ?? '').trim(),
+                        accountId: emp.id ?? emp.userId ?? '',
+                        availabilityStatus: 'Active',
+                        isAvailable: true,
+                        workload: 0,
+                        role: emp.role ?? '',
+                        isRecommended: true,
+                        recommendationReason: 'Active account',
+                        departmentId: emp.departmentId ? String(emp.departmentId) : '',
+                        department: emp.departmentName ?? '',
+                        teamId: '',
+                        teamName: '',
+                    })).filter(e => e.accountId && e.employeeName);
+                    setter(mapped);
+                }
+            } catch {
+                // Ignore final fallback error
+            }
         }
     };
 
@@ -4702,13 +4747,13 @@ export default function Dashboard() {
                 <FormModal
                     isOpen={true}
                     onClose={() => setShowNewTask(false)}
-                    title="Create New Task"
-                    subtitle="Fill in the details to create a new task."
+                    title={newEnableDelivery ? "Create Pre-Delivery Operational Task" : "Create New Task"}
+                    subtitle={newEnableDelivery ? "Configure operational parameters and assign this pre-delivery order to create a STARS task before dispatch." : "Fill in the details to create a new task."}
                     apiError={newTaskApiError}
                     onSubmit={handleManagerCreateTask}
                     isSubmitting={newTaskSubmitting}
-                    size="md"
-                    submitLabel="Create Task"
+                    size={newEnableDelivery ? 'xl' : 'lg'}
+                    submitLabel={newEnableDelivery ? "Create & Initialize Task" : "Create Task"}
                 >
                     <div className="fm-section">
                         <h5 className="fm-section-title">Task Information</h5>

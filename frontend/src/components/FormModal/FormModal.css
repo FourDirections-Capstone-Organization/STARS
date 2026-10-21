@@ -84,13 +84,15 @@
 }
 
 .fm-size-xl {
-    width: 860px;
+    width: min(1080px, 95vw);
+    max-width: 1080px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
     .fm-card {
         width: calc(100vw - 32px) !important;
         max-width: 100% !important;
+        padding: 16px;
     }
 }
 
