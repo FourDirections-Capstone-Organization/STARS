@@ -651,12 +651,23 @@ public class DmsIntegrationService : IDmsIntegrationService
             return ApiResponseDTO<bool>.Failure("DMS integration is not configured");
         }
 
+        var effectiveRole = string.IsNullOrWhiteSpace(role) ? "Encoder" : role;
+        string canonicalAccess = effectiveRole.ToLowerInvariant() switch
+        {
+            "admin" => "All Systems",
+            "driver" => "Delivery Tracker",
+            "client" => "Client Portal",
+            _ => "Operations"
+        };
+
         var payload = new
         {
             employeeId,
             name,
-            role = string.IsNullOrWhiteSpace(role) ? "Driver" : role,
-            systemAccess = string.IsNullOrWhiteSpace(systemAccess) ? "Both" : systemAccess,
+            role = effectiveRole,
+            systemAccess = !string.IsNullOrWhiteSpace(systemAccess) && systemAccess != "Both" && systemAccess != "Mobile" && systemAccess != "Web"
+                ? systemAccess
+                : canonicalAccess,
             status = "Active",
             temporaryPassword,
             areas = areas ?? new List<string>()
