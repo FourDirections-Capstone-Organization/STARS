@@ -67,15 +67,15 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             return ApiResponseDTO<AuthResponseDTO>.Failure("Account is inactive. Please contact your administrator.");
 
-        // Check if account has access to STARS
+        // Check if account has access to any authorized systems
         var allowedSystems = (user.AllowedSystems ?? "STARS")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(s => s.ToUpperInvariant())
             .ToList();
 
-        if (allowedSystems.Any() && !allowedSystems.Contains("STARS"))
+        if (!allowedSystems.Any())
         {
-            return ApiResponseDTO<AuthResponseDTO>.Failure("This account does not have access permissions for STARS.");
+            return ApiResponseDTO<AuthResponseDTO>.Failure("This account does not have access permissions for any Speedex system.");
         }
 
         // Verify password using PBKDF2 (PasswordHasher)

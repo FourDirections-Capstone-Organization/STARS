@@ -346,6 +346,7 @@ public class UserService : IUserService
         var oldSuffix = user.Suffix ?? string.Empty;
         var oldContact = user.ContactNumber ?? string.Empty;
         var oldEmail = user.Email;
+        var oldAllowedSystems = user.AllowedSystems ?? "STARS";
 
         if (!string.IsNullOrWhiteSpace(dto.Email) && dto.Email.ToLower() != user.Email.ToLower())
         {
@@ -381,6 +382,15 @@ public class UserService : IUserService
         if (dto.EmploymentStatus != null)
             user.EmploymentStatus = dto.EmploymentStatus;
 
+        if (dto.TargetSystems != null && dto.TargetSystems.Any())
+        {
+            user.AllowedSystems = string.Join(",", dto.TargetSystems.Select(s => s.Trim().ToUpperInvariant()).Distinct());
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.AllowedSystems))
+        {
+            user.AllowedSystems = string.Join(",", dto.AllowedSystems.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s.ToUpperInvariant()).Distinct());
+        }
+
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -404,6 +414,7 @@ public class UserService : IUserService
         Track("Suffix", oldSuffix, user.Suffix ?? string.Empty);
         Track("ContactNumber", oldContact, user.ContactNumber ?? string.Empty);
         Track("Email", oldEmail, user.Email);
+        Track("AllowedSystems", oldAllowedSystems, user.AllowedSystems ?? "STARS");
 
         await _auditLogService.LogAsync(
             requestUserId,

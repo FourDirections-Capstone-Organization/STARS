@@ -27,4 +27,9 @@ public class UpdateUserDTO
 
     [MaxLength(50)]
     public string? EmploymentStatus { get; set; }
+
+    [MaxLength(100)]
+    public string? AllowedSystems { get; set; }
+
+    public List<string>? TargetSystems { get; set; }
 }

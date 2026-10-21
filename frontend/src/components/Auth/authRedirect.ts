@@ -174,9 +174,16 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
 
     if (typeof window !== 'undefined') {
         const loginUrl = getCentralLoginUrl();
+        const portalUrl = getSystemPortalUrl();
         const reason = options?.reason || 'logged_out';
-        
-        // Clear all session and authentication storage
+
+        const tokenToHandoff = localStorage.getItem('authToken') || '';
+        const refreshTokenToHandoff = localStorage.getItem('refreshToken') || '';
+        const roleToHandoff = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
+        const employeeIdToHandoff = localStorage.getItem('employeeId') || '';
+        const employeeNameToHandoff = localStorage.getItem('employeeName') || '';
+
+        // Clear local subsystem storage
         [
             'authToken', 'refreshToken', 'employeeId', 'employeeName',
             'firstName', 'middleName', 'lastName', 'suffix',
@@ -185,9 +192,22 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
         ].forEach(k => localStorage.removeItem(k));
         clearStoredRedirectUri();
 
-        if (options?.redirectToPortal !== false) {
-            // Direct to the Central One-Login with action=logout and reason
+        if (reason === 'inactivity' || reason === 'session_expired') {
+            // Force return to Central Login on actual session timeout
             window.location.href = `${loginUrl}?action=logout&reason=${encodeURIComponent(reason)}&system=stars`;
+        } else if (options?.redirectToPortal !== false) {
+            // Return to Central Landing Page (/portal) so user can switch systems
+            if (tokenToHandoff) {
+                redirectToExternalPortal(portalUrl, {
+                    token: tokenToHandoff,
+                    refreshToken: refreshTokenToHandoff,
+                    role: roleToHandoff,
+                    employeeId: employeeIdToHandoff,
+                    employeeName: employeeNameToHandoff,
+                });
+            } else {
+                window.location.href = portalUrl;
+            }
         } else {
             window.location.href = options?.fallbackUrl || '/';
         }
