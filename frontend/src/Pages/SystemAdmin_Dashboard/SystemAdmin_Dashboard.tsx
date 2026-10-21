@@ -784,21 +784,23 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
             }
 
             const data = responseData.data;
-            success('Employee registered successfully!');
             setDirty(false);
+            const fullName = [form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(' ') || form.email.trim();
             onSuccess({
                 employeeNumber: data.employeeNumber ?? form.employeeNumber,
-                employeeName: form.email.trim(),
-                firstName: '',
-                middleName: '',
-                lastName: '',
-                suffix: '',
-                contactNumber: '',
+                employeeName: fullName,
+                firstName: form.firstName,
+                middleName: form.middleName,
+                lastName: form.lastName,
+                suffix: form.suffix,
+                contactNumber: form.contactNumber,
                 role: data.role ?? form.role,
                 accountStatus: 'Inactive',
                 email: form.email.trim(),
             });
-            onClose();
+            setSuccessData({
+                employeeNumber: data.employeeNumber ?? form.employeeNumber,
+            });
         } catch (err: any) {
             const errorData = err.response?.data;
             const validationMsg = errorData?.errors
@@ -927,7 +929,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
     return (
         <div style={{ display: 'contents' }}>
             <FormModal
-                isOpen={true}
+                isOpen={!successData}
                 onClose={handleRequestClose}
                 title="Add New Employee"
                 subtitle="Fill in all details to register a new employee account."
@@ -1669,47 +1671,62 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
             </FormModal>
 
             {/* ── Success Screen ── */}
-            <FormModal isOpen={!!successData} onClose={() => { setSuccessData(null); onClose(); }} size="sm"
-                title="Employee registered"
-                subtitle="Account has been created successfully."
+            <FormModal isOpen={!!successData} onClose={() => { setSuccessData(null); onClose(); }} size="md"
+                title="Employee Created Successfully"
+                subtitle="The new employee account has been created and verified in the system."
             >
                 {successData && (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--status-active-bg)', border: '1px solid rgba(5,150,105,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13 }}>
-                            <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 1 }} color="var(--status-active)" />
-                            <span style={{ color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                Login credentials and activation link have been sent to <strong>{form.email.trim()}</strong>.
-                            </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(5, 150, 105, 0.08)', border: '1px solid rgba(5, 150, 105, 0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 18 }}>
+                            <CheckCircle2 size={24} style={{ flexShrink: 0 }} color="#059669" />
+                            <div>
+                                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 13.5 }}>Account Creation Complete</div>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.4 }}>
+                                    Login credentials and an activation link have been dispatched to <strong>{form.email.trim()}</strong>.
+                                </span>
+                            </div>
                         </div>
 
-                        <div style={{ background: 'var(--bg-input)', borderRadius: 10, border: '1px solid var(--border)', padding: '12px 16px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 10, border: '1px solid var(--border, #e2e8f0)', padding: '14px 18px', marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {[
                                 { label: 'Employee ID', value: successData.employeeNumber },
+                                { label: 'Employee Name', value: [form.firstName, form.middleName, form.lastName, form.suffix].filter(Boolean).join(' ') || '—' },
+                                { label: 'Email Address', value: form.email.trim() },
+                                { label: 'Contact Number', value: form.contactNumber.trim() || '—' },
                                 { label: 'Authorized Systems', value: form.targetSystems?.join(', ') || form.targetSystem },
                                 ...(form.targetSystems?.includes('STARS') ? [
+                                    { label: 'STARS Department', value: departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || form.departmentId },
+                                    { label: 'STARS Position', value: jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name || form.jobPositionId },
                                     { label: 'STARS Role', value: form.role },
                                 ] : []),
                                 ...(form.targetSystems?.includes('DMS') ? [
-                                    { label: 'DMS Role', value: form.dmsRole || 'Driver' },
+                                    { label: 'DMS Role', value: form.dmsRole || 'Courier' },
+                                    { label: 'DMS Hubs', value: form.dmsAreas?.join(', ') || 'Manila' },
                                 ] : []),
                                 ...(form.targetSystems?.includes('FOMS') ? [
                                     { label: 'FOMS Role', value: form.fomsRole || 'Accountant' },
                                 ] : []),
-                                { label: 'Status', value: form.employmentStatus },
+                                { label: 'Employment Status', value: form.employmentStatus },
                                 { label: 'Hire Date', value: fmtDate(form.hireDate) },
-                                { label: 'Email', value: form.email.trim() },
                             ].map(({ label, value }, i, arr) => (
                                 <div key={label}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                                         <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
-                                        <strong style={{ textAlign: 'right', maxWidth: 240, wordBreak: 'break-all' }}>{value || '—'}</strong>
+                                        <strong style={{ textAlign: 'right', maxWidth: 280, wordBreak: 'break-word', color: 'var(--text-primary)' }}>{value || '—'}</strong>
                                     </div>
-                                    {i < arr.length - 1 && <div style={{ height: 1, background: 'var(--border)', marginTop: 10 }} />}
+                                    {i < arr.length - 1 && <div style={{ height: 1, background: 'var(--border, #e2e8f0)', marginTop: 8 }} />}
                                 </div>
                             ))}
                         </div>
 
-                        <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => { setSuccessData(null); onClose(); }}>Done</button>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '11px 0', fontSize: 13.5, fontWeight: 600 }}
+                            onClick={() => { setSuccessData(null); onClose(); }}
+                        >
+                            Done
+                        </button>
                     </>
                 )}
             </FormModal>
@@ -3057,6 +3074,7 @@ export default function Dashboard() {
     const [tmTasks, setTmTasks] = useState<any[]>([]);
     const [tmLoading, setTmLoading] = useState(false);
     const [showNewTask, setShowNewTask] = useState(false);
+    const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [tmDetailTask, setTmDetailTask] = useState<TaskViewTask | null>(null);
     const [tmEditingTask, setTmEditingTask] = useState<TaskViewTask | null>(null);
@@ -3688,7 +3706,18 @@ export default function Dashboard() {
                     setNewTaskApiError(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
                 }
             }
-            success(`Task "${createdTitle}" created successfully.`);
+            const assigneeObj = newTaskEligibleEmployees.find(e => e.accountId === newTaskForm.assignedTo);
+            setCreatedTaskSuccess({
+                taskId,
+                title: createdTitle,
+                priority: newTaskForm.priority,
+                deadline: newTaskForm.deadline,
+                assigneeName: assigneeObj?.employeeName || (newTaskForm.assignedTo ? 'Assigned Employee' : 'Team / Department'),
+                isDelivery: newEnableDelivery,
+                waybillNo: (newDeliveryForm as any).dmsWaybillNo,
+                recipientName: newDeliveryForm.recipientName,
+                area: newDeliveryForm.area,
+            });
             setShowNewTask(false);
             setNewEnableDelivery(false);
             setNewDeliveryForm({
@@ -5311,6 +5340,71 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                </FormModal>
+            )}
+
+            {/* ── Task Created Success Modal ── */}
+            {createdTaskSuccess && (
+                <FormModal
+                    isOpen={true}
+                    onClose={() => setCreatedTaskSuccess(null)}
+                    title="Task Created Successfully"
+                    subtitle="Operational task has been recorded and assigned in STARS."
+                    size="md"
+                    footer={
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '11px 0', fontSize: 13.5, fontWeight: 600 }}
+                            onClick={() => setCreatedTaskSuccess(null)}
+                        >
+                            Done
+                        </button>
+                    }
+                >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(5, 150, 105, 0.08)', border: '1px solid rgba(5, 150, 105, 0.25)', borderRadius: 10, padding: '12px 16px' }}>
+                            <CheckCircle2 size={24} color="#059669" style={{ flexShrink: 0 }} />
+                            <div>
+                                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 13.5 }}>Task Successfully Created</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Assignees have been notified and operational tracking is now active.</div>
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 10, border: '1px solid var(--border, #e2e8f0)', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Task Title</span>
+                                <strong style={{ textAlign: 'right', maxWidth: 280, wordBreak: 'break-word', color: 'var(--text-primary)' }}>{createdTaskSuccess.title}</strong>
+                            </div>
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Priority SLA</span>
+                                <strong style={{ color: createdTaskSuccess.priority === 'Urgent' ? '#dc2626' : 'var(--text-primary)' }}>{createdTaskSuccess.priority}</strong>
+                            </div>
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Assigned Target</span>
+                                <strong>{createdTaskSuccess.assigneeName}</strong>
+                            </div>
+                            {createdTaskSuccess.isDelivery && (
+                                <>
+                                    <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>DMS Dispatch</span>
+                                        <strong style={{ color: 'var(--teal, #00A99D)' }}>
+                                            {createdTaskSuccess.waybillNo ? `Waybill: ${createdTaskSuccess.waybillNo}` : 'DMS Delivery Linked'}
+                                        </strong>
+                                    </div>
+                                    {createdTaskSuccess.recipientName && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            <span>Recipient</span>
+                                            <span>{createdTaskSuccess.recipientName}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 </FormModal>
             )}

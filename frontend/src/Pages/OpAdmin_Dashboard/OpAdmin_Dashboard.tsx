@@ -8028,6 +8028,7 @@ export default function OpsAdminDashboard() {
     }, [activeTab, fetchAllNotifications]);
 
     const [showNew, setShowNew] = useState(false);
+    const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
@@ -8686,14 +8687,28 @@ export default function OpsAdminDashboard() {
                 setPendingFiles([]);
                 if (failed > 0) {
                     error(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
-                } else {
-                    success(`Task "${createdTitle}" created. ${uploaded} attachment(s) uploaded.`);
                 }
-            } else {
-                success(`Task "${createdTitle}" created successfully.`);
             }
 
+            const assigneeId = data.assignedUserIds?.[0] || (data as any).assignedTo;
+            const assigneeObj = teamMembers.find(m => m.accountId === assigneeId || (m as any).id === assigneeId || (m as any).employeeId === assigneeId);
+            const priorityLabels = ['Low', 'Medium', 'High', 'Urgent'];
+            const priorityStr = typeof data.priorityLevel === 'number' ? priorityLabels[data.priorityLevel] || 'Medium' : 'Medium';
+
+            setCreatedTaskSuccess({
+                taskId,
+                taskNumber: created?.data?.taskNumber ?? created?.taskNumber ?? created?.data?.TaskNumber,
+                title: createdTitle,
+                priority: priorityStr,
+                assigneeName: assigneeObj?.employeeName || (assigneeId ? 'Assigned Employee' : 'Team / Department'),
+                isDelivery: !!(data as any).deliveryDetails,
+                waybillNo: (data as any).deliveryDetails?.dmsWaybillNo,
+                recipientName: (data as any).deliveryDetails?.recipientName,
+                area: (data as any).deliveryDetails?.area,
+            });
+
             setShowNew(false);
+            setInitialTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
         } catch (err: any) {
@@ -9576,6 +9591,76 @@ export default function OpsAdminDashboard() {
                 />
             )}
 
+
+            {createdTaskSuccess && (
+                <div className="modal-overlay" onClick={() => setCreatedTaskSuccess(null)}>
+                    <div className="modal-card" style={{ maxWidth: 500, padding: '24px 28px' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                            <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(5, 150, 105, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <CheckCircle2 size={24} color="#059669" />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>Task Created Successfully</h3>
+                                <p style={{ margin: '2px 0 0', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                    Operational task has been recorded and assigned in STARS.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 10, border: '1px solid var(--border, #e2e8f0)', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Task Title</span>
+                                <strong style={{ textAlign: 'right', maxWidth: 280, wordBreak: 'break-word', color: 'var(--text-primary)' }}>{createdTaskSuccess.title}</strong>
+                            </div>
+                            {createdTaskSuccess.taskNumber && (
+                                <>
+                                    <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>Task Number</span>
+                                        <strong style={{ fontFamily: 'monospace', color: 'var(--teal, #00A99D)' }}>{createdTaskSuccess.taskNumber}</strong>
+                                    </div>
+                                </>
+                            )}
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Priority SLA</span>
+                                <strong style={{ color: createdTaskSuccess.priority === 'Urgent' ? '#dc2626' : 'var(--text-primary)' }}>{createdTaskSuccess.priority}</strong>
+                            </div>
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Assigned Target</span>
+                                <strong>{createdTaskSuccess.assigneeName}</strong>
+                            </div>
+                            {createdTaskSuccess.isDelivery && (
+                                <>
+                                    <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>DMS Dispatch</span>
+                                        <strong style={{ color: 'var(--teal, #00A99D)' }}>
+                                            {createdTaskSuccess.waybillNo ? `Waybill: ${createdTaskSuccess.waybillNo}` : 'DMS Delivery Linked'}
+                                        </strong>
+                                    </div>
+                                    {createdTaskSuccess.recipientName && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            <span>Recipient</span>
+                                            <span>{createdTaskSuccess.recipientName}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '10px 0', fontSize: 13.5, fontWeight: 600 }}
+                            onClick={() => setCreatedTaskSuccess(null)}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <ConfirmationModal
                 isOpen={confirmModal.isOpen}
