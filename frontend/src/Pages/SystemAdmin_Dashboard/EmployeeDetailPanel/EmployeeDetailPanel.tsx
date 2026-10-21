@@ -600,6 +600,11 @@ export default function EmployeeDetailPanel({
             if (!data.isSuccess) {
                 throw new Error(data.message || 'Failed to send verification email.');
             }
+            if (emailToSend && emailToSend !== profile.email) {
+                const updated = { ...profile, email: emailToSend };
+                setProfile(updated);
+                onEmployeeUpdated(updated);
+            }
             success(`Verification email sent to ${emailToSend || profile.employeeName}.`);
             setResendCooldown(60);
             sessionStorage.setItem(cooldownKey, String(Date.now() + 60000));

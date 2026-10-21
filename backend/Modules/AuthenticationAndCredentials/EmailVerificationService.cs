@@ -94,83 +94,120 @@ public class EmailVerificationService : IEmailVerificationService
     public async Task<ApiResponseDTO<bool>> ResendVerificationAsync(
         Guid? employeeId, string? email, string verificationUrl, string? identifier = null)
     {
-        User? user = null;
-
-        if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+        try
         {
-            user = await _db.Users.FindAsync(employeeId.Value);
-        }
+            User? user = null;
 
-        var searchEmail = EmailHelper.AutoCorrectEmail(email?.Trim() ?? string.Empty);
-        var searchIdentifier = identifier?.Trim() ?? string.Empty;
-
-        if (user is null && !string.IsNullOrWhiteSpace(searchEmail))
-        {
-            var emailLower = searchEmail.ToLowerInvariant();
-            user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower);
-        }
-
-        if (user is null && !string.IsNullOrWhiteSpace(searchIdentifier))
-        {
-            if (Guid.TryParse(searchIdentifier, out var parsedGuid))
+            if (employeeId.HasValue && employeeId.Value != Guid.Empty)
             {
-                user = await _db.Users.FindAsync(parsedGuid);
+                user = await _db.Users.FindAsync(employeeId.Value);
+            }
+
+            var searchEmail = EmailHelper.AutoCorrectEmail(email?.Trim() ?? string.Empty);
+            var searchIdentifier = identifier?.Trim() ?? string.Empty;
+
+            if (user is null && !string.IsNullOrWhiteSpace(searchEmail))
+            {
+                var emailLower = searchEmail.ToLowerInvariant();
+                user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower);
+            }
+
+            // Also check raw email in case it wasn't yet corrected in DB
+            if (user is null && !string.IsNullOrWhiteSpace(email))
+            {
+                var rawEmailLower = email.Trim().ToLowerInvariant();
+                user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == rawEmailLower);
+            }
+
+            if (user is null && !string.IsNullOrWhiteSpace(searchIdentifier))
+            {
+                if (Guid.TryParse(searchIdentifier, out var parsedGuid))
+                {
+                    user = await _db.Users.FindAsync(parsedGuid);
+                }
+
+                if (user is null)
+                {
+                    var idLower = searchIdentifier.ToLowerInvariant();
+                    var correctedIdEmail = searchIdentifier.Contains('@')
+                        ? EmailHelper.AutoCorrectEmail(searchIdentifier).ToLowerInvariant()
+                        : idLower;
+
+                    user = await _db.Users.FirstOrDefaultAsync(u =>
+                        u.EmployeeNumber.ToLower() == idLower ||
+                        (u.Username != null && u.Username.ToLower() == idLower) ||
+                        u.Email.ToLower() == idLower ||
+                        u.Email.ToLower() == correctedIdEmail);
+                }
             }
 
             if (user is null)
+                return ApiResponseDTO<bool>.Failure("Employee not found.");
+
+            if (user.IsEmailVerified)
+                return ApiResponseDTO<bool>.Failure("Account is already verified. You may log in.");
+
+            if (user.IsDeactivated)
+                return ApiResponseDTO<bool>.Failure("Account is deactivated. Please contact your administrator.");
+
+            // If user's email in DB has a typo (e.g. gmaill.com), auto-correct and persist the correction
+            if (!string.IsNullOrWhiteSpace(user.Email))
             {
-                var idLower = searchIdentifier.ToLowerInvariant();
-                var correctedIdEmail = searchIdentifier.Contains('@')
-                    ? EmailHelper.AutoCorrectEmail(searchIdentifier).ToLowerInvariant()
-                    : idLower;
-
-                user = await _db.Users.FirstOrDefaultAsync(u =>
-                    u.EmployeeNumber.ToLower() == idLower ||
-                    (u.Username != null && u.Username.ToLower() == idLower) ||
-                    u.Email.ToLower() == idLower ||
-                    u.Email.ToLower() == correctedIdEmail);
+                var correctedDbEmail = EmailHelper.AutoCorrectEmail(user.Email);
+                if (!string.IsNullOrWhiteSpace(correctedDbEmail) && !correctedDbEmail.Equals(user.Email, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.Email = correctedDbEmail;
+                }
             }
+
+            if (string.IsNullOrWhiteSpace(user.Email))
+                return ApiResponseDTO<bool>.Failure("Employee does not have a registered email address.");
+
+            // Check 60-second cooldown rate-limiting
+            var now = DateTime.UtcNow;
+            var userKey = user.Id.ToString();
+            var emailKey = (user.Email ?? string.Empty).Trim().ToLowerInvariant();
+
+            if (TryGetCooldownRemaining(userKey, emailKey, now, out var remainingSeconds))
+            {
+                return ApiResponseDTO<bool>.Failure($"Please wait {remainingSeconds} second(s) before sending another verification email.");
+            }
+
+            var token = GenerateToken();
+            user.EmailVerificationToken = token;
+            user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            var fullName = $"{user.FirstName} {user.LastName}".Trim();
+            if (string.IsNullOrWhiteSpace(fullName)) fullName = user.EmployeeNumber;
+
+            await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
+
+            RecordCooldown(userKey, emailKey, now);
+
+            try
+            {
+                await _auditLogService.LogAsync(
+                    user.Id, AuditActionType.Update, "User", user.Id, null,
+                    $"Verification email RESENT to {fullName} ({user.Email})",
+                    "Authentication");
+            }
+            catch (Exception auditEx)
+            {
+                _logger.LogWarning(auditEx, "Failed to record audit log for verification email resend.");
+            }
+
+            _logger.LogInformation("Verification email resent to user {UserId} ({Email})", user.Id, user.Email);
+
+            return ApiResponseDTO<bool>.Success(true, "Verification email resent successfully. Please check your inbox.");
         }
-
-        if (user is null)
-            return ApiResponseDTO<bool>.Failure("Employee not found.");
-
-        if (user.IsEmailVerified)
-            return ApiResponseDTO<bool>.Failure("Account is already verified. You may log in.");
-
-        if (user.IsDeactivated)
-            return ApiResponseDTO<bool>.Failure("Account is deactivated. Please contact your administrator.");
-
-        // Check 60-second cooldown rate-limiting
-        var now = DateTime.UtcNow;
-        var userKey = user.Id.ToString();
-        var emailKey = user.Email.Trim().ToLowerInvariant();
-
-        if (TryGetCooldownRemaining(userKey, emailKey, now, out var remainingSeconds))
+        catch (Exception ex)
         {
-            return ApiResponseDTO<bool>.Failure($"Please wait {remainingSeconds} second(s) before sending another verification email.");
+            _logger.LogError(ex, "Unexpected error in ResendVerificationAsync");
+            return ApiResponseDTO<bool>.Failure($"Failed to process verification request: {ex.Message}");
         }
-
-        var token = GenerateToken();
-        user.EmailVerificationToken = token;
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-        user.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync();
-
-        var fullName = $"{user.FirstName} {user.LastName}".Trim();
-        await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
-
-        RecordCooldown(userKey, emailKey, now);
-
-        await _auditLogService.LogAsync(
-            user.Id, AuditActionType.Update, "User", user.Id, null,
-            $"Verification email RESENT to {fullName} ({user.Email})",
-            "Authentication");
-
-        _logger.LogInformation("Verification email resent to user {UserId} ({Email})", user.Id, user.Email);
-
-        return ApiResponseDTO<bool>.Success(true, "Verification email resent successfully. Please check your inbox.");
     }
 
     public async Task<ApiResponseDTO<EmailVerificationStatusDTO>> GetVerificationStatusAsync(Guid userId)
@@ -205,27 +242,55 @@ public class EmailVerificationService : IEmailVerificationService
 
     public async System.Threading.Tasks.Task SendVerificationEmailForUserAsync(Guid userId, string verificationUrl)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user is null)
-            return;
+        try
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user is null)
+                return;
 
-        var token = GenerateToken();
-        user.EmailVerificationToken = token;
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-        await _db.SaveChangesAsync();
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                var correctedDbEmail = EmailHelper.AutoCorrectEmail(user.Email);
+                if (!string.IsNullOrWhiteSpace(correctedDbEmail) && !correctedDbEmail.Equals(user.Email, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.Email = correctedDbEmail;
+                }
+            }
 
-        var fullName = $"{user.FirstName} {user.LastName}".Trim();
-        await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
+            var token = GenerateToken();
+            user.EmailVerificationToken = token;
+            user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+            await _db.SaveChangesAsync();
 
-        var now = DateTime.UtcNow;
-        RecordCooldown(user.Id.ToString(), user.Email?.Trim().ToLowerInvariant() ?? string.Empty, now);
+            var fullName = $"{user.FirstName} {user.LastName}".Trim();
+            if (string.IsNullOrWhiteSpace(fullName)) fullName = user.EmployeeNumber;
 
-        await _auditLogService.LogAsync(
-            userId, AuditActionType.Update, "User", userId, null,
-            $"Verification email SENT to {fullName} ({user.Email})",
-            "Authentication");
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
+            }
 
-        _logger.LogInformation("Verification email sent to new user {UserId} ({Email})", user.Id, user.Email);
+            var now = DateTime.UtcNow;
+            RecordCooldown(user.Id.ToString(), (user.Email ?? string.Empty).Trim().ToLowerInvariant(), now);
+
+            try
+            {
+                await _auditLogService.LogAsync(
+                    userId, AuditActionType.Update, "User", userId, null,
+                    $"Verification email SENT to {fullName} ({user.Email})",
+                    "Authentication");
+            }
+            catch (Exception auditEx)
+            {
+                _logger.LogWarning(auditEx, "Failed to record audit log for verification email send.");
+            }
+
+            _logger.LogInformation("Verification email sent to new user {UserId} ({Email})", user.Id, user.Email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send verification email for user {UserId}", userId);
+        }
     }
 
     private static bool TryGetCooldownRemaining(string userKey, string emailKey, DateTime now, out int remainingSeconds)
