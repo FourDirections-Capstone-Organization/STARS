@@ -23,6 +23,8 @@ import {
     Activity,
     Lock,
     Calendar,
+    Eye,
+    Search,
 } from 'lucide-react';
 import { useToast } from '../../../components/Toast/Toast';
 import api from '../../../api';
@@ -37,7 +39,7 @@ import './RoleManagementTab.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SubTab = 'roles' | 'departments' | 'positions' | 'client-accounts' | 'overview';
+type SubTab = 'roles' | 'departments' | 'teams' | 'positions' | 'client-accounts' | 'overview';
 
 // ── Client Accounts (FR-011) ──
 export interface ClientAccountDTO {
@@ -112,6 +114,40 @@ export interface DepartmentResponseDTO {
 export interface CreateDepartmentDTO {
     name: string;
     description?: string;
+}
+
+// ── Teams ──
+export interface TeamMemberDTO {
+    userId: string;
+    fullName: string;
+    employeeNumber?: string;
+    role?: string;
+    department?: string;
+    availabilityStatus?: string;
+    isAvailable?: boolean;
+    joinedAt?: string;
+}
+
+export interface TeamResponseDTO {
+    id: string;
+    name: string;
+    departmentId?: string;
+    departmentName?: string;
+    description?: string;
+    isActive: boolean;
+    memberCount: number;
+    members: TeamMemberDTO[];
+    createdAt?: string;
+}
+
+export interface DepartmentUserSummaryDTO {
+    id: string;
+    fullName: string;
+    employeeNumber?: string;
+    role?: string;
+    jobPositionName?: string;
+    departmentId?: string;
+    departmentName?: string;
 }
 
 // ── Employees (for dropdowns) ──
@@ -383,6 +419,28 @@ export default function RoleManagementTab() {
     const [deptSearch, setDeptSearch] = useState(''); const [deptPage, setDeptPage] = useState(1);
     const [posSearch, setPosSearch] = useState(''); const [posPage, setPosPage] = useState(1);
 
+    // ── Teams ──
+    const [teams, setTeams] = useState<TeamResponseDTO[]>([]);
+    const [teamsLoading, setTeamsLoading] = useState(false);
+    const [teamSearch, setTeamSearch] = useState('');
+    const [teamDeptFilter, setTeamDeptFilter] = useState('');
+    const [teamPage, setTeamPage] = useState(1);
+    const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
+    const [editingTeam, setEditingTeam] = useState<TeamResponseDTO | null>(null);
+    const [viewingTeam, setViewingTeam] = useState<TeamResponseDTO | null>(null);
+    const [teamForm, setTeamForm] = useState({
+        name: '',
+        departmentId: '',
+        description: '',
+        isActive: true,
+        memberUserIds: [] as string[],
+    });
+    const [teamFormErrors, setTeamFormErrors] = useState<Record<string, string>>({});
+    const [teamDirty, setTeamDirty] = useState(false);
+    const [deptEmployees, setDeptEmployees] = useState<DepartmentUserSummaryDTO[]>([]);
+    const [deptEmployeesLoading, setDeptEmployeesLoading] = useState(false);
+    const [teamMemberSearch, setTeamMemberSearch] = useState('');
+
     // ── Modals ──
     const [confirmModal, setConfirmModal] = useState<ConfirmState>(CONFIRM_CLOSED);
 
@@ -563,8 +621,79 @@ export default function RoleManagementTab() {
         } catch { setAuditEntries([]); } finally { setAuditLoading(false); }
     };
 
+    const fetchTeams = async (deptId?: string) => {
+        setTeamsLoading(true);
+        try {
+            const params: any = { pageNumber: 1, pageSize: 200, includeInactive: true };
+            if (deptId) params.departmentId = deptId;
+            const res = await api.get('/api/Team', params);
+            const rd = res.data;
+            const raw = rd?.data?.items ?? (Array.isArray(rd?.data) ? rd.data : (Array.isArray(rd) ? rd : rd?.$values ?? []));
+            setTeams(raw.map((t: any): TeamResponseDTO => ({
+                id: t.id ?? t.Id,
+                name: t.name ?? t.Name,
+                departmentId: t.departmentId ?? t.DepartmentId,
+                departmentName: t.departmentName ?? t.DepartmentName ?? '',
+                description: t.description ?? t.Description ?? '',
+                isActive: t.isActive ?? t.IsActive ?? true,
+                memberCount: t.memberCount ?? t.MemberCount ?? (t.members?.length ?? 0),
+                members: (t.members ?? t.Members ?? []).map((m: any): TeamMemberDTO => ({
+                    userId: m.userId ?? m.UserId ?? m.id,
+                    fullName: m.fullName ?? m.FullName ?? '',
+                    employeeNumber: m.employeeNumber ?? m.EmployeeNumber ?? '',
+                    role: m.role ?? m.Role ?? '',
+                    department: m.department ?? m.Department ?? '',
+                    availabilityStatus: m.availabilityStatus ?? m.AvailabilityStatus,
+                    isAvailable: m.isAvailable ?? m.IsAvailable ?? true,
+                    joinedAt: m.joinedAt ?? m.JoinedAt,
+                })),
+                createdAt: t.createdAt ?? t.CreatedAt,
+            })));
+        } catch (e: any) {
+            toastError(e.message || 'Failed to load teams');
+        } finally {
+            setTeamsLoading(false);
+        }
+    };
+
+    const fetchDeptEmployees = async (deptId: string) => {
+        if (!deptId) {
+            setDeptEmployees([]);
+            return;
+        }
+        setDeptEmployeesLoading(true);
+        try {
+            const res = await api.get('/api/user', {
+                departmentId: deptId,
+                pageSize: 200,
+                status: 'Active',
+            });
+            const rd = res.data;
+            const raw = rd?.data?.items ?? (Array.isArray(rd?.data) ? rd.data : (Array.isArray(rd) ? rd : rd?.$values ?? []));
+            setDeptEmployees(raw.map((u: any): DepartmentUserSummaryDTO => ({
+                id: u.id ?? u.userId ?? u.employeeId,
+                fullName: u.fullName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
+                employeeNumber: u.employeeNumber ?? u.EmployeeNumber ?? '',
+                role: u.roleName ?? (typeof u.role === 'string' ? u.role : ''),
+                jobPositionName: u.jobPositionName ?? u.position,
+                departmentId: u.departmentId,
+                departmentName: u.departmentName,
+            })));
+        } catch {
+            setDeptEmployees([]);
+        } finally {
+            setDeptEmployeesLoading(false);
+        }
+    };
+
     useEffect(() => { fetchRoles(); }, []);
     useEffect(() => { if (subTab === 'departments') { if (departments.length === 0) fetchDepartments(); fetchEmployees(); } }, [subTab]);
+    useEffect(() => {
+        if (subTab === 'teams') {
+            if (departments.length === 0) fetchDepartments();
+            fetchTeams(teamDeptFilter || undefined);
+        }
+    }, [subTab, teamDeptFilter]);
     useEffect(() => {
         if (subTab === 'positions') {
             if (positions.length === 0) fetchPositions();
@@ -599,6 +728,17 @@ export default function RoleManagementTab() {
         (d.description || '').toLowerCase().includes(deptSearch.toLowerCase()));
     const deptTotalPages = Math.max(1, Math.ceil(filteredDepts.length / PER_PAGE));
     const pagedDepts = filteredDepts.slice((deptPage - 1) * PER_PAGE, deptPage * PER_PAGE);
+
+    const filteredTeams = teams.filter(t => {
+        const matchesSearch =
+            t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+            (t.description || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
+            (t.departmentName || '').toLowerCase().includes(teamSearch.toLowerCase());
+        const matchesDept = !teamDeptFilter || t.departmentId === teamDeptFilter;
+        return matchesSearch && matchesDept;
+    });
+    const teamTotalPages = Math.max(1, Math.ceil(filteredTeams.length / PER_PAGE));
+    const pagedTeams = filteredTeams.slice((teamPage - 1) * PER_PAGE, teamPage * PER_PAGE);
 
     const filteredPos = positions.filter(p =>
         p.name.toLowerCase().includes(posSearch.toLowerCase()) ||
@@ -918,6 +1058,505 @@ export default function RoleManagementTab() {
                 } catch (e: any) { toastError(e.response?.data?.message || e.message || 'Failed to delete position.'); setConfirmModal(CONFIRM_CLOSED); } finally { setActionLoading(false); }
             },
         });
+    };
+
+    // ─── Team Actions ─────────────────────────────────────────────────────────
+
+    const openCreateTeam = () => {
+        if (teams.length === 0) fetchTeams();
+        if (departments.length === 0) fetchDepartments();
+        setEditingTeam(null);
+        const initialDept = teamDeptFilter || '';
+        setTeamForm({
+            name: '',
+            departmentId: initialDept,
+            description: '',
+            isActive: true,
+            memberUserIds: [],
+        });
+        setTeamFormErrors({});
+        setTeamMemberSearch('');
+        if (initialDept) {
+            fetchDeptEmployees(initialDept);
+        } else {
+            setDeptEmployees([]);
+        }
+        setIsCreateTeamOpen(true);
+    };
+
+    const openCreateTeamForDept = (dept: DepartmentResponseDTO) => {
+        if (teams.length === 0) fetchTeams();
+        setEditingTeam(null);
+        setTeamForm({
+            name: '',
+            departmentId: dept.departmentId,
+            description: '',
+            isActive: true,
+            memberUserIds: [],
+        });
+        setTeamFormErrors({});
+        setTeamMemberSearch('');
+        fetchDeptEmployees(dept.departmentId);
+        setIsCreateTeamOpen(true);
+    };
+
+    const openEditTeam = (team: TeamResponseDTO) => {
+        if (teams.length === 0) fetchTeams();
+        if (departments.length === 0) fetchDepartments();
+        setEditingTeam(team);
+        const deptId = team.departmentId || '';
+        setTeamForm({
+            name: team.name,
+            departmentId: deptId,
+            description: team.description || '',
+            isActive: team.isActive,
+            memberUserIds: (team.members || []).map(m => m.userId),
+        });
+        setTeamFormErrors({});
+        setTeamMemberSearch('');
+        if (deptId) {
+            fetchDeptEmployees(deptId);
+        } else {
+            setDeptEmployees([]);
+        }
+        setIsCreateTeamOpen(true);
+    };
+
+    const handleTeamDeptChange = (newDeptId: string) => {
+        setTeamDirty(true);
+        // Rule: Team is strictly under one department, and only people in that department can be selected.
+        // If department changes, clear previously selected members.
+        setTeamForm(prev => ({
+            ...prev,
+            departmentId: newDeptId,
+            memberUserIds: [],
+        }));
+        setTeamFormErrors(err => ({ ...err, departmentId: '' }));
+        if (newDeptId) {
+            fetchDeptEmployees(newDeptId);
+        } else {
+            setDeptEmployees([]);
+        }
+    };
+
+    const validateTeamForm = () => {
+        const errors: Record<string, string> = {};
+        if (!teamForm.name.trim()) {
+            errors.name = 'Team name is required.';
+        } else if (teamForm.name.trim().length > 100) {
+            errors.name = 'Team name cannot exceed 100 characters.';
+        } else {
+            const exists = teams.some(t =>
+                t.name.trim().toLowerCase() === teamForm.name.trim().toLowerCase() &&
+                t.id !== editingTeam?.id
+            );
+            if (exists) {
+                errors.name = 'A team with this name already exists.';
+            }
+        }
+
+        if (!teamForm.departmentId) {
+            errors.departmentId = 'Department is required. A team must belong to one specific department.';
+        }
+
+        return errors;
+    };
+
+    const handleSaveTeam = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const errors = validateTeamForm();
+        if (Object.keys(errors).length > 0) {
+            setTeamFormErrors(errors);
+            return;
+        }
+
+        setActionLoading(true);
+        try {
+            if (!editingTeam) {
+                await api.post('/api/Team', {
+                    name: teamForm.name.trim(),
+                    departmentId: teamForm.departmentId,
+                    description: teamForm.description.trim() || undefined,
+                    memberUserIds: teamForm.memberUserIds,
+                });
+                toastSuccess('Team created successfully!');
+            } else {
+                await api.put(`/api/Team/${editingTeam.id}`, {
+                    name: teamForm.name.trim(),
+                    departmentId: teamForm.departmentId,
+                    description: teamForm.description.trim() || undefined,
+                    isActive: teamForm.isActive,
+                });
+
+                // Reconcile members
+                const existingMemberIds = (editingTeam.members || []).map(m => m.userId);
+                const addedIds = teamForm.memberUserIds.filter(id => !existingMemberIds.includes(id));
+                const removedIds = existingMemberIds.filter(id => !teamForm.memberUserIds.includes(id));
+
+                if (addedIds.length > 0) {
+                    await api.post(`/api/Team/${editingTeam.id}/members`, { memberUserIds: addedIds });
+                }
+
+                for (const removedId of removedIds) {
+                    await api.delete(`/api/Team/${editingTeam.id}/members/${removedId}`);
+                }
+
+                toastSuccess('Team updated successfully!');
+            }
+
+            setTeamDirty(false);
+            setIsCreateTeamOpen(false);
+            setEditingTeam(null);
+            fetchTeams(teamDeptFilter || undefined);
+        } catch (e: any) {
+            const msg = e.response?.data?.message || e.message || 'Failed to save team.';
+            toastError(msg);
+            setTeamFormErrors(prev => ({ ...prev, api: msg }));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const confirmToggleTeamStatus = (team: TeamResponseDTO) => {
+        const currentlyActive = team.isActive;
+        const activate = !currentlyActive;
+        setConfirmModal({
+            isOpen: true,
+            variant: activate ? 'success' : 'warning',
+            icon: activate ? 'ti-check' : 'ti-alert-triangle',
+            title: `${activate ? 'Activate' : 'Deactivate'} Team?`,
+            description: (
+                <>
+                    Are you sure you want to <strong>{activate ? 'activate' : 'deactivate'}</strong> the team <strong>{team.name}</strong>?
+                </>
+            ),
+            notice: !activate ? 'Deactivated teams will not receive new task assignments.' : undefined,
+            confirmLabel: activate ? 'Activate' : 'Deactivate',
+            onConfirm: async () => {
+                setActionLoading(true);
+                try {
+                    await api.put(`/api/Team/${team.id}`, {
+                        name: team.name,
+                        departmentId: team.departmentId,
+                        description: team.description,
+                        isActive: activate,
+                    });
+                    toastSuccess(`Team ${activate ? 'activated' : 'deactivated'}.`);
+                    setConfirmModal(CONFIRM_CLOSED);
+                    fetchTeams(teamDeptFilter || undefined);
+                } catch (e: any) {
+                    toastError(e.response?.data?.message || e.message || 'Failed to update team status.');
+                    setConfirmModal(CONFIRM_CLOSED);
+                } finally {
+                    setActionLoading(false);
+                }
+            },
+        });
+    };
+
+    const confirmDeleteTeam = (team: TeamResponseDTO) => {
+        setConfirmModal({
+            isOpen: true,
+            variant: 'danger',
+            icon: 'ti-trash',
+            title: `Delete Team: ${team.name}?`,
+            description: (
+                <>
+                    Permanently delete team <strong>{team.name}</strong>?
+                    All {team.members?.length ?? 0} assigned member(s) will be unassigned from this team.
+                </>
+            ),
+            confirmLabel: 'Delete Team',
+            onConfirm: async () => {
+                setActionLoading(true);
+                try {
+                    await api.delete(`/api/Team/${team.id}`);
+                    toastSuccess('Team deleted successfully.');
+                    setConfirmModal(CONFIRM_CLOSED);
+                    fetchTeams(teamDeptFilter || undefined);
+                } catch (e: any) {
+                    toastError(e.response?.data?.message || e.message || 'Failed to delete team.');
+                    setConfirmModal(CONFIRM_CLOSED);
+                } finally {
+                    setActionLoading(false);
+                }
+            },
+        });
+    };
+
+    const renderTeamFormBody = () => {
+        const isEditing = !!editingTeam;
+        const currentEditingTeamId = editingTeam?.id;
+
+        // Map userId -> teamName for members already assigned to other teams
+        const memberOtherTeamMap = new Map<string, string>();
+        teams.forEach(t => {
+            if (t.id !== currentEditingTeamId) {
+                t.members?.forEach(m => {
+                    memberOtherTeamMap.set(m.userId, t.name);
+                });
+            }
+        });
+
+        // Filter deptEmployees by teamMemberSearch
+        const filteredEmployees = deptEmployees.filter(emp => {
+            if (!teamMemberSearch.trim()) return true;
+            const q = teamMemberSearch.toLowerCase();
+            return (
+                emp.fullName.toLowerCase().includes(q) ||
+                (emp.employeeNumber && emp.employeeNumber.toLowerCase().includes(q)) ||
+                (emp.jobPositionName && emp.jobPositionName.toLowerCase().includes(q)) ||
+                (emp.role && emp.role.toLowerCase().includes(q))
+            );
+        });
+
+        const selectedCount = teamForm.memberUserIds.length;
+        const selectableCount = deptEmployees.filter(e => !memberOtherTeamMap.has(e.id)).length;
+
+        const toggleMember = (userId: string) => {
+            setTeamDirty(true);
+            setTeamForm(prev => {
+                const exists = prev.memberUserIds.includes(userId);
+                const next = exists
+                    ? prev.memberUserIds.filter(id => id !== userId)
+                    : [...prev.memberUserIds, userId];
+                return { ...prev, memberUserIds: next };
+            });
+        };
+
+        const handleSelectAllAvailable = () => {
+            setTeamDirty(true);
+            const availableIds = deptEmployees
+                .filter(e => !memberOtherTeamMap.has(e.id))
+                .map(e => e.id);
+            setTeamForm(prev => ({
+                ...prev,
+                memberUserIds: Array.from(new Set([...prev.memberUserIds, ...availableIds])),
+            }));
+        };
+
+        const handleDeselectAll = () => {
+            setTeamDirty(true);
+            setTeamForm(prev => ({ ...prev, memberUserIds: [] }));
+        };
+
+        return (
+            <div className="rm2-form-body">
+                {/* Team Name */}
+                <div className="rm2-field">
+                    <label className="rm2-form-label">
+                        Team Name <span className="rm2-req">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        className={`form-input${teamFormErrors.name ? ' rm2-input--error' : ''}`}
+                        placeholder="e.g. Frontend Squad, Dispatch Alpha"
+                        value={teamForm.name}
+                        maxLength={100}
+                        onChange={e => {
+                            setTeamDirty(true);
+                            setTeamForm(f => ({ ...f, name: e.target.value }));
+                            setTeamFormErrors(err => ({ ...err, name: '' }));
+                        }}
+                    />
+                    <div className="rm2-field-footer">
+                        {teamFormErrors.name ? (
+                            <span className="rm2-field-error"><AlertCircle size={11} /> {teamFormErrors.name}</span>
+                        ) : (
+                            <span className="rm2-field-hint">Must be unique within the organization.</span>
+                        )}
+                        <span className="rm2-char-count">{teamForm.name.length}/100</span>
+                    </div>
+                </div>
+
+                {/* Department Selection */}
+                <div className="rm2-field">
+                    <label className="rm2-form-label">
+                        Department <span className="rm2-req">*</span>
+                    </label>
+                    <select
+                        className={`form-input${teamFormErrors.departmentId ? ' rm2-input--error' : ''}`}
+                        value={teamForm.departmentId}
+                        onChange={e => handleTeamDeptChange(e.target.value)}
+                    >
+                        <option value="">— Select Department —</option>
+                        {departments.map(d => (
+                            <option key={d.departmentId} value={d.departmentId}>
+                                {d.name} {d.code ? `(${d.code})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    {teamFormErrors.departmentId ? (
+                        <span className="rm2-field-error"><AlertCircle size={11} /> {teamFormErrors.departmentId}</span>
+                    ) : (
+                        <span className="rm2-field-hint">
+                            <Info size={11} /> Teams belong strictly to one department. Changing the department updates available employees.
+                        </span>
+                    )}
+                </div>
+
+                {/* Department Members Selection */}
+                <div className="rm2-field">
+                    <label className="rm2-form-label">
+                        <Users size={13} className="rm2-label-icon" />
+                        Department Members ({selectedCount} selected)
+                    </label>
+
+                    {!teamForm.departmentId ? (
+                        <div className="rm2-team-no-dept-notice">
+                            <AlertCircle size={15} />
+                            <span>Please select a department above to view and assign department employees.</span>
+                        </div>
+                    ) : (
+                        <div className="rm2-team-members-box">
+                            <div className="rm2-team-members-header">
+                                <div className="rm2-team-search-wrap">
+                                    <Search size={13} className="rm2-team-search-icon" />
+                                    <input
+                                        type="text"
+                                        className="rm2-team-search-input"
+                                        placeholder="Search employees by name, role, or ID…"
+                                        value={teamMemberSearch}
+                                        onChange={e => setTeamMemberSearch(e.target.value)}
+                                    />
+                                </div>
+                                <div className="rm2-team-bulk-actions">
+                                    <button
+                                        type="button"
+                                        className="rm2-btn-link"
+                                        onClick={handleSelectAllAvailable}
+                                        disabled={selectableCount === 0 || selectedCount === selectableCount}
+                                    >
+                                        Select All ({selectableCount})
+                                    </button>
+                                    <span style={{ color: 'var(--border)' }}>|</span>
+                                    <button
+                                        type="button"
+                                        className="rm2-btn-link"
+                                        onClick={handleDeselectAll}
+                                        disabled={selectedCount === 0}
+                                    >
+                                        Deselect All
+                                    </button>
+                                </div>
+                            </div>
+
+                            {deptEmployeesLoading ? (
+                                <div className="rm2-team-members-loading">
+                                    <Loader2 size={16} className="spinner" />
+                                    <span>Loading department employees…</span>
+                                </div>
+                            ) : deptEmployees.length === 0 ? (
+                                <div className="rm2-team-members-empty">
+                                    <Info size={15} />
+                                    <span>No active employees found in this department.</span>
+                                </div>
+                            ) : filteredEmployees.length === 0 ? (
+                                <div className="rm2-team-members-empty">
+                                    <span>No employees match "{teamMemberSearch}".</span>
+                                </div>
+                            ) : (
+                                <div className="rm2-team-members-list">
+                                    {filteredEmployees.map(emp => {
+                                        const otherTeamName = memberOtherTeamMap.get(emp.id);
+                                        const isTaken = !!otherTeamName;
+                                        const isChecked = teamForm.memberUserIds.includes(emp.id);
+                                        const initials = emp.fullName
+                                            .split(' ')
+                                            .map(n => n[0])
+                                            .join('')
+                                            .slice(0, 2)
+                                            .toUpperCase();
+
+                                        return (
+                                            <div
+                                                key={emp.id}
+                                                className={`rm2-member-row${isChecked ? ' rm2-member-row--selected' : ''}${isTaken ? ' rm2-member-row--taken' : ''}`}
+                                                onClick={() => {
+                                                    if (!isTaken) toggleMember(emp.id);
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    disabled={isTaken}
+                                                    onChange={() => {}}
+                                                    onClick={e => e.stopPropagation()}
+                                                    onChangeCapture={() => {
+                                                        if (!isTaken) toggleMember(emp.id);
+                                                    }}
+                                                />
+                                                <div className="rm2-member-avatar">{initials}</div>
+                                                <div className="rm2-member-info">
+                                                    <div className="rm2-member-name">
+                                                        <span>{emp.fullName}</span>
+                                                        {emp.employeeNumber && (
+                                                            <span className="rm2-member-empnum">#{emp.employeeNumber}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="rm2-member-sub">
+                                                        {emp.jobPositionName || emp.role || 'Employee'}
+                                                    </div>
+                                                </div>
+                                                {isTaken && (
+                                                    <span className="rm2-taken-tag" title={`Already assigned to team "${otherTeamName}"`}>
+                                                        In: {otherTeamName}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <span className="rm2-field-hint" style={{ marginTop: 6 }}>
+                        <Info size={11} /> Only employees belonging to this department can be selected. Employees can belong to at most one team.
+                    </span>
+                </div>
+
+                {/* Description */}
+                <div className="rm2-field">
+                    <label className="rm2-form-label">
+                        Description
+                        <span className="rm2-field-optional"> (optional)</span>
+                    </label>
+                    <textarea
+                        className="form-input"
+                        rows={3}
+                        placeholder="Describe the team's operational scope or focus…"
+                        value={teamForm.description}
+                        maxLength={500}
+                        onChange={e => {
+                            setTeamDirty(true);
+                            setTeamForm(f => ({ ...f, description: e.target.value }));
+                        }}
+                    />
+                    <div className="rm2-field-footer">
+                        <span />
+                        <span className="rm2-char-count">{teamForm.description.length}/500</span>
+                    </div>
+                </div>
+
+                {/* Status (if editing) */}
+                {isEditing && (
+                    <div className="rm2-field rm2-field--sm">
+                        <label className="rm2-form-label">Status</label>
+                        <select
+                            className="form-input"
+                            value={teamForm.isActive ? 'Active' : 'Inactive'}
+                            onChange={e => {
+                                setTeamDirty(true);
+                                setTeamForm(f => ({ ...f, isActive: e.target.value === 'Active' }));
+                            }}
+                        >
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                )}
+            </div>
+        );
     };
 
     // ─── Stats per sub-tab ────────────────────────────────────────────────────
@@ -1335,6 +1974,7 @@ export default function RoleManagementTab() {
                 tabs={[
                     { key: 'roles', label: 'Roles & Permissions', icon: <Shield size={15} /> },
                     { key: 'departments', label: 'Departments', icon: <Building2 size={15} /> },
+                    { key: 'teams', label: 'Teams', icon: <Users size={15} /> },
                     { key: 'positions', label: 'Job Positions', icon: <Briefcase size={15} /> },
                     { key: 'client-accounts', label: 'Client Accounts', icon: <Building2 size={15} /> },
                     { key: 'overview', label: 'Overview & Logs', icon: <BarChart2 size={15} /> },
@@ -1421,6 +2061,7 @@ export default function RoleManagementTab() {
                                 <td><span className="rm2-count-text">{dept.employeeCount ?? 0} employees</span></td>
                                 <td>
                                     <ActionsDropdown actions={[
+                                        { label: 'Create Team', icon: <Users size={13} />, onClick: () => openCreateTeamForDept(dept) },
                                         { label: 'Edit', icon: <Pencil size={13} />, onClick: () => openEditDept(dept) },
                                         {
                                             label: (dept.status === 'Active' || dept.isActive !== false) ? 'Deactivate' : 'Activate',
@@ -1429,6 +2070,95 @@ export default function RoleManagementTab() {
                                             variant: (dept.status === 'Active' || dept.isActive !== false) ? 'danger' as const : 'success' as const,
                                         },
                                         { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => confirmDeleteDept(dept), variant: 'danger' as const },
+                                    ]} />
+                                </td>
+                            </tr>
+                        ))}
+                    </DataTable>
+                </>
+            )}
+
+            {/* ─────────────────────────────── TEAMS TAB ─────────────────────── */}
+            {subTab === 'teams' && (
+                <>
+                    <div className="rm2-stats-grid">
+                        <StatusCard icon={<Users size={18} />} label="Total Teams" value={teams.length} subtext="Across all departments" variant='teal' />
+                        <StatusCard icon={<CheckCircle2 size={18} />} label="Active Teams" value={teams.filter(t => t.isActive).length} subtext="Currently operational" variant="success" />
+                        <StatusCard icon={<XCircle size={18} />} label="Inactive Teams" value={teams.filter(t => !t.isActive).length} subtext="Deactivated teams" variant="warning" />
+                        <StatusCard icon={<Building2 size={18} />} label="Total Members" value={teams.reduce((acc, t) => acc + (t.memberCount ?? t.members?.length ?? 0), 0)} subtext="Employees assigned to teams" variant='teal' />
+                    </div>
+
+                    <DataTable
+                        title="Teams"
+                        totalResults={filteredTeams.length}
+                        searchQuery={teamSearch}
+                        setSearchQuery={v => { setTeamSearch(v); setTeamPage(1); }}
+                        searchPlaceholder="Search by team name or description…"
+                        filterElements={
+                            <select
+                                className="rm2-dept-filter-select"
+                                value={teamDeptFilter}
+                                onChange={e => { setTeamDeptFilter(e.target.value); setTeamPage(1); }}
+                            >
+                                <option value="">All Departments ({departments.length})</option>
+                                {departments.map(d => (
+                                    <option key={d.departmentId} value={d.departmentId}>
+                                        {d.name} {d.code ? `(${d.code})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        }
+                        headers={['Team Name', 'Department', 'Members', 'Status', 'Created Date', 'Actions']}
+                        loading={teamsLoading}
+                        emptyMessage="No teams found. Create a team to get started."
+                        emptyIcon={<Users size={20} />}
+                        actionButton={{ label: 'Create Team', icon: <Plus size={14} />, onClick: openCreateTeam }}
+                        currentPage={teamPage}
+                        totalPages={teamTotalPages}
+                        onPageChange={setTeamPage}
+                    >
+                        {pagedTeams.map(team => (
+                            <tr key={team.id}>
+                                <td>
+                                    <div className="rm2-role-name-cell">
+                                        <div className="rm2-role-icon rm2-role-icon--team"><Users size={14} /></div>
+                                        <div>
+                                            <div className="rm2-role-name">{team.name}</div>
+                                            <div className="rm2-role-desc">{team.description || <span className="rm2-no-desc">No description</span>}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {team.departmentName ? (
+                                        <span className="rm2-dept-tag">{team.departmentName}</span>
+                                    ) : (
+                                        <span className="rm2-no-desc">—</span>
+                                    )}
+                                </td>
+                                <td>
+                                    <span className="rm2-count-text">
+                                        {team.memberCount ?? team.members?.length ?? 0} members
+                                    </span>
+                                </td>
+                                <td><ActiveStatusBadge isActive={team.isActive} /></td>
+                                <td>
+                                    {team.createdAt ? (
+                                        <span className="rm2-date-text">{new Date(team.createdAt).toLocaleDateString()}</span>
+                                    ) : (
+                                        <span className="rm2-no-desc">—</span>
+                                    )}
+                                </td>
+                                <td>
+                                    <ActionsDropdown actions={[
+                                        { label: 'View Details', icon: <Eye size={13} />, onClick: () => setViewingTeam(team) },
+                                        { label: 'Edit', icon: <Pencil size={13} />, onClick: () => openEditTeam(team) },
+                                        {
+                                            label: team.isActive ? 'Deactivate' : 'Activate',
+                                            icon: team.isActive ? <ToggleLeft size={13} /> : <ToggleRight size={13} />,
+                                            onClick: () => confirmToggleTeamStatus(team),
+                                            variant: team.isActive ? 'danger' as const : 'success' as const,
+                                        },
+                                        { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => confirmDeleteTeam(team), variant: 'danger' as const },
                                     ]} />
                                 </td>
                             </tr>
@@ -1671,6 +2401,105 @@ export default function RoleManagementTab() {
                 dirty={posDirty}
             >
                 {editingPos && renderPosFormBody()}
+            </FormModal>
+
+            {/* ─── CREATE / EDIT TEAM MODAL ─────────────────────────────────── */}
+            <FormModal
+                isOpen={isCreateTeamOpen}
+                onClose={() => { setTeamDirty(false); setIsCreateTeamOpen(false); setEditingTeam(null); }}
+                title={editingTeam ? `Edit Team: ${editingTeam.name}` : "Create Team"}
+                subtitle={editingTeam ? "Update team information and members." : "Create a new team under a specific department and assign members."}
+                onSubmit={handleSaveTeam}
+                submitLabel={editingTeam ? "Save Changes" : "Create Team"}
+                isSubmitting={actionLoading}
+                apiError={teamFormErrors.api}
+                size="lg"
+                confirmOnCancel={true}
+                dirty={teamDirty}
+            >
+                {renderTeamFormBody()}
+            </FormModal>
+
+            {/* ─── VIEW TEAM MODAL (read-only) ─────────────────────────────── */}
+            <FormModal
+                isOpen={!!viewingTeam}
+                onClose={() => setViewingTeam(null)}
+                title={viewingTeam ? `Team: ${viewingTeam.name}` : ''}
+                subtitle={viewingTeam?.description || 'Team overview and members'}
+                size="lg"
+                infoCard={viewingTeam ? {
+                    avatarText: viewingTeam.name.slice(0, 2).toUpperCase(),
+                    title: viewingTeam.name,
+                    subtitle: viewingTeam.description || 'No description provided',
+                    badgeText: viewingTeam.isActive ? 'Active' : 'Inactive',
+                    badgeStatus: viewingTeam.isActive ? 'Active' : 'Inactive',
+                } : undefined}
+            >
+                {viewingTeam && (
+                    <div className="rm2-form-body">
+                        {/* Summary Stats */}
+                        <div className="rm2-role-view-stats">
+                            <div className="rm2-role-view-stat">
+                                <div className="rm2-role-view-stat-icon" style={{ background: 'rgba(0, 169, 157, 0.1)', color: 'var(--primary)' }}>
+                                    <Building2 size={16} />
+                                </div>
+                                <div className="rm2-role-view-stat-body">
+                                    <span className="rm2-role-view-stat-value">{viewingTeam.departmentName || '—'}</span>
+                                    <span className="rm2-role-view-stat-label">Department</span>
+                                </div>
+                            </div>
+                            <div className="rm2-role-view-stat">
+                                <div className="rm2-role-view-stat-icon" style={{ background: 'rgba(67, 24, 255, 0.1)', color: '#4318FF' }}>
+                                    <Users size={16} />
+                                </div>
+                                <div className="rm2-role-view-stat-body">
+                                    <span className="rm2-role-view-stat-value">{viewingTeam.members?.length ?? 0}</span>
+                                    <span className="rm2-role-view-stat-label">Assigned Members</span>
+                                </div>
+                            </div>
+                            <div className="rm2-role-view-stat">
+                                <div className="rm2-role-view-stat-icon" style={{ background: viewingTeam.isActive ? 'rgba(1, 181, 116, 0.1)' : 'rgba(227, 26, 26, 0.1)', color: viewingTeam.isActive ? '#01B574' : '#E31A1A' }}>
+                                    {viewingTeam.isActive ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                                </div>
+                                <div className="rm2-role-view-stat-body">
+                                    <span className="rm2-role-view-stat-value">{viewingTeam.isActive ? 'Active' : 'Inactive'}</span>
+                                    <span className="rm2-role-view-stat-label">Status</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Members List */}
+                        <div className="rm2-field">
+                            <label className="rm2-form-label" style={{ marginBottom: 10 }}>Team Members ({viewingTeam.members?.length ?? 0})</label>
+                            {(!viewingTeam.members || viewingTeam.members.length === 0) ? (
+                                <div className="rm2-overview-empty" style={{ background: 'var(--bg-input)', borderRadius: 10, border: '1px dashed var(--border)' }}>
+                                    <Users size={28} />
+                                    <p>No members assigned to this team</p>
+                                </div>
+                            ) : (
+                                <div className="rm2-team-members-list" style={{ maxHeight: 300 }}>
+                                    {viewingTeam.members.map(member => {
+                                        const initials = member.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                                        return (
+                                            <div key={member.userId} className="rm2-member-row" style={{ cursor: 'default' }}>
+                                                <div className="rm2-member-avatar">{initials}</div>
+                                                <div className="rm2-member-info">
+                                                    <div className="rm2-member-name">
+                                                        <span>{member.fullName}</span>
+                                                        {member.employeeNumber && <span className="rm2-member-empnum">#{member.employeeNumber}</span>}
+                                                    </div>
+                                                    <div className="rm2-member-sub">
+                                                        {member.role || member.department || 'Team Member'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </FormModal>
 
             {/* ─────────────────────── CLIENT ACCOUNTS TAB (FR-011) ─────────── */}

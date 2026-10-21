@@ -8,6 +8,7 @@ public class CreateTeamDTO
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
+    [Required(ErrorMessage = "Department is required")]
     public Guid? DepartmentId { get; set; }
 
     [MaxLength(500)]
