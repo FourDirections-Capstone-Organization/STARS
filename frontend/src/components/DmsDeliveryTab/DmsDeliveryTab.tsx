@@ -233,6 +233,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
 
     const handleManualResend = async (taskId: string, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!taskId) {
+            toastError('Operational task must be created in STARS before running DMS integration.');
+            return;
+        }
         setSyncingId(taskId);
         try {
             await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});

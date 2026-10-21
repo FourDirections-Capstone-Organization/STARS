@@ -53,6 +53,8 @@ import {
     Check,
     ExternalLink,
     RefreshCw,
+    Maximize2,
+    Minimize2,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -870,7 +872,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState('');
     const [supportingEvidenceFiles, setSupportingEvidenceFiles] = useState<File[]>([]);
+    const [isSinglePage, setIsSinglePage] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const isPreDelivery = useMemo(() => Boolean(
+        (initial as any)?.deliveryDetails?.dmsWaybillNo ||
+        (initial as any)?.deliveryDetails?.dmsOrderId ||
+        (initial.taskTitle && initial.taskTitle.toLowerCase().includes('pre-delivery'))
+    ), [initial]);
 
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
@@ -918,28 +927,54 @@ const TaskModal: React.FC<TaskModalProps> = ({
         const fetchMeta = async () => {
             try {
                 const [empRes, teamRes, deptRes] = await Promise.allSettled([
-                    api.get('/api/Task/assignable-users'),
+                    api.get('/api/Task/assignable-users?pageNumber=1&pageSize=100'),
                     api.get('/api/Team?pageNumber=1&pageSize=100'),
                     api.get('/api/Department'),
                 ]);
 
                 if (empRes.status === 'fulfilled' && empRes.value?.data) {
-                    const rawList: any[] = empRes.value.data?.data ?? empRes.value.data ?? [];
+                    const body = empRes.value.data;
+                    let rawList: any[] = [];
+                    if (Array.isArray(body)) {
+                        rawList = body;
+                    } else if (Array.isArray(body?.data?.items)) {
+                        rawList = body.data.items;
+                    } else if (Array.isArray(body?.data?.data)) {
+                        rawList = body.data.data;
+                    } else if (Array.isArray(body?.data)) {
+                        rawList = body.data;
+                    } else if (Array.isArray(body?.items)) {
+                        rawList = body.items;
+                    }
+
+                    // Fallback to teamMembers prop if API returned empty
+                    if (rawList.length === 0 && Array.isArray(teamMembers) && teamMembers.length > 0) {
+                        rawList = teamMembers.map(tm => ({
+                            id: tm.accountId,
+                            fullName: tm.employeeName,
+                            role: tm.role,
+                            availabilityStatus: tm.presenceStatus,
+                            isAvailable: tm.presenceStatus !== 'Offline' && tm.presenceStatus !== 'On Leave',
+                            workload: 0,
+                        }));
+                    }
+
                     const mapped: TaskModalWorkloadInfo[] = rawList.map((e: any) => ({
-                        accountId: e.id ?? e.accountId ?? e.userId ?? '',
-                        employeeName: e.fullName ?? e.employeeName ?? e.name ?? 'Unknown',
-                        workload: e.workload ?? e.activeTaskCount ?? 0,
-                        department: e.departmentName ?? e.department ?? '',
-                        departmentId: e.departmentId ? String(e.departmentId) : '',
-                        teamId: e.teamId ? String(e.teamId) : '',
-                        teamName: e.teamName ?? '',
+                        accountId: e.id ?? e.accountId ?? e.userId ?? e.UserId ?? '',
+                        employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? e.name ?? 'Unknown').trim(),
+                        workload: typeof e.workload === 'number' ? e.workload : (e.activeTaskCount ?? 0),
+                        department: e.departmentName ?? e.department ?? e.Department ?? '',
+                        departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : ''),
+                        teamId: e.teamId ? String(e.teamId) : (e.TeamId ? String(e.TeamId) : ''),
+                        teamName: e.teamName ?? e.TeamName ?? '',
                         availabilityStatus: typeof e.availabilityStatus === 'object'
                             ? (e.availabilityStatus?.status ?? (e.availabilityStatus?.isAvailable ? 'Available' : 'Unavailable'))
-                            : (e.availabilityStatus ?? (e.isAvailable ? 'Available' : 'Unavailable')),
+                            : (e.availabilityStatus ?? e.AvailabilityStatus ?? (e.isAvailable ? 'Active' : 'Unavailable')),
                         isAvailable: typeof e.availabilityStatus === 'object'
                             ? Boolean(e.availabilityStatus?.isAvailable)
                             : (e.isAvailable !== false && e.availabilityStatus !== 'Offline' && e.availabilityStatus !== 'On Leave'),
-                    }));
+                    })).filter(e => e.accountId && e.employeeName && e.employeeName !== 'Unknown');
+
                     setEligibleEmployees(mapped);
                     if (mapped.length > 0) {
                         const available = mapped.filter(e => e.isAvailable);
@@ -950,11 +985,36 @@ const TaskModal: React.FC<TaskModalProps> = ({
                             employeeName: best.employeeName,
                             reason: `Lowest active workload (${best.workload} tasks)`,
                         });
+
+                        // If pre-delivery has a driver/courier ID and assignee is not yet selected, match it
+                        if (!form.assignedTo && deliveryForm.courierEmployeeId) {
+                            const matched = mapped.find(e =>
+                                e.accountId.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase() ||
+                                (e as any).employeeNumber?.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase()
+                            );
+                            if (matched) {
+                                setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                            }
+                        }
                     }
+                } else if (Array.isArray(teamMembers) && teamMembers.length > 0) {
+                    const mapped: TaskModalWorkloadInfo[] = teamMembers.map(tm => ({
+                        accountId: tm.accountId,
+                        employeeName: tm.employeeName,
+                        workload: 0,
+                        department: '',
+                        departmentId: '',
+                        teamId: '',
+                        teamName: '',
+                        availabilityStatus: tm.presenceStatus,
+                        isAvailable: tm.presenceStatus !== 'Offline' && tm.presenceStatus !== 'On Leave',
+                    }));
+                    setEligibleEmployees(mapped);
                 }
 
                 if (teamRes.status === 'fulfilled' && teamRes.value?.data) {
-                    const tList: any[] = teamRes.value.data?.data?.items ?? teamRes.value.data?.data ?? teamRes.value.data ?? [];
+                    const tBody = teamRes.value.data;
+                    const tList: any[] = Array.isArray(tBody?.data?.items) ? tBody.data.items : (Array.isArray(tBody?.data) ? tBody.data : (Array.isArray(tBody) ? tBody : []));
                     setTeamsForTask(tList.map((t: any) => ({
                         id: t.id ?? t.teamId,
                         name: t.name ?? t.teamName,
@@ -966,18 +1026,32 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 }
 
                 if (deptRes.status === 'fulfilled' && deptRes.value?.data) {
-                    const dList: any[] = deptRes.value.data?.data ?? deptRes.value.data ?? [];
+                    const dBody = deptRes.value.data;
+                    const dList: any[] = Array.isArray(dBody?.data?.items) ? dBody.data.items : (Array.isArray(dBody?.data) ? dBody.data : (Array.isArray(dBody) ? dBody : []));
                     setDepartments(dList.map((d: any) => ({
                         id: String(d.departmentId ?? d.id),
                         name: d.name ?? d.departmentName ?? '',
                     })));
                 }
-            } catch {
-                // fallback gracefully
+            } catch (err) {
+                console.error('Failed to load assignable metadata in TaskModal', err);
+                if (Array.isArray(teamMembers) && teamMembers.length > 0) {
+                    setEligibleEmployees(teamMembers.map(tm => ({
+                        accountId: tm.accountId,
+                        employeeName: tm.employeeName,
+                        workload: 0,
+                        department: '',
+                        departmentId: '',
+                        teamId: '',
+                        teamName: '',
+                        availabilityStatus: tm.presenceStatus,
+                        isAvailable: tm.presenceStatus !== 'Offline' && tm.presenceStatus !== 'On Leave',
+                    })));
+                }
             }
         };
         fetchMeta();
-    }, []);
+    }, [teamMembers]);
 
     // Filtered teams based on department
     const availableTeams = useMemo(() => {
@@ -1150,606 +1224,654 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </span>
     );
 
+    const isWideModal = isPreDelivery || enableDelivery || isSinglePage;
+
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className={`modal-card${isWideModal ? ' modal-card-wide' : ''}${isSinglePage ? ' modal-card-single-page' : ''}`} onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
-                        <h3>{mode === 'new' ? 'Create New Task' : 'Edit Task'}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0 }}>{mode === 'new' ? (isPreDelivery ? 'Create Pre-Delivery Task' : 'Create New Task') : 'Edit Task'}</h3>
+                            {isPreDelivery && (
+                                <span className="pre-delivery-modal-badge">
+                                    <Truck size={13} /> Pre-Delivery Order
+                                    {deliveryForm.dmsWaybillNo ? ` • WB: ${deliveryForm.dmsWaybillNo}` : ''}
+                                </span>
+                            )}
+                        </div>
                         <p className="modal-subtitle">
-                            {mode === 'new' ? 'Fill in the details to create a new task.' : 'Update the task details below.'}
+                            {mode === 'new'
+                                ? (isPreDelivery
+                                    ? 'Validate and assign this DMS order to create a STARS operational task before dispatch.'
+                                    : 'Fill in the details to create a new task.')
+                                : 'Update the task details below.'}
                         </p>
                     </div>
-                    <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            title={isSinglePage ? "Restore standard size" : "Expand to single page view"}
+                            onClick={() => setIsSinglePage(prev => !prev)}
+                        >
+                            {isSinglePage ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
+                        <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+                    </div>
                 </div>
 
                 <div className="modal-form">
-
-                    {/* -- Task Title -- */}
-                    <div className="field">
-                        <label>Task Title <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                        <input
-                            value={form.taskTitle}
-                            onChange={set('taskTitle')}
-                            placeholder="e.g. Route planning update"
-                            className={errors.taskTitle ? 'input-error' : ''}
-                            maxLength={150}
-                            style={{ outline: 'none' }}
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <FieldErr name="taskTitle" />
-                            {!errors.taskTitle && form.taskTitle.trim().length >= 3 && (() => {
-                                const preview = mode === 'new' ? resolveIncrementalTitlePreview(form.taskTitle, existingTitles) : '';
-                                if (preview && preview !== form.taskTitle.trim()) {
-                                    return (
-                                        <span style={{ fontSize: 11, color: '#0284c7', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            <Info size={11} /> Existing title found: will create as &quot;<strong>{preview}</strong>&quot;
-                                        </span>
-                                    );
-                                }
-                                return <span style={{ fontSize: 11, color: 'var(--status-active)', marginTop: 3 }}>✓ Looks good</span>;
-                            })()}
-                            <CharCount value={form.taskTitle} max={150} />
-                        </div>
-                    </div>
-
-                    {/* -- Description -- */}
-                    <div className="field">
-                        <label>Description <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                        <textarea
-                            value={form.taskDescription}
-                            onChange={set('taskDescription')}
-                            placeholder="Describe the task..."
-                            rows={3}
-                            className={errors.taskDescription ? 'input-error' : ''}
-                            maxLength={2000}
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <FieldErr name="taskDescription" />
-                            <CharCount value={form.taskDescription} max={2000} />
-                        </div>
-                    </div>
-
-                    {/* -- Due Date + Priority -- */}
-                    <div className="field-row">
-                        <div className="field">
-                            <label>
-                                Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                {deadlineRange.maxDate && (
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
-                                        Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                )}
-                            </label>
-                            <input
-                                type="datetime-local"
-                                value={form.dueAt}
-                                onChange={slaLocked ? undefined : set('dueAt')}
-                                min={deadlineRange.min}
-                                max={deadlineRange.max}
-                                readOnly={slaLocked}
-                                className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${slaLocked ? ' input-sla-locked' : ''}`}
-                                style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
-                            />
-                            <FieldErr name="dueAt" />
-                            {deadlineRange.helperText && (
-                                <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
-                                    {deadlineRange.helperText}
-                                </span>
-                            )}
-                            {quickPicks.length > 0 && !slaLocked && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
-                                    {quickPicks.map(qp => (
-                                        <button
-                                            key={qp.label}
-                                            type="button"
-                                            onClick={() => {
-                                                const target = new Date(Date.now() + qp.hours * 60 * 60 * 1000);
-                                                const formatted = formatDateForInput(target);
-                                                setForm(p => ({ ...p, dueAt: formatted }));
-                                                setErrors(p => ({ ...p, dueAt: '' }));
-                                            }}
-                                            style={{
-                                                fontSize: 10.5,
-                                                padding: '2px 7px',
-                                                borderRadius: 4,
-                                                border: '1px solid #cbd5e1',
-                                                background: '#f8fafc',
-                                                color: '#334155',
-                                                cursor: 'pointer',
-                                                fontWeight: 500
-                                            }}
-                                        >
-                                            {qp.label}
-                                        </button>
-                                    ))}
+                    <div className="modal-grid-layout">
+                        {/* Left Column: Task Details & Documentation */}
+                        <div className="modal-grid-column">
+                            <div className="modal-section-card">
+                                <div className="modal-section-title">
+                                    <FileText size={14} /> Task Information
                                 </div>
-                            )}
-                        </div>
-                        <div className="field">
-                            <label>
-                                Priority <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                            </label>
-                            <select
-                                value={form.priority}
-                                onChange={e => {
-                                    const val = e.target.value as Priority;
-                                    const range = getPriorityDeadlineRange(val);
-                                    let newDueAt = form.dueAt;
-                                    if (val === 'Urgent') {
-                                        const sla = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                                        newDueAt = formatDateForInput(sla);
-                                    } else if (range.maxDate && form.dueAt) {
-                                        const curr = new Date(form.dueAt);
-                                        if (curr > range.maxDate) {
-                                            newDueAt = formatDateForInput(range.maxDate);
-                                        }
-                                    }
-                                    setForm(prev => ({ ...prev, priority: val, dueAt: newDueAt }));
-                                    setFormError('');
-                                    const msg = validateField('priority', val);
-                                    setErrors(prev => ({ ...prev, priority: msg || '', dueAt: '' }));
-                                }}
-                                className={errors.priority ? 'input-error' : ''}
-                            >
-                                <option value="">Select priority</option>
-                                <option value="Urgent">🔴 Urgent</option>
-                                <option value="High">🟠 High (1-2 days)</option>
-                                <option value="Medium">🟡 Medium (within 1 week)</option>
-                                <option value="Low">🟢 Low (any future date)</option>
-                            </select>
-                            <FieldErr name="priority" />
-                            {!errors.priority && form.priority && (
-                                <span style={{
-                                    fontSize: 11, marginTop: 3, display: 'block',
-                                    color: form.priority === 'Urgent' ? '#7c1d1d' : form.priority === 'High' ? 'var(--status-failed)' : form.priority === 'Medium' ? 'var(--status-pending)' : 'var(--status-active)',
-                                }}>
-                                    {form.priority === 'Urgent' && '🔴 Urgent — 24h SLA enforced'}
-                                    {form.priority === 'High' && '🟠 High — Deadline restricted to 1–2 days'}
-                                    {form.priority === 'Medium' && '🟡 Medium — Deadline restricted to 1 week'}
-                                    {form.priority === 'Low' && '🟢 Low — Any future deadline allowed'}
-                                </span>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* -- Task Category -- */}
-                    <div className="field">
-                        <label>Task Category <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
-                        <select
-                            value={form.taskCategory}
-                            onChange={set('taskCategory')}
-                        >
-                            <option value="">Select category</option>
-                            <option value="Operations">Operations</option>
-                            <option value="Logistics">Logistics</option>
-                            <option value="IT & Admin">IT & Admin</option>
-                            <option value="Customer Service">Customer Service</option>
-                            <option value="Maintenance">Maintenance</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
+                                {/* -- Task Title -- */}
+                                <div className="field">
+                                    <label>Task Title <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                    <input
+                                        value={form.taskTitle}
+                                        onChange={set('taskTitle')}
+                                        placeholder="e.g. Route planning update"
+                                        className={errors.taskTitle ? 'input-error' : ''}
+                                        maxLength={150}
+                                        style={{ outline: 'none' }}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <FieldErr name="taskTitle" />
+                                        {!errors.taskTitle && form.taskTitle.trim().length >= 3 && (() => {
+                                            const preview = mode === 'new' ? resolveIncrementalTitlePreview(form.taskTitle, existingTitles) : '';
+                                            if (preview && preview !== form.taskTitle.trim()) {
+                                                return (
+                                                    <span style={{ fontSize: 11, color: '#0284c7', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                        <Info size={11} /> Existing title found: will create as &quot;<strong>{preview}</strong>&quot;
+                                                    </span>
+                                                );
+                                            }
+                                            return <span style={{ fontSize: 11, color: 'var(--status-active)', marginTop: 3 }}>✓ Looks good</span>;
+                                        })()}
+                                        <CharCount value={form.taskTitle} max={150} />
+                                    </div>
+                                </div>
 
-                    {/* -- Supporting Document -- */}
-                    <div className="field">
-                        <label>Supporting Document <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(optional) — select one or more files</span></label>
-                        {initial.supportingEvidenceUrl && supportingEvidenceFiles.length === 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, padding: '8px 12px', background: 'rgba(67,24,255,0.04)', border: '1px solid rgba(67,24,255,0.15)', borderRadius: 8, marginBottom: 8 }}>
-                                <span style={{ fontSize: 12, color: 'var(--primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {(initial.supportingEvidenceUrl.split('/').pop() || '').replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '')}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => window.open(initial.supportingEvidenceUrl, '_blank')}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', padding: 4, fontSize: 11, fontWeight: 600 }}
-                                >
-                                    View
-                                </button>
+                                {/* -- Description -- */}
+                                <div className="field">
+                                    <label>Description <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                    <textarea
+                                        value={form.taskDescription}
+                                        onChange={set('taskDescription')}
+                                        placeholder="Describe the task..."
+                                        rows={3}
+                                        className={errors.taskDescription ? 'input-error' : ''}
+                                        maxLength={2000}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <FieldErr name="taskDescription" />
+                                        <CharCount value={form.taskDescription} max={2000} />
+                                    </div>
+                                </div>
+
+                                {/* -- Due Date + Priority -- */}
+                                <div className="field-row">
+                                    <div className="field">
+                                        <label>
+                                            Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
+                                            {deadlineRange.maxDate && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            )}
+                                        </label>
+                                        <input
+                                            type="datetime-local"
+                                            value={form.dueAt}
+                                            onChange={slaLocked ? undefined : set('dueAt')}
+                                            min={deadlineRange.min}
+                                            max={deadlineRange.max}
+                                            readOnly={slaLocked}
+                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${slaLocked ? ' input-sla-locked' : ''}`}
+                                            style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
+                                        />
+                                        <FieldErr name="dueAt" />
+                                        {deadlineRange.helperText && (
+                                            <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
+                                                {deadlineRange.helperText}
+                                            </span>
+                                        )}
+                                        {quickPicks.length > 0 && !slaLocked && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                                <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
+                                                {quickPicks.map(qp => (
+                                                    <button
+                                                        key={qp.label}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const target = new Date(Date.now() + qp.hours * 60 * 60 * 1000);
+                                                            const formatted = formatDateForInput(target);
+                                                            setForm(p => ({ ...p, dueAt: formatted }));
+                                                            setErrors(p => ({ ...p, dueAt: '' }));
+                                                        }}
+                                                        style={{
+                                                            fontSize: 10.5,
+                                                            padding: '2px 7px',
+                                                            borderRadius: 4,
+                                                            border: '1px solid #cbd5e1',
+                                                            background: '#f8fafc',
+                                                            color: '#334155',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 500
+                                                        }}
+                                                    >
+                                                        {qp.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="field">
+                                        <label>
+                                            Priority <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
+                                        </label>
+                                        <select
+                                            value={form.priority}
+                                            onChange={e => {
+                                                const val = e.target.value as Priority;
+                                                const range = getPriorityDeadlineRange(val);
+                                                let newDueAt = form.dueAt;
+                                                if (val === 'Urgent') {
+                                                    const sla = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                                                    newDueAt = formatDateForInput(sla);
+                                                } else if (range.maxDate && form.dueAt) {
+                                                    const curr = new Date(form.dueAt);
+                                                    if (curr > range.maxDate) {
+                                                        newDueAt = formatDateForInput(range.maxDate);
+                                                    }
+                                                }
+                                                setForm(prev => ({ ...prev, priority: val, dueAt: newDueAt }));
+                                                setFormError('');
+                                                const msg = validateField('priority', val);
+                                                setErrors(prev => ({ ...prev, priority: msg || '', dueAt: '' }));
+                                            }}
+                                            className={errors.priority ? 'input-error' : ''}
+                                        >
+                                            <option value="">Select priority</option>
+                                            <option value="Urgent">🔴 Urgent</option>
+                                            <option value="High">🟠 High (1-2 days)</option>
+                                            <option value="Medium">🟡 Medium (within 1 week)</option>
+                                            <option value="Low">🟢 Low (any future date)</option>
+                                        </select>
+                                        <FieldErr name="priority" />
+                                        {!errors.priority && form.priority && (
+                                            <span style={{
+                                                fontSize: 11, marginTop: 3, display: 'block',
+                                                color: form.priority === 'Urgent' ? '#7c1d1d' : form.priority === 'High' ? 'var(--status-failed)' : form.priority === 'Medium' ? 'var(--status-pending)' : 'var(--status-active)',
+                                            }}>
+                                                {form.priority === 'Urgent' && '🔴 Urgent — 24h SLA enforced'}
+                                                {form.priority === 'High' && '🟠 High — Deadline restricted to 1–2 days'}
+                                                {form.priority === 'Medium' && '🟡 Medium — Deadline restricted to 1 week'}
+                                                {form.priority === 'Low' && '🟢 Low — Any future deadline allowed'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* -- Task Category -- */}
+                                <div className="field">
+                                    <label>Task Category <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
+                                    <select
+                                        value={form.taskCategory}
+                                        onChange={set('taskCategory')}
+                                    >
+                                        <option value="">Select category</option>
+                                        <option value="Operations">Operations</option>
+                                        <option value="Logistics">Logistics</option>
+                                        <option value="IT & Admin">IT & Admin</option>
+                                        <option value="Customer Service">Customer Service</option>
+                                        <option value="Maintenance">Maintenance</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
                             </div>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                multiple
-                                accept=".pdf,.docx,.xlsx,.jpg,.png"
-                                onChange={e => {
-                                    const files = Array.from(e.target.files ?? []);
-                                    if (fileInputRef.current) fileInputRef.current.value = '';
-                                    if (files.length === 0) return;
-                                    const allowed = ['pdf', 'docx', 'xlsx', 'jpg', 'png'];
-                                    for (const file of files) {
-                                        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-                                        if (!allowed.includes(ext)) {
-                                            setFormError(`Invalid file format "${file.name}". Allowed: PDF, DOCX, XLSX, JPG, PNG.`);
-                                            return;
-                                        }
-                                        if (file.size > 20 * 1024 * 1024) {
-                                            setFormError(`File "${file.name}" exceeds the maximum size of 20MB.`);
-                                            return;
-                                        }
-                                    }
-                                    setFormError('');
-                                    const existingKeys = new Set(supportingEvidenceFiles.map(f => `${f.name}-${f.size}`));
-                                    const newUnique = files.filter(f => !existingKeys.has(`${f.name}-${f.size}`));
-                                    const updated = [...supportingEvidenceFiles, ...newUnique];
-                                    setSupportingEvidenceFiles(updated);
-                                    onFileChange?.(updated);
-                                }}
-                                style={{ display: supportingEvidenceFiles.length > 0 ? 'none' : 'block', flex: 1, fontSize: 13 }}
-                            />
-                        </div>
-                        {supportingEvidenceFiles.length > 0 ? (
-                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {supportingEvidenceFiles.map((file, idx) => (
-                                        <div key={`${file.name}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(0,169,157,0.05)', border: '1px solid rgba(0,169,157,0.18)', borderRadius: 6 }}>
-                                            <span style={{ fontSize: 11, color: 'var(--status-active)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+
+                            <div className="modal-section-card">
+                                <div className="modal-section-title">
+                                    <Lock size={14} /> Documentation &amp; Security
+                                </div>
+
+                                {/* -- Supporting Document -- */}
+                                <div className="field">
+                                    <label>Supporting Document <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(optional) — select one or more files</span></label>
+                                    {initial.supportingEvidenceUrl && supportingEvidenceFiles.length === 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, padding: '8px 12px', background: 'rgba(67,24,255,0.04)', border: '1px solid rgba(67,24,255,0.15)', borderRadius: 8, marginBottom: 8 }}>
+                                            <span style={{ fontSize: 12, color: 'var(--primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {(initial.supportingEvidenceUrl.split('/').pop() || '').replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '')}
                                             </span>
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    const next = supportingEvidenceFiles.filter((_, i) => i !== idx);
-                                                    setSupportingEvidenceFiles(next);
-                                                    onFileChange?.(next);
-                                                }}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 2 }}
-                                                aria-label={`Remove ${file.name}`}
+                                                onClick={() => window.open(initial.supportingEvidenceUrl, '_blank')}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', padding: 4, fontSize: 11, fontWeight: 600 }}
                                             >
-                                                <X size={14} />
+                                                View
                                             </button>
                                         </div>
-                                    ))}
+                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            multiple
+                                            accept=".pdf,.docx,.xlsx,.jpg,.png"
+                                            onChange={e => {
+                                                const files = Array.from(e.target.files ?? []);
+                                                if (fileInputRef.current) fileInputRef.current.value = '';
+                                                if (files.length === 0) return;
+                                                const allowed = ['pdf', 'docx', 'xlsx', 'jpg', 'png'];
+                                                for (const file of files) {
+                                                    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+                                                    if (!allowed.includes(ext)) {
+                                                        setFormError(`Invalid file format "${file.name}". Allowed: PDF, DOCX, XLSX, JPG, PNG.`);
+                                                        return;
+                                                    }
+                                                    if (file.size > 20 * 1024 * 1024) {
+                                                        setFormError(`File "${file.name}" exceeds the maximum size of 20MB.`);
+                                                        return;
+                                                    }
+                                                }
+                                                setFormError('');
+                                                const existingKeys = new Set(supportingEvidenceFiles.map(f => `${f.name}-${f.size}`));
+                                                const newUnique = files.filter(f => !existingKeys.has(`${f.name}-${f.size}`));
+                                                const updated = [...supportingEvidenceFiles, ...newUnique];
+                                                setSupportingEvidenceFiles(updated);
+                                                onFileChange?.(updated);
+                                            }}
+                                            style={{ display: supportingEvidenceFiles.length > 0 ? 'none' : 'block', flex: 1, fontSize: 13 }}
+                                        />
+                                    </div>
+                                    {supportingEvidenceFiles.length > 0 ? (
+                                        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {supportingEvidenceFiles.map((file, idx) => (
+                                                    <div key={`${file.name}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(0,169,157,0.05)', border: '1px solid rgba(0,169,157,0.18)', borderRadius: 6 }}>
+                                                        <span style={{ fontSize: 11, color: 'var(--status-active)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            ✓ {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const next = supportingEvidenceFiles.filter((_, i) => i !== idx);
+                                                                setSupportingEvidenceFiles(next);
+                                                                onFileChange?.(next);
+                                                            }}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 2 }}
+                                                            aria-label={`Remove ${file.name}`}
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--primary, #0284c7)', background: 'rgba(2, 132, 199, 0.08)', border: '1px dashed rgba(2, 132, 199, 0.4)', borderRadius: 6, cursor: 'pointer' }}
+                                                >
+                                                    <Plus size={13} /> Upload more
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSupportingEvidenceFiles([]);
+                                                        onFileChange?.([]);
+                                                        if (fileInputRef.current) fileInputRef.current.value = '';
+                                                    }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 4, fontSize: 11, fontWeight: 600 }}
+                                                >
+                                                    Clear all
+                                                </button>
+                                            </div>
+                                            <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                                                {supportingEvidenceFiles.length} file{supportingEvidenceFiles.length === 1 ? '' : 's'} selected — uploaded after the task is saved.
+                                            </span>
+                                        </div>
+                                    ) : initial.supportingEvidenceUrl ? (
+                                        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, display: 'block' }}>
+                                            Leave empty to keep current file. Select new files above to add attachments.
+                                        </span>
+                                    ) : null}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--primary, #0284c7)', background: 'rgba(2, 132, 199, 0.08)', border: '1px dashed rgba(2, 132, 199, 0.4)', borderRadius: 6, cursor: 'pointer' }}
-                                    >
-                                        <Plus size={13} /> Upload more
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSupportingEvidenceFiles([]);
-                                            onFileChange?.([]);
-                                            if (fileInputRef.current) fileInputRef.current.value = '';
-                                        }}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ee5d50', padding: 4, fontSize: 11, fontWeight: 600 }}
-                                    >
-                                        Clear all
-                                    </button>
-                                </div>
-                                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                                    {supportingEvidenceFiles.length} file{supportingEvidenceFiles.length === 1 ? '' : 's'} selected — uploaded after the task is saved.
-                                </span>
-                            </div>
-                        ) : initial.supportingEvidenceUrl ? (
-                            <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, display: 'block' }}>
-                                Leave empty to keep current file. Select new files above to add attachments.
-                            </span>
-                        ) : null}
-                    </div>
 
-                    {/* -- Confidential Task Toggle -- */}
-                    <label className={`conf-card${form.isConfidential ? ' active' : ''}`} style={{ marginBottom: 12 }}>
-                        <input type="checkbox" checked={form.isConfidential}
-                            onChange={e => setForm(prev => ({ ...prev, isConfidential: e.target.checked }))} />
-                        <div className="conf-card-body">
-                            <div className="conf-label-row">
-                                <span className="conf-icon">
-                                    <Lock size={14} color={form.isConfidential ? '#ee5d50' : 'var(--text-secondary)'} />
-                                </span>
-                                <span className="conf-title">Confidential Task</span>
-                                {form.isConfidential && <span className="conf-badge">Restricted</span>}
-                            </div>
-                            <span className="conf-desc">
-                                {form.isConfidential ? (
-                                    <>Only <strong>Coordinators</strong> &amp; <strong>Manager</strong> can view this task</>
-                                ) : (
-                                    'Restrict visibility to Coordinators and Manager only'
-                                )}
-                            </span>
-                        </div>
-                    </label>
-
-                    {/* -- Assignment Scope -- */}
-                    <div className="sr-section">
-                        <div className="sr-header">
-                            <div className="sr-title-row">
-                                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
-                                    Assignment Scope &amp; Target
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="scope-selector">
-                            {(['SingleEmployee', 'Team', 'Department'] as const).map(scope => (
-                                <label
-                                    key={scope}
-                                    className={`scope-option${form.assignmentScope === scope ? ' active' : ''}`}
-                                    onClick={() => {
-                                        setForm(prev => ({ ...prev, assignmentScope: scope, assignedDepartmentId: '' }));
-                                        setErrors(prev => ({ ...prev, assignmentScope: '', assignedTo: '', assignedDepartmentId: '' }));
-                                        setSelectedTeamId('');
-                                    }}
-                                >
-                                    <input type="radio" name="scope" value={scope}
-                                        checked={form.assignmentScope === scope}
-                                        onChange={() => { }} />
-                                    {scope === 'SingleEmployee' ? <UserCircle2 className="scope-icon" /> : scope === 'Team' ? <Users className="scope-icon" /> : <Building className="scope-icon" />}
-                                    {scope === 'SingleEmployee' ? 'Single' : scope === 'Team' ? 'Team' : 'Department'}
+                                {/* -- Confidential Task Toggle -- */}
+                                <label className={`conf-card${form.isConfidential ? ' active' : ''}`} style={{ marginBottom: 12 }}>
+                                    <input type="checkbox" checked={form.isConfidential}
+                                        onChange={e => setForm(prev => ({ ...prev, isConfidential: e.target.checked }))} />
+                                    <div className="conf-card-body">
+                                        <div className="conf-label-row">
+                                            <span className="conf-icon">
+                                                <Lock size={14} color={form.isConfidential ? '#ee5d50' : 'var(--text-secondary)'} />
+                                            </span>
+                                            <span className="conf-title">Confidential Task</span>
+                                            {form.isConfidential && <span className="conf-badge">Restricted</span>}
+                                        </div>
+                                        <span className="conf-desc">
+                                            {form.isConfidential ? (
+                                                <>Only <strong>Coordinators</strong> &amp; <strong>Manager</strong> can view this task</>
+                                            ) : (
+                                                'Restrict visibility to Coordinators and Manager only'
+                                            )}
+                                        </span>
+                                    </div>
                                 </label>
-                            ))}
-                        </div>
 
-                        {/* -- SingleEmployee: pick one user -- */}
-                        {form.assignmentScope === 'SingleEmployee' && (
-                            <div className="emp-picker-section">
-                                {recommendation && (
-                                    <div className="emp-picker-rec-banner">
-                                        <Lightbulb size={13} />
-                                        <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                {/* -- Remarks (edit mode only) -- */}
+                                {mode === 'edit' && (
+                                    <div className="field" style={{ marginBottom: 0 }}>
+                                        <label>Remarks</label>
+                                        <input
+                                            value={form.taskRemarks}
+                                            onChange={set('taskRemarks')}
+                                            placeholder="Optional remarks..."
+                                            maxLength={200}
+                                        />
+                                        <CharCount value={form.taskRemarks} max={200} />
                                     </div>
                                 )}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                                    <div>
-                                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
-                                        <select
-                                            value={filterDeptId}
-                                            onChange={e => {
-                                                setFilterDeptId(e.target.value);
-                                                setFilterTeamId('');
+                            </div>
+                        </div>
+
+                        {/* Right Column: Operational Assignment & DMS Details */}
+                        <div className="modal-grid-column">
+                            {/* -- Assignment Scope -- */}
+                            <div className="modal-section-card">
+                                <div className="modal-section-title">
+                                    <Users size={14} /> Operational Assignment
+                                </div>
+
+                                <div className="scope-selector">
+                                    {(['SingleEmployee', 'Team', 'Department'] as const).map(scope => (
+                                        <label
+                                            key={scope}
+                                            className={`scope-option${form.assignmentScope === scope ? ' active' : ''}`}
+                                            onClick={() => {
+                                                setForm(prev => ({ ...prev, assignmentScope: scope, assignedDepartmentId: '' }));
+                                                setErrors(prev => ({ ...prev, assignmentScope: '', assignedTo: '', assignedDepartmentId: '' }));
+                                                setSelectedTeamId('');
                                             }}
-                                            style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
                                         >
-                                            <option value="">All Departments</option>
+                                            <input type="radio" name="scope" value={scope}
+                                                checked={form.assignmentScope === scope}
+                                                onChange={() => { }} />
+                                            {scope === 'SingleEmployee' ? <UserCircle2 className="scope-icon" /> : scope === 'Team' ? <Users className="scope-icon" /> : <Building className="scope-icon" />}
+                                            {scope === 'SingleEmployee' ? 'Single' : scope === 'Team' ? 'Team' : 'Department'}
+                                        </label>
+                                    ))}
+                                </div>
+
+                                {/* -- SingleEmployee: pick one user -- */}
+                                {form.assignmentScope === 'SingleEmployee' && (
+                                    <div className="emp-picker-section">
+                                        {recommendation && (
+                                            <div className="emp-picker-rec-banner">
+                                                <Lightbulb size={13} />
+                                                <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                            <div>
+                                                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
+                                                <select
+                                                    value={filterDeptId}
+                                                    onChange={e => {
+                                                        setFilterDeptId(e.target.value);
+                                                        setFilterTeamId('');
+                                                    }}
+                                                    style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                                >
+                                                    <option value="">All Departments</option>
+                                                    {departments.map(d => (
+                                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Team Filter</label>
+                                                <select
+                                                    value={filterTeamId}
+                                                    onChange={e => setFilterTeamId(e.target.value)}
+                                                    style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                                >
+                                                    <option value="">All Teams {filterDeptId ? 'in Department' : ''}</option>
+                                                    {availableTeams.map(t => (
+                                                        <option key={t.id} value={t.id}>{t.name} ({t.memberCount})</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="emp-picker-search"
+                                            placeholder="Search employees…"
+                                            value={singleSearch}
+                                            onChange={e => setSingleSearch(e.target.value)}
+                                        />
+                                        {filteredEmployees.length > 0 ? (
+                                            <div className="emp-picker-list">
+                                                {filteredEmployees.map(e => {
+                                                    const isSelected = form.assignedTo === e.accountId;
+                                                    const isRecommended = recommendation?.accountId === e.accountId;
+                                                    const disabled = !e.isAvailable;
+                                                    return (
+                                                        <div key={e.accountId}
+                                                            className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
+                                                            onClick={() => { if (disabled) return; setForm(prev => ({ ...prev, assignedTo: e.accountId })); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
+                                                        >
+                                                            <input type="radio" name="singleEmp" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => { }} />
+                                                            <div className="emp-picker-info">
+                                                                <span className="emp-picker-name">{e.employeeName}</span>
+                                                                <div className="emp-picker-meta">
+                                                                    <span className={`emp-picker-dot ${e.isAvailable ? 'active' : e.availabilityStatus === 'Offline' ? 'offline' : 'leave'}`} />
+                                                                    <span>{e.availabilityStatus}</span>
+                                                                    <span>{e.workload} tasks</span>
+                                                                    {e.department && <span style={{ color: '#64748b' }}>• {e.department}</span>}
+                                                                    {e.teamName && <span style={{ color: '#0284c7' }}>• {e.teamName}</span>}
+                                                                </div>
+                                                            </div>
+                                                            {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
+                                                            {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="emp-picker-empty">No eligible employees found for assignment matching filters.</div>
+                                        )}
+                                        <FieldErr name="assignedTo" />
+                                        {!errors.assignedTo && form.assignedTo && (
+                                            <span className="emp-picker-confirm"><CheckCircle2 size={12} /> {eligibleEmployees.find(e => e.accountId === form.assignedTo)?.employeeName ?? 'Employee'} assigned</span>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* -- Team: pick a team from Team Management -- */}
+                                {form.assignmentScope === 'Team' && (
+                                    <div className="field" style={{ marginBottom: 0 }}>
+                                        <div style={{ marginBottom: 8 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
+                                            <select
+                                                value={filterDeptId}
+                                                onChange={e => {
+                                                    setFilterDeptId(e.target.value);
+                                                    setSelectedTeamId('');
+                                                }}
+                                                style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+                                            >
+                                                <option value="">All Departments</option>
+                                                {departments.map(d => (
+                                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <label>Team <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <select
+                                            value={selectedTeamId}
+                                            onChange={e => { setSelectedTeamId(e.target.value); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
+                                            className={errors.assignedTo ? 'input-error' : ''}
+                                        >
+                                            <option value="">Select team</option>
+                                            {availableTeams.map(t => (
+                                                <option key={t.id} value={t.id}>{t.name} ({t.memberCount} member{t.memberCount !== 1 ? 's' : ''}){t.departmentName ? ` — ${t.departmentName}` : ''}</option>
+                                            ))}
+                                        </select>
+                                        {availableTeams.length === 0 && (
+                                            <div style={{ fontSize: 11, color: 'var(--status-warn, #d97706)', marginTop: 4 }}>
+                                                None — no teams {filterDeptId ? 'under selected department' : 'created yet'}.
+                                            </div>
+                                        )}
+                                        <FieldErr name="assignedTo" />
+                                        {!errors.assignedTo && selectedTeamId && (
+                                            <span className="emp-picker-confirm"><CheckCircle2 size={12} /> Assigned to team: {teamsForTask.find(t => t.id === selectedTeamId)?.name ?? ''}</span>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* -- Department: pick a department -- */}
+                                {form.assignmentScope === 'Department' && (
+                                    <div className="field" style={{ marginBottom: 0 }}>
+                                        <label>Target Department <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                        <select
+                                            value={form.assignedDepartmentId}
+                                            onChange={e => { setForm(prev => ({ ...prev, assignedDepartmentId: e.target.value })); setErrors(prev => ({ ...prev, assignedDepartmentId: '' })); }}
+                                            className={errors.assignedDepartmentId ? 'input-error' : ''}
+                                        >
+                                            <option value="">Select department</option>
                                             {departments.map(d => (
                                                 <option key={d.id} value={d.id}>{d.name}</option>
                                             ))}
                                         </select>
+                                        <FieldErr name="assignedDepartmentId" />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Team Filter</label>
-                                        <select
-                                            value={filterTeamId}
-                                            onChange={e => setFilterTeamId(e.target.value)}
-                                            style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
-                                        >
-                                            <option value="">All Teams {filterDeptId ? 'in Department' : ''}</option>
-                                            {availableTeams.map(t => (
-                                                <option key={t.id} value={t.id}>{t.name} ({t.memberCount})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                                <input
-                                    type="text"
-                                    className="emp-picker-search"
-                                    placeholder="Search employees…"
-                                    value={singleSearch}
-                                    onChange={e => setSingleSearch(e.target.value)}
-                                />
-                                {filteredEmployees.length > 0 ? (
-                                    <div className="emp-picker-list">
-                                        {filteredEmployees.map(e => {
-                                            const isSelected = form.assignedTo === e.accountId;
-                                            const isRecommended = recommendation?.accountId === e.accountId;
-                                            const disabled = !e.isAvailable;
-                                            return (
-                                                <div key={e.accountId}
-                                                    className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
-                                                    onClick={() => { if (disabled) return; setForm(prev => ({ ...prev, assignedTo: e.accountId })); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
-                                                >
-                                                    <input type="radio" name="singleEmp" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => { }} />
-                                                    <div className="emp-picker-info">
-                                                        <span className="emp-picker-name">{e.employeeName}</span>
-                                                        <div className="emp-picker-meta">
-                                                            <span className={`emp-picker-dot ${e.isAvailable ? 'active' : e.availabilityStatus === 'Offline' ? 'offline' : 'leave'}`} />
-                                                            <span>{e.availabilityStatus}</span>
-                                                            <span>{e.workload} tasks</span>
-                                                            {e.department && <span style={{ color: '#64748b' }}>• {e.department}</span>}
-                                                            {e.teamName && <span style={{ color: '#0284c7' }}>• {e.teamName}</span>}
-                                                        </div>
-                                                    </div>
-                                                    {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
-                                                    {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="emp-picker-empty">No eligible employees found for assignment matching filters.</div>
-                                )}
-                                <FieldErr name="assignedTo" />
-                                {!errors.assignedTo && form.assignedTo && (
-                                    <span className="emp-picker-confirm"><CheckCircle2 size={12} /> {eligibleEmployees.find(e => e.accountId === form.assignedTo)?.employeeName ?? 'Employee'} assigned</span>
                                 )}
                             </div>
-                        )}
 
-                        {/* -- Team: pick a team from Team Management -- */}
-                        {form.assignmentScope === 'Team' && (
-                            <div className="field" style={{ marginBottom: 0 }}>
-                                <div style={{ marginBottom: 8 }}>
-                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, display: 'block' }}>Department Filter</label>
-                                    <select
-                                        value={filterDeptId}
-                                        onChange={e => {
-                                            setFilterDeptId(e.target.value);
-                                            setSelectedTeamId('');
-                                        }}
-                                        style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
-                                    >
-                                        <option value="">All Departments</option>
-                                        {departments.map(d => (
-                                            <option key={d.id} value={d.id}>{d.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <label>Team <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                <select
-                                    value={selectedTeamId}
-                                    onChange={e => { setSelectedTeamId(e.target.value); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
-                                    className={errors.assignedTo ? 'input-error' : ''}
-                                >
-                                    <option value="">Select team</option>
-                                    {availableTeams.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name} ({t.memberCount} member{t.memberCount !== 1 ? 's' : ''}){t.departmentName ? ` — ${t.departmentName}` : ''}</option>
-                                    ))}
-                                </select>
-                                {availableTeams.length === 0 && (
-                                    <div style={{ fontSize: 11, color: 'var(--status-warn, #d97706)', marginTop: 4 }}>
-                                        None — no teams {filterDeptId ? 'under selected department' : 'created yet'}.
+                            {/* -- DMS Delivery Details Card -- */}
+                            <div className="modal-section-card" style={{ border: enableDelivery ? '1.5px solid var(--primary, #0284c7)' : '1px solid var(--border, #e2e8f0)', background: enableDelivery ? 'rgba(2, 132, 199, 0.03)' : 'var(--bg-surface)' }}>
+                                <div className="modal-section-title" style={{ justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <Truck size={14} color="var(--primary, #0284c7)" />
+                                        <span>DMS Delivery Dispatch</span>
                                     </div>
-                                )}
-                                <FieldErr name="assignedTo" />
-                                {!errors.assignedTo && selectedTeamId && (
-                                    <span className="emp-picker-confirm"><CheckCircle2 size={12} /> Assigned to team: {teamsForTask.find(t => t.id === selectedTeamId)?.name ?? ''}</span>
-                                )}
-                            </div>
-                        )}
+                                    {isPreDelivery && (
+                                        <span style={{ fontSize: 10, background: 'rgba(2,132,199,0.1)', color: '#0284c7', padding: '2px 6px', borderRadius: 4, textTransform: 'none', fontWeight: 600 }}>Required for Pre-Delivery</span>
+                                    )}
+                                </div>
 
-                        {/* -- Department: pick a department -- */}
-                        {form.assignmentScope === 'Department' && (
-                            <div className="field" style={{ marginBottom: 0 }}>
-                                <label>Target Department <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                <select
-                                    value={form.assignedDepartmentId}
-                                    onChange={e => { setForm(prev => ({ ...prev, assignedDepartmentId: e.target.value })); setErrors(prev => ({ ...prev, assignedDepartmentId: '' })); }}
-                                    className={errors.assignedDepartmentId ? 'input-error' : ''}
-                                >
-                                    <option value="">Select department</option>
-                                    {departments.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
-                                <FieldErr name="assignedDepartmentId" />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* -- Remarks (edit mode only) -- */}
-                    {mode === 'edit' && (
-                        <div className="field">
-                            <label>Remarks</label>
-                            <input
-                                value={form.taskRemarks}
-                                onChange={set('taskRemarks')}
-                                placeholder="Optional remarks..."
-                                maxLength={200}
-                            />
-                            <CharCount value={form.taskRemarks} max={200} />
-                        </div>
-                    )}
-
-                    {/* -- DMS Delivery Details Card (Optional) -- */}
-                    <div style={{ marginTop: 12, marginBottom: 12, padding: 12, borderRadius: 8, border: enableDelivery ? '1.5px solid var(--primary, #0284c7)' : '1px solid var(--border, #e2e8f0)', background: enableDelivery ? 'rgba(2, 132, 199, 0.04)' : 'var(--bg-input, #f8fafc)' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
-                            <input
-                                type="checkbox"
-                                checked={enableDelivery}
-                                onChange={e => {
-                                    const checked = e.target.checked;
-                                    setEnableDelivery(checked);
-                                    if (checked && !deliveryForm.packageDescription) {
-                                        setDeliveryForm(prev => ({ ...prev, packageDescription: form.taskTitle }));
-                                    }
-                                }}
-                            />
-                            <Truck size={15} color="var(--primary, #0284c7)" />
-                            <span>Require Delivery via DMS (Auto-Generate Waybill)</span>
-                        </label>
-                        <p style={{ margin: '3px 0 0 24px', fontSize: 11, color: 'var(--text-secondary)' }}>
-                            Attach recipient drop-off address and parcel details for automatic DMS dispatch.
-                        </p>
-
-                        {enableDelivery && (
-                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Recipient Full Name <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                        <input
-                                            value={deliveryForm.recipientName}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientName: e.target.value }))}
-                                            placeholder="e.g. Engr. Roberto Cruz"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Recipient Contact Number <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                        <input
-                                            value={deliveryForm.recipientContact}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, recipientContact: e.target.value }))}
-                                            placeholder="e.g. 09171234567"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Area / City</label>
-                                        <input
-                                            value={deliveryForm.area}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, area: e.target.value }))}
-                                            placeholder="e.g. Taguig, Makati"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Sender / Pickup Address</label>
-                                        <input
-                                            value={deliveryForm.senderAddress}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, senderAddress: e.target.value }))}
-                                            placeholder="e.g. STARS Operations Office"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="field" style={{ margin: 0 }}>
-                                    <label style={{ fontSize: 11 }}>Delivery Destination Address <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
-                                    <textarea
-                                        rows={2}
-                                        value={deliveryForm.deliveryAddress}
-                                        onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
-                                        placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
-                                        style={{ fontSize: 12 }}
-                                    />
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Package Description</label>
-                                        <input
-                                            value={deliveryForm.packageDescription}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
-                                            placeholder="e.g. Confidential Project Dossier"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
-                                        <input
-                                            value={deliveryForm.courierEmployeeId}
-                                            onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
-                                            placeholder="e.g. DRV-001"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="field" style={{ margin: 0 }}>
-                                    <label style={{ fontSize: 11 }}>Special Instructions (Optional notes for DMS)</label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
                                     <input
-                                        value={deliveryForm.specialInstructions}
-                                        onChange={e => setDeliveryForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
-                                        placeholder="e.g. Fragile documents, call recipient upon arrival"
-                                        style={{ fontSize: 12 }}
+                                        type="checkbox"
+                                        checked={enableDelivery}
+                                        onChange={e => {
+                                            const checked = e.target.checked;
+                                            setEnableDelivery(checked);
+                                            if (checked && !deliveryForm.packageDescription) {
+                                                setDeliveryForm(prev => ({ ...prev, packageDescription: form.taskTitle }));
+                                            }
+                                        }}
                                     />
-                                </div>
+                                    <span>Require Delivery via DMS (Auto-Generate Waybill)</span>
+                                </label>
+                                <p style={{ margin: '0 0 12px 24px', fontSize: 11, color: 'var(--text-secondary)' }}>
+                                    Attach recipient drop-off address and parcel details for automatic DMS dispatch.
+                                </p>
+
+                                {enableDelivery && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Recipient Full Name <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                                <input
+                                                    value={deliveryForm.recipientName}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, recipientName: e.target.value }))}
+                                                    placeholder="e.g. Engr. Roberto Cruz"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Recipient Contact Number <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                                <input
+                                                    value={deliveryForm.recipientContact}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, recipientContact: e.target.value }))}
+                                                    placeholder="e.g. 09171234567"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Area / City</label>
+                                                <input
+                                                    value={deliveryForm.area}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, area: e.target.value }))}
+                                                    placeholder="e.g. Taguig, Makati"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Sender / Pickup Address</label>
+                                                <input
+                                                    value={deliveryForm.senderAddress}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, senderAddress: e.target.value }))}
+                                                    placeholder="e.g. STARS Operations Office"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="field" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: 11 }}>Delivery Destination Address <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span></label>
+                                            <textarea
+                                                rows={2}
+                                                value={deliveryForm.deliveryAddress}
+                                                onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                                                placeholder="e.g. Tower 2, High Street South, Bonifacio Global City, Taguig"
+                                                style={{ fontSize: 12 }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Package Description</label>
+                                                <input
+                                                    value={deliveryForm.packageDescription}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                                    placeholder="e.g. Confidential Project Dossier"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                                <input
+                                                    value={deliveryForm.courierEmployeeId}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                                    placeholder="e.g. DRV-001"
+                                                    style={{ fontSize: 12 }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="field" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: 11 }}>Special Instructions (Optional notes for DMS)</label>
+                                            <input
+                                                value={deliveryForm.specialInstructions}
+                                                onChange={e => setDeliveryForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                                                placeholder="e.g. Fragile documents, call recipient upon arrival"
+                                                style={{ fontSize: 12 }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
 
@@ -7906,6 +8028,7 @@ export default function OpsAdminDashboard() {
     }, [activeTab, fetchAllNotifications]);
 
     const [showNew, setShowNew] = useState(false);
+    const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
@@ -8564,14 +8687,28 @@ export default function OpsAdminDashboard() {
                 setPendingFiles([]);
                 if (failed > 0) {
                     error(`${uploaded} attachment(s) uploaded, ${failed} failed.`);
-                } else {
-                    success(`Task "${createdTitle}" created. ${uploaded} attachment(s) uploaded.`);
                 }
-            } else {
-                success(`Task "${createdTitle}" created successfully.`);
             }
 
+            const assigneeId = data.assignedUserIds?.[0] || (data as any).assignedTo;
+            const assigneeObj = teamMembers.find(m => m.accountId === assigneeId || (m as any).id === assigneeId || (m as any).employeeId === assigneeId);
+            const priorityLabels = ['Low', 'Medium', 'High', 'Urgent'];
+            const priorityStr = typeof data.priorityLevel === 'number' ? priorityLabels[data.priorityLevel] || 'Medium' : 'Medium';
+
+            setCreatedTaskSuccess({
+                taskId,
+                taskNumber: created?.data?.taskNumber ?? created?.taskNumber ?? created?.data?.TaskNumber,
+                title: createdTitle,
+                priority: priorityStr,
+                assigneeName: assigneeObj?.employeeName || (assigneeId ? 'Assigned Employee' : 'Team / Department'),
+                isDelivery: !!(data as any).deliveryDetails,
+                waybillNo: (data as any).deliveryDetails?.dmsWaybillNo,
+                recipientName: (data as any).deliveryDetails?.recipientName,
+                area: (data as any).deliveryDetails?.area,
+            });
+
             setShowNew(false);
+            setInitialTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
         } catch (err: any) {
@@ -9454,6 +9591,76 @@ export default function OpsAdminDashboard() {
                 />
             )}
 
+
+            {createdTaskSuccess && (
+                <div className="modal-overlay" onClick={() => setCreatedTaskSuccess(null)}>
+                    <div className="modal-card" style={{ maxWidth: 500, padding: '24px 28px' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                            <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(5, 150, 105, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <CheckCircle2 size={24} color="#059669" />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>Task Created Successfully</h3>
+                                <p style={{ margin: '2px 0 0', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                    Operational task has been recorded and assigned in STARS.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 10, border: '1px solid var(--border, #e2e8f0)', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Task Title</span>
+                                <strong style={{ textAlign: 'right', maxWidth: 280, wordBreak: 'break-word', color: 'var(--text-primary)' }}>{createdTaskSuccess.title}</strong>
+                            </div>
+                            {createdTaskSuccess.taskNumber && (
+                                <>
+                                    <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>Task Number</span>
+                                        <strong style={{ fontFamily: 'monospace', color: 'var(--teal, #00A99D)' }}>{createdTaskSuccess.taskNumber}</strong>
+                                    </div>
+                                </>
+                            )}
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Priority SLA</span>
+                                <strong style={{ color: createdTaskSuccess.priority === 'Urgent' ? '#dc2626' : 'var(--text-primary)' }}>{createdTaskSuccess.priority}</strong>
+                            </div>
+                            <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Assigned Target</span>
+                                <strong>{createdTaskSuccess.assigneeName}</strong>
+                            </div>
+                            {createdTaskSuccess.isDelivery && (
+                                <>
+                                    <div style={{ height: 1, background: 'var(--border, #e2e8f0)' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>DMS Dispatch</span>
+                                        <strong style={{ color: 'var(--teal, #00A99D)' }}>
+                                            {createdTaskSuccess.waybillNo ? `Waybill: ${createdTaskSuccess.waybillNo}` : 'DMS Delivery Linked'}
+                                        </strong>
+                                    </div>
+                                    {createdTaskSuccess.recipientName && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            <span>Recipient</span>
+                                            <span>{createdTaskSuccess.recipientName}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '10px 0', fontSize: 13.5, fontWeight: 600 }}
+                            onClick={() => setCreatedTaskSuccess(null)}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <ConfirmationModal
                 isOpen={confirmModal.isOpen}
