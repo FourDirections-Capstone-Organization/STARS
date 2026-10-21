@@ -136,7 +136,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(dto.EmployeeNumber))
             return ApiResponseDTO<bool>.Failure("Employee number is required.");
 
-        var cleanEmail = dto.Email.Trim().ToLowerInvariant();
+        var cleanEmail = EmailHelper.AutoCorrectEmail(dto.Email.Trim()).ToLowerInvariant();
         var cleanEmpNum = dto.EmployeeNumber.Trim().ToLowerInvariant();
 
         var user = await _db.Users
@@ -697,8 +697,10 @@ public class AuthService : IAuthService
 
     private async Task<User?> FindUserByIdentifier(string identifier)
     {
-
-        var normalizedIdentifier = identifier.Trim().ToLower();
+        var normalizedIdentifier = identifier.Trim().ToLowerInvariant();
+        var correctedIdentifier = normalizedIdentifier.Contains('@')
+            ? EmailHelper.AutoCorrectEmail(normalizedIdentifier).ToLowerInvariant()
+            : normalizedIdentifier;
         
         return await _db.Users
             .Include(u => u.Department)
@@ -706,6 +708,7 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(u =>
                 u.EmployeeNumber.ToLower() == normalizedIdentifier ||
                 u.Email.ToLower() == normalizedIdentifier ||
+                u.Email.ToLower() == correctedIdentifier ||
                 (u.Username != null && u.Username.ToLower() == normalizedIdentifier));
     }
 

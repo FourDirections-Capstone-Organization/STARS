@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast/Toast';
 import api from '../../api';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import { captureRedirectUriFromQuery, getStoredRedirectUri, redirectToExternalPortal, bootstrapIncomingAuth, normalizeRole, dashboardRoutes, getDashboardRoute, getPublicWebsiteUrl } from '../../components/Auth/authRedirect';
+import { cleanEmail } from '../../utils/emailHelper';
 import './login.css';
 
 /* ── Types ── */
@@ -47,6 +48,15 @@ export default function Login() {
     const [passwordError, setPasswordError] = useState('');
     const [pendingVerification, setPendingVerification] = useState(false);
     const [resending, setResending] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const interval = setInterval(() => {
+            setResendCooldown(prev => Math.max(0, prev - 1));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [resendCooldown]);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -250,19 +260,27 @@ export default function Login() {
     };
 
     const handleResendVerification = async () => {
+        if (resendCooldown > 0 || resending) return;
         setResending(true);
         try {
             const trimmed = employeeId.trim();
+            const cleaned = cleanEmail(trimmed);
             await api.post('/api/email-verification/resend', {
                 identifier: trimmed,
                 employeeID: trimmed,
                 employeeNumber: trimmed,
-                email: trimmed.includes('@') ? trimmed : undefined,
+                email: cleaned.includes('@') ? cleaned : undefined,
             });
             updateStatus('A new verification link has been sent to your email.', 'success');
+            setResendCooldown(60);
         } catch (err: any) {
             const msg = err?.response?.data?.message || err.message || 'Failed to resend verification email.';
             updateStatus(msg, 'error');
+            const match = msg.match(/(\d+)\s*second/i);
+            if (match) {
+                const sec = parseInt(match[1], 10);
+                if (sec > 0) setResendCooldown(sec);
+            }
         } finally {
             setResending(false);
         }
@@ -357,16 +375,17 @@ export default function Login() {
                                 type="button"
                                 className="resend-btn"
                                 onClick={handleResendVerification}
-                                disabled={resending}
+                                disabled={resending || resendCooldown > 0}
                                 style={{
                                     display: 'block', margin: '8px auto 0', padding: '8px 20px',
                                     fontSize: 13, fontWeight: 600, borderRadius: 8,
                                     border: '1px solid var(--primary)', background: 'transparent',
-                                    color: 'var(--primary)', cursor: 'pointer', fontFamily: 'inherit',
+                                    color: 'var(--primary)', cursor: (resending || resendCooldown > 0) ? 'not-allowed' : 'pointer',
+                                    opacity: (resending || resendCooldown > 0) ? 0.7 : 1, fontFamily: 'inherit',
                                 }}
                             >
                                 {resending ? <Loader2 size={14} className="spin" style={{ marginRight: 6 }} /> : null}
-                                {resending ? 'Sending...' : 'Resend Verification Email'}
+                                {resending ? 'Sending...' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Verification Email'}
                             </button>
                         )}
 

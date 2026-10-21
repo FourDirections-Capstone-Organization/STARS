@@ -7,6 +7,7 @@ using Backend.Modules.AuthenticationAndCredentials;
 using Backend.Modules.TaskManagement;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.FomsIntegration;
+using Backend.Modules.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 
@@ -45,6 +46,12 @@ public class UserService : IUserService
 
     public async Task<ApiResponseDTO<UserResponseDTO>> RegisterAsync(RegisterUserDTO dto)
     {
+        // 0. Auto-correct email address typos (e.g. gmaill.com -> gmail.com, .con -> .com)
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = EmailHelper.AutoCorrectEmail(dto.Email);
+        }
+
         // 1. Determine target systems
         var targetSystems = (dto.TargetSystems != null && dto.TargetSystems.Any())
             ? dto.TargetSystems.Select(s => s.Trim().ToUpperInvariant()).Distinct().ToList()
@@ -347,6 +354,11 @@ public class UserService : IUserService
         var oldContact = user.ContactNumber ?? string.Empty;
         var oldEmail = user.Email;
         var oldAllowedSystems = user.AllowedSystems ?? "STARS";
+
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = EmailHelper.AutoCorrectEmail(dto.Email);
+        }
 
         if (!string.IsNullOrWhiteSpace(dto.Email) && dto.Email.ToLower() != user.Email.ToLower())
         {

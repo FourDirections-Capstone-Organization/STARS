@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import api from "../../api";
+import { autoCorrectEmail, cleanEmail } from "../../utils/emailHelper";
 import "./email_verification_page.css";
 
 type VerifyState = "verifying" | "success" | "error";
@@ -13,8 +14,17 @@ function VerifyEmail() {
     const [resending, setResending] = useState(false);
     const [resendSuccess, setResendSuccess] = useState(false);
     const [resendError, setResendError] = useState("");
+    const [resendCooldown, setResendCooldown] = useState(0);
     const navigate = useNavigate();
     const hasVerified = useRef(false);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const interval = setInterval(() => {
+            setResendCooldown(prev => Math.max(0, prev - 1));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [resendCooldown]);
 
     useEffect(() => {
         if (hasVerified.current) return; 
@@ -47,20 +57,28 @@ function VerifyEmail() {
 
     const handleResend = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!resendEmail.trim()) return;
+        if (!resendEmail.trim() || resendCooldown > 0 || resending) return;
         setResending(true);
         setResendError("");
         setResendSuccess(false);
         try {
-            const val = resendEmail.trim();
+            const raw = resendEmail.trim();
+            const val = raw.includes('@') ? cleanEmail(raw) : raw;
             await api.post('/api/email-verification/resend', {
                 identifier: val,
                 employeeID: val,
                 email: val.includes('@') ? val : undefined,
             });
             setResendSuccess(true);
+            setResendCooldown(60);
         } catch (err: any) {
-            setResendError(err.response?.data?.message || err.message || "Failed to resend verification email.");
+            const msg = err.response?.data?.message || err.message || "Failed to resend verification email.";
+            setResendError(msg);
+            const match = msg.match(/(\d+)\s*second/i);
+            if (match) {
+                const sec = parseInt(match[1], 10);
+                if (sec > 0) setResendCooldown(sec);
+            }
         } finally {
             setResending(false);
         }
@@ -181,6 +199,14 @@ function VerifyEmail() {
                                             type="text"
                                             value={resendEmail}
                                             onChange={e => setResendEmail(e.target.value)}
+                                            onBlur={() => {
+                                                if (resendEmail.includes('@')) {
+                                                    const corrected = autoCorrectEmail(resendEmail);
+                                                    if (corrected.wasCorrected) {
+                                                        setResendEmail(corrected.email);
+                                                    }
+                                                }
+                                            }}
                                             placeholder="e.g. employee@company.com or 0001"
                                             style={{
                                                 flex: 1,
@@ -194,11 +220,11 @@ function VerifyEmail() {
                                         />
                                         <button
                                             type="submit"
-                                            disabled={resending || !resendEmail.trim()}
+                                            disabled={resending || resendCooldown > 0 || !resendEmail.trim()}
                                             className="ev-btn ev-btn--primary"
                                             style={{ padding: '8px 14px', fontSize: 12, width: 'auto', whiteSpace: 'nowrap' }}
                                         >
-                                            {resending ? 'Sending...' : 'Resend'}
+                                            {resending ? 'Sending...' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend'}
                                         </button>
                                     </div>
                                     {resendSuccess && (

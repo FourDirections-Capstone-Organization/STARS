@@ -58,6 +58,7 @@ import SearchableSelect from '../../components/ui/SearchableSelect';
 import Pagination from '../../components/ui/Pagination';
 import FormModal from '../../components/FormModal/FormModal';
 import EmployeeDetailPanel from './EmployeeDetailPanel/EmployeeDetailPanel';
+import { autoCorrectEmail, cleanEmail } from '../../utils/emailHelper';
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import ConfirmationModal from '../../components/ConfirmationModal/ConfirmationModal';
 import RoleManagementTab, { DepartmentResponseDTO, JobPositionResponseDTO } from './RoleManagementTab/RoleManagementTab';
@@ -757,6 +758,8 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
             const isDms = targetSystems.includes('DMS');
             const isFoms = targetSystems.includes('FOMS');
 
+            const cleanMail = cleanEmail(form.email);
+
             const res = await api.post('/api/User/register', {
                 employeeNumber: form.employeeNumber,
                 firstName: form.firstName.trim() || 'New',
@@ -766,7 +769,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 contactNumber: form.contactNumber || null,
                 role: isStars ? toBackendRole(form.role) : 3,
                 starsRole: isStars ? form.role : null,
-                email: form.email.trim(),
+                email: cleanMail,
                 departmentId: isStars ? (form.departmentId || null) : null,
                 jobPositionId: isStars ? (form.jobPositionId || null) : null,
                 employmentStatus: form.employmentStatus || 'Regular',
@@ -788,7 +791,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
             setDirty(false);
             onSuccess({
                 employeeNumber: data.employeeNumber ?? form.employeeNumber,
-                employeeName: form.email.trim(),
+                employeeName: cleanMail,
                 firstName: '',
                 middleName: '',
                 lastName: '',
@@ -796,7 +799,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 contactNumber: '',
                 role: data.role ?? form.role,
                 accountStatus: 'Inactive',
-                email: form.email.trim(),
+                email: cleanMail,
             });
             onClose();
         } catch (err: any) {
@@ -1488,6 +1491,13 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                 placeholder="e.g. name@company.com"
                                 value={form.email}
                                 onChange={handleChange('email')}
+                                onBlur={() => {
+                                    const corrected = autoCorrectEmail(form.email);
+                                    if (corrected.wasCorrected) {
+                                        setForm(prev => ({ ...prev, email: corrected.email }));
+                                        setErrors(prev => ({ ...prev, email: undefined }));
+                                    }
+                                }}
                                 className="fm-input"
                                 style={inputStyle(errors.email)}
                                 maxLength={100}

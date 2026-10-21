@@ -2,6 +2,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using Microsoft.Extensions.Options;
+using Backend.Modules.Utilities;
 
 namespace Backend.Modules.Email;
 
@@ -192,6 +193,8 @@ public class EmailService : IEmailService
 
     private async Task SendEmailAsync(string toEmail, string subject, string htmlBody)
     {
+        toEmail = EmailHelper.AutoCorrectEmail(toEmail);
+
         if (string.IsNullOrWhiteSpace(_smtpSettings.Host) ||
             string.IsNullOrWhiteSpace(_smtpSettings.Username) ||
             string.IsNullOrWhiteSpace(_smtpSettings.Password) ||

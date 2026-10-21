@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -6,11 +7,15 @@ using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Backend.Modules.Email;
 using Backend.Modules.TaskManagement;
+using Backend.Modules.Utilities;
 
 namespace Backend.Modules.AuthenticationAndCredentials;
 
 public class EmailVerificationService : IEmailVerificationService
 {
+    private static readonly ConcurrentDictionary<string, DateTime> _cooldowns = new();
+    private const int CooldownSeconds = 60;
+
     private readonly AppDbContext _db;
     private readonly IEmailService _emailService;
     private readonly IAuditLogService _auditLogService;
@@ -96,7 +101,7 @@ public class EmailVerificationService : IEmailVerificationService
             user = await _db.Users.FindAsync(employeeId.Value);
         }
 
-        var searchEmail = email?.Trim() ?? string.Empty;
+        var searchEmail = EmailHelper.AutoCorrectEmail(email?.Trim() ?? string.Empty);
         var searchIdentifier = identifier?.Trim() ?? string.Empty;
 
         if (user is null && !string.IsNullOrWhiteSpace(searchEmail))
@@ -115,10 +120,15 @@ public class EmailVerificationService : IEmailVerificationService
             if (user is null)
             {
                 var idLower = searchIdentifier.ToLowerInvariant();
+                var correctedIdEmail = searchIdentifier.Contains('@')
+                    ? EmailHelper.AutoCorrectEmail(searchIdentifier).ToLowerInvariant()
+                    : idLower;
+
                 user = await _db.Users.FirstOrDefaultAsync(u =>
                     u.EmployeeNumber.ToLower() == idLower ||
                     (u.Username != null && u.Username.ToLower() == idLower) ||
-                    u.Email.ToLower() == idLower);
+                    u.Email.ToLower() == idLower ||
+                    u.Email.ToLower() == correctedIdEmail);
             }
         }
 
@@ -131,6 +141,16 @@ public class EmailVerificationService : IEmailVerificationService
         if (user.IsDeactivated)
             return ApiResponseDTO<bool>.Failure("Account is deactivated. Please contact your administrator.");
 
+        // Check 60-second cooldown rate-limiting
+        var now = DateTime.UtcNow;
+        var userKey = user.Id.ToString();
+        var emailKey = user.Email.Trim().ToLowerInvariant();
+
+        if (TryGetCooldownRemaining(userKey, emailKey, now, out var remainingSeconds))
+        {
+            return ApiResponseDTO<bool>.Failure($"Please wait {remainingSeconds} second(s) before sending another verification email.");
+        }
+
         var token = GenerateToken();
         user.EmailVerificationToken = token;
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
@@ -140,6 +160,8 @@ public class EmailVerificationService : IEmailVerificationService
 
         var fullName = $"{user.FirstName} {user.LastName}".Trim();
         await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
+
+        RecordCooldown(userKey, emailKey, now);
 
         await _auditLogService.LogAsync(
             user.Id, AuditActionType.Update, "User", user.Id, null,
@@ -195,12 +217,51 @@ public class EmailVerificationService : IEmailVerificationService
         var fullName = $"{user.FirstName} {user.LastName}".Trim();
         await _emailService.SendEmailVerificationAsync(user.Email, fullName, token, verificationUrl);
 
+        var now = DateTime.UtcNow;
+        RecordCooldown(user.Id.ToString(), user.Email?.Trim().ToLowerInvariant() ?? string.Empty, now);
+
         await _auditLogService.LogAsync(
             userId, AuditActionType.Update, "User", userId, null,
             $"Verification email SENT to {fullName} ({user.Email})",
             "Authentication");
 
         _logger.LogInformation("Verification email sent to new user {UserId} ({Email})", user.Id, user.Email);
+    }
+
+    private static bool TryGetCooldownRemaining(string userKey, string emailKey, DateTime now, out int remainingSeconds)
+    {
+        remainingSeconds = 0;
+        DateTime lastSent = DateTime.MinValue;
+
+        if (!string.IsNullOrWhiteSpace(userKey) && _cooldowns.TryGetValue(userKey, out var userTime) && userTime > lastSent)
+        {
+            lastSent = userTime;
+        }
+
+        if (!string.IsNullOrWhiteSpace(emailKey) && _cooldowns.TryGetValue(emailKey, out var emailTime) && emailTime > lastSent)
+        {
+            lastSent = emailTime;
+        }
+
+        if (lastSent != DateTime.MinValue)
+        {
+            var elapsed = (now - lastSent).TotalSeconds;
+            if (elapsed < CooldownSeconds)
+            {
+                remainingSeconds = Math.Max(1, (int)Math.Ceiling(CooldownSeconds - elapsed));
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void RecordCooldown(string userKey, string emailKey, DateTime now)
+    {
+        if (!string.IsNullOrWhiteSpace(userKey))
+            _cooldowns[userKey] = now;
+        if (!string.IsNullOrWhiteSpace(emailKey))
+            _cooldowns[emailKey] = now;
     }
 
     private string GenerateToken()

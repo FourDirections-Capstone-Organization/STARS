@@ -37,6 +37,7 @@ import ConfirmationModal from '../../../components/ConfirmationModal/Confirmatio
 import DataTable from '../../../components/ui/DataTable';
 import Pagination from '../../../components/ui/Pagination';
 import api from '../../../api';
+import { autoCorrectEmail, cleanEmail } from '../../../utils/emailHelper';
 
 interface ConfirmModalState {
     isOpen: boolean;
@@ -299,6 +300,8 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                 await api.patch(`/api/User/${userId}/activate`);
             }
 
+            const cleanMail = cleanEmail(form.email);
+
             // Update personal details
             await api.put(`/api/User/${userId}`, {
                 firstName: form.firstName.trim(),
@@ -306,7 +309,7 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                 lastName: form.lastName.trim(),
                 suffix: form.suffix.trim(),
                 contactNumber: form.contactNumber,
-                email: form.email.trim(),
+                email: cleanMail,
             });
 
             // Deactivate AFTER updating personal details (backend blocks PUT on deactivated users)
@@ -332,7 +335,7 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                 contactNumber: form.contactNumber,
                 role: String(toBackendRole(form.role)),
                 accountStatus: form.accountStatus,
-                email: form.email.trim(),
+                email: cleanMail,
             });
             success('Employee details updated successfully!');
             onClose();
@@ -438,7 +441,18 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Email</label>
-                            <input type="email" value={form.email} onChange={set('email')} className="fm-input" />
+                            <input
+                                type="email"
+                                value={form.email}
+                                onChange={set('email')}
+                                onBlur={() => {
+                                    const corrected = autoCorrectEmail(form.email);
+                                    if (corrected.wasCorrected) {
+                                        setForm(prev => ({ ...prev, email: corrected.email }));
+                                    }
+                                }}
+                                className="fm-input"
+                            />
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Contact Number</label>
@@ -543,6 +557,67 @@ export default function EmployeeDetailPanel({
     const REC_PAGE_SIZE = 6;
     const { success, error } = useToast();
     const [confirmModal, setConfirmModal] = useState<ConfirmModalState>(CONFIRM_CLOSED);
+    const [resendCooldown, setResendCooldown] = useState<number>(0);
+    const [sendingVerification, setSendingVerification] = useState(false);
+    const cooldownKey = `stars_verification_cooldown_${profile.employeeNumber}`;
+
+    useEffect(() => {
+        const savedUntil = Number(sessionStorage.getItem(cooldownKey) || 0);
+        const remaining = Math.max(0, Math.ceil((savedUntil - Date.now()) / 1000));
+        if (remaining > 0) {
+            setResendCooldown(remaining);
+        } else {
+            setResendCooldown(0);
+        }
+    }, [profile.employeeNumber, cooldownKey]);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const timer = setInterval(() => {
+            setResendCooldown(prev => {
+                const next = prev - 1;
+                if (next <= 0) {
+                    sessionStorage.removeItem(cooldownKey);
+                    return 0;
+                }
+                return next;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [resendCooldown, cooldownKey]);
+
+    const handleSendVerification = async () => {
+        if (resendCooldown > 0 || sendingVerification) return;
+        setSendingVerification(true);
+        try {
+            const emailToSend = cleanEmail(profile.email || '');
+            const res = await api.post('/api/email-verification/resend', {
+                employeeNumber: profile.employeeNumber,
+                email: emailToSend || undefined,
+                identifier: profile.employeeNumber,
+            });
+            const data = res.data;
+            if (!data.isSuccess) {
+                throw new Error(data.message || 'Failed to send verification email.');
+            }
+            success(`Verification email sent to ${emailToSend || profile.employeeName}.`);
+            setResendCooldown(60);
+            sessionStorage.setItem(cooldownKey, String(Date.now() + 60000));
+        } catch (err: any) {
+            const msg = err?.response?.data?.message || err.message || 'Failed to send verification email.';
+            error(msg);
+            const match = msg.match(/(\d+)\s*second/i);
+            if (match) {
+                const sec = parseInt(match[1], 10);
+                if (sec > 0) {
+                    setResendCooldown(sec);
+                    sessionStorage.setItem(cooldownKey, String(Date.now() + sec * 1000));
+                }
+            }
+        } finally {
+            setSendingVerification(false);
+        }
+    };
 
     // Sync active section if initialSection prop changes
     useEffect(() => {
@@ -748,6 +823,28 @@ export default function EmployeeDetailPanel({
                         ) : (
                             <>
                                 <ToggleRight size={15} /> Activate
+                            </>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        className="ed-btn ed-btn-secondary"
+                        onClick={handleSendVerification}
+                        disabled={resendCooldown > 0 || sendingVerification}
+                        title={resendCooldown > 0 ? `Please wait ${resendCooldown}s before sending another verification email` : 'Send verification email'}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                        {sendingVerification ? (
+                            <>
+                                <Loader2 size={14} className="spin" /> Sending...
+                            </>
+                        ) : resendCooldown > 0 ? (
+                            <>
+                                <Clock size={14} /> Resend in {resendCooldown}s
+                            </>
+                        ) : (
+                            <>
+                                <Mail size={14} /> Send Verification
                             </>
                         )}
                     </button>
