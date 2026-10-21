@@ -175,7 +175,9 @@ public class AuthController : ControllerBase
         "localhost",
         "127.0.0.1",
         "speedex-system.vercel.app",
-        "stars-two-chi.vercel.app"
+        "stars-two-chi.vercel.app",
+        "fomsfrontend.vercel.app",
+        "delivery-system-capstone-beige.vercel.app"
     };
 
     private string GetClientBaseUrl()

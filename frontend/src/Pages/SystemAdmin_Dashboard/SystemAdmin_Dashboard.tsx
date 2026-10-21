@@ -124,7 +124,6 @@ interface EmployeeRegisterDTO {
     dmsSystemAccess?: string;
     dmsAreas?: string[];
     fomsRole?: string;
-    fomsSalaryRate?: number;
 }
 
 interface FieldError {
@@ -141,7 +140,6 @@ interface FieldError {
     dmsRole?: string;
     dmsAreas?: string;
     fomsRole?: string;
-    fomsSalaryRate?: string;
 }
 
 type FormState = EmployeeRegisterDTO;
@@ -161,11 +159,10 @@ const EMPTY_FORM: FormState = {
     hireDate: new Date().toISOString().split('T')[0],
     targetSystems: ['STARS'],
     targetSystem: 'STARS',
-    dmsRole: 'Driver',
+    dmsRole: 'Encoder',
     dmsSystemAccess: 'Both',
     dmsAreas: ['Manila'],
     fomsRole: 'Accountant',
-    fomsSalaryRate: 25000,
 };
 
 interface ActivityLog {
@@ -489,9 +486,6 @@ function validate(form: FormState): FieldError {
     // FOMS specific validations
     if (selectedSystems.includes('FOMS')) {
         if (!form.fomsRole) errs.fomsRole = 'Please select a FOMS role.';
-        if (form.fomsSalaryRate === undefined || form.fomsSalaryRate === null || isNaN(form.fomsSalaryRate) || form.fomsSalaryRate < 0) {
-            errs.fomsSalaryRate = 'Please enter a valid salary rate (>= 0).';
-        }
     }
 
     // Contact Number
@@ -781,11 +775,10 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 hireDate: form.hireDate ? new Date(form.hireDate).toISOString() : null,
                 targetSystems: targetSystems,
                 targetSystem: targetSystems.join(','),
-                dmsRole: isDms ? (form.dmsRole || 'Driver') : undefined,
+                dmsRole: isDms ? (form.dmsRole || 'Encoder') : undefined,
                 dmsSystemAccess: isDms ? (form.dmsSystemAccess || 'Both') : undefined,
                 dmsAreas: isDms ? (form.dmsAreas || ['Manila']) : undefined,
                 fomsRole: isFoms ? (form.fomsRole || 'Accountant') : undefined,
-                fomsSalaryRate: isFoms ? Number(form.fomsSalaryRate || 0) : undefined,
             });
 
             const responseData = res.data;
@@ -828,7 +821,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         const errs = validate(form);
         if (Object.keys(errs).length > 0) {
             setErrors(errs);
-            if (errs.targetSystems || errs.departmentId || errs.jobPositionId || errs.role || errs.dmsRole || errs.dmsAreas || errs.fomsRole || errs.fomsSalaryRate) {
+            if (errs.targetSystems || errs.departmentId || errs.jobPositionId || errs.role || errs.dmsRole || errs.dmsAreas || errs.fomsRole) {
                 setSystemAccessCollapsed(false);
             }
             return;
@@ -881,10 +874,9 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
         if (form.jobPositionId) return true;
         if (form.role) return true;
         if (form.targetSystems && (form.targetSystems.length !== 1 || form.targetSystems[0] !== 'STARS')) return true;
-        if (form.dmsRole && form.dmsRole !== 'Driver') return true;
+        if (form.dmsRole && form.dmsRole !== 'Encoder') return true;
         if (form.dmsAreas && form.dmsAreas.join(',') !== 'Manila') return true;
         if (form.fomsRole && form.fomsRole !== 'Accountant') return true;
-        if (form.fomsSalaryRate && form.fomsSalaryRate !== 25000) return true;
         if (form.employmentStatus && form.employmentStatus !== 'Regular') return true;
         return false;
     }, [form, dirty]);
@@ -913,9 +905,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
 
         // FOMS requirements if selected
         if (selectedSystems.includes('FOMS')) {
-            if (!form.fomsRole || form.fomsSalaryRate === undefined || form.fomsSalaryRate === null || isNaN(form.fomsSalaryRate) || form.fomsSalaryRate < 0) {
-                return false;
-            }
+            if (!form.fomsRole) return false;
         }
 
         // General Employee Profile required fields
@@ -1267,16 +1257,17 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                                         <label className="fm-label" htmlFor="dms-role">DMS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
                                                         <select
                                                             id="dms-role"
-                                                            value={form.dmsRole || 'Driver'}
+                                                            value={form.dmsRole || 'Encoder'}
                                                             onChange={e => {
                                                                 setDirty(true);
                                                                 setForm(prev => ({ ...prev, dmsRole: e.target.value }));
                                                             }}
                                                             className="fm-select"
                                                         >
-                                                            <option value="Driver">Driver / Rider</option>
-                                                            <option value="Dispatcher">Dispatcher</option>
-                                                            <option value="Admin">Fleet Administrator</option>
+                                                            <option value="Admin">Admin (Fleet Administrator)</option>
+                                                            <option value="Encoder">Encoder (Operations Team)</option>
+                                                            <option value="Driver">Driver (Courier / Rider)</option>
+                                                            <option value="Client">Client (Consignor / Order Creator)</option>
                                                         </select>
                                                         <FieldErr msg={errors.dmsRole} />
                                                     </div>
@@ -1408,28 +1399,12 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                                             }}
                                                             className="fm-select"
                                                         >
+                                                            <option value="Financial Manager">Financial Manager</option>
+                                                            <option value="Head Accountant">Head Accountant</option>
                                                             <option value="Accountant">Accountant</option>
-                                                            <option value="Financial Analyst">Financial Analyst</option>
-                                                            <option value="Auditor">Financial Auditor</option>
+                                                            <option value="Assistant Financial Manager">Assistant Financial Manager</option>
                                                         </select>
                                                         <FieldErr msg={errors.fomsRole} />
-                                                    </div>
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="foms-salary">Monthly Salary / Base Rate (PHP) <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                                        <input
-                                                            id="foms-salary"
-                                                            type="number"
-                                                            placeholder="25000"
-                                                            value={form.fomsSalaryRate ?? 25000}
-                                                            onChange={e => {
-                                                                setDirty(true);
-                                                                setForm(prev => ({ ...prev, fomsSalaryRate: parseFloat(e.target.value) || 0 }));
-                                                            }}
-                                                            className="fm-input"
-                                                            min={0}
-                                                            step={500}
-                                                        />
-                                                        <FieldErr msg={errors.fomsSalaryRate} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -1653,7 +1628,6 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                             ] : []),
                             ...(form.targetSystems?.includes('FOMS') ? [
                                 { label: 'FOMS Role', value: form.fomsRole || 'Accountant' },
-                                { label: 'FOMS Salary Rate', value: `PHP ${Number(form.fomsSalaryRate || 0).toLocaleString()}` },
                             ] : []),
                             { label: 'Employment Status', value: form.employmentStatus },
                             { label: 'Hire Date', value: fmtDate(form.hireDate) },
