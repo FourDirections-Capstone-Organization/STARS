@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import api from '../../api';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import { CheckCircle2, AlertCircle, Loader2, ArrowRight, User, Lock, Phone, Sparkles, ShieldCheck, Eye, EyeOff, Check, X } from 'lucide-react';
 import { getStoredRedirectUri, redirectToExternalPortal } from '../../components/Auth/authRedirect';
@@ -150,33 +151,79 @@ export default function OnboardingPage() {
     const [apiError, setApiError] = useState('');
     const [saving, setSaving] = useState(false);
 
-    const [profile, setProfile] = useState({ firstName: '', middleName: '', lastName: '', suffix: '', contactNumber: '' });
+    const [profile, setProfile] = useState(() => {
+        const storedContact = localStorage.getItem('contactNumber') || localStorage.getItem('phoneNumber') || localStorage.getItem('phone') || '';
+        const storedFirst = localStorage.getItem('firstName') || '';
+        const storedMiddle = localStorage.getItem('middleName') || '';
+        const storedLast = localStorage.getItem('lastName') || '';
+        const storedSuffix = localStorage.getItem('suffix') || '';
+        return {
+            firstName: storedFirst,
+            middleName: storedMiddle,
+            lastName: storedLast,
+            suffix: storedSuffix,
+            contactNumber: storedContact,
+        };
+    });
     const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
+        let isMounted = true;
         const fetchExistingProfile = async () => {
             try {
-                const res = await axios.get('/api/Auth/me');
-                const data = res.data?.data;
-                if (data) {
-                    setProfile({
-                        firstName: data.firstName ?? '',
-                        middleName: data.middleName ?? '',
-                        lastName: data.lastName ?? '',
-                        suffix: data.suffix ?? '',
-                        contactNumber: data.contactNumber ?? '',
-                    });
-                    if (data.firstName) localStorage.setItem('firstName', data.firstName);
-                    if (data.lastName) localStorage.setItem('lastName', data.lastName);
-                    if (data.middleName) localStorage.setItem('middleName', data.middleName);
-                    if (data.suffix) localStorage.setItem('suffix', data.suffix);
-                    if (data.contactNumber) localStorage.setItem('contactNumber', data.contactNumber);
-                    const fullName = [data.firstName, data.middleName, data.lastName, data.suffix].filter(Boolean).join(' ').trim();
-                    if (fullName) localStorage.setItem('employeeName', fullName);
+                let data: any = null;
+
+                // 1. First attempt: /api/Auth/me
+                try {
+                    const res = await api.get('/api/Auth/me');
+                    data = res.data?.data ?? res.data;
+                } catch (meErr) {
+                    console.warn('Onboarding: /api/Auth/me failed, will try employee lookup fallback', meErr);
                 }
+
+                // 2. Second attempt: lookup by employee number if contactNumber is still missing
+                const empNo = localStorage.getItem('employeeId') || data?.employeeNumber || data?.EmployeeNumber;
+                const contactFromMe = data?.contactNumber ?? data?.ContactNumber ?? data?.phoneNumber ?? data?.PhoneNumber ?? data?.phone ?? data?.Phone;
+                if (!contactFromMe && empNo) {
+                    try {
+                        const userRes = await api.get(`/api/User/employee-number/${encodeURIComponent(empNo)}`);
+                        const userData = userRes.data?.data ?? userRes.data;
+                        if (userData) {
+                            data = { ...userData, ...data, contactNumber: userData.contactNumber ?? userData.ContactNumber ?? contactFromMe };
+                        }
+                    } catch (userErr) {
+                        console.warn('Onboarding: lookup by employee number failed', userErr);
+                    }
+                }
+
+                if (!isMounted) return;
+
+                const contact = data?.contactNumber ?? data?.ContactNumber ?? data?.phoneNumber ?? data?.PhoneNumber ?? data?.phone ?? data?.Phone ?? localStorage.getItem('contactNumber') ?? localStorage.getItem('phoneNumber') ?? '';
+                const first = data?.firstName ?? data?.FirstName ?? localStorage.getItem('firstName') ?? '';
+                const middle = data?.middleName ?? data?.MiddleName ?? localStorage.getItem('middleName') ?? '';
+                const last = data?.lastName ?? data?.LastName ?? localStorage.getItem('lastName') ?? '';
+                const suffix = data?.suffix ?? data?.Suffix ?? localStorage.getItem('suffix') ?? '';
+
+                setProfile(prev => ({
+                    firstName: first || prev.firstName,
+                    middleName: middle || prev.middleName,
+                    lastName: last || prev.lastName,
+                    suffix: suffix || prev.suffix,
+                    contactNumber: contact || prev.contactNumber,
+                }));
+
+                if (first) localStorage.setItem('firstName', first);
+                if (middle) localStorage.setItem('middleName', middle);
+                if (last) localStorage.setItem('lastName', last);
+                if (suffix) localStorage.setItem('suffix', suffix);
+                if (contact) localStorage.setItem('contactNumber', contact);
+
+                const fullName = [first, middle, last, suffix].filter(Boolean).join(' ').trim();
+                if (fullName) localStorage.setItem('employeeName', fullName);
             } catch { /* silently ignore */ }
         };
         fetchExistingProfile();
+        return () => { isMounted = false; };
     }, []);
 
     const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
@@ -230,10 +277,10 @@ export default function OnboardingPage() {
         try {
             const empNo = localStorage.getItem('employeeId');
             if (!empNo) throw new Error('Session expired.');
-            const lookupRes = await axios.get(`/api/User/employee-number/${encodeURIComponent(empNo)}`);
+            const lookupRes = await api.get(`/api/User/employee-number/${encodeURIComponent(empNo)}`);
             const userId = lookupRes.data?.data?.id ?? lookupRes.data?.id;
             if (!userId) throw new Error('Profile not found.');
-            await axios.put(`/api/User/${userId}`, {
+            await api.put(`/api/User/${userId}`, {
                 firstName: profile.firstName.trim(), middleName: profile.middleName.trim(),
                 lastName: profile.lastName.trim(), suffix: profile.suffix.trim(), contactNumber: profile.contactNumber,
             });

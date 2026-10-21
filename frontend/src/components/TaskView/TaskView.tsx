@@ -553,6 +553,14 @@ const TaskView: React.FC<TaskViewProps> = ({
     };
 
     const handleResendDms = async () => {
+        if (!task?.taskId) {
+            toastError('Operational task must be created in STARS before dispatching to DMS.');
+            return;
+        }
+        if (!deliveryDetail && !task?.deliveryDetails) {
+            toastError('Operational delivery details are not configured for this task. Please save delivery details first.');
+            return;
+        }
         setResendingDms(true);
         try {
             const res = await api.post(`/api/dms-integration/tasks/${task.taskId}/resend`, {});
