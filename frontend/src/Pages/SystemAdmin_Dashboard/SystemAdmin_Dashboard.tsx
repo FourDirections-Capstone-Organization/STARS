@@ -121,7 +121,6 @@ interface EmployeeRegisterDTO {
     targetSystems: string[];
     targetSystem?: string;
     dmsRole?: string;
-    dmsSystemAccess?: string;
     dmsAreas?: string[];
     fomsRole?: string;
 }
@@ -160,7 +159,6 @@ const EMPTY_FORM: FormState = {
     targetSystems: ['STARS'],
     targetSystem: 'STARS',
     dmsRole: 'Encoder',
-    dmsSystemAccess: 'Both',
     dmsAreas: ['Manila'],
     fomsRole: 'Accountant',
 };
@@ -776,7 +774,6 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                 targetSystems: targetSystems,
                 targetSystem: targetSystems.join(','),
                 dmsRole: isDms ? (form.dmsRole || 'Encoder') : undefined,
-                dmsSystemAccess: isDms ? (form.dmsSystemAccess || 'Both') : undefined,
                 dmsAreas: isDms ? (form.dmsAreas || ['Manila']) : undefined,
                 fomsRole: isFoms ? (form.fomsRole || 'Accountant') : undefined,
             });
@@ -1272,22 +1269,6 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                                         <FieldErr msg={errors.dmsRole} />
                                                     </div>
                                                     <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="dms-access">System Access Channel</label>
-                                                        <select
-                                                            id="dms-access"
-                                                            value={form.dmsSystemAccess || 'Both'}
-                                                            onChange={e => {
-                                                                setDirty(true);
-                                                                setForm(prev => ({ ...prev, dmsSystemAccess: e.target.value }));
-                                                            }}
-                                                            className="fm-select"
-                                                        >
-                                                            <option value="Both">Both (Mobile App & Web Portal)</option>
-                                                            <option value="Mobile">Mobile Application Only</option>
-                                                            <option value="Web">Web Portal Only</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="fm-field" style={{ gridColumn: 'span 2' }}>
                                                         <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub <span style={{ color: 'var(--status-failed)' }}>*</span></label>
                                                         <input
                                                             id="dms-areas"
@@ -1623,7 +1604,7 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                                 { label: 'STARS Role', value: form.role },
                             ] : []),
                             ...(form.targetSystems?.includes('DMS') ? [
-                                { label: 'DMS Role', value: `${form.dmsRole || 'Driver'} (${form.dmsSystemAccess || 'Both'})` },
+                                { label: 'DMS Role', value: form.dmsRole || 'Encoder' },
                                 { label: 'DMS Hubs', value: form.dmsAreas?.join(', ') || 'Manila' },
                             ] : []),
                             ...(form.targetSystems?.includes('FOMS') ? [
