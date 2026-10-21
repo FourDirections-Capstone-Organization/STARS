@@ -189,15 +189,31 @@ export default function Login() {
 
             // Fetch full profile to populate localStorage
             try {
-                const meRes = await api.get<any>('/api/Auth/me');
-                const me = meRes.data?.data ?? meRes.data;
+                let me: any = null;
+                try {
+                    const meRes = await api.get<any>('/api/Auth/me');
+                    me = meRes.data?.data ?? meRes.data;
+                } catch {
+                    const empNum = d.employeeNumber ?? employeeId.trim();
+                    if (empNum) {
+                        const userRes = await api.get<any>(`/api/User/employee-number/${encodeURIComponent(empNum)}`);
+                        me = userRes.data?.data ?? userRes.data;
+                    }
+                }
                 if (me) {
-                    localStorage.setItem('contactNumber', me.contactNumber ?? '');
-                    localStorage.setItem('firstName', me.firstName ?? '');
-                    localStorage.setItem('middleName', me.middleName ?? '');
-                    localStorage.setItem('lastName', me.lastName ?? '');
-                    localStorage.setItem('suffix', me.suffix ?? '');
-                    const fullName = [me.firstName, me.middleName, me.lastName, me.suffix]
+                    const contact = me.contactNumber ?? me.ContactNumber ?? me.phoneNumber ?? me.PhoneNumber ?? me.phone ?? '';
+                    if (contact) {
+                        localStorage.setItem('contactNumber', contact);
+                    }
+                    const fn = me.firstName ?? me.FirstName ?? '';
+                    const mn = me.middleName ?? me.MiddleName ?? '';
+                    const ln = me.lastName ?? me.LastName ?? '';
+                    const sx = me.suffix ?? me.Suffix ?? '';
+                    if (fn) localStorage.setItem('firstName', fn);
+                    if (mn) localStorage.setItem('middleName', mn);
+                    if (ln) localStorage.setItem('lastName', ln);
+                    if (sx) localStorage.setItem('suffix', sx);
+                    const fullName = [fn, mn, ln, sx]
                         .filter(Boolean).join(' ');
                     localStorage.setItem('employeeName', fullName || d.fullName || me.fullName || d.employeeName || '');
                 }
