@@ -512,9 +512,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ task, onUpdate, onClose }) => {
                     </div>
                 ))}
             </div>
-            <div className="tc-bar" style={{ height: 8, marginBottom: 12 }}>
-                <div className={`tc-fill ${pm.bar}`} style={{ width: `${task.progress}%` }} />
-            </div>
+
 
             {/* Delivery Destination & Waybill (DMS Integration 1) */}
             {deliveryDetail && (
@@ -890,12 +888,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onView, onUpdate }) => {
                 </span>
                 <span className="tc-date">{fmtDate(task.deadline)}</span>
             </div>
-            <div className="tc-progress-row">
-                <div className="tc-bar">
-                    <div className={`tc-fill ${pm.bar}`} style={{ width: `${task.progress}%` }} />
-                </div>
-                <span className="tc-pct">{task.progress}%</span>
-            </div>
+
             {task.status === 'completed' && (
                 <div className="tc-actions">
                     <span className="completed-pill"><CheckCircle2 size={12} /> Done</span>
@@ -1205,13 +1198,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ task, onView, onUpdate, onDragS
                 </div>
             )}
 
-            {/* Progress bar */}
-            <div className="tc-progress-row" style={{ marginTop: 8 }}>
-                <div className="tc-bar">
-                    <div className={`tc-fill ${pm.bar}`} style={{ width: `${task.progress}%` }} />
-                </div>
-                <span className="tc-pct">{task.progress}%</span>
-            </div>
+
 
             <div className="kanban-card-meta">
                 <span className={`tc-deadline${od ? ' overdue-text' : daysLeft !== null && daysLeft <= 2 ? ' warning-text' : ''}`} style={{ fontSize: 11 }}>

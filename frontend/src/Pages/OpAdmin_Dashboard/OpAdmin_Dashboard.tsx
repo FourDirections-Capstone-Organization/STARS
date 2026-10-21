@@ -712,9 +712,6 @@ interface TaskRowProps {
 const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = false }) => {
     const od = isEffectivelyOverdue(task);
     const effectiveStatus = od ? 'Overdue' : task.taskStatus;
-    const progress = (task.assignees && task.assignees.length > 0 && task.assignees[0].completionPercentage !== undefined)
-        ? Math.round(task.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / task.assignees.length)
-        : statusToProgress(effectiveStatus);
     const refDisplay = task.taskNumber || task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase();
 
     return (
@@ -744,9 +741,6 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
                         ]}
                     />
                 )}
-            </div>
-            <div style={{ margin: '6px 0 4px', height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ width: `${progress}%`, height: '100%', background: progress >= 100 ? '#05cd99' : progress >= 75 ? '#4318ff' : progress >= 45 ? '#ffb547' : '#94a3b8', borderRadius: 2, transition: 'width 0.3s ease' }} />
             </div>
             <div className="task-row-bottom">
                 <span className="task-assignee">{task.assignedEmployee || 'Unassigned'}</span>
@@ -2844,9 +2838,6 @@ const TasksTab: React.FC<{
                     const od = isEffectivelyOverdue(t);
                     const effectiveStatus = od ? 'Overdue' : t.taskStatus;
                     const refDisplay = t.taskNumber || t.taskReferenceNumber || t.taskId.slice(0, 8).toUpperCase();
-                    const reportedProgress = (t.assignees && t.assignees.length > 0 && t.assignees[0].completionPercentage !== undefined)
-                        ? Math.round(t.assignees.reduce((acc, a) => acc + (a.completionPercentage || 0), 0) / t.assignees.length)
-                        : statusToProgress(effectiveStatus);
                     return (
                         <tr key={t.taskId} onClick={() => onView(t.taskId)} style={{ cursor: 'pointer' }}>
                             <td>
@@ -2859,10 +2850,6 @@ const TasksTab: React.FC<{
                                         </div>
                                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                                             <span className={statusBadgeClass(effectiveStatus)} style={{ fontSize: 10, padding: '1px 8px' }}>{effectiveStatus}</span>
-                                            <div style={{ width: 100, height: 4, background: '#e8ecf4', borderRadius: 2, overflow: 'hidden' }} title={`${reportedProgress}% completed`}>
-                                                <div style={{ width: `${reportedProgress}%`, height: '100%', background: reportedProgress >= 100 ? '#05cd99' : reportedProgress >= 75 ? '#4318ff' : reportedProgress >= 45 ? '#ffb547' : '#94a3b8', borderRadius: 2 }} />
-                                            </div>
-                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>{reportedProgress}%</span>
                                         </div>
                                     </div>
                                 </div>
