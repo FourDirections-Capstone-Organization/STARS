@@ -15,6 +15,7 @@ export interface TMTask {
     classification?: string;
     project?: string;
     assignee?: { id: string; name: string };
+    assignees?: { id: string; name: string }[];
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
     status: 'Backlog' | 'To do' | 'In progress' | 'In review' | 'Done' | 'Cancelled' | 'On hold';
     dueDate?: string;
@@ -438,7 +439,14 @@ export default function TaskManager({
             });
         }
         if (filterClassification) list = list.filter(t => t.classification === filterClassification);
-        if (filterAssignee) list = list.filter(t => t.assignee?.id === filterAssignee);
+        if (filterAssignee) {
+            const target = filterAssignee.toLowerCase().trim();
+            list = list.filter(t =>
+                (t.assignee?.id && t.assignee.id.toLowerCase().trim() === target) ||
+                (t.assignee?.name && t.assignee.name.toLowerCase().trim() === target) ||
+                (t.assignees && t.assignees.some(a => (a.id && a.id.toLowerCase().trim() === target) || (a.name && a.name.toLowerCase().trim() === target)))
+            );
+        }
         return list;
     }, [tabTasks, search, filterPrio, filterStatus, filterDueDate, filterClassification, filterAssignee]);
 

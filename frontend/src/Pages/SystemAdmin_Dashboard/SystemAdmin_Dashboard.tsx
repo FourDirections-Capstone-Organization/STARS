@@ -3082,6 +3082,7 @@ export default function Dashboard() {
 
     // ── Task Management ──
     const [tmTasks, setTmTasks] = useState<any[]>([]);
+    const [tmTeamMembers, setTmTeamMembers] = useState<{ accountId: string; employeeName: string }[]>([]);
     const [tmLoading, setTmLoading] = useState(false);
     const [showNewTask, setShowNewTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
@@ -3297,6 +3298,16 @@ export default function Dashboard() {
                     else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'in review') statusVal = 'In review';
                     else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') statusVal = 'To do';
                 }
+                const rawAssignees: { id: string; name: string }[] = Array.isArray(t.assignees)
+                    ? t.assignees.map((a: any) => ({
+                        id: String(a.userId ?? a.UserId ?? a.id ?? a.accountId ?? ''),
+                        name: (a.fullName ?? a.FullName ?? a.employeeName ?? a.name ?? '').trim(),
+                    })).filter((a: any) => a.id || a.name)
+                    : [];
+                const firstAssignee = rawAssignees.length > 0 ? rawAssignees[0] : (t.assignedTo || t.assignedEmployee ? {
+                    id: String(t.assignedTo ?? ''),
+                    name: (t.assignedEmployee ?? '').trim()
+                } : undefined);
                 return {
                     id: t.id ?? t.taskId,
                     name: t.title ?? t.taskTitle ?? '',
@@ -3304,7 +3315,8 @@ export default function Dashboard() {
                     referenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification === 1 || t.Classification === 1 ? 'special' : 'routine',
                     project: t.taskCategory ?? (t.classification === 1 ? 'SpecialTask' : ''),
-                    assignee: t.assignees?.length ? { id: t.assignees[0].userId ?? '', name: t.assignees[0].fullName ?? '' } : undefined,
+                    assignee: firstAssignee,
+                    assignees: rawAssignees,
                     priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) || 'Medium',
                     status: statusVal,
                     dueDate: t.deadline ?? t.dueAt ?? undefined,
@@ -3320,7 +3332,75 @@ export default function Dashboard() {
         if (!silent) setTmLoading(false);
     };
 
-    useEffect(() => { if (activeTab === 'tasks') { fetchManagerTasks(); } }, [activeTab]);
+    const fetchManagerTeamMembers = async () => {
+        try {
+            const res = await api.get('/api/Task/assignable-users?pageNumber=1&pageSize=100');
+            const body = res.data;
+            let rawList: any[] = Array.isArray(body)
+                ? body
+                : (Array.isArray(body?.data?.items)
+                    ? body.data.items
+                    : (Array.isArray(body?.data?.data)
+                        ? body.data.data
+                        : (Array.isArray(body?.data) ? body.data : [])));
+
+            if (rawList.length === 0) {
+                try {
+                    const fallbackRes = await api.get('/api/User?pageNumber=1&pageSize=100');
+                    const fbBody = fallbackRes.data;
+                    rawList = Array.isArray(fbBody?.data?.items)
+                        ? fbBody.data.items
+                        : (Array.isArray(fbBody?.data) ? fbBody.data : (Array.isArray(fbBody) ? fbBody : []));
+                } catch {
+                    // ignore fallback failure
+                }
+            }
+
+            setTmTeamMembers(rawList.map((e: any) => ({
+                accountId: String(e.userId ?? e.UserId ?? e.id ?? e.accountId ?? ''),
+                employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? e.name ?? '').trim(),
+            })).filter(m => m.accountId && m.employeeName));
+        } catch {
+            setTmTeamMembers([]);
+        }
+    };
+
+    useEffect(() => {
+        fetchManagerTeamMembers();
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'tasks') {
+            fetchManagerTasks();
+            fetchManagerTeamMembers();
+        }
+    }, [activeTab]);
+
+    const managerAssignees = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const m of tmTeamMembers) {
+            if (m.accountId && m.employeeName) {
+                map.set(m.accountId, m.employeeName);
+            }
+        }
+        for (const t of tmTasks) {
+            if (t.assignee?.id && t.assignee?.name) {
+                if (!map.has(t.assignee.id)) {
+                    map.set(t.assignee.id, t.assignee.name);
+                }
+            }
+            if (Array.isArray(t.assignees)) {
+                for (const a of t.assignees) {
+                    if (a.id && a.name && !map.has(a.id)) {
+                        map.set(a.id, a.name);
+                    }
+                }
+            }
+        }
+        return Array.from(map.entries())
+            .map(([accountId, employeeName]) => ({ accountId, employeeName }))
+            .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    }, [tmTeamMembers, tmTasks]);
 
     useEffect(() => {
         api.get('/api/Department')
@@ -4456,7 +4536,7 @@ export default function Dashboard() {
                                     <div className="dashboard-content">
                                         <TaskManager
                                             tasks={tmTasks}
-                                            teamMembers={[]}
+                                            teamMembers={managerAssignees}
                                             onNewTask={() => setTaskSubTab('create')}
                                             onEdit={id => {
                                                 const found = tmTasks.find(t => t.id === id);
