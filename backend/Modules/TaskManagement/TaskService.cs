@@ -193,8 +193,7 @@ public class TaskService : ITaskService
                 break;
 
             case UserRole.Coordinator:
-                if (requestUserDepartmentId.HasValue)
-                    query = query.Where(t => t.AssignedDepartmentId == requestUserDepartmentId.Value);
+                query = query.Where(t => t.CreatedById == requestUserId);
                 break;
 
             case UserRole.Dispatcher:
@@ -307,6 +306,9 @@ public class TaskService : ITaskService
         if (requestUserRole != UserRole.Coordinator && requestUserRole != UserRole.Manager)
             return ApiResponseDTO<bool>.Failure("Only Coordinators and Managers can delete tasks");
 
+        if (requestUserRole == UserRole.Coordinator && task.CreatedById != requestUserId)
+            return ApiResponseDTO<bool>.Failure("Cannot delete tasks created by another coordinator");
+
         _db.TaskAttachments.RemoveRange(task.Attachments);
         _db.TaskAssignments.RemoveRange(task.Assignments);
         _db.Tasks.Remove(task);
@@ -334,8 +336,8 @@ public class TaskService : ITaskService
             .Include(t => t.Attachments)
             .Where(t => t.Status == Models.Enums.TaskStatus.Cancelled);
 
-        if (requestUserRole == UserRole.Coordinator && departmentId.HasValue)
-            query = query.Where(t => t.AssignedDepartmentId == departmentId.Value);
+        if (requestUserRole == UserRole.Coordinator)
+            query = query.Where(t => t.CreatedById == requestUserId);
 
         var cancelledTasks = await query.ToListAsync();
         var count = cancelledTasks.Count;
@@ -408,8 +410,8 @@ public class TaskService : ITaskService
             return ApiResponseDTO<TaskResponseDTO>.Failure("Only Coordinators and Managers can update tasks");
 
         if (requestUser.Role == UserRole.Coordinator 
-            && requestUser.DepartmentId != task.AssignedDepartmentId)
-            return ApiResponseDTO<TaskResponseDTO>.Failure("Cannot update tasks from another department");
+            && task.CreatedById != requestUserId)
+            return ApiResponseDTO<TaskResponseDTO>.Failure("Cannot update tasks created by another coordinator");
 
         if (task.Status == Models.Enums.TaskStatus.Completed)
             return ApiResponseDTO<TaskResponseDTO>.Failure("Cannot modify a completed task");

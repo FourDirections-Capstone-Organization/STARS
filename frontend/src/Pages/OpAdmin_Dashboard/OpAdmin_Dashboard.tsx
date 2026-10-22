@@ -214,6 +214,7 @@ interface Task {
     taskStatus: TaskStatus;
     taskRemarks?: string;
     assignedEmployee: string;
+    createdById?: string;
     createdByEmployee: string;
     assignedTo: string;
     /** Each assignee plus the completion percentage the employee reported. */
@@ -8081,7 +8082,20 @@ export default function OpsAdminDashboard() {
             const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
             const STATUS_LABELS: Record<number, string> = { 0: 'Assigned', 1: 'In Progress', 2: 'Pending Admin Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled' };
             const now = new Date();
+            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const currentAccountId = localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? localStorage.getItem('employeeId') ?? '';
+            const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
+
             rawList.forEach((t: any) => {
+                const tCreatedById = t.createdById ?? t.CreatedById ?? '';
+                const tCreatedByName = (t.createdByName ?? t.createdByEmployee ?? '').trim().toLowerCase();
+                if (isCoordinator) {
+                    const matchesId = tCreatedById && currentAccountId && tCreatedById.toLowerCase() === currentAccountId.toLowerCase();
+                    const matchesName = tCreatedByName && currentEmployeeName && tCreatedByName === currentEmployeeName;
+                    if (!matchesId && !matchesName && (tCreatedById || tCreatedByName)) {
+                        return;
+                    }
+                }
                 const taskId = t.id ?? t.taskId;
                 const rawTitle = t.title ?? t.taskTitle ?? '';
                 const title = rawTitle.length > 50 ? rawTitle.slice(0, 50) + '...' : rawTitle;
@@ -8479,6 +8493,7 @@ export default function OpsAdminDashboard() {
                     taskStatus: statusStr,
                     taskRemarks: t.progressNotes ?? t.taskRemarks ?? '',
                     assignedEmployee: t.assignees?.length > 0 ? t.assignees[0].fullName ?? '' : '',
+                    createdById: t.createdById ?? t.CreatedById ?? '',
                     createdByEmployee: t.createdByName ?? t.createdByEmployee ?? '',
                     assignedTo: t.assignees?.length > 0 ? t.assignees[0].userId ?? '' : '',
                     assignees: (t.assignees ?? []).map((a: any) => ({
@@ -8496,9 +8511,25 @@ export default function OpsAdminDashboard() {
                 };
             });
 
-            setAllTasks(normalized);
+            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const currentAccountId = localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? localStorage.getItem('employeeId') ?? '';
+            const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
+
+            const scopedTasks = isCoordinator
+                ? normalized.filter(t => {
+                    if (t.createdById && currentAccountId) {
+                        return t.createdById.toLowerCase() === currentAccountId.toLowerCase();
+                    }
+                    if (t.createdByEmployee && currentEmployeeName) {
+                        return t.createdByEmployee.trim().toLowerCase() === currentEmployeeName;
+                    }
+                    return true;
+                })
+                : normalized;
+
+            setAllTasks(scopedTasks);
             const isBinTab = taskTabRef.current === 'bin';
-            setTasks(isBinTab ? normalized : normalized.filter(t => !t.deleted));
+            setTasks(isBinTab ? scopedTasks : scopedTasks.filter(t => !t.deleted));
         } catch {
             if (!silent) console.warn('[fetchTasks] Failed to load tasks');
         } finally {
