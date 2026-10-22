@@ -1485,6 +1485,23 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
                 </select>
+                <select
+                    value={filter}
+                    onChange={e => setFilter(e.target.value as any)}
+                    style={{
+                        height: 36, borderRadius: 8, border: '1px solid var(--border)',
+                        padding: '0 10px', fontSize: 12, background: 'var(--bg-card)',
+                        color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
+                    }}
+                >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="on-hold">On Hold</option>
+                    <option value="completed">Completed</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="cancelled">Bin</option>
+                </select>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{filtered.length} task{filtered.length === 1 ? '' : 's'}</span>
             </div>
 

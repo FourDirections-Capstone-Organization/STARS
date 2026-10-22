@@ -46,14 +46,15 @@ public class TaskController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] Models.Enums.TaskStatus? status = null,
+        [FromQuery] string? status = null,
         [FromQuery] PriorityLevel? priority = null,
         [FromQuery] TaskClassification? classification = null,
         [FromQuery] Guid? assignedToUserId = null,
         [FromQuery] Guid? departmentId = null,
         [FromQuery] string? search = null,
         [FromQuery] Models.Enums.TaskStatus? excludeStatus = null,
-        [FromQuery] string? excludeStatuses = null)
+        [FromQuery] string? excludeStatuses = null,
+        [FromQuery] bool? isOverdue = null)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
@@ -85,10 +86,27 @@ public class TaskController : ControllerBase
             }
         }
 
+        Models.Enums.TaskStatus? parsedStatus = null;
+        if (!string.IsNullOrEmpty(status))
+        {
+            if (status.Equals("Overdue", StringComparison.OrdinalIgnoreCase))
+            {
+                isOverdue = true;
+            }
+            else if (int.TryParse(status, out var sInt) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), sInt))
+            {
+                parsedStatus = (Models.Enums.TaskStatus)sInt;
+            }
+            else if (Enum.TryParse<Models.Enums.TaskStatus>(status, true, out var sEnum))
+            {
+                parsedStatus = sEnum;
+            }
+        }
+
         var result = await _taskService.GetAllAsync(
             requestUserId, requestUserRole, requestUserDepartmentId,
             pageNumber, pageSize,
-            status, priority, classification, assignedToUserId, departmentId, search, excludeStatus, excludedList);
+            parsedStatus, priority, classification, assignedToUserId, departmentId, search, excludeStatus, excludedList, isOverdue);
         return Ok(result);
     }
 

@@ -402,9 +402,9 @@ export default function TaskManager({
         else setSelectedIds(new Set(paginated.map(t => t.id)));
     };
 
-    const availableStatuses: TMTask['status'][] = useMemo(() => {
-        if (tab === 'active') return ['Backlog', 'To do', 'In progress', 'In review'];
-        if (tab === 'on_hold') return ['On hold'];
+    const availableStatuses: string[] = useMemo(() => {
+        if (tab === 'active') return ['Backlog', 'To do', 'In progress', 'In review', 'Overdue'];
+        if (tab === 'on_hold') return ['On hold', 'Overdue'];
         if (tab === 'completed') return ['Done'];
         return ['Cancelled'];
     }, [tab]);
@@ -421,7 +421,22 @@ export default function TaskManager({
         const q = search.toLowerCase().trim();
         if (q) list = list.filter(t => t.name.toLowerCase().includes(q) || (t.assignee?.name || '').toLowerCase().includes(q) || (t.project || '').toLowerCase().includes(q));
         if (filterPrio) list = list.filter(t => t.priority === filterPrio);
-        if (filterStatus) list = list.filter(t => t.status === filterStatus);
+        if (filterStatus) {
+            if (filterStatus.toLowerCase() === 'overdue') {
+                const now = new Date();
+                list = list.filter(t => {
+                    if (t.status === 'Done' || t.status === 'Cancelled') return false;
+                    if (!t.dueDate) return false;
+                    try {
+                        return new Date(t.dueDate) < now;
+                    } catch {
+                        return false;
+                    }
+                });
+            } else {
+                list = list.filter(t => t.status === filterStatus);
+            }
+        }
         if (filterDueDate) {
             list = list.filter(t => {
                 if (!t.dueDate) return false;
@@ -573,6 +588,10 @@ export default function TaskManager({
                                     <option value="">All Classifications</option>
                                     <option value="routine">Routine Daily</option>
                                     <option value="special">Special Task</option>
+                                </select>
+                                <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <option value="">All Statuses</option>
+                                    {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                                 <SearchableSelect
                                     value={filterAssignee}

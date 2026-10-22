@@ -2846,7 +2846,9 @@ const TasksTab: React.FC<{
 
     const sorted = [...tasks]
         .filter(t =>
-            (!filterStatus || t.taskStatus === filterStatus) &&
+            (!filterStatus || (filterStatus === 'Overdue'
+                ? (t.taskStatus !== 'Completed' && t.taskStatus !== 'Done' && t.taskStatus !== 'Cancelled' && !!t.dueAt && new Date(t.dueAt) < new Date())
+                : t.taskStatus === filterStatus)) &&
             (!filterPriority || t.priority === filterPriority) &&
             (!filterEmployee || t.assignedTo === filterEmployee) &&
             (!filterDeadline || (t.dueAt && t.dueAt.startsWith(filterDeadline))) &&
@@ -8199,6 +8201,7 @@ export default function OpsAdminDashboard() {
     const [taskPageSize, setTaskPageSize] = useState(8);
     const [taskTab, setTaskTab] = useState<'active' | 'on_hold' | 'completed' | 'bin'>('active');
     const [taskFilterPrio, setTaskFilterPrio] = useState('');
+    const [taskFilterStatus, setTaskFilterStatus] = useState('');
     const [taskFilterClassification, setTaskFilterClassification] = useState('');
     const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
     const [taskSummary, setTaskSummary] = useState<{ active: number; inProgress: number; completed: number; overdue: number; cancelled: number; onHold: number }>({ active: 0, inProgress: 0, completed: 0, overdue: 0, cancelled: 0, onHold: 0 });
@@ -8235,6 +8238,8 @@ export default function OpsAdminDashboard() {
     taskTabRef.current = taskTab;
     const taskFilterPrioRef = useRef(taskFilterPrio);
     taskFilterPrioRef.current = taskFilterPrio;
+    const taskFilterStatusRef = useRef(taskFilterStatus);
+    taskFilterStatusRef.current = taskFilterStatus;
     const taskFilterClassificationRef = useRef(taskFilterClassification);
     taskFilterClassificationRef.current = taskFilterClassification;
     const taskFilterAssigneeRef = useRef(taskFilterAssignee);
@@ -8433,12 +8438,28 @@ export default function OpsAdminDashboard() {
             // Dropdown filters are sent server-side so the server filters AND paginates
             // consistently — each page then shows the same number of matching rows.
             const prioParam = taskFilterPrioRef.current ? `&priority=${encodeURIComponent(taskFilterPrioRef.current)}` : ``;
+            let filterStatusParam = '';
+            if (taskFilterStatusRef.current) {
+                if (taskFilterStatusRef.current.toLowerCase() === 'overdue') {
+                    filterStatusParam = '&isOverdue=true';
+                } else {
+                    const STATUS_NUM_MAP: Record<string, string> = {
+                        'Backlog': '0', 'To do': '0', 'Assigned': '0',
+                        'In progress': '1', 'In Progress': '1',
+                        'In review': '2', 'Pending Admin Review': '2',
+                        'Done': '3', 'Completed': '3',
+                        'On hold': '4', 'On Hold': '4',
+                        'Cancelled': '5'
+                    };
+                    filterStatusParam = `&status=${STATUS_NUM_MAP[taskFilterStatusRef.current] ?? taskFilterStatusRef.current}`;
+                }
+            }
             const CLASSIFICATION_PARAM_MAP: Record<string, string> = { routine: '0', special: '1' };
             const classificationParam = taskFilterClassificationRef.current
                 ? `&classification=${CLASSIFICATION_PARAM_MAP[taskFilterClassificationRef.current] ?? taskFilterClassificationRef.current}`
                 : ``;
             const assigneeParam = taskFilterAssigneeRef.current ? `&assignedToUserId=${encodeURIComponent(taskFilterAssigneeRef.current)}` : ``;
-            const res = await api.get(`/api/Task?pageNumber=${taskPageRef.current}&pageSize=${taskPageSizeRef.current}${statusParam}${excludeStatusParam}${prioParam}${classificationParam}${assigneeParam}`);
+            const res = await api.get(`/api/Task?pageNumber=${taskPageRef.current}&pageSize=${taskPageSizeRef.current}${statusParam}${excludeStatusParam}${prioParam}${filterStatusParam}${classificationParam}${assigneeParam}`);
             const jsonRes = res.data;
             const rawList: any[] = Array.isArray(jsonRes) ? jsonRes : (Array.isArray(jsonRes?.data?.items) ? jsonRes.data.items : (Array.isArray(jsonRes?.data) ? jsonRes.data : []));
 
@@ -9143,7 +9164,7 @@ export default function OpsAdminDashboard() {
     }, [activeTab]);
 
     // Re-fetch tasks when page, page size, tab, or a dropdown filter changes
-    useEffect(() => { fetchTasks(); }, [taskPage, taskPageSize, taskTab, taskFilterPrio, taskFilterClassification, taskFilterAssignee]);
+    useEffect(() => { fetchTasks(); }, [taskPage, taskPageSize, taskTab, taskFilterPrio, taskFilterStatus, taskFilterClassification, taskFilterAssignee]);
 
     // -- Auto-refresh dashboard data every 30 seconds (silent, no loading state) --
     useEffect(() => {
@@ -9260,9 +9281,11 @@ export default function OpsAdminDashboard() {
                                             tasks={tmTasks}
                                             summary={taskSummary}
                                             activeTab={taskTab}
-                                            onTabChange={tab => { setTaskTab(tab); setTaskPage(1); }}
+                                            onTabChange={tab => { setTaskTab(tab); setTaskFilterStatus(''); setTaskPage(1); }}
                                             filterPrio={taskFilterPrio}
                                             onFilterPrioChange={val => { setTaskFilterPrio(val); setTaskPage(1); }}
+                                            filterStatus={taskFilterStatus}
+                                            onFilterStatusChange={val => { setTaskFilterStatus(val); setTaskPage(1); }}
                                             filterClassification={taskFilterClassification}
                                             onFilterClassificationChange={val => { setTaskFilterClassification(val); setTaskPage(1); }}
                                             filterAssignee={taskFilterAssignee}

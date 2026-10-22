@@ -173,7 +173,8 @@ public class TaskService : ITaskService
         Guid? departmentId = null,
         string? search = null,
         Models.Enums.TaskStatus? excludeStatus = null,
-        List<Models.Enums.TaskStatus>? excludeStatuses = null)
+        List<Models.Enums.TaskStatus>? excludeStatuses = null,
+        bool? isOverdue = null)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -231,6 +232,15 @@ public class TaskService : ITaskService
 
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
+
+        if (isOverdue.HasValue && isOverdue.Value)
+        {
+            query = query.Where(t =>
+                t.Status != Models.Enums.TaskStatus.Completed &&
+                t.Status != Models.Enums.TaskStatus.Cancelled &&
+                t.Status != Models.Enums.TaskStatus.OnHold &&
+                (t.RevisedDeadline ?? t.Deadline) < nowUtc);
+        }
 
         // The "Active" tab shows every non-completed, non-cancelled, and non-on-hold status, so the caller can pass
         // excludeStatus or excludeStatuses to drop statuses (e.g. Completed, Cancelled, OnHold) from the result BEFORE
