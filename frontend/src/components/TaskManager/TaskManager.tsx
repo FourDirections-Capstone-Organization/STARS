@@ -4,6 +4,7 @@ import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import StatusCard from '../StatusCard/StatusCard';
 import SearchableSelect from '../ui/SearchableSelect';
+import { formatDeadlineWithRemaining, getDeadlineDiffDays } from '../../utils/dateUtils';
 import './TaskManager.css';
 
 export interface TMTask {
@@ -94,26 +95,28 @@ const AssigneeAvatar = ({ name }: { name: string }) => (
     </div>
 );
 
-const DueLabel = ({ date, isSLALocked }: { date?: string; isSLALocked?: boolean }) => {
+const DueLabel = ({ date, isSLALocked, isCompleted }: { date?: string; isSLALocked?: boolean; isCompleted?: boolean }) => {
     if (!date) return <span style={{ color: '#94a3b8', fontSize: 11 }}>—</span>;
-    let diff: number;
-    try {
-        const n = new Date(); n.setHours(0, 0, 0, 0);
-        const d = new Date(date); d.setHours(0, 0, 0, 0);
-        diff = Math.round((d.getTime() - n.getTime()) / 86400000);
-    } catch { return <span style={{ color: '#94a3b8', fontSize: 11 }}>{date}</span>; }
-    if (isNaN(diff)) return <span style={{ color: '#94a3b8', fontSize: 11 }}>{date}</span>;
-    const label = diff < 0
-        ? <span style={{ color: '#dc2626', fontSize: 11, fontWeight: 700 }}>Overdue</span>
-        : diff === 0
-            ? <span style={{ color: '#d97706', fontSize: 11, fontWeight: 600 }}>Today</span>
-            : diff <= 3
-                ? <span style={{ color: '#d97706', fontSize: 11, fontWeight: 600 }}>{diff}d left</span>
-                : <span style={{ color: '#94a3b8', fontSize: 11 }}>{fmtDate(date)}</span>;
-    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        {isSLALocked && <span title="SLA Locked — deadline enforced by system"><Lock size={11} color="#7c1d1d" /></span>}
-        {label}
-    </span>;
+    const diff = getDeadlineDiffDays(date);
+    const isOverdue = !isCompleted && diff !== null && diff < 0;
+    const isWarning = !isCompleted && diff !== null && diff >= 0 && diff <= 3;
+    const labelText = formatDeadlineWithRemaining(date, { isCompleted });
+
+    return (
+        <span
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                color: isOverdue ? '#dc2626' : isWarning ? '#d97706' : '#64748b',
+                fontWeight: isOverdue ? 700 : isWarning ? 600 : 500,
+                fontSize: 11,
+            }}
+        >
+            {isSLALocked && <span title="SLA Locked — deadline enforced by system"><Lock size={11} color="#7c1d1d" /></span>}
+            {labelText}
+        </span>
+    );
 };
 
 // ─── TaskManager Kanban Board Subcomponent ──────────────────────────────────
@@ -292,7 +295,7 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                 </div>
 
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} />
+                                                    <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} />
                                                     <div className="tm-board-card-actions" onClick={e => e.stopPropagation()}>
                                                         <button className="tm-board-action-btn" title="View Details" onClick={() => onView(t.id)}>
                                                             <Eye size={12} />
@@ -729,7 +732,7 @@ export default function TaskManager({
                                 </td>
                                 <td>{t.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AssigneeAvatar name={t.assignee.name} /><span style={{ fontSize: 13 }}>{t.assignee.name}</span></div> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                 <td><PriorityBadge p={t.priority} /></td>
-                                <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} /></td>
+                                <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} /></td>
                                 <td>
                                     <StatusBadge status={t.status} size="sm" />
                                 </td>

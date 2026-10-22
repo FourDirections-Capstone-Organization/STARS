@@ -44,6 +44,7 @@ import {
     Truck,
     MapPin,
 } from 'lucide-react';
+import { formatDeadlineWithRemaining, getDeadlineDiffDays } from '../../utils/dateUtils';
 import './OpEmployee_Dashboard.css';
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import { useToast } from '../../components/Toast/Toast';
@@ -491,7 +492,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ task, onUpdate, onClose }) => {
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 {[
-                    { label: 'Deadline', value: fmtDate(task.deadline) },
+                    { label: 'Deadline', value: formatDeadlineWithRemaining(task.deadline, { isEffectivelyOverdue: effectiveStatus(task) === 'overdue', isCompleted: task.status === 'completed' || task.status === 'done' }) },
                     { label: 'Priority', value: task.priority, style: { textTransform: 'capitalize' as const } },
                     { label: 'Assigned by', value: task.assignedBy },
                     { label: 'Progress', value: `${task.progress}%` },
@@ -842,9 +843,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onView, onUpdate }) => {
     const sm = statusMeta[es];
     const pm = priorityMeta[task.priority];
     const od = es === 'overdue';
-    const daysLeft = task.deadline
-        ? Math.ceil((new Date(task.deadline + 'T00:00:00').getTime() - Date.now()) / 86400000)
-        : null;
+    const daysLeft = getDeadlineDiffDays(task.deadline);
 
     return (
         <div
@@ -879,14 +878,8 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onView, onUpdate }) => {
             )}
             <div className="tc-meta">
                 <span className={`tc-deadline${od ? ' overdue-text' : daysLeft !== null && daysLeft <= 2 ? ' warning-text' : ''}`}>
-                    {od ? '• Overdue'
-                        : daysLeft !== null
-                            ? daysLeft === 0 ? 'Due today'
-                                : daysLeft === 1 ? 'Due tomorrow'
-                                    : `${daysLeft}d left`
-                            : fmtDate(task.deadline)}
+                    {formatDeadlineWithRemaining(task.deadline, { isEffectivelyOverdue: od, isCompleted: task.status === 'completed' || task.status === 'done' })}
                 </span>
-                <span className="tc-date">{fmtDate(task.deadline)}</span>
             </div>
 
             {task.status === 'completed' && (
@@ -1035,7 +1028,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
                                 <span className={`prio-dot ${priorityMeta[t.priority].cls}`} />
                                 <div>
                                     <div className="dtr-name">{t.name}</div>
-                                    <div className="dtr-date">{fmtDate(t.deadline)}</div>
+                                    <div className="dtr-date">{formatDeadlineWithRemaining(t.deadline, { isEffectivelyOverdue: effectiveStatus(t) === 'overdue', isCompleted: t.status === 'completed' || t.status === 'done' })}</div>
                                 </div>
                             </div>
                             <div className="dtr-right">
@@ -1141,9 +1134,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ task, onView, onUpdate, onDragS
     // Employee can drag if not on-hold and not already completed/pending-review
     const canDrag = !isHold && !isCompleted && !isPendingReview;
 
-    const daysLeft = task.deadline
-        ? Math.ceil((new Date(task.deadline + 'T00:00:00').getTime() - Date.now()) / 86400000)
-        : null;
+    const daysLeft = getDeadlineDiffDays(task.deadline);
 
     return (
         <div
@@ -1202,7 +1193,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ task, onView, onUpdate, onDragS
 
             <div className="kanban-card-meta">
                 <span className={`tc-deadline${od ? ' overdue-text' : daysLeft !== null && daysLeft <= 2 ? ' warning-text' : ''}`} style={{ fontSize: 11 }}>
-                    {od ? '⚠️ Overdue' : daysLeft !== null ? (daysLeft === 0 ? 'Due today' : daysLeft === 1 ? 'Due tomorrow' : `${daysLeft}d left`) : fmtDate(task.deadline)}
+                    {formatDeadlineWithRemaining(task.deadline, { isEffectivelyOverdue: od, isCompleted })}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {canDrag && <GripVertical size={13} style={{ color: 'var(--text-muted)' }} title="Drag to move status" />}

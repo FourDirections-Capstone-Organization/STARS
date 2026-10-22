@@ -13,6 +13,7 @@ import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import { useToast } from '../Toast/Toast';
 import api from '../../api';
 import axios from 'axios';
+import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -992,7 +993,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </span>
                                     )}
                                     <span className={`tv-meta-value${od ? ' tv-overdue' : ''}`}>
-                                        {task.dueAt ? fmtDate(task.dueAt) : '—'}
+                                        {task.dueAt ? formatDeadlineWithRemaining(task.dueAt, { isEffectivelyOverdue: od, isCompleted: task.taskStatus === 'Completed' || task.taskStatus === 'Cancelled' }) : '—'}
                                     </span>
                                 </span>
                             </div>

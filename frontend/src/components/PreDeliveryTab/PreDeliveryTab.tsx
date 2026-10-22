@@ -23,6 +23,7 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
+import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
 import './PreDeliveryTab.css';
 
 export interface DmsPendingOrder {
@@ -460,7 +461,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                     </span>
                                                 </td>
                                                 <td style={{ fontSize: '0.8125rem' }}>
-                                                    {t.dueAt ? new Date(t.dueAt).toLocaleString() : 'N/A'}
+                                                    {t.dueAt ? formatDeadlineWithRemaining(t.dueAt, { isCompleted: t.status === 'Completed' || t.status === 'Done' }) : 'N/A'}
                                                 </td>
                                                 <td>
                                                     {onViewTask && (

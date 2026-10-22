@@ -62,6 +62,7 @@ import { useNavigate } from 'react-router-dom';
 import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
 import { useToast } from '../../components/Toast/Toast';
 import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
+import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
 
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import GlobalHeader, { NotificationItem } from '../../components/GlobalHeader/GlobalHeader';
@@ -748,7 +749,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
                 <span className="task-assignee">{task.assignedEmployee || 'Unassigned'}</span>
                 {task.isConfidential && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--status-failed)', background: 'rgba(238,93,80,0.08)', padding: '1px 6px', borderRadius: 4, marginRight: 8 }}>CONFIDENTIAL</span>}
                 <span style={{ fontSize: 11, color: '#94a3b8', marginRight: 12 }}>{task.updatedAt ? fmtDateTime(task.updatedAt) : ''}</span>
-                <span className={`task-due${od ? ' overdue' : ''}`}>{task.dueAt ? fmtDate(task.dueAt) : '—'}</span>
+                <span className={`task-due${od ? ' overdue' : ''}`}>{task.dueAt ? formatDeadlineWithRemaining(task.dueAt, { isEffectivelyOverdue: od, isCompleted: task.taskStatus === 'Completed' || task.taskStatus === 'Done' }) : '—'}</span>
             </div>
         </div>
     );
@@ -1942,7 +1943,7 @@ const ViewModal: React.FC<ViewModalProps> = ({ task, onEdit, onReopen, onStatusC
                 <div className="view-modal-meta">
                     <div className="view-modal-meta-item">
                         <span className="view-modal-label">Due Date</span>
-                        <span className="view-modal-meta-value">{task.dueAt ? fmtDate(task.dueAt) : '—'}</span>
+                        <span className="view-modal-meta-value">{task.dueAt ? formatDeadlineWithRemaining(task.dueAt, { isEffectivelyOverdue: od, isCompleted: task.taskStatus === 'Completed' || task.taskStatus === 'Done' }) : '—'}</span>
                     </div>
                     <div className="view-modal-meta-item">
                         <span className="view-modal-label">Priority</span>
@@ -2978,7 +2979,7 @@ const TasksTab: React.FC<{
                             </td>
                             <td style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{t.assignedEmployee || 'Unassigned'}</td>
                             <td><PrioBadge p={t.priority} /></td>
-                            <td style={{ fontSize: 12, color: od ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: od ? 700 : 400 }}>{t.dueAt ? fmtDate(t.dueAt) : '—'}</td>
+                            <td style={{ fontSize: 12, color: od ? 'var(--status-failed)' : 'var(--text-secondary)', fontWeight: od ? 700 : 400 }}>{t.dueAt ? formatDeadlineWithRemaining(t.dueAt, { isEffectivelyOverdue: od, isCompleted: t.taskStatus === 'Completed' || t.taskStatus === 'Done' }) : '—'}</td>
                         </tr>
                     );
                 })}
@@ -2999,7 +3000,7 @@ const TasksTab: React.FC<{
                         </td>
                         <td><PrioBadge p={t.priority} /></td>
                         <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                            {t.dueAt ? fmtDate(t.dueAt) : '—'}
+                            {t.dueAt ? formatDeadlineWithRemaining(t.dueAt, { isCompleted: true }) : '—'}
                         </td>
                         <td>
                             <ActionsDropdown
@@ -7819,7 +7820,7 @@ const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
                                 <span className={statusBadgeClass(d.status)} style={{ fontSize: 11 }}>{d.status}</span>
                             </td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)' }}>{d.loading ? '…' : (d.priority || '—')}</td>
-                            <td style={{ padding: '10px 8px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{d.loading ? '…' : fmtDeadline(d.deadline)}</td>
+                            <td style={{ padding: '10px 8px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{d.loading ? '…' : formatDeadlineWithRemaining(d.deadline)}</td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)' }}>{d.loading ? '…' : (d.assignee || '—')}</td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-secondary)', maxWidth: 260 }}>
                                 {d.loading ? <span style={{ fontSize: 11, fontStyle: 'italic' }}>Loading…</span> : (snippet(d.description) || '—')}
