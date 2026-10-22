@@ -63,7 +63,7 @@ public class EmailVerificationController : ControllerBase
             var verificationUrl = $"{baseUrl}/verify-email";
 
             Guid? employeeGuid = null;
-            string? identifier = dto.Identifier ?? dto.EmployeeNumber ?? dto.EmployeeID ?? dto.EmployeeId;
+            string? identifier = dto.Identifier ?? dto.EmployeeNumber ?? dto.EmployeeId;
             if (!string.IsNullOrWhiteSpace(identifier) && Guid.TryParse(identifier, out var parsedGuid))
             {
                 employeeGuid = parsedGuid;

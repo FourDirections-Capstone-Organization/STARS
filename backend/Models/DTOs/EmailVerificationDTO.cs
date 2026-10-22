@@ -12,8 +12,6 @@ public class ResendVerificationDTO
 {
     public string? EmployeeId { get; set; }
 
-    public string? EmployeeID { get; set; }
-
     public string? EmployeeNumber { get; set; }
 
     public string? Identifier { get; set; }
