@@ -37,7 +37,8 @@ builder.Services.AddCors(options =>
                 return uri.Host == "localhost"
                     || uri.Host == "127.0.0.1"
                     || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.Equals("speedex-system.vercel.app", StringComparison.OrdinalIgnoreCase);
+                    || uri.Host.Equals("speedex-system.vercel.app", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
             }
             catch
             {
