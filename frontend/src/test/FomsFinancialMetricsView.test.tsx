@@ -297,14 +297,17 @@ describe('FomsFinancialMetricsView', () => {
             expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
         });
 
-        const traceBtns = screen.getAllByRole('button', { name: /trace/i });
-        fireEvent.click(traceBtns[0]);
+        const actionsBtns = screen.getAllByRole('button', { name: /actions/i });
+        fireEvent.click(actionsBtns[0]);
+
+        const traceBtn = screen.getByRole('button', { name: /trace routing decision/i });
+        fireEvent.click(traceBtn);
 
         // Inspector modal open
-        expect(screen.getByText(/Graph Routing Engine Decision Trace/i)).toBeInTheDocument();
-        expect(screen.getByText('Execution Graph Architecture')).toBeInTheDocument();
-        expect(screen.getByText('FOMS Aging Engine')).toBeInTheDocument();
-        expect(screen.getByText('STARS Webhook Interceptor')).toBeInTheDocument();
+        expect(screen.getByText(/Routing Decision Trace/i)).toBeInTheDocument();
+        expect(screen.getByText(/Autonomous Decision & Workload Routing Trace/i)).toBeInTheDocument();
+        expect(screen.getByText(/FOMS Aging Telemetry/i)).toBeInTheDocument();
+        expect(screen.getByText(/Policy & SLA Rule/i)).toBeInTheDocument();
     });
 
     it('calls onOpenTask when clicking View Task in the alerts stream', async () => {
