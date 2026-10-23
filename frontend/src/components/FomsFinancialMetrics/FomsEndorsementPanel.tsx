@@ -64,35 +64,36 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     // Fetch live endorsement tasks from STARS database
     const fetchLiveEndorsements = useCallback(async () => {
         try {
-            // Priority 1: Direct structured records from STARS database
+            // Priority 1: Query Tasks matching [FOMS Endorsement]
+            let items: any[] = [];
             try {
-                const directRes = await api.get('/api/foms-integration/endorsements');
-                const directData = directRes.data;
-                const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
-                    ? directData.data
-                    : [];
-                if (directItems.length > 0) {
-                    setEndorsements(directItems as FomsEndorsementItem[]);
-                    return;
-                }
+                const res = await api.get('/api/Task?search=[FOMS Endorsement]&pageSize=30');
+                const data = res.data;
+                items = data.isSuccess && Array.isArray(data.data?.items)
+                    ? data.data.items
+                    : data.isSuccess && Array.isArray(data.data)
+                        ? data.data
+                        : [];
             } catch {
-                // Fall through to Task search
+                items = [];
             }
 
-            // Priority 2: Query Tasks matching either [FOMS Endorsement] or [Invoice Endorsement]
-            const res = await api.get('/api/Task?pageSize=50');
-            const data = res.data;
-            const allItems: any[] = data.isSuccess && Array.isArray(data.data?.items)
-                ? data.data.items
-                : data.isSuccess && Array.isArray(data.data)
-                    ? data.data
-                    : [];
-
-            const items = allItems.filter((t: any) =>
-                (t.title || '').includes('[FOMS Endorsement]') ||
-                (t.title || '').includes('[Invoice Endorsement]') ||
-                (t.title || '').toLowerCase().includes('invoice endorsement')
-            );
+            // Priority 2: Direct structured records from STARS database
+            if (items.length === 0) {
+                try {
+                    const directRes = await api.get('/api/foms-integration/endorsements');
+                    const directData = directRes.data;
+                    const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
+                        ? directData.data
+                        : [];
+                    if (directItems.length > 0) {
+                        setEndorsements(directItems as FomsEndorsementItem[]);
+                        return;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
 
             if (items.length > 0) {
                 const mapped: FomsEndorsementItem[] = items.map((t: any) => {

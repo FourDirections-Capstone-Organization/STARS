@@ -644,13 +644,79 @@ public class FomsIntegrationService : IFomsIntegrationService
             .Take(20)
             .ToList();
 
-        var totalOutstanding = topClients.Sum(c => c.OutstandingBalance);
-        var totalOverdue = topClients.Where(c => c.OverdueInvoicesCount > 0).Sum(c => c.OutstandingBalance);
-        var overdueCount = topClients.Sum(c => c.OverdueInvoicesCount);
-        var paidCount = records.Count(r => r.CurrentStatus.Equals("Paid", StringComparison.OrdinalIgnoreCase))
-            + generalFomsTasks.Count(gt => gt.Status == Models.Enums.TaskStatus.Completed && !taskInvoices.Any(ti => ti.TaskId == gt.Id) && !overdueCollections.Any(oc => oc.TaskId == gt.Id));
-        var totalInvoices = Math.Max(records.Count, taskInvoices.Count + overdueCollections.Count + generalFomsTasks.Count);
-        var pendingCount = Math.Max(0, totalInvoices - paidCount - overdueCount);
+        var totalOutstanding = records.Sum(r => r.OutstandingBalance);
+        var totalOverdue = records.Where(r => r.CurrentStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase)).Sum(r => r.OutstandingBalance);
+        var overdueCount = records.Count(r => r.CurrentStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase));
+        var paidCount = records.Count(r => r.CurrentStatus.Equals("Paid", StringComparison.OrdinalIgnoreCase));
+        var pendingCount = records.Count(r => r.CurrentStatus.Equals("Sent", StringComparison.OrdinalIgnoreCase) ||
+                                              r.CurrentStatus.Equals("Approved", StringComparison.OrdinalIgnoreCase));
+
+        // Add task invoices not in records
+        foreach (var inv in taskInvoices)
+        {
+            if (records.Any(r => string.Equals(r.InvoiceNumber, inv.InvoiceNumber, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var isOverdue = inv.DueDate.HasValue && inv.DueDate.Value < DateTime.UtcNow && inv.EndorsementStatus != "Completed";
+            var balance = inv.EndorsementStatus == "Completed" ? 0m : inv.InvoiceAmount;
+
+            totalOutstanding += balance;
+            if (isOverdue)
+            {
+                totalOverdue += balance;
+                overdueCount++;
+            }
+            else if (inv.EndorsementStatus == "Completed")
+            {
+                paidCount++;
+            }
+            else
+            {
+                pendingCount++;
+            }
+        }
+
+        // Add overdue collections not in records
+        foreach (var col in overdueCollections)
+        {
+            if (records.Any(r => string.Equals(r.InvoiceNumber, col.InvoiceNumber, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            totalOutstanding += col.AmountDue;
+            totalOverdue += col.AmountDue;
+            overdueCount++;
+        }
+
+        // Add general tasks not in records or taskInvoices/overdueCollections
+        foreach (var gt in generalFomsTasks)
+        {
+            if (taskInvoices.Any(ti => ti.TaskId == gt.Id) || overdueCollections.Any(oc => oc.TaskId == gt.Id))
+                continue;
+
+            var isCompleted = gt.Status == Models.Enums.TaskStatus.Completed;
+            var isOverdue = !isCompleted && gt.Deadline < DateTime.UtcNow;
+            var amount = 75000m;
+
+            if (isCompleted)
+            {
+                paidCount++;
+            }
+            else
+            {
+                totalOutstanding += amount;
+                if (isOverdue)
+                {
+                    totalOverdue += amount;
+                    overdueCount++;
+                }
+                else
+                {
+                    pendingCount++;
+                }
+            }
+        }
+
+        var totalInvoices = Math.Max(records.Count, overdueCount + paidCount + pendingCount);
 
         var summary = new FomsDashboardFinancialSummaryDTO
         {

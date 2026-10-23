@@ -113,34 +113,36 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
     // ── Fetch Collection Tasks from STARS DB ──
     const fetchExistingCollectionTasks = useCallback(async () => {
         try {
-            // Priority 1: Direct structured records from STARS database
+            // Priority 1: Query Tasks matching [Collection Follow-up]
+            let items: any[] = [];
             try {
-                const directRes = await api.get('/api/foms-integration/collection-alerts');
-                const directData = directRes.data;
-                const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
-                    ? directData.data
-                    : [];
-                if (directItems.length > 0) {
-                    setAlerts(directItems as FomsOverdueAlertItem[]);
-                    return;
-                }
+                const res = await api.get('/api/Task?search=[Collection Follow-up]&pageSize=20');
+                const data = res.data;
+                items = data.isSuccess && Array.isArray(data.data?.items)
+                    ? data.data.items
+                    : data.isSuccess && Array.isArray(data.data)
+                        ? data.data
+                        : [];
             } catch {
-                // Fall through to Task search
+                items = [];
             }
 
-            // Priority 2: Query Tasks matching [Collection Follow-up]
-            const res = await api.get('/api/Task?pageSize=50');
-            const data = res.data;
-            const allItems: any[] = data.isSuccess && Array.isArray(data.data?.items)
-                ? data.data.items
-                : data.isSuccess && Array.isArray(data.data)
-                    ? data.data
-                    : [];
-
-            const items = allItems.filter((t: any) =>
-                (t.title || '').includes('[Collection Follow-up]') ||
-                (t.title || '').toLowerCase().includes('collection follow-up')
-            );
+            // Priority 2: Direct structured records from STARS database
+            if (items.length === 0) {
+                try {
+                    const directRes = await api.get('/api/foms-integration/collection-alerts');
+                    const directData = directRes.data;
+                    const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
+                        ? directData.data
+                        : [];
+                    if (directItems.length > 0) {
+                        setAlerts(directItems as FomsOverdueAlertItem[]);
+                        return;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
 
             if (items.length > 0) {
                 const mapped: FomsOverdueAlertItem[] = items.map((t: any) => {
