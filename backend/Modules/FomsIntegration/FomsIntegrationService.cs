@@ -143,39 +143,8 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         _db.TaskFomsInvoiceDetails.Add(endorsementDetail);
 
-        // Optimal Coordinator Assignment (workload distribution)
-        var optimalCoordinator = await _db.Users
-            .Where(u => u.Role == UserRole.Coordinator && u.EmploymentStatus == "Active")
-            .OrderBy(u => _db.TaskAssignments.Count(a => a.AssignedUserId == u.Id && a.Task!.Status != Models.Enums.TaskStatus.Completed && a.Task!.Status != Models.Enums.TaskStatus.Cancelled))
-            .FirstOrDefaultAsync();
-
-        string? assignedCoordinatorName = null;
-        if (optimalCoordinator != null)
-        {
-            _db.TaskAssignments.Add(new TaskAssignment
-            {
-                TaskId = task.Id,
-                AssignedUserId = optimalCoordinator.Id,
-                AssignedAt = now
-            });
-            task.Status = Models.Enums.TaskStatus.InProgress;
-            assignedCoordinatorName = $"{optimalCoordinator.FirstName} {optimalCoordinator.LastName}".Trim();
-
-            try
-            {
-                await _notificationService.SendNotificationAsync(
-                    optimalCoordinator.Id,
-                    NotificationType.TaskAssigned,
-                    "New Invoice Endorsement Task Assigned",
-                    $"Invoice {dto.InvoiceNumber} for {dto.ClientName} is ready for client delivery and signature endorsement.",
-                    task.Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to send assignment notification for endorsement task {TaskId}", task.Id);
-            }
-        }
-
+        // Keep in NotStarted status without auto-assignment so it appears first in the Invoice Endorsement tab
+        // under "Awaiting STARS Task" where coordinators/managers click "Create STARS Task" (Defect 2)
         await _db.SaveChangesAsync();
 
         return ApiResponseDTO<FomsEndorsementResponseDTO>.Success(new FomsEndorsementResponseDTO
@@ -185,8 +154,8 @@ public class FomsIntegrationService : IFomsIntegrationService
             StarsTaskNumber = task.TaskNumber,
             InvoiceNumber = endorsementDetail.InvoiceNumber,
             Status = endorsementDetail.EndorsementStatus,
-            AssignedTo = assignedCoordinatorName ?? "Unassigned",
-            Message = "Invoice endorsement task created and scheduled in STARS."
+            AssignedTo = "Awaiting STARS Task",
+            Message = "Invoice endorsement received and awaiting STARS task creation."
         });
     }
 
@@ -200,10 +169,41 @@ public class FomsIntegrationService : IFomsIntegrationService
             .Include(d => d.Task)
             .FirstOrDefaultAsync(d => d.TaskId == taskId);
 
+        var task = detail?.Task ?? await _db.Tasks.FindAsync(taskId);
+
+        // Fallback: If detail is not linked by TaskId, search by Invoice Number from task title / description
+        if (detail == null && task != null)
+        {
+            var title = task.Title ?? "";
+            var desc = task.Description ?? "";
+            var invoiceMatch = System.Text.RegularExpressions.Regex.Match($"{title} {desc}", @"(?:Invoice|invoice)[:\s]+([A-Za-z0-9-]+)");
+            if (invoiceMatch.Success)
+            {
+                var invNo = invoiceMatch.Groups[1].Value.Trim();
+                detail = await _db.TaskFomsInvoiceDetails.FirstOrDefaultAsync(d => d.InvoiceNumber == invNo);
+                if (detail != null)
+                {
+                    detail.TaskId = taskId;
+                }
+                else
+                {
+                    detail = new TaskFomsInvoiceDetail
+                    {
+                        TaskId = taskId,
+                        InvoiceNumber = invNo,
+                        ClientName = title.Replace("[FOMS Endorsement]", "").Trim(),
+                        EndorsementStatus = "PendingEndorsement",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _db.TaskFomsInvoiceDetails.Add(detail);
+                }
+            }
+        }
+
         if (detail == null)
             return ApiResponseDTO<bool>.Failure("No FOMS invoice endorsement linked to this task");
 
-        var task = detail.Task ?? await _db.Tasks.FindAsync(taskId);
         if (task == null)
             return ApiResponseDTO<bool>.Failure("Task not found");
 
@@ -494,6 +494,83 @@ public class FomsIntegrationService : IFomsIntegrationService
     public async Task<ApiResponseDTO<FomsDashboardFinancialSummaryDTO>> GetDashboardFinancialSummaryAsync()
     {
         var records = await _db.FomsClientFinancialStatuses.ToListAsync();
+
+        // If configured, fetch live AR records from FOMS to synchronize STARS dashboard (Integration 2 / FR-038)
+        if (IsConfigured)
+        {
+            try
+            {
+                var client = _http.CreateClient(HttpClientName);
+                client.Timeout = TimeSpan.FromSeconds(10);
+                var endpoint = $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/accounts-receivable";
+                using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                req.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+                var res = await client.SendAsync(req);
+                if (res.IsSuccessStatusCode)
+                {
+                    var content = await res.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(content);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        var nowUtc = DateTime.UtcNow;
+                        foreach (var el in doc.RootElement.EnumerateArray())
+                        {
+                            var invNo = el.TryGetProperty("invoiceNumber", out var pInvNo) ? pInvNo.GetString() : null;
+                            if (string.IsNullOrWhiteSpace(invNo)) continue;
+
+                            var clientCode = el.TryGetProperty("clientCode", out var pCode) ? pCode.GetString() ?? "CLI-001" : "CLI-001";
+                            var clientName = el.TryGetProperty("clientName", out var pName) ? pName.GetString() ?? "Client" : "Client";
+                            var invAmount = el.TryGetProperty("invoiceAmount", out var pAmt) ? pAmt.GetDecimal() : 0m;
+                            var paidAmt = el.TryGetProperty("paidAmount", out var pPaid) ? pPaid.GetDecimal() : 0m;
+                            var outBal = el.TryGetProperty("outstandingBalance", out var pBal) ? pBal.GetDecimal() : (invAmount - paidAmt);
+                            var status = el.TryGetProperty("status", out var pStat) ? pStat.GetString() ?? "Pending" : "Pending";
+                            DateTime? due = null;
+                            if (el.TryGetProperty("dueDate", out var pDue) && pDue.ValueKind == JsonValueKind.String)
+                            {
+                                if (DateTime.TryParse(pDue.GetString(), out var parsedDue)) due = DateTime.SpecifyKind(parsedDue, DateTimeKind.Utc);
+                            }
+
+                            var existing = records.FirstOrDefault(r => string.Equals(r.InvoiceNumber, invNo, StringComparison.OrdinalIgnoreCase));
+                            if (existing == null)
+                            {
+                                existing = new FomsClientFinancialStatus
+                                {
+                                    Id = Guid.NewGuid(),
+                                    ClientAccountId = clientCode,
+                                    ClientName = clientName,
+                                    InvoiceNumber = invNo,
+                                    CurrentStatus = status,
+                                    TotalAmount = invAmount,
+                                    AmountPaid = paidAmt,
+                                    OutstandingBalance = outBal,
+                                    NextDueDate = due,
+                                    LastUpdatedFromFoms = nowUtc
+                                };
+                                _db.FomsClientFinancialStatuses.Add(existing);
+                                records.Add(existing);
+                            }
+                            else
+                            {
+                                existing.ClientAccountId = clientCode;
+                                existing.ClientName = clientName;
+                                existing.CurrentStatus = status;
+                                existing.TotalAmount = invAmount;
+                                existing.AmountPaid = paidAmt;
+                                existing.OutstandingBalance = outBal;
+                                existing.NextDueDate = due;
+                                existing.LastUpdatedFromFoms = nowUtc;
+                            }
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch live accounts-receivable from FOMS; using local cached records.");
+            }
+        }
         var taskInvoices = await _db.TaskFomsInvoiceDetails.ToListAsync();
         var overdueCollections = await _db.TaskFomsCollectionDetails.ToListAsync();
 
@@ -749,6 +826,37 @@ public class FomsIntegrationService : IFomsIntegrationService
         Guid taskId, SubmitSignedEndorsementDTO dto, Guid userId)
     {
         var detail = await _db.TaskFomsInvoiceDetails.FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        if (detail == null)
+        {
+            var task = await _db.Tasks.FindAsync(taskId);
+            var title = task?.Title ?? "";
+            var desc = task?.Description ?? "";
+            var invoiceMatch = System.Text.RegularExpressions.Regex.Match($"{title} {desc}", @"(?:Invoice|invoice)[:\s]+([A-Za-z0-9-]+)");
+            if (invoiceMatch.Success)
+            {
+                var invNo = invoiceMatch.Groups[1].Value.Trim();
+                detail = await _db.TaskFomsInvoiceDetails.FirstOrDefaultAsync(d => d.InvoiceNumber == invNo);
+                if (detail != null)
+                {
+                    detail.TaskId = taskId;
+                }
+                else
+                {
+                    detail = new TaskFomsInvoiceDetail
+                    {
+                        TaskId = taskId,
+                        InvoiceNumber = invNo,
+                        ClientName = title.Replace("[FOMS Endorsement]", "").Trim(),
+                        EndorsementStatus = "PendingEndorsement",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _db.TaskFomsInvoiceDetails.Add(detail);
+                }
+            }
+        }
+
         if (detail == null)
             return ApiResponseDTO<TaskFomsInvoiceDetail>.Failure("Endorsement details not found for task");
 
