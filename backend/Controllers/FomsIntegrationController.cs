@@ -87,6 +87,51 @@ public class FomsIntegrationController : ControllerBase
     }
 
     /// <summary>
+    /// Explicitly links a newly created operational STARS task to an invoice endorsement detail.
+    /// </summary>
+    [HttpPost("api/foms-integration/tasks/link-endorsement")]
+    [Authorize]
+    public async Task<IActionResult> LinkTaskToEndorsement([FromBody] LinkEndorsementTaskDTO dto)
+    {
+        if (dto.TaskId == Guid.Empty || string.IsNullOrWhiteSpace(dto.InvoiceNumber))
+            return BadRequest(ApiResponseDTO<object>.Failure("TaskId and InvoiceNumber are required."));
+
+        var cleanInv = dto.InvoiceNumber.Trim();
+        var task = await _db.Tasks.FindAsync(dto.TaskId);
+        if (task == null)
+            return NotFound(ApiResponseDTO<object>.Failure("Task not found."));
+
+        var detail = await _db.TaskFomsInvoiceDetails
+            .FirstOrDefaultAsync(d => d.InvoiceNumber == cleanInv);
+
+        if (detail == null)
+        {
+            detail = new TaskFomsInvoiceDetail
+            {
+                TaskId = dto.TaskId,
+                InvoiceNumber = cleanInv,
+                ClientName = dto.ClientName ?? task.Title.Replace("[FOMS Endorsement]", "").Trim(),
+                InvoiceAmount = dto.InvoiceAmount ?? 89500m,
+                DueDate = task.Deadline,
+                EndorsementStatus = "PendingEndorsement",
+                FomsSyncStatus = "Synced",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.TaskFomsInvoiceDetails.Add(detail);
+        }
+        else
+        {
+            detail.TaskId = dto.TaskId;
+            detail.EndorsementStatus = "PendingEndorsement";
+            detail.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(ApiResponseDTO<object>.Success(new { detail.TaskId, detail.InvoiceNumber }, "Task linked to endorsement successfully."));
+    }
+
+    /// <summary>
     /// Retrieve all invoice endorsement records linked to tasks.
     /// </summary>
     [HttpGet("api/foms-integration/endorsements")]

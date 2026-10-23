@@ -8856,6 +8856,22 @@ export default function OpsAdminDashboard() {
                 }
             }
 
+            // Link FOMS invoice endorsement if task was created from endorsement
+            if (taskId && (data.title || '').includes('[FOMS Endorsement]')) {
+                try {
+                    const invMatch = (data.title || '').match(/\[FOMS Endorsement\]\s+Invoice\s+([^\s\-]+)/i);
+                    const invoiceNumber = invMatch ? invMatch[1] : '';
+                    if (invoiceNumber) {
+                        await api.post('/api/foms-integration/tasks/link-endorsement', {
+                            taskId,
+                            invoiceNumber
+                        });
+                    }
+                } catch (linkErr) {
+                    console.error('Failed to link FOMS endorsement to task:', linkErr);
+                }
+            }
+
             // Upload supporting documents if provided
             if (taskId && pendingFiles.length > 0) {
                 const results = await Promise.allSettled(pendingFiles.map(async (file) => {

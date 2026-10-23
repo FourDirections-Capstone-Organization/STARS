@@ -219,3 +219,16 @@ public class FomsClientFinancialSummaryItemDTO
     public string LatestStatus { get; set; } = string.Empty;
     public DateTime? NextDueDate { get; set; }
 }
+
+public class LinkEndorsementTaskDTO
+{
+    [Required]
+    public Guid TaskId { get; set; }
+
+    [Required]
+    public string InvoiceNumber { get; set; } = string.Empty;
+
+    public string? ClientName { get; set; }
+
+    public decimal? InvoiceAmount { get; set; }
+}

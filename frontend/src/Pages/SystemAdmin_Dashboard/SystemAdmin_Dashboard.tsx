@@ -333,7 +333,7 @@ const NAV_GROUPS = [
         items: [
             { tab: 'delivery' as NavTab, icon: 'FileText', label: 'Delivery Summary' },
             { tab: 'tasks' as NavTab, icon: 'ClipboardList', label: 'Task Management' },
-            { tab: 'finance' as NavTab, icon: 'BarChart3', label: 'Finance' },
+            { tab: 'finance' as NavTab, icon: 'BarChart3', label: 'Client Financial Status' },
         ],
     },
     {
@@ -2942,10 +2942,10 @@ export default function Dashboard() {
         ],
         },
         {
-        label: 'Financial Management System',
+        label: 'Financial Management System (FOMS)',
         icon: 'ti ti-currency-dollar',
         subItems: [
-        { label: 'Finance', onClick: () => handleNavChange('finance'), active: activeTab === 'finance' },
+        { label: 'Client Financial Status', onClick: () => handleNavChange('finance'), active: activeTab === 'finance' },
         ],
         },
         {
@@ -3738,6 +3738,22 @@ export default function Dashboard() {
                 }
             }
 
+            // Link FOMS invoice endorsement if task was created from endorsement
+            if (taskId && t.includes('[FOMS Endorsement]')) {
+                try {
+                    const invMatch = t.match(/\[FOMS Endorsement\]\s+Invoice\s+([^\s\-]+)/i);
+                    const invoiceNumber = invMatch ? invMatch[1] : '';
+                    if (invoiceNumber) {
+                        await api.post('/api/foms-integration/tasks/link-endorsement', {
+                            taskId,
+                            invoiceNumber
+                        });
+                    }
+                } catch (linkErr) {
+                    console.error('Failed to link FOMS endorsement to task:', linkErr);
+                }
+            }
+
             // Upload supporting documents (one or more files) if provided
             if (taskId && newTaskSupportingEvidence.length > 0) {
                 const results = await Promise.allSettled(newTaskSupportingEvidence.map(async (file) => {
@@ -4303,7 +4319,7 @@ export default function Dashboard() {
 
     const pageTitles: Record<NavTab, string> = {
         dashboard: 'Dashboard', employees: 'Manage Employee',
-        delivery: 'Delivery Summary', pre_delivery: 'Pre-Delivery Validation', finance: 'Financial Overview', settings: 'Settings',
+        delivery: 'Delivery Summary', pre_delivery: 'Pre-Delivery Validation', finance: 'FOMS Financial & Client Status', settings: 'Settings',
         roles: 'Role Management', reports: 'Reports', announcements: 'Announcements', notifications: 'Notifications', activity_logs: 'Activity Logs', profile: 'My Profile',
         tasks: 'Task Manager',
         'org-structure': 'Organizational Structure',
