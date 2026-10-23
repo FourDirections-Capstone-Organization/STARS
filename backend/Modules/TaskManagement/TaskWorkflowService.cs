@@ -181,6 +181,7 @@ public class TaskWorkflowService : ITaskWorkflowService
         {
             task.Status = Models.Enums.TaskStatus.Completed;
             task.IsApproved = true;
+            task.PushBackComment = null;
             if (!string.IsNullOrWhiteSpace(dto.Remarks))
                 task.ReviewRemarks = dto.Remarks.Trim();
             task.UpdatedAt = DateTime.UtcNow;
@@ -251,6 +252,7 @@ public class TaskWorkflowService : ITaskWorkflowService
             task.Status = Models.Enums.TaskStatus.InProgress;
             task.IsApproved = false;
             task.ReviewRemarks = dto.Remarks.Trim();
+            task.PushBackComment = dto.Remarks.Trim();
             task.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();

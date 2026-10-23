@@ -3621,10 +3621,25 @@ export default function Dashboard() {
         fetchManagerTasks();
     };
 
+    const handleManagerTaskPushBack = async (taskId: string, remarks: string) => {
+        try {
+            await api.patch(`/api/Task/${taskId}/review`, { isApproved: false, remarks });
+            success('Task returned for rework. The employee has been notified.');
+            fetchManagerTasks();
+        } catch (err: any) {
+            error(err?.response?.data?.message || err?.message || 'Failed to return task for rework.');
+        }
+    };
+
     const handleManagerTaskMarkDone = async (ids: string[]) => {
         for (const id of ids) {
             try {
-                await api.patch(`/api/Task/${id}/status`, { status: 3 });
+                const found = tmTasks.find(t => t.id === id);
+                if (found && (found.status === 'In review' || found.status === 2)) {
+                    await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
+                } else {
+                    await api.patch(`/api/Task/${id}/status`, { status: 3 });
+                }
             } catch { /* ignore individual failures */ }
         }
         success(`${ids.length} task${ids.length !== 1 ? 's' : ''} marked done.`);
@@ -4695,6 +4710,7 @@ export default function Dashboard() {
                                             onRestore={ids => handleManagerTaskRestore(ids)}
                                             onDelete={ids => handleManagerTaskDelete(ids)}
                                             onMarkDone={ids => handleManagerTaskMarkDone(ids)}
+                                            onPushBack={handleManagerTaskPushBack}
                                         />
                                     </div>
                                 )}

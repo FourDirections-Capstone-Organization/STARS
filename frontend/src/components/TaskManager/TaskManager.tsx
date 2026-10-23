@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock } from 'lucide-react';
+import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import StatusCard from '../StatusCard/StatusCard';
 import SearchableSelect from '../ui/SearchableSelect';
+import FormModal from '../FormModal/FormModal';
+import api from '../../api';
 import { formatDeadlineWithRemaining, getDeadlineDiffDays } from '../../utils/dateUtils';
 import './TaskManager.css';
 
@@ -58,6 +60,8 @@ interface TMProps {
     onRestore?: (ids: string[]) => void;
     onDelete: (ids: string[]) => void;
     onMarkDone: (ids: string[]) => void;
+    onPushBack?: (taskId: string, remarks: string) => Promise<void> | void;
+    onStatusChange?: (taskId: string, newStatus: string) => Promise<void> | void;
     searchQuery?: string;
     onSearchChange?: (val: string) => void;
     filterPrio?: string;
@@ -128,9 +132,11 @@ interface TMKanbanBoardProps {
     onEdit: (id: string) => void;
     onMarkDone: (ids: string[]) => void;
     onArchive: (ids: string[]) => void;
+    onPushBackRequest: (task: TMTask) => void;
+    onStatusChange?: (id: string, newStatus: string) => void;
 }
 
-const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, onMarkDone, onArchive }) => {
+const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, onMarkDone, onArchive, onPushBackRequest, onStatusChange }) => {
     const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
     const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
@@ -168,7 +174,24 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
         e.preventDefault();
         setDragOverCol(null);
         const taskId = e.dataTransfer.getData('text/plain') || draggingTaskId;
-        if (taskId) {
+        if (!taskId) {
+            setDraggingTaskId(null);
+            return;
+        }
+
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            const isCurrentlyInReview = task.status === 'In review';
+            if (colKey === 'done') {
+                onMarkDone([taskId]);
+            } else if (isCurrentlyInReview && (colKey === 'in-progress' || colKey === 'todo')) {
+                onPushBackRequest(task);
+            } else if (onStatusChange && colKey === 'in-progress' && (task.status === 'Backlog' || task.status === 'To do')) {
+                onStatusChange(taskId, 'In Progress');
+            } else {
+                onEdit(taskId);
+            }
+        } else {
             if (colKey === 'done') {
                 onMarkDone([taskId]);
             } else {
@@ -283,6 +306,27 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
 
 
 
+                                            {col.key === 'review' && (
+                                                <div className="tm-board-card-review-bar" onClick={e => e.stopPropagation()}>
+                                                    <button
+                                                        type="button"
+                                                        className="tm-btn-pushback"
+                                                        onClick={() => onPushBackRequest(t)}
+                                                        title="Push back task for employee rework"
+                                                    >
+                                                        <RotateCcw size={11} /> Push Back
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="tm-btn-approve"
+                                                        onClick={() => onMarkDone([t.id])}
+                                                        title="Approve and mark completed"
+                                                    >
+                                                        <CheckCircle2 size={11} /> Approve
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             <div className="tm-board-card-meta">
                                                 <div>
                                                     {t.assignee ? (
@@ -302,8 +346,16 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                             actions={[
                                                                 { label: 'View Details', icon: <Eye size={13} />, onClick: () => onView(t.id) },
                                                                 { label: 'Edit Task', icon: <Pencil size={13} />, onClick: () => onEdit(t.id) },
+                                                                ...(t.status === 'In review' ? [
+                                                                    {
+                                                                        label: 'Push Back for Rework',
+                                                                        icon: <RotateCcw size={13} />,
+                                                                        onClick: () => onPushBackRequest(t),
+                                                                        variant: 'danger' as const,
+                                                                    },
+                                                                ] : []),
                                                                 ...(t.status !== 'Done' ? [
-                                                                    { label: 'Mark Done', icon: <CheckCircle2 size={13} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                                    { label: t.status === 'In review' ? 'Approve & Mark Done' : 'Mark Done', icon: <CheckCircle2 size={13} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
                                                                 ] : []),
                                                                 {
                                                                     label: 'Archive',
@@ -328,8 +380,159 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
     );
 };
 
+// ─── Push Back / Return for Rework Modal ──────────────────────────────────────
+
+interface PushBackModalProps {
+    task: TMTask;
+    isOpen: boolean;
+    onClose: () => void;
+    onSubmit: (taskId: string, remarks: string) => Promise<void> | void;
+}
+
+const PushBackModal: React.FC<PushBackModalProps> = ({ task, isOpen, onClose, onSubmit }) => {
+    const [remarks, setRemarks] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!remarks.trim()) {
+            setError('Please provide specific remarks or revision instructions for the employee.');
+            return;
+        }
+        setError('');
+        setSubmitting(true);
+        try {
+            await onSubmit(task.id, remarks.trim());
+            onClose();
+        } catch (err: any) {
+            setError(err?.response?.data?.message || err?.message || 'Failed to push back task.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const refDisplay = task.taskNumber || task.referenceNumber || task.id.slice(0, 8).toUpperCase();
+
+    return (
+        <FormModal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Push Back Task for Rework"
+            subtitle={`Returning: ${task.name}`}
+            size="md"
+            confirmOnCancel={false}
+            onSubmit={handleSubmit}
+            footer={
+                <>
+                    <button type="button" className="btn" onClick={onClose} disabled={submitting}>
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={handleSubmit}
+                        disabled={submitting || !remarks.trim()}
+                        style={{
+                            background: '#dc2626',
+                            color: '#ffffff',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            border: 'none',
+                            padding: '0 16px',
+                            height: 38,
+                            borderRadius: 8,
+                            fontWeight: 600,
+                            cursor: submitting || !remarks.trim() ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {submitting ? (
+                            <><Loader2 size={13} className="spin" /> Returning…</>
+                        ) : (
+                            <><RotateCcw size={13} /> Push Back for Rework</>
+                        )}
+                    </button>
+                </>
+            }
+        >
+            <div style={{ marginBottom: 16 }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        background: '#f8fafc',
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        marginBottom: 16,
+                        gap: 12,
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <div>
+                        <span style={{ fontSize: 11, color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Task Reference</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', fontFamily: 'monospace' }}>
+                            #{refDisplay}
+                        </span>
+                    </div>
+                    <div>
+                        <span style={{ fontSize: 11, color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Assigned Employee</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                            {task.assignee?.name || 'Unassigned'}
+                        </span>
+                    </div>
+                    <div>
+                        <span style={{ fontSize: 11, color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Priority</span>
+                        <PriorityBadge p={task.priority} />
+                    </div>
+                </div>
+
+                <div className="field">
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>
+                        Revision Instructions / Remarks <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px', lineHeight: 1.4 }}>
+                        Specify what needs to be revised or improved. The employee will see these remarks on their dashboard and task view.
+                    </p>
+                    <textarea
+                        className="report-input"
+                        rows={4}
+                        maxLength={500}
+                        value={remarks}
+                        onChange={e => { setRemarks(e.target.value); setError(''); }}
+                        placeholder="Provide clear revision instructions (e.g., missing supporting document, incorrect invoice total, incomplete task requirements)..."
+                        style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            borderRadius: 8,
+                            padding: '10px 12px',
+                            fontSize: 13,
+                            border: error ? '1px solid #dc2626' : '1px solid #cbd5e1',
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            resize: 'vertical',
+                            minHeight: 90,
+                        }}
+                        autoFocus
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, fontSize: 11 }}>
+                        <span style={{ color: '#dc2626', fontWeight: 500 }}>{error}</span>
+                        <span style={{ color: remarks.length > 450 ? '#dc2626' : '#94a3b8' }}>{remarks.length}/500</span>
+                    </div>
+                </div>
+            </div>
+        </FormModal>
+    );
+};
+
 export default function TaskManager({
     tasks, teamMembers, onNewTask, onEdit, onView, onArchive, onRestore, onDelete, onMarkDone,
+    onPushBack,
+    onStatusChange: externalStatusChange,
     summary,
     searchQuery: externalSearch,
     onSearchChange,
@@ -350,6 +553,7 @@ export default function TaskManager({
     const [viewMode, setViewMode] = useState<'table' | 'board'>('table');
     const [internalTab, setInternalTab] = useState<TabType>('active');
     const tab = controlledTab !== undefined ? controlledTab : internalTab;
+    const [pushBackTask, setPushBackTask] = useState<TMTask | null>(null);
     const [internalSearch, setInternalSearch] = useState('');
     const [internalFilterPrio, setInternalFilterPrio] = useState('');
     const [internalFilterStatus, setInternalFilterStatus] = useState('');
@@ -623,6 +827,8 @@ export default function TaskManager({
                             onEdit={onEdit}
                             onMarkDone={onMarkDone}
                             onArchive={onArchive}
+                            onPushBackRequest={setPushBackTask}
+                            onStatusChange={externalStatusChange}
                         />
                     </div>
                 </div>
@@ -779,8 +985,11 @@ export default function TaskManager({
                                             ...(tab !== 'bin' ? [
                                                 { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },
                                                 { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEdit(t.id) },
+                                                ...(t.status === 'In review' ? [
+                                                    { label: 'Push Back for Rework', icon: <RotateCcw size={12} />, onClick: () => setPushBackTask(t), variant: 'danger' as const },
+                                                ] : []),
                                                 ...(t.status !== 'Done' ? [
-                                                    { label: 'Mark Done', icon: <CheckCircle2 size={12} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                    { label: t.status === 'In review' ? 'Approve & Mark Done' : 'Mark Done', icon: <CheckCircle2 size={12} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
                                                 ] : []),
                                                 { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
                                             ] as const : [
@@ -805,6 +1014,24 @@ export default function TaskManager({
                     {tab === 'bin' && onRestore && <button onClick={() => { onRestore([...selectedIds]); setSelectedIds(new Set()); }} style={{ padding: '4px 10px', borderRadius: 6, border: '0.5px solid #e2e8f0', background: '#fff', fontSize: 12, cursor: 'pointer' }}>Restore</button>}
                     <button onClick={() => { onDelete([...selectedIds]); setSelectedIds(new Set()); }} style={{ padding: '4px 10px', borderRadius: 6, border: '0.5px solid #e2e8f0', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#dc2626' }}>Delete</button>
                 </div>
+            )}
+
+            {pushBackTask && (
+                <PushBackModal
+                    task={pushBackTask}
+                    isOpen={!!pushBackTask}
+                    onClose={() => setPushBackTask(null)}
+                    onSubmit={async (taskId, remarks) => {
+                        if (onPushBack) {
+                            await onPushBack(taskId, remarks);
+                        } else {
+                            await api.patch(`/api/Task/${taskId}/review`, {
+                                isApproved: false,
+                                remarks,
+                            });
+                        }
+                    }}
+                />
             )}
         </div>
     );

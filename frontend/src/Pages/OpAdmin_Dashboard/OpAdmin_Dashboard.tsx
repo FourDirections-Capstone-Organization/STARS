@@ -10038,6 +10038,8 @@ export default function OpsAdminDashboard() {
                                             onRestore={ids => { ids.forEach(id => handleRestoreTask(id)); }}
                                             onDelete={ids => { ids.forEach(id => handleDeleteTask(id)); }}
                                             onMarkDone={ids => { ids.forEach(id => handleStatusTransition(id, 'Completed')); }}
+                                            onPushBack={(taskId, reason) => handleReviewTask(taskId, 'Return for Rework', reason)}
+                                            onStatusChange={(taskId, status) => handleStatusTransition(taskId, status as any)}
                                             serverPagination={{
                                                 currentPage: taskPage,
                                                 totalPages: taskTotalPages,
