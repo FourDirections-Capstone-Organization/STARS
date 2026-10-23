@@ -4458,10 +4458,19 @@ export default function Dashboard() {
                             }));
                         }}
                         onNotificationAction={n => {
-                            if (n.relatedEntityId && n.relatedEntityType === 'task') {
-                                openManagerTaskById(n.relatedEntityId);
-                            } else if (n.relatedEntityType === 'announcement') handleNavChange('announcements');
-                            else handleNavChange('notifications');
+                            const taskId = n.relatedEntityId
+                                || (n as any).relatedTaskId
+                                || (n as any).taskId
+                                || (typeof n.id === 'string' && (n.id.startsWith('review-') || n.id.startsWith('overdue-'))
+                                    ? n.id.replace('review-', '').replace('overdue-', '')
+                                    : null);
+                            if (taskId) {
+                                openManagerTaskById(taskId);
+                            } else if (n.relatedEntityType === 'announcement') {
+                                handleNavChange('announcements');
+                            } else {
+                                handleNavChange('notifications');
+                            }
                         }}
                     />
                 )}
@@ -4557,6 +4566,7 @@ export default function Dashboard() {
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
                         <NotificationsTab
+                            extraNotifications={mergedHeaderNotifications as any}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 setActiveTab('tasks');

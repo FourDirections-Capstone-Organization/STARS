@@ -419,6 +419,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                   if (!n.read) {
                                     markAsRead(n.id);
                                   }
+                                  setShowNotifications(false);
                                   onNotificationAction?.(n);
                                 }}
                               >
@@ -461,6 +462,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                         <button 
                                           className="notification-action-btn"
                                           onClick={() => {
+                                            setShowNotifications(false);
                                             onNotificationAction
                                               ? onNotificationAction(n)
                                               : console.info('[GlobalHeader] onNotificationAction not set for:', n.actionLabel);
@@ -494,6 +496,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                   if (!n.read) {
                                     markAsRead(n.id);
                                   }
+                                  setShowNotifications(false);
                                   onNotificationAction?.(n);
                                 }}
                               >
@@ -536,6 +539,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                         <button 
                                           className="notification-action-btn"
                                           onClick={() => {
+                                            setShowNotifications(false);
                                             onNotificationAction
                                               ? onNotificationAction(n)
                                               : console.info('[GlobalHeader] onNotificationAction not set for:', n.actionLabel);

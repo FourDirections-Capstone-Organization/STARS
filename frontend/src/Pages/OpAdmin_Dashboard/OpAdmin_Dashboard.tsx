@@ -4086,12 +4086,22 @@ const ApprovalsWrapper: React.FC = () => {
 
 // --- Notification Settings Tab (TN-002: Configurable Deadline Alerts) ---------
 
+const PRESET_OPTIONS = [
+    { label: '12 Hours', value: 12, unit: 'Hours' as const },
+    { label: '24 Hours (1 Day)', value: 24, unit: 'Hours' as const },
+    { label: '48 Hours (2 Days)', value: 2, unit: 'Days' as const, isDefault: true },
+    { label: '3 Days', value: 3, unit: 'Days' as const },
+    { label: '7 Days (1 Week)', value: 7, unit: 'Days' as const },
+];
+
 const NotificationSettingsTab: React.FC = () => {
     const { success, error } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [value, setValue] = useState('2');
     const [unit, setUnit] = useState<'Hours' | 'Days'>('Days');
+    const [savedValue, setSavedValue] = useState('2');
+    const [savedUnit, setSavedUnit] = useState<'Hours' | 'Days'>('Days');
     const [formError, setFormError] = useState('');
 
     const fetchSettings = useCallback(async () => {
@@ -4102,9 +4112,13 @@ const NotificationSettingsTab: React.FC = () => {
             const json = res.data;
             const d = json?.data;
             if (json?.isSuccess && d) {
-                setValue(String(d.deadlineWarningValue ?? 2));
+                const valStr = String(d.deadlineWarningValue ?? 2);
                 const u = d.deadlineWarningUnit;
-                setUnit(u === 'Hours' || u === 0 ? 'Hours' : 'Days');
+                const unitStr = (u === 'Hours' || u === 0 ? 'Hours' : 'Days');
+                setValue(valStr);
+                setUnit(unitStr);
+                setSavedValue(valStr);
+                setSavedUnit(unitStr);
             }
         } catch {
             // keep defaults (2 days)
@@ -4128,6 +4142,8 @@ const NotificationSettingsTab: React.FC = () => {
                 deadlineWarningValue: num,
                 deadlineWarningUnit: unit === 'Hours' ? 0 : 1,
             });
+            setSavedValue(String(num));
+            setSavedUnit(unit);
             success('Deadline warning threshold updated successfully.');
         } catch (err: any) {
             error(err.response?.data?.message || err.message || 'Failed to update settings.');
@@ -4136,89 +4152,314 @@ const NotificationSettingsTab: React.FC = () => {
         }
     };
 
+    const handleAdjust = (delta: number) => {
+        const cur = Number(value) || 1;
+        const next = Math.max(1, cur + delta);
+        setValue(String(next));
+        setFormError('');
+    };
+
     if (loading) {
         return (
             <div className="dashboard-content">
-                <div className="dashboard-grid">
-                    <div className="card">
-                        <div className="empty-state">
-                            <Loader2 size={22} className="spin" />
-                            <p>Loading notification settings…</p>
-                        </div>
-                    </div>
+                <div style={{ maxWidth: 840, margin: '0 auto', padding: '60px 0', textAlign: 'center' }}>
+                    <Loader2 size={32} className="spin" style={{ color: 'var(--teal, #00A99D)', margin: '0 auto 12px' }} />
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Loading deadline warning settings…</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="dashboard-content">
-            <div className="dashboard-grid" style={{ maxWidth: 760, margin: '0 auto' }}>
-                <div className="card">
-                    <div className="card-header-layout">
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Bell size={15} /> Deadline Warning Settings
-                        </h3>
-                    </div>
-                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
-                        Configure when the system warns assignees that a task deadline is approaching.
-                        The system's scheduled check compares each active task's remaining time against this
-                        threshold and triggers a <strong>Deadline Approaching</strong> notification to
-                        the assignee once the remaining time reaches it. The change applies to all future checks
-                        and is recorded in the Audit Log.
-                    </p>
-
-                    <div>
-                        <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                            Warning threshold (before due)
-                        </label>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <input
-                                type="number"
-                                min={1}
-                                step={1}
-                                value={value}
-                                onChange={e => { setValue(e.target.value); setFormError(''); }}
-                                onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                                style={{
-                                    width: 140, padding: '8px 12px', fontSize: 13, borderRadius: 8,
-                                    border: `1px solid ${formError ? 'var(--status-failed, #ee5d50)' : 'var(--border-color, #e2e8f0)'}`,
-                                    background: 'var(--bg-primary, #fff)', color: 'var(--text-primary, #1e293b)',
-                                    outline: 'none',
-                                }}
-                            />
-                            <select
-                                value={unit}
-                                onChange={e => setUnit(e.target.value as 'Hours' | 'Days')}
-                                style={{
-                                    padding: '8px 12px', fontSize: 13, borderRadius: 8,
-                                    border: '1px solid var(--border-color, #e2e8f0)',
-                                    background: 'var(--bg-primary, #fff)', color: 'var(--text-primary, #1e293b)',
-                                    outline: 'none', cursor: 'pointer',
-                                }}
-                            >
-                                <option value="Hours">Hours</option>
-                                <option value="Days">Days</option>
-                            </select>
+        <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+            <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {/* ── Hero Banner ── */}
+                <div
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.04) 0%, rgba(0, 169, 157, 0.09) 100%)',
+                        border: '1px solid rgba(0, 169, 157, 0.25)',
+                        borderRadius: 14,
+                        padding: '24px 28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 16,
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div
+                            style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 12,
+                                background: 'linear-gradient(135deg, var(--teal, #00A99D) 0%, #0284C7 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                boxShadow: '0 4px 12px rgba(0, 169, 157, 0.25)',
+                            }}
+                        >
+                            <Clock size={24} strokeWidth={2.4} />
                         </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>
-                            Default: <strong>2 days</strong>. For example, a value of 48 Hours warns exactly 48 hours
-                            before the task deadline.
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                Deadline Warning Settings
+                            </h2>
+                            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+                                Configure proactive warning notifications for assignees before task due dates
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 14px',
+                            background: '#ffffff',
+                            borderRadius: 9999,
+                            border: '1px solid var(--border)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--teal-dark, #007A72)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        }}
+                    >
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--teal, #00A99D)' }} />
+                        <span>Active Rule: <strong>{savedValue} {savedUnit}</strong> before deadline</span>
+                    </div>
+                </div>
+
+                {/* ── Main Settings Card ── */}
+                <div className="card" style={{ padding: '28px', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <label style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                Warning Proximity Threshold
+                            </label>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                Default: <strong>2 Days</strong>
+                            </span>
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                            When an active task's remaining time until its due date is less than or equal to this threshold, the automated background runner triggers an advance <strong>Deadline Warning</strong> notice.
                         </p>
                     </div>
 
-                    {formError && (
-                        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--status-failed, #ee5d50)' }}>
-                            <AlertCircle size={13} /> {formError}
+                    {/* Quick Presets */}
+                    <div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 10 }}>
+                            Quick Presets
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {PRESET_OPTIONS.map(opt => {
+                                const isSelected = value === String(opt.value) && unit === opt.unit;
+                                return (
+                                    <button
+                                        key={opt.label}
+                                        type="button"
+                                        onClick={() => {
+                                            setValue(String(opt.value));
+                                            setUnit(opt.unit);
+                                            setFormError('');
+                                        }}
+                                        style={{
+                                            padding: '8px 16px',
+                                            borderRadius: 8,
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            border: `1.5px solid ${isSelected ? 'var(--teal, #00A99D)' : 'var(--border)'}`,
+                                            background: isSelected ? 'var(--teal-bg, rgba(0, 169, 157, 0.1))' : 'var(--bg-primary, #ffffff)',
+                                            color: isSelected ? 'var(--teal-dark, #007A72)' : 'var(--text-secondary)',
+                                            transition: 'all 0.15s ease',
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
                         </div>
-                    )}
+                    </div>
 
-                    <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={saving}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {saving ? <><Loader2 size={13} className="spin" /> Saving…</> : <><Save size={13} /> Save Threshold</>}
+                    {/* Numeric Input & Unit Toggle Group */}
+                    <div style={{ background: 'var(--bg-secondary, #f8fafc)', padding: 18, borderRadius: 10, border: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 10 }}>
+                            Custom Threshold Value & Units
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', background: '#ffffff', borderRadius: 8, border: `1.5px solid ${formError ? 'var(--err, #DC2626)' : 'var(--border)'}`, overflow: 'hidden' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleAdjust(-1)}
+                                    style={{ width: 36, height: 38, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text-secondary)' }}
+                                    title="Decrease value"
+                                >
+                                    −
+                                </button>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={value}
+                                    onChange={e => { setValue(e.target.value); setFormError(''); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                                    style={{
+                                        width: 70,
+                                        height: 38,
+                                        border: 'none',
+                                        textAlign: 'center',
+                                        fontSize: 15,
+                                        fontWeight: 700,
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                        background: 'transparent',
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleAdjust(1)}
+                                    style={{ width: 36, height: 38, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text-secondary)' }}
+                                    title="Increase value"
+                                >
+                                    +
+                                </button>
+                            </div>
+
+                            {/* Segmented Control for Units */}
+                            <div style={{ display: 'inline-flex', background: '#e2e8f0', borderRadius: 8, padding: 3 }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setUnit('Hours')}
+                                    style={{
+                                        padding: '7px 18px',
+                                        border: 'none',
+                                        borderRadius: 6,
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        background: unit === 'Hours' ? '#ffffff' : 'transparent',
+                                        color: unit === 'Hours' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        boxShadow: unit === 'Hours' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                        transition: 'all 0.15s ease',
+                                    }}
+                                >
+                                    Hours
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setUnit('Days')}
+                                    style={{
+                                        padding: '7px 18px',
+                                        border: 'none',
+                                        borderRadius: 6,
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        background: unit === 'Days' ? '#ffffff' : 'transparent',
+                                        color: unit === 'Days' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        boxShadow: unit === 'Days' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                        transition: 'all 0.15s ease',
+                                    }}
+                                >
+                                    Days
+                                </button>
+                            </div>
+
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                                before task deadline
+                            </span>
+                        </div>
+
+                        {formError && (
+                            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--err, #DC2626)', fontWeight: 500 }}>
+                                <AlertCircle size={14} /> {formError}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Dynamic Real-Time Simulation Callout */}
+                    <div
+                        style={{
+                            padding: '14px 18px',
+                            borderRadius: 10,
+                            background: 'rgba(0, 169, 157, 0.05)',
+                            border: '1px solid rgba(0, 169, 157, 0.2)',
+                            fontSize: 13,
+                            color: 'var(--text-secondary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                        }}
+                    >
+                        <Lightbulb size={20} style={{ color: 'var(--teal, #00A99D)', flexShrink: 0 }} />
+                        <span>
+                            <strong>Timing Preview:</strong> For a sample task due on <strong>Friday at 5:00 PM</strong>, the warning notification will automatically trigger on <strong>{(() => {
+                                const num = Number(value) || 2;
+                                if (unit === 'Hours') {
+                                    return `${num} hour${num !== 1 ? 's' : ''} prior`;
+                                }
+                                return `${num} day${num !== 1 ? 's' : ''} prior`;
+                            })()}</strong>.
+                        </span>
+                    </div>
+
+                    {/* Operational Rule Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                        <div style={{ padding: 14, borderRadius: 10, border: '1px solid var(--border)', background: '#ffffff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
+                                <Activity size={15} style={{ color: 'var(--teal, #00A99D)' }} />
+                                <span>Background Scanner</span>
+                            </div>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, display: 'block' }}>
+                                Continuous background runner evaluates all active tasks against this threshold.
+                            </span>
+                        </div>
+
+                        <div style={{ padding: 14, borderRadius: 10, border: '1px solid var(--border)', background: '#ffffff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
+                                <Bell size={15} style={{ color: '#0284C7' }} />
+                                <span>Multi-Channel Alerts</span>
+                            </div>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, display: 'block' }}>
+                                Assignees receive in-app notification bell alerts, banner notices, and feed updates.
+                            </span>
+                        </div>
+
+                        <div style={{ padding: 14, borderRadius: 10, border: '1px solid var(--border)', background: '#ffffff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
+                                <Shield size={15} style={{ color: '#059669' }} />
+                                <span>Audit Logged</span>
+                            </div>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, display: 'block' }}>
+                                Every modification to this threshold is automatically tracked in the system Audit Log.
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={handleSave}
+                            disabled={saving}
+                            style={{ height: 40, padding: '0 20px', display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13 }}
+                        >
+                            {saving ? <><Loader2 size={15} className="spin" /> Saving Changes…</> : <><Save size={15} /> Save Settings</>}
                         </button>
-                        <button className="btn" onClick={fetchSettings} disabled={saving}>Reset</button>
+                        <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={fetchSettings}
+                            disabled={saving}
+                            style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+                        >
+                            Reset to Saved
+                        </button>
                     </div>
                 </div>
             </div>
@@ -9335,6 +9576,27 @@ export default function OpsAdminDashboard() {
         }
     };
 
+    // -- Open a task in coordinator TaskView by ID --
+    const openCoordinatorTaskById = async (taskId: string) => {
+        if (!taskId) return;
+        setActiveTab('tasks');
+        setTaskSubTab('list');
+        const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+        if (found) {
+            setDetailTask(found as any);
+            return;
+        }
+        try {
+            const res = await api.get(`/api/Task/${taskId}`);
+            const data = res.data?.data ?? res.data;
+            if (data) {
+                setDetailTask(mapTaskDetailToTaskView(data));
+            }
+        } catch (err) {
+            console.error('Failed to load task details for notification:', err);
+        }
+    };
+
     // -- Update Task --
     const handleEditTask = async (taskId: string, data: UpdateTaskDTO) => {
         try {
@@ -9666,11 +9928,21 @@ export default function OpsAdminDashboard() {
                         }));
                     }}
                     onNotificationAction={n => {
-                        if (n.relatedEntityId && n.relatedEntityType === 'task') {
-                            const found = tasks.find(t => t.taskId === n.relatedEntityId!) || allTasks.find(t => t.taskId === n.relatedEntityId!);
-                            if (found) { setViewingTask(found); return; }
+                        const taskId = n.relatedEntityId
+                            || (n as any).relatedTaskId
+                            || (n as any).taskId
+                            || (typeof n.id === 'string' && (n.id.startsWith('review-') || n.id.startsWith('overdue-'))
+                                ? n.id.replace('review-', '').replace('overdue-', '')
+                                : null);
+                        if (taskId) {
+                            openCoordinatorTaskById(taskId);
+                            return;
                         }
-                        if (n.relatedEntityType === 'announcement') handleNavChange('announcements');
+                        if (n.relatedEntityType === 'announcement') {
+                            handleNavChange('announcements');
+                        } else {
+                            handleNavChange('notifications');
+                        }
                     }}
                 />
 
@@ -9986,12 +10258,9 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content">
                         <NotificationsTab
+                            extraNotifications={mergedHeaderNotifications as any}
                             onViewTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                }
+                                openCoordinatorTaskById(taskId);
                             }}
                         />
                     </div>

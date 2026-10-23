@@ -2717,11 +2717,19 @@ export default function EmployeeDashboard() {
                         }));
                     }}
                     onNotificationAction={n => {
-                        if (n.relatedEntityId && n.relatedEntityType === 'task') {
-                            const found = tasks.find(t => t.id === n.relatedEntityId);
-                            if (found) { setViewingId(found.id); return; }
+                        const taskId = n.relatedEntityId
+                            || (n as any).relatedTaskId
+                            || (n as any).taskId
+                            || (typeof n.id === 'string' && (n.id.startsWith('review-') || n.id.startsWith('overdue-'))
+                                ? n.id.replace('review-', '').replace('overdue-', '')
+                                : null);
+                        if (taskId) {
+                            setActiveTab('my-tasks');
+                            setViewingId(taskId);
+                            return;
                         }
                         if (n.relatedEntityType === 'announcement') setActiveTab('announcements');
+                        else setActiveTab('notifications');
                     }}
                 />
 
@@ -2810,9 +2818,12 @@ export default function EmployeeDashboard() {
                 {activeTab === 'notifications' && (
                     <div className="dashboard-content" style={{ padding: '0 28px 28px' }}>
                         <NotificationsTab
+                            extraNotifications={mergedHeaderNotifications as any}
                             onViewTask={(taskId) => {
                                 const found = tasks.find(t => t.id === taskId);
+                                setActiveTab('my-tasks');
                                 if (found) setViewingId(found.id);
+                                else setViewingId(taskId);
                             }}
                         />
                     </div>

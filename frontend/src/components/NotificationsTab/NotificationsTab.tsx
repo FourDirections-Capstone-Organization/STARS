@@ -39,6 +39,7 @@ export interface NotificationRecord {
 interface NotificationsTabProps {
     onViewTask?: (taskId: string) => void;
     canViewTasks?: boolean;
+    extraNotifications?: any[];
 }
 
 const NOTIF_TYPE_NAMES: Record<number, string> = {
@@ -57,6 +58,7 @@ const NOTIF_TYPE_NAMES: Record<number, string> = {
 export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     onViewTask,
     canViewTasks = true,
+    extraNotifications = [],
 }) => {
     const { success, error } = useToast();
 
@@ -72,20 +74,53 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const PAGE_SIZE = 10;
 
+    const mapExtraNotifications = useCallback((): NotificationRecord[] => {
+        if (!Array.isArray(extraNotifications) || extraNotifications.length === 0) return [];
+        return extraNotifications.map(n => {
+            const tId = n.relatedEntityId || n.taskId || n.RelatedEntityId || n.TaskId ||
+                (typeof n.id === 'string' && (n.id.startsWith('review-') || n.id.startsWith('overdue-'))
+                    ? n.id.replace('review-', '').replace('overdue-', '')
+                    : null);
+            let rawType = n.type || n.notificationType || 'Notice';
+            if (typeof n.id === 'string' && n.id.startsWith('review-')) rawType = 'TaskAwaitingReview';
+            else if (typeof n.id === 'string' && n.id.startsWith('overdue-')) rawType = 'TaskOverdue';
+            else if (n.type === 'alert') rawType = 'TaskOverdue';
+            else if (n.type === 'info') rawType = 'TaskUpdated';
+            else if (n.type === 'success') rawType = 'TaskCompleted';
+
+            return {
+                id: String(n.id || tId || Math.random()),
+                taskId: tId,
+                type: rawType,
+                notificationType: rawType,
+                title: n.title || n.message || 'Notification',
+                message: n.description || n.message || n.title || '',
+                isRead: Boolean(n.read ?? n.isRead),
+                createdAt: n.createdAt || n.timestamp || new Date().toISOString(),
+            };
+        });
+    }, [extraNotifications]);
+
     const fetchUnreadCount = useCallback(async () => {
         try {
             const res = await api.get('/api/Notification/unread-count');
+            const extrasUnread = (extraNotifications || []).filter(n => !n.read && !n.isRead).length;
             if (res.data?.isSuccess && typeof res.data?.data === 'number') {
-                setUnreadCount(res.data.data);
+                setUnreadCount(res.data.data + extrasUnread);
+            } else if (extrasUnread > 0) {
+                setUnreadCount(extrasUnread);
             }
         } catch {
-            /* ignore */
+            const extrasUnread = (extraNotifications || []).filter(n => !n.read && !n.isRead).length;
+            if (extrasUnread > 0) setUnreadCount(extrasUnread);
         }
-    }, []);
+    }, [extraNotifications]);
 
     const fetchNotifications = useCallback(async (targetPage: number, silent = false) => {
         if (!silent) setLoading(true);
         else setRefreshing(true);
+
+        const extraMapped = mapExtraNotifications();
 
         try {
             const res = await api.get('/api/Notification', {
@@ -95,46 +130,76 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
 
             const json = res.data;
             const d = json?.data;
-            if (json?.isSuccess && d?.items) {
-                const mapped: NotificationRecord[] = d.items.map((n: any) => {
-                    const rawType = typeof n.type === 'number' ? (NOTIF_TYPE_NAMES[n.type] || 'Unknown') : (n.type || n.notificationType || 'Unknown');
-                    return {
-                        id: String(n.id || n.notificationId || Math.random()),
-                        taskId: n.relatedTaskId || n.taskId || null,
-                        type: rawType,
-                        notificationType: rawType,
-                        title: n.title || n.message || 'Notification',
-                        message: n.message || n.title || '',
-                        isRead: Boolean(n.isRead),
-                        createdAt: n.createdAt || new Date().toISOString(),
-                    };
-                });
-                setNotifications(mapped);
-                setPage(d.pageNumber || targetPage);
-                setTotalPages(d.totalPages || 1);
-                setTotalRecords(d.totalCount ?? mapped.length);
+            const rawItems: any[] = Array.isArray(d?.items)
+                ? d.items
+                : (Array.isArray(d?.Items)
+                    ? d.Items
+                    : (Array.isArray(d)
+                        ? d
+                        : (Array.isArray(json?.data)
+                            ? json.data
+                            : (Array.isArray(json) ? json : d?.$values ?? []))));
+
+            const serverMapped: NotificationRecord[] = rawItems.map((n: any) => {
+                const rawType = typeof n.type === 'number'
+                    ? (NOTIF_TYPE_NAMES[n.type] || 'Unknown')
+                    : (n.type || n.notificationType || n.Type || n.NotificationType || 'Unknown');
+                return {
+                    id: String(n.id || n.notificationId || n.Id || n.NotificationId || Math.random()),
+                    taskId: n.relatedTaskId || n.taskId || n.RelatedTaskId || n.TaskId || null,
+                    type: rawType,
+                    notificationType: rawType,
+                    title: n.title || n.message || n.Title || n.Message || 'Notification',
+                    message: n.message || n.title || n.Message || n.Title || '',
+                    isRead: Boolean(n.isRead ?? n.IsRead),
+                    createdAt: n.createdAt || n.CreatedAt || new Date().toISOString(),
+                };
+            });
+
+            // Merge extra derived notifications (e.g. Awaiting Review, Overdue) with server feed
+            const seen = new Set<string>();
+            const combined: NotificationRecord[] = [];
+            for (const item of [...extraMapped, ...serverMapped]) {
+                const key = item.id;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    combined.push(item);
+                }
+            }
+
+            setNotifications(combined);
+            setPage(d?.pageNumber || d?.PageNumber || targetPage);
+            setTotalPages(Math.max(1, d?.totalPages || d?.TotalPages || Math.ceil(combined.length / PAGE_SIZE)));
+            setTotalRecords(d?.totalCount ?? d?.TotalCount ?? combined.length);
+        } catch {
+            if (extraMapped.length > 0) {
+                setNotifications(extraMapped);
+                setTotalRecords(extraMapped.length);
+                setTotalPages(Math.max(1, Math.ceil(extraMapped.length / PAGE_SIZE)));
             } else {
                 setNotifications([]);
                 setTotalRecords(0);
             }
-        } catch {
-            setNotifications([]);
-            setTotalRecords(0);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [mapExtraNotifications]);
 
     useEffect(() => {
         fetchNotifications(1);
         fetchUnreadCount();
     }, [fetchNotifications, fetchUnreadCount]);
 
+    const isRealNotificationId = (id: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
     const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
         e?.stopPropagation();
         try {
-            await api.patch(`/api/Notification/${id}/read`);
+            if (isRealNotificationId(id)) {
+                await api.patch(`/api/Notification/${id}/read`);
+            }
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
             setUnreadCount(prev => Math.max(0, prev - 1));
             success('Notification marked as read.');
