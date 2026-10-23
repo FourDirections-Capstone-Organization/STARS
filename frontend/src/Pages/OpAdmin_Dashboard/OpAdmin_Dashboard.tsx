@@ -8427,20 +8427,17 @@ export default function OpsAdminDashboard() {
             setLoadingTasks(true);
         }
         try {
-            const statusParam = taskTabRef.current === 'on_hold' ? `&status=4` : taskTabRef.current === 'completed' ? `&status=3` : taskTabRef.current === 'bin' ? `&status=5` : ``;
+            const tabStatus = taskTabRef.current === 'on_hold' ? '4' : taskTabRef.current === 'completed' ? '3' : taskTabRef.current === 'bin' ? '5' : '';
             // The Active tab filters out Done, Cancelled, and On Hold tasks client-side (TaskManager tabTasks),
-            // so exclude Completed (status 3), On Hold (status 4), and Cancelled (status 5) server-side BEFORE pagination. Otherwise an
-            // excluded task landing on a page gets dropped client-side and that page
-            // shows fewer rows than the page size.
+            // so exclude Completed (status 3), On Hold (status 4), and Cancelled (status 5) server-side BEFORE pagination.
             const excludeStatusParam = taskTabRef.current === 'active' ? `&excludeStatuses=3,4,5` : ``;
-            // Dropdown filters are sent server-side so the server filters AND paginates
-            // consistently — each page then shows the same number of matching rows.
             const prioParam = taskFilterPrioRef.current ? `&priority=${encodeURIComponent(taskFilterPrioRef.current)}` : ``;
             let filterStatusParam = '';
+            let statusParam = tabStatus ? `&status=${tabStatus}` : '';
             if (taskFilterStatusRef.current) {
                 if (taskFilterStatusRef.current.toLowerCase() === 'overdue') {
                     filterStatusParam = '&isOverdue=true';
-                } else {
+                } else if (!tabStatus) {
                     const STATUS_NUM_MAP: Record<string, string> = {
                         'Backlog': '0', 'To do': '0', 'Assigned': '0',
                         'In progress': '1', 'In Progress': '1',
@@ -8449,7 +8446,7 @@ export default function OpsAdminDashboard() {
                         'On hold': '4', 'On Hold': '4',
                         'Cancelled': '5'
                     };
-                    filterStatusParam = `&status=${STATUS_NUM_MAP[taskFilterStatusRef.current] ?? taskFilterStatusRef.current}`;
+                    statusParam = `&status=${STATUS_NUM_MAP[taskFilterStatusRef.current] ?? taskFilterStatusRef.current}`;
                 }
             }
             const CLASSIFICATION_PARAM_MAP: Record<string, string> = { routine: '0', special: '1' };
@@ -8531,18 +8528,37 @@ export default function OpsAdminDashboard() {
             });
 
             const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
-            const currentAccountId = localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? localStorage.getItem('employeeId') ?? '';
+            const currentAccountId = (localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? '').toLowerCase();
+            const currentEmployeeNum = (localStorage.getItem('employeeId') ?? '').toLowerCase();
             const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
 
             const scopedTasks = isCoordinator
                 ? normalized.filter(t => {
-                    if (t.createdById && currentAccountId) {
-                        return t.createdById.toLowerCase() === currentAccountId.toLowerCase();
+                    const cId = (t.createdById ?? '').toLowerCase();
+                    const cEmp = (t.createdByEmployee ?? '').trim().toLowerCase();
+                    const aTo = (t.assignedTo ?? '').toLowerCase();
+                    const aEmp = (t.assignedEmployee ?? '').trim().toLowerCase();
+
+                    // Creator match
+                    if (currentAccountId && cId === currentAccountId) return true;
+                    if (currentEmployeeNum && cId === currentEmployeeNum) return true;
+                    if (currentEmployeeName && cEmp && (cEmp === currentEmployeeName || currentEmployeeName.includes(cEmp) || cEmp.includes(currentEmployeeName))) return true;
+
+                    // Assignee match (handling task)
+                    if (currentAccountId && aTo === currentAccountId) return true;
+                    if (currentEmployeeNum && aTo === currentEmployeeNum) return true;
+                    if (currentEmployeeName && aEmp && (aEmp === currentEmployeeName || currentEmployeeName.includes(aEmp) || aEmp.includes(currentEmployeeName))) return true;
+                    if (t.assignees && t.assignees.some((a: any) => {
+                        const uid = (a.userId ?? a.id ?? '').toLowerCase();
+                        const uname = (a.fullName ?? a.name ?? '').trim().toLowerCase();
+                        return (currentAccountId && uid === currentAccountId) ||
+                               (currentEmployeeNum && uid === currentEmployeeNum) ||
+                               (currentEmployeeName && uname && (uname === currentEmployeeName || currentEmployeeName.includes(uname) || uname.includes(currentEmployeeName)));
+                    })) {
+                        return true;
                     }
-                    if (t.createdByEmployee && currentEmployeeName) {
-                        return t.createdByEmployee.trim().toLowerCase() === currentEmployeeName;
-                    }
-                    return true;
+
+                    return false;
                 })
                 : normalized;
 
@@ -8673,6 +8689,10 @@ export default function OpsAdminDashboard() {
             .then(resJson => {
                 if (!resJson || !resJson.isSuccess || !resJson.data) return;
                 const data = resJson.data;
+                if (data.id) {
+                    localStorage.setItem('userId', String(data.id));
+                    localStorage.setItem('accountId', String(data.id));
+                }
                 const contact = data.contactNumber ?? data.contact ?? data.phoneNumber ?? '';
                 const email = data.email ?? '';
                 const firstNameVal = data.firstName ?? '';
@@ -8959,6 +8979,9 @@ export default function OpsAdminDashboard() {
         if (!task) { error('Task not found.'); return; }
         try {
             await api.patch(`/api/Task/${taskId}/status`, { newStatus: STATUS_TO_BACKEND[newStatus] || newStatus });
+            if (newStatus === 'Completed') {
+                setTaskTab('completed');
+            }
             await fetchTasks();
             await doFetchDashboard();
             setViewingTask(null);
@@ -8975,6 +8998,9 @@ export default function OpsAdminDashboard() {
                 isApproved: adminDecision === 'Approve & Close',
                 remarks: reviewerRemarks || undefined,
             });
+            if (adminDecision === 'Approve & Close') {
+                setTaskTab('completed');
+            }
             await fetchTasks();
             await fetchAwaitingReview();
             await doFetchDashboard();
