@@ -10,6 +10,7 @@ import {
     Clock,
     AlertCircle,
     ArrowRight,
+    ArrowLeft,
     ExternalLink,
     Package,
     Navigation,
@@ -268,6 +269,37 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         }
     };
 
+    const handleSyncSelected = async () => {
+        if (!selectedDelivery?.taskId) return;
+        setSyncingId(selectedDelivery.taskId);
+        try {
+            await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
+            const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
+            const data = res?.data?.data ?? res?.data;
+            if (data) {
+                setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+            }
+            toastSuccess('Re-synced with DMS successfully.');
+            await fetchDeliveries();
+        } catch (err: any) {
+            try {
+                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
+                const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
+                const data = res?.data?.data ?? res?.data;
+                if (data) {
+                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+                }
+                toastSuccess('Dispatched and re-synced with DMS.');
+                await fetchDeliveries();
+            } catch (fallbackErr: any) {
+                const msg = fallbackErr?.response?.data?.message || err?.response?.data?.message || err?.message || 'Re-sync failed.';
+                toastError(msg);
+            }
+        } finally {
+            setSyncingId(null);
+        }
+    };
+
     // Filter, search, and sort (most recent created record first)
     const filteredDeliveries = useMemo(() => {
         const list = deliveries.filter(d => {
@@ -357,6 +389,357 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         if (s.includes('processing') || s.includes('preparing')) return 1;
         return 0;
     };
+
+    if (selectedDelivery) {
+        const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
+        const isDelivered = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
+        const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 6) / 6) * 100;
+
+        const journeySteps = [
+            { title: 'Pending', desc: 'Order Created' },
+            { title: 'Processing', desc: 'Preparing Dispatch' },
+            { title: 'Assigned', desc: 'Driver Assigned' },
+            { title: 'Picked Up', desc: 'Driver Collected' },
+            { title: 'In Transit', desc: 'En Route to Hub' },
+            { title: 'Out for Delivery', desc: 'Final Mile Delivery' },
+            { title: 'Delivered (POD)', desc: 'Proof Confirmed' },
+        ];
+
+        return (
+            <div className="dms-tab-container dms-detail-view-page">
+                {/* ── Breadcrumb & Top Navigation Bar ── */}
+                <div className="dms-detail-top-bar">
+                    <div className="dms-detail-nav-left">
+                        <button
+                            type="button"
+                            className="dms-detail-back-btn"
+                            onClick={() => setSelectedDelivery(null)}
+                        >
+                            <ArrowLeft size={15} />
+                            <span>Back to Deliveries</span>
+                        </button>
+                        <div className="dms-detail-breadcrumbs">
+                            <span className="dms-breadcrumb-root">Delivery Management</span>
+                            <span className="dms-breadcrumb-sep">/</span>
+                            <span className="dms-breadcrumb-current">
+                                Waybill: {selectedDelivery.dmsWaybillNo || `#${selectedDelivery.dmsOrderId || selectedDelivery.taskId}`}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="dms-detail-nav-actions">
+                        <button
+                            type="button"
+                            className="dms-action-btn"
+                            disabled={syncingId === selectedDelivery.taskId}
+                            onClick={handleSyncSelected}
+                            title="Re-sync telemetry with DMS cloud"
+                        >
+                            <RefreshCw size={13} className={syncingId === selectedDelivery.taskId ? 'spin' : ''} />
+                            <span>{syncingId === selectedDelivery.taskId ? 'Syncing...' : 'Sync with DMS'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="dms-detail-primary-btn"
+                            onClick={() => onViewTask(selectedDelivery.taskId)}
+                        >
+                            <span>Open STARS Task Details</span>
+                            <ArrowRight size={14} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── Hero Status Card ── */}
+                <div className="dms-detail-hero-card">
+                    <div className="dms-detail-hero-main">
+                        <div className="dms-detail-hero-icon">
+                            <Truck size={24} />
+                        </div>
+                        <div className="dms-detail-hero-content">
+                            <div className="dms-detail-hero-title-row">
+                                <h3 className="dms-detail-hero-title">Live Delivery Tracker</h3>
+                                {getStatusPill(selectedDelivery.dmsStatus, selectedDelivery.syncStatus)}
+                            </div>
+                            <div className="dms-detail-hero-pills">
+                                <div className="dms-detail-waybill-pill">
+                                    <span className="dms-detail-pill-label">WAYBILL:</span>
+                                    <span className="dms-detail-pill-code">{selectedDelivery.dmsWaybillNo || 'Pending Creation'}</span>
+                                    {selectedDelivery.dmsWaybillNo && (
+                                        <button
+                                            type="button"
+                                            className="dms-detail-copy-btn"
+                                            onClick={() => handleCopy(selectedDelivery.dmsWaybillNo!)}
+                                            title="Copy Waybill"
+                                        >
+                                            {copiedWaybill === selectedDelivery.dmsWaybillNo ? (
+                                                <Check size={11} color="#059669" />
+                                            ) : (
+                                                <Copy size={11} />
+                                            )}
+                                            <span>{copiedWaybill === selectedDelivery.dmsWaybillNo ? 'Copied' : 'Copy'}</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                {(selectedDelivery.taskNumber || selectedDelivery.taskReferenceNumber) && (
+                                    <span className="dms-detail-task-tag">
+                                        STARS #{selectedDelivery.taskNumber || selectedDelivery.taskReferenceNumber}
+                                    </span>
+                                )}
+
+                                {selectedDelivery.dmsOrderId && (
+                                    <span className="dms-detail-order-tag">
+                                        DMS Order #{selectedDelivery.dmsOrderId}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="dms-detail-hero-pulse-wrap">
+                        <span className="dms-detail-pulse-beacon" />
+                        <span className="dms-detail-pulse-text">Live DMS Dispatch Active</span>
+                    </div>
+                </div>
+
+                {/* ── 7-Stage Milestone Tracker (Full-Width, Single-Page, No-Scroll) ── */}
+                <div className="dms-detail-stepper-card">
+                    <div className="dms-detail-stepper-header">
+                        <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
+                        <span className="dms-detail-stepper-summary">
+                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{selectedDelivery.dmsStatus}</strong>
+                        </span>
+                    </div>
+
+                    <div className="dms-detail-stepper-track-wrap">
+                        <div className="dms-detail-stepper-track">
+                            <div
+                                className="dms-detail-stepper-progress"
+                                style={{ width: `${progressPct}%` }}
+                            />
+                        </div>
+
+                        <div className="dms-detail-stepper">
+                            {journeySteps.map((step, idx) => {
+                                const isDone = isDelivered ? true : idx < activeIdx;
+                                const isCurrent = !isDelivered && idx === activeIdx;
+                                const isUpcoming = idx > activeIdx;
+
+                                return (
+                                    <div
+                                        key={idx}
+                                        className={`dms-detail-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
+                                    >
+                                        <div className="dms-detail-step-dot">
+                                            {isDone ? (
+                                                <Check size={16} strokeWidth={2.8} />
+                                            ) : isCurrent ? (
+                                                <Clock size={16} strokeWidth={2.5} />
+                                            ) : (
+                                                <span>{idx + 1}</span>
+                                            )}
+                                        </div>
+                                        <div className="dms-detail-step-text">
+                                            <span className="dms-detail-step-title">{step.title}</span>
+                                            <span className="dms-detail-step-desc">{step.desc}</span>
+                                            {isCurrent && (
+                                                <span className="dms-detail-step-badge current">In Progress</span>
+                                            )}
+                                            {isDone && (
+                                                <span className="dms-detail-step-badge done">Completed</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Failure / Exception Alert if Any ── */}
+                {selectedDelivery.dmsFailureReason && (
+                    <div className="dms-detail-alert-box">
+                        <AlertCircle size={18} className="dms-detail-alert-icon" />
+                        <div>
+                            <strong className="dms-detail-alert-title">Delivery Issue / Exception Reported:</strong>
+                            <p className="dms-detail-alert-msg">{selectedDelivery.dmsFailureReason}</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Comprehensive Details Grid (3 Polished Cards) ── */}
+                <div className="dms-detail-grid">
+                    {/* Card 1: Recipient & Destination */}
+                    <div className="dms-detail-card">
+                        <div className="dms-detail-card-header">
+                            <MapPin size={16} className="dms-detail-card-icon" />
+                            <h5>Recipient & Destination</h5>
+                        </div>
+                        <div className="dms-detail-card-body">
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Recipient Name</span>
+                                <span className="dms-detail-val dms-detail-val-highlight">{selectedDelivery.recipientName || '—'}</span>
+                            </div>
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Contact Number</span>
+                                <span className="dms-detail-val">{selectedDelivery.recipientContact || '—'}</span>
+                            </div>
+                            <div className="dms-detail-row dms-detail-row-full">
+                                <span className="dms-detail-label">Delivery Destination</span>
+                                <span className="dms-detail-val dms-detail-addr">
+                                    <MapPin size={13} style={{ flexShrink: 0, color: 'var(--primary, #00A99D)' }} />
+                                    <span>
+                                        {selectedDelivery.deliveryAddress || '—'}
+                                        {selectedDelivery.area && <strong style={{ marginLeft: 4 }}>({selectedDelivery.area})</strong>}
+                                    </span>
+                                </span>
+                            </div>
+                            {selectedDelivery.packageDescription && (
+                                <div className="dms-detail-row dms-detail-row-full">
+                                    <span className="dms-detail-label">Package Description</span>
+                                    <span className="dms-detail-val">{selectedDelivery.packageDescription}</span>
+                                </div>
+                            )}
+                            {selectedDelivery.specialInstructions && (
+                                <div className="dms-detail-row dms-detail-row-full">
+                                    <span className="dms-detail-label">Special Delivery Instructions</span>
+                                    <span className="dms-detail-val dms-detail-instructions">{selectedDelivery.specialInstructions}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Card 2: Logistics & Dispatch Operations */}
+                    <div className="dms-detail-card">
+                        <div className="dms-detail-card-header">
+                            <Truck size={16} className="dms-detail-card-icon" />
+                            <h5>Logistics & Carrier Operations</h5>
+                        </div>
+                        <div className="dms-detail-card-body">
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Assigned Courier</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.courierEmployeeId ? (
+                                        <span className="dms-detail-driver-badge">{selectedDelivery.courierEmployeeId}</span>
+                                    ) : (
+                                        <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Linked STARS Task</span>
+                                <span className="dms-detail-val">
+                                    <button
+                                        type="button"
+                                        className="dms-detail-inline-task-btn"
+                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                    >
+                                        <span>{selectedDelivery.taskTitle}</span>
+                                        <ExternalLink size={11} />
+                                    </button>
+                                </span>
+                            </div>
+                            {selectedDelivery.senderAddress && (
+                                <div className="dms-detail-row dms-detail-row-full">
+                                    <span className="dms-detail-label">Sender Pickup Address</span>
+                                    <span className="dms-detail-val">{selectedDelivery.senderAddress}</span>
+                                </div>
+                            )}
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Fulfillment Channel</span>
+                                <span className="dms-detail-val">DMS Express Dispatch</span>
+                            </div>
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Created At</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.createdAt ? new Date(selectedDelivery.createdAt).toLocaleString() : '—'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 3: Real-Time Telemetry & Tracking */}
+                    <div className="dms-detail-card">
+                        <div className="dms-detail-card-header">
+                            <Activity size={16} className="dms-detail-card-icon" />
+                            <h5>Live Telemetry & Tracking</h5>
+                        </div>
+                        <div className="dms-detail-card-body">
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Current Status</span>
+                                <span className="dms-detail-val">
+                                    <strong>{selectedDelivery.dmsStatus}</strong>
+                                    {selectedDelivery.dmsRawStatus && selectedDelivery.dmsRawStatus !== selectedDelivery.dmsStatus && (
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>
+                                            ({selectedDelivery.dmsRawStatus})
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="dms-detail-row">
+                                <span className="dms-detail-label">Cloud Sync State</span>
+                                <span className="dms-detail-val">
+                                    <span className={`dms-sync-badge ${selectedDelivery.syncStatus?.toLowerCase() || ''}`}>
+                                        {selectedDelivery.syncStatus || 'Synced'}
+                                    </span>
+                                </span>
+                            </div>
+                            <div className="dms-detail-row dms-detail-row-full">
+                                <span className="dms-detail-label">Live GPS Coordinates</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.dmsLatitude && selectedDelivery.dmsLongitude ? (
+                                        <a
+                                            href={`https://www.google.com/maps?q=${selectedDelivery.dmsLatitude},${selectedDelivery.dmsLongitude}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="dms-detail-gps-link"
+                                        >
+                                            <Navigation size={13} />
+                                            <span>{selectedDelivery.dmsLatitude.toFixed(4)}, {selectedDelivery.dmsLongitude.toFixed(4)}</span>
+                                            <ExternalLink size={12} />
+                                        </a>
+                                    ) : (
+                                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No GPS ping recorded</span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="dms-detail-row dms-detail-row-full">
+                                <span className="dms-detail-label">Last Synced Ping</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.dmsLastSyncedAt ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            <Clock size={12} color="var(--sidebar-text)" />
+                                            {new Date(selectedDelivery.dmsLastSyncedAt).toLocaleString()}
+                                        </span>
+                                    ) : '—'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Action Footer Bar ── */}
+                <div className="dms-detail-footer">
+                    <button
+                        type="button"
+                        className="dms-detail-footer-btn-secondary"
+                        onClick={() => setSelectedDelivery(null)}
+                    >
+                        <ArrowLeft size={14} />
+                        <span>Return to Deliveries List</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="dms-detail-footer-btn-primary"
+                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                    >
+                        <span>Open STARS Task Details</span>
+                        <ArrowRight size={14} />
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="dms-tab-container">
@@ -676,6 +1059,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                             <button
                                                 type="button"
+                                                className="dms-table-btn dms-table-track-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedDelivery(item);
+                                                }}
+                                                title="View Live Delivery Tracker"
+                                            >
+                                                <Truck size={12} />
+                                                <span>Track</span>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 className="dms-table-btn"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -707,169 +1102,6 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                     </>
                 )}
             </div>
-
-            {/* ── Shipment Journey Details Drawer / Modal ── */}
-            {selectedDelivery && (
-                <div className="dms-modal-overlay" onClick={() => setSelectedDelivery(null)}>
-                    <div className="dms-modal-card" onClick={e => e.stopPropagation()}>
-                        <div className="dms-modal-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div className="dms-modal-icon-wrap">
-                                    <Truck size={18} />
-                                </div>
-                                <div>
-                                    <h4 className="dms-modal-title">Live Delivery Tracker</h4>
-                                    <span className="dms-modal-waybill">
-                                        Waybill: {selectedDelivery.dmsWaybillNo || 'Pending'}
-                                    </span>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                className="dms-modal-close"
-                                onClick={() => setSelectedDelivery(null)}
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-
-                        <div className="dms-modal-body">
-                            {/* Milestone Tracker */}
-                            <div className="dms-stepper-container">
-                                <div className="dms-stepper">
-                                    <div className="dms-stepper-track">
-                                        <div
-                                            className="dms-stepper-progress"
-                                            style={{
-                                                width: `${(Math.min(getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus), 6) / 6) * 100}%`
-                                            }}
-                                        />
-                                    </div>
-                                    {[
-                                        { title: 'Pending', desc: 'Order Created' },
-                                        { title: 'Processing', desc: 'Preparing Dispatch' },
-                                        { title: 'Assigned', desc: 'Driver Assigned' },
-                                        { title: 'Picked Up', desc: 'Driver Collected' },
-                                        { title: 'In Transit', desc: 'En Route to Hub' },
-                                        { title: 'Out for Delivery', desc: 'Final Mile Delivery' },
-                                        { title: 'Delivered (POD)', desc: 'Proof Confirmed' },
-                                    ].map((step, idx) => {
-                                        const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
-                                        const isDelivered = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
-                                        const isDone = isDelivered ? true : idx < activeIdx;
-                                        const isCurrent = !isDelivered && idx === activeIdx;
-                                        const isUpcoming = idx > activeIdx;
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className={`dms-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
-                                            >
-                                                <div className="dms-step-dot">
-                                                    {isDone ? <Check size={14} strokeWidth={2.5} /> : idx + 1}
-                                                </div>
-                                                <div className="dms-step-info">
-                                                    <span className="dms-step-title">{step.title}</span>
-                                                    <span className="dms-step-desc">{step.desc}</span>
-                                                    {isCurrent && <span className="dms-step-status-tag">In Progress</span>}
-                                                    {isDone && <span className="dms-step-status-tag">Completed</span>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Failure reason if any */}
-                            {selectedDelivery.dmsFailureReason && (
-                                <div className="dms-modal-alert">
-                                    <AlertCircle size={14} style={{ color: '#ee5d50', flexShrink: 0, marginTop: 2 }} />
-                                    <div>
-                                        <strong>Delivery Issue:</strong> {selectedDelivery.dmsFailureReason}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Details Grid */}
-                            <div className="dms-modal-grid">
-                                <div className="dms-modal-field">
-                                    <label>Recipient Name</label>
-                                    <span>{selectedDelivery.recipientName}</span>
-                                </div>
-                                <div className="dms-modal-field">
-                                    <label>Contact Number</label>
-                                    <span>{selectedDelivery.recipientContact}</span>
-                                </div>
-                                <div className="dms-modal-field dms-modal-full">
-                                    <label>Delivery Address</label>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <MapPin size={12} color="var(--primary)" />
-                                        {selectedDelivery.deliveryAddress}
-                                        {selectedDelivery.area && <strong>({selectedDelivery.area})</strong>}
-                                    </span>
-                                </div>
-                                <div className="dms-modal-field">
-                                    <label>Assigned Driver</label>
-                                    <span>{selectedDelivery.courierEmployeeId || 'Not assigned'}</span>
-                                </div>
-                                {selectedDelivery.senderAddress && (
-                                    <div className="dms-modal-field dms-modal-full">
-                                        <label>Sender Pickup Address</label>
-                                        <span>{selectedDelivery.senderAddress}</span>
-                                    </div>
-                                )}
-                                {selectedDelivery.specialInstructions && (
-                                    <div className="dms-modal-field dms-modal-full">
-                                        <label>Special Instructions</label>
-                                        <span>{selectedDelivery.specialInstructions}</span>
-                                    </div>
-                                )}
-                                <div className="dms-modal-field">
-                                    <label>Current Status</label>
-                                    <span>{selectedDelivery.dmsStatus}</span>
-                                </div>
-                                {selectedDelivery.dmsLatitude && selectedDelivery.dmsLongitude && (
-                                    <div className="dms-modal-field dms-modal-full">
-                                        <label>Live GPS Telemetry</label>
-                                        <a
-                                            href={`https://www.google.com/maps?q=${selectedDelivery.dmsLatitude},${selectedDelivery.dmsLongitude}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="dms-gps-link"
-                                            style={{ marginTop: 2, display: 'inline-flex' }}
-                                        >
-                                            <Navigation size={12} />
-                                            <span>Latitude: {selectedDelivery.dmsLatitude}, Longitude: {selectedDelivery.dmsLongitude}</span>
-                                            <ExternalLink size={11} />
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="dms-modal-footer">
-                            <button
-                                type="button"
-                                className="dms-modal-secondary-btn"
-                                onClick={() => setSelectedDelivery(null)}
-                            >
-                                Close
-                            </button>
-                            <button
-                                type="button"
-                                className="dms-modal-primary-btn"
-                                onClick={() => {
-                                    const tId = selectedDelivery.taskId;
-                                    setSelectedDelivery(null);
-                                    onViewTask(tId);
-                                }}
-                            >
-                                <span>Open STARS Task Details</span>
-                                <ArrowRight size={13} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

@@ -1601,13 +1601,14 @@
 
 /* Multi-Stage Delivery Stepper (TaskView) - 7 Stages Matching DMS */
 .tv-dms-stepper-wrap {
-    background: #131b2e;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 18px 16px 14px 16px;
+    padding: 18px 12px 14px 12px;
     position: relative;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+    overflow: visible;
+    margin-bottom: 6px;
 }
 
 .tv-dms-stepper {
@@ -1620,19 +1621,19 @@
 
 .tv-dms-stepper-track {
     position: absolute;
-    top: 14px;
-    left: 7%;
-    right: 7%;
+    top: 31px;
+    left: calc(100% / 14);
+    right: calc(100% / 14);
     height: 3px;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 2px;
+    background: #e2e8f0;
+    border-radius: 999px;
     z-index: 1;
 }
 
 .tv-dms-stepper-progress {
     height: 100%;
-    background: #00A99D;
-    border-radius: 2px;
+    background: linear-gradient(90deg, #059669 0%, #00A99D 100%);
+    border-radius: 999px;
     transition: width 0.4s ease;
 }
 
@@ -1651,64 +1652,82 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.6);
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    color: #64748b;
     font-size: 11px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .tv-dms-step.done .tv-dms-step-dot {
     background: #00A99D;
     border-color: #00A99D;
     color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 169, 157, 0.35);
 }
 
 .tv-dms-step.current .tv-dms-step-dot {
     background: #00A99D;
     border-color: #00A99D;
     color: #ffffff;
-    box-shadow: 0 0 0 6px rgba(0, 169, 157, 0.25);
+    box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.22);
     animation: tv-dms-pulse 2s infinite ease-in-out;
 }
 
 @keyframes tv-dms-pulse {
-    0% { box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.35); }
-    50% { box-shadow: 0 0 0 7px rgba(0, 169, 157, 0.15); }
-    100% { box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.35); }
+    0% { box-shadow: 0 0 0 2px rgba(0, 169, 157, 0.35); }
+    50% { box-shadow: 0 0 0 6px rgba(0, 169, 157, 0.15); }
+    100% { box-shadow: 0 0 0 2px rgba(0, 169, 157, 0.35); }
 }
 
 .tv-dms-step-label {
     font-size: 9.5px;
     font-weight: 700;
-    letter-spacing: 0.4px;
-    color: rgba(255, 255, 255, 0.65);
+    letter-spacing: 0.02em;
+    color: #64748b;
     text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+    word-break: normal;
+    overflow: visible;
+    text-overflow: clip;
+    max-width: 82px;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.tv-dms-step.done .tv-dms-step-label,
+.tv-dms-step.done .tv-dms-step-label {
+    color: #0f172a;
+    font-weight: 700;
+}
+
 .tv-dms-step.current .tv-dms-step-label {
-    color: #ffffff;
+    color: #00A99D;
+    font-weight: 800;
 }
 
 .tv-dms-step-time {
     font-size: 9px;
-    color: rgba(0, 169, 157, 0.9);
-    font-weight: 600;
-    margin-top: -2px;
+    color: #00A99D;
+    font-weight: 700;
+    background: rgba(0, 169, 157, 0.1);
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin-top: 1px;
+    white-space: nowrap;
 }
 
 @media (max-width: 640px) {
     .tv-dms-stepper-wrap {
-        padding: 14px 8px 10px 8px;
+        padding: 14px 6px 10px 6px;
     }
     .tv-dms-step-dot {
         width: 22px;
@@ -1718,9 +1737,11 @@
     .tv-dms-step-label {
         font-size: 8px;
         letter-spacing: 0;
+        max-width: 48px;
+        min-height: 20px;
     }
     .tv-dms-stepper-track {
-        top: 11px;
+        top: 25px;
     }
 }
 
