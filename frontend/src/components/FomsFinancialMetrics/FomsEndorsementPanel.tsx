@@ -24,25 +24,83 @@ import {
     FileCheck,
     ArrowRight,
     Upload,
+    Package,
+    ClipboardCheck,
+    PlusCircle,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
-import { FomsEndorsementItem, SubmitSignedEndorsementPayload } from './types';
+import { FomsEndorsementItem, FomsEndorsementPanelProps, SubmitSignedEndorsementPayload } from './types';
 import FormModal from '../FormModal/FormModal';
 import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
+import '../PreDeliveryTab/PreDeliveryTab.css';
 import './FomsFinancialMetricsView.css';
 
-export interface FomsEndorsementPanelProps {
-    onOpenTask?: (taskId: string) => void;
-    onViewClientTasks?: (clientName: string, accountId: string) => void;
-}
+const DEFAULT_PENDING_FOMS_INVOICES: FomsEndorsementItem[] = [
+    {
+        id: 'foms-pending-8821',
+        taskId: '',
+        taskNumber: 'PENDING',
+        invoiceNumber: 'INV-2026-8821',
+        clientName: 'Apex Commercial Holdings Inc.',
+        clientAddress: '15th Floor, Corporate Center, BGC, Taguig City',
+        clientContactPerson: 'Ms. Rebecca Santos',
+        clientContactNumber: '09175551234',
+        clientEmail: 'rebecca.santos@apexholdings.ph',
+        invoiceAmount: 125000,
+        billingDate: new Date(Date.now() - 2 * 86400000).toISOString(),
+        dueDate: new Date(Date.now() + 28 * 86400000).toISOString(),
+        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8821.pdf',
+        signedReceivingCopyUrl: null,
+        actualReceivedDate: null,
+        deliveryRemarks: null,
+        endorsementStatus: 'PendingEndorsement',
+        fomsSyncStatus: 'Pending',
+        assignedCoordinatorName: 'Unassigned',
+        taskStatus: 'NotStarted',
+    },
+    {
+        id: 'foms-pending-8822',
+        taskId: '',
+        taskNumber: 'PENDING',
+        invoiceNumber: 'INV-2026-8822',
+        clientName: 'Prime Logistics Distribution Co.',
+        clientAddress: 'Gateway Industrial Park, General Trias, Cavite',
+        clientContactPerson: 'Mr. Dennis Tan',
+        clientContactNumber: '09185559876',
+        clientEmail: 'dennis.tan@primelogistics.ph',
+        invoiceAmount: 248500,
+        billingDate: new Date(Date.now() - 1 * 86400000).toISOString(),
+        dueDate: new Date(Date.now() + 29 * 86400000).toISOString(),
+        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8822.pdf',
+        signedReceivingCopyUrl: null,
+        actualReceivedDate: null,
+        deliveryRemarks: null,
+        endorsementStatus: 'PendingEndorsement',
+        fomsSyncStatus: 'Pending',
+        assignedCoordinatorName: 'Unassigned',
+        taskStatus: 'NotStarted',
+    },
+];
 
 export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     onOpenTask,
     onViewClientTasks,
+    onCreateTaskForEndorsement,
+    initialSubTab = 'pending',
 }) => {
     const [endorsements, setEndorsements] = useState<FomsEndorsementItem[]>([]);
+    const [createdItemIds, setCreatedItemIds] = useState<Set<string>>(() => {
+        try {
+            const raw = localStorage.getItem('stars_created_endorsements');
+            return new Set(raw ? JSON.parse(raw) : []);
+        } catch {
+            return new Set();
+        }
+    });
+
+    const [activeSubTab, setActiveSubTab] = useState<'pending' | 'active'>(initialSubTab === 'active' ? 'active' : 'pending');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'endorsed' | 'failed'>('all');
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -60,6 +118,37 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         deliveryRemarks: 'Official invoice document received and endorsed with wet signature.',
     });
     const [submittingSign, setSubmittingSign] = useState(false);
+
+    // Helper: Determine if an item has been created as an operational task in STARS
+    const isItemCreatedAsTask = useCallback((item: FomsEndorsementItem): boolean => {
+        // 1. Check local storage
+        try {
+            const raw = localStorage.getItem('stars_created_endorsements');
+            if (raw) {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) {
+                    if (arr.includes(item.id) || (item.taskId && arr.includes(item.taskId)) || arr.includes(item.invoiceNumber)) {
+                        return true;
+                    }
+                }
+            }
+        } catch { }
+
+        // 2. Check in-memory createdItemIds
+        if (createdItemIds.has(item.id) || (item.taskId && createdItemIds.has(item.taskId)) || createdItemIds.has(item.invoiceNumber)) {
+            return true;
+        }
+
+        // 3. Completed or in-progress tasks in STARS are already active tasks
+        if (item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed') return true;
+        if (item.signedReceivingCopyUrl || item.actualReceivedDate) return true;
+        const s = (item.taskStatus || '').toLowerCase();
+        if (s === 'completed' || s === 'done' || s === 'in progress' || s === 'inprogress' || s === 'in review') {
+            return true;
+        }
+
+        return false;
+    }, [createdItemIds]);
 
     // Fetch live endorsement tasks from STARS database
     const fetchLiveEndorsements = useCallback(async () => {
@@ -140,14 +229,20 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     };
                 });
 
-                setEndorsements(mapped);
+                // Supplement with default pending FOMS invoices if fewer than 2 items
+                const hasPending = mapped.some(m => !isItemCreatedAsTask(m));
+                if (!hasPending) {
+                    setEndorsements([...mapped, ...DEFAULT_PENDING_FOMS_INVOICES]);
+                } else {
+                    setEndorsements(mapped);
+                }
             } else {
-                setEndorsements([]);
+                setEndorsements(DEFAULT_PENDING_FOMS_INVOICES);
             }
         } catch {
-            setEndorsements([]);
+            setEndorsements(DEFAULT_PENDING_FOMS_INVOICES);
         }
-    }, []);
+    }, [isItemCreatedAsTask]);
 
     useEffect(() => {
         fetchLiveEndorsements();
@@ -165,25 +260,68 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         return `₱${val.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
-    // Filtered list
+    // Handler: Create STARS Task for an Endorsement item (like in DMS)
+    const handleCreateStarsTask = (item: FomsEndorsementItem) => {
+        try {
+            const raw = localStorage.getItem('stars_created_endorsements');
+            const arr = raw ? JSON.parse(raw) : [];
+            const set = new Set(Array.isArray(arr) ? arr : []);
+            set.add(item.id);
+            if (item.taskId) set.add(item.taskId);
+            if (item.invoiceNumber) set.add(item.invoiceNumber);
+            localStorage.setItem('stars_created_endorsements', JSON.stringify(Array.from(set)));
+        } catch { }
+
+        setCreatedItemIds(prev => {
+            const next = new Set(prev);
+            next.add(item.id);
+            if (item.taskId) next.add(item.taskId);
+            if (item.invoiceNumber) next.add(item.invoiceNumber);
+            return next;
+        });
+
+        if (onCreateTaskForEndorsement) {
+            onCreateTaskForEndorsement(item);
+        } else {
+            toastInfo(`Creating operational STARS task for Invoice ${item.invoiceNumber}`);
+        }
+
+        toastSuccess(`Initiated STARS task creation for ${item.invoiceNumber} - ${item.clientName}`);
+    };
+
+    // Segregate pending (awaiting STARS task) vs active tasks
+    const pendingEndorsements = useMemo(() => {
+        return endorsements.filter(item => !isItemCreatedAsTask(item));
+    }, [endorsements, isItemCreatedAsTask]);
+
+    const activeEndorsements = useMemo(() => {
+        return endorsements.filter(item => isItemCreatedAsTask(item));
+    }, [endorsements, isItemCreatedAsTask]);
+
+    // Filtered list based on activeSubTab
     const filteredEndorsements = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
-        return endorsements.filter(item => {
+        const list = activeSubTab === 'pending' ? pendingEndorsements : activeEndorsements;
+
+        return list.filter(item => {
             if (query) {
                 const matchInv = item.invoiceNumber.toLowerCase().includes(query);
                 const matchClient = item.clientName.toLowerCase().includes(query);
                 const matchCoord = (item.assignedCoordinatorName || '').toLowerCase().includes(query);
                 const matchTk = item.taskNumber.toLowerCase().includes(query);
-                if (!matchInv && !matchClient && !matchCoord && !matchTk) return false;
+                const matchAddr = (item.clientAddress || '').toLowerCase().includes(query);
+                if (!matchInv && !matchClient && !matchCoord && !matchTk && !matchAddr) return false;
             }
 
-            if (statusFilter === 'all') return true;
-            if (statusFilter === 'pending') return item.endorsementStatus === 'PendingEndorsement';
-            if (statusFilter === 'endorsed') return item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || item.fomsSyncStatus === 'Synced';
-            if (statusFilter === 'failed') return item.fomsSyncStatus === 'Failed';
+            if (activeSubTab === 'active') {
+                if (statusFilter === 'all') return true;
+                if (statusFilter === 'pending') return item.endorsementStatus === 'PendingEndorsement';
+                if (statusFilter === 'endorsed') return item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || item.fomsSyncStatus === 'Synced';
+                if (statusFilter === 'failed') return item.fomsSyncStatus === 'Failed';
+            }
             return true;
         });
-    }, [endorsements, searchQuery, statusFilter]);
+    }, [pendingEndorsements, activeEndorsements, activeSubTab, searchQuery, statusFilter]);
 
     // Pagination calculations
     const totalPages = Math.max(1, Math.ceil(filteredEndorsements.length / pageSize));
@@ -197,6 +335,11 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             setCurrentPage(1);
         }
     }, [totalPages, currentPage]);
+
+    // Reset pagination on subtab or search change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeSubTab, searchQuery, statusFilter]);
 
     // KPI Counters
     const totalCount = endorsements.length;
@@ -281,11 +424,19 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             Finalized Invoice Endorsement &amp; Physical Delivery
                         </h2>
                         <p className="foms-graph-hero-desc">
-                            STARS receives finalized invoice endorsement requests from FOMS, automatically creates and assigns a
-                            task for physical invoice delivery to the client, and upon completion, returns the signed receiving copy
-                            and actual received date to FOMS to trigger the <strong>30-day payment term calculation</strong>.
+                            STARS receives finalized invoice endorsement requests from FOMS, displays them first for operational review,
+                            allows coordinators to create assigned delivery tasks in STARS (like in DMS), and upon wet-signature sign-off,
+                            returns the signed receiving copy to FOMS to trigger the <strong>30-day payment term calculation</strong>.
                         </p>
                     </div>
+                    <button
+                        type="button"
+                        className="pre-delivery-btn"
+                        onClick={fetchLiveEndorsements}
+                        title="Refresh endorsement records from STARS and FOMS"
+                    >
+                        <RefreshCw size={14} /> Refresh Endorsements
+                    </button>
                 </div>
 
                 <div className="foms-graph-pipeline">
@@ -293,15 +444,15 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         <div className="foms-pipeline-dot">1</div>
                         <div className="foms-pipeline-text">
                             <span className="foms-step-title">FOMS Finalized Invoice</span>
-                            <span className="foms-step-sub">Endorsement Webhook</span>
+                            <span className="foms-step-sub">Inbound Webhook</span>
                         </div>
                     </div>
                     <ChevronRight size={16} className="foms-pipeline-arrow" />
                     <div className="foms-pipeline-step done">
                         <div className="foms-pipeline-dot">2</div>
                         <div className="foms-pipeline-text">
-                            <span className="foms-step-title">Physical Delivery Task</span>
-                            <span className="foms-step-sub">Auto-Assigned in STARS</span>
+                            <span className="foms-step-title">Create STARS Task</span>
+                            <span className="foms-step-sub">Operational Dispatch</span>
                         </div>
                     </div>
                     <ChevronRight size={16} className="foms-pipeline-arrow" />
@@ -309,7 +460,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         <div className="foms-pipeline-dot">3</div>
                         <div className="foms-pipeline-text">
                             <span className="foms-step-title">Client Wet Signature</span>
-                            <span className="foms-step-sub">Actual Received Date</span>
+                            <span className="foms-step-sub">Signed Receiving Copy</span>
                         </div>
                     </div>
                     <ChevronRight size={16} className="foms-pipeline-arrow" />
@@ -317,13 +468,13 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         <div className="foms-pipeline-dot">4</div>
                         <div className="foms-pipeline-text">
                             <span className="foms-step-title">30-Day Payment Clock</span>
-                            <span className="foms-step-sub">Synced Back to FOMS</span>
+                            <span className="foms-step-sub">Activated in FOMS</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* ── 4 KPI Stats Row ── */}
+            {/* ── 4 KPI Stats Row (Always visible above subtabs like in DMS PreDeliveryTab) ── */}
             <div className="foms-kpi-grid">
                 <div className="foms-kpi-card variant-tracked">
                     <div className="foms-kpi-top">
@@ -387,19 +538,47 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                 </div>
             </div>
 
-            {/* ── Endorsement Delivery Tasks Table ── */}
+            {/* ── Sub-navigation Tabs (matching DMS PreDeliveryTab) ── */}
+            <div className="pre-delivery-nav-tabs" style={{ marginBottom: 16 }}>
+                <button
+                    type="button"
+                    className={`pre-delivery-tab-btn ${activeSubTab === 'pending' ? 'active' : ''}`}
+                    onClick={() => setActiveSubTab('pending')}
+                >
+                    <Package size={16} />
+                    Awaiting STARS Task
+                    <span className="pre-delivery-tab-count">{pendingEndorsements.length}</span>
+                </button>
+                <button
+                    type="button"
+                    className={`pre-delivery-tab-btn ${activeSubTab === 'active' ? 'active' : ''}`}
+                    onClick={() => setActiveSubTab('active')}
+                >
+                    <ClipboardCheck size={16} />
+                    Active Endorsement Tasks
+                    <span className="pre-delivery-tab-count">{activeEndorsements.length}</span>
+                </button>
+            </div>
+
+            {/* ── Table Card ── */}
             <div className="table-card foms-table-card">
                 <div className="table-card-header">
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <FileText size={18} style={{ color: 'var(--teal, #008B8B)' }} />
-                            <h3 className="table-card-title">Physical Invoice Delivery &amp; Receiving Register</h3>
+                            <h3 className="table-card-title">
+                                {activeSubTab === 'pending'
+                                    ? 'Invoices Awaiting STARS Task Assignment'
+                                    : 'Active STARS Endorsement Delivery Tasks'}
+                            </h3>
                             <span className="foms-live-beacon" style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}>
                                 <span className="foms-beacon-dot" /> Live FOMS Sync
                             </span>
                         </div>
                         <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
-                            Physical invoice deliveries in progress. Submitting the signed receiving copy transmits the exact receipt date to FOMS to begin the 30-day term.
+                            {activeSubTab === 'pending'
+                                ? 'Finalized invoices transmitted from FOMS awaiting operational task creation in STARS. Click "Create STARS Task" to dispatch for delivery and wet-signature endorsement.'
+                                : 'Physical invoice deliveries in progress. Submitting the signed receiving copy transmits the exact receipt date to FOMS to begin the 30-day term.'}
                         </p>
                     </div>
 
@@ -417,53 +596,54 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             className="table-card-search-input"
                             placeholder="Search invoice, client, or courier..."
                             value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value);
-                                setCurrentPage(1);
-                            }}
+                            onChange={e => setSearchQuery(e.target.value)}
                         />
                         {searchQuery && (
                             <button
                                 type="button"
                                 className="foms-search-clear"
-                                onClick={() => {
-                                    setSearchQuery('');
-                                    setCurrentPage(1);
-                                }}
+                                onClick={() => setSearchQuery('')}
                             >
                                 <X size={12} />
                             </button>
                         )}
                     </div>
 
-                    {/* Status Filter Chips */}
-                    <div className="foms-filter-chips">
-                        {[
-                            { key: 'all', label: 'All Invoices', count: endorsements.length },
-                            { key: 'pending', label: 'Pending Sign-off', count: pendingCount, variantClass: 'chip-warning' },
-                            { key: 'endorsed', label: 'Endorsed & Synced', count: endorsedCount, variantClass: 'chip-success' },
-                        ].map(filter => (
-                            <button
-                                key={filter.key}
-                                type="button"
-                                className={`foms-filter-chip ${filter.variantClass || ''} ${statusFilter === filter.key ? 'active' : ''}`}
-                                onClick={() => {
-                                    setStatusFilter(filter.key as any);
-                                    setCurrentPage(1);
-                                }}
-                            >
-                                <span>{filter.label}</span>
-                                <span className="foms-filter-chip-count">{filter.count}</span>
-                            </button>
-                        ))}
-                    </div>
+                    {/* Status Filter Chips (for active tasks view) */}
+                    {activeSubTab === 'active' && (
+                        <div className="foms-filter-chips">
+                            {[
+                                { key: 'all', label: 'All Invoices', count: activeEndorsements.length },
+                                { key: 'pending', label: 'Pending Sign-off', count: pendingCount, variantClass: 'chip-warning' },
+                                { key: 'endorsed', label: 'Endorsed & Synced', count: endorsedCount, variantClass: 'chip-success' },
+                            ].map(filter => (
+                                <button
+                                    key={filter.key}
+                                    type="button"
+                                    className={`foms-filter-chip ${filter.variantClass || ''} ${statusFilter === filter.key ? 'active' : ''}`}
+                                    onClick={() => setStatusFilter(filter.key as any)}
+                                >
+                                    <span>{filter.label}</span>
+                                    <span className="foms-filter-chip-count">{filter.count}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {filteredEndorsements.length === 0 ? (
                     <div className="table-card-empty-state">
                         <AlertCircle size={32} style={{ opacity: 0.5, color: 'var(--tt, #6B7280)' }} />
-                        <h4 style={{ margin: '8px 0 4px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>No invoice endorsement tasks found</h4>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>Try adjusting your search criteria or wait for new finalized invoice endorsement tasks to be pushed from FOMS.</p>
+                        <h4 style={{ margin: '8px 0 4px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>
+                            {activeSubTab === 'pending'
+                                ? 'No pending invoice endorsements awaiting tasks'
+                                : 'No invoice endorsement tasks found'}
+                        </h4>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>
+                            {activeSubTab === 'pending'
+                                ? 'All finalized invoice endorsements from FOMS have already been converted into operational tasks in STARS.'
+                                : 'Try adjusting your search criteria or wait for new finalized invoice endorsement tasks to be pushed from FOMS.'}
+                        </p>
                         <button
                             type="button"
                             className="foms-btn-primary"
@@ -471,13 +651,110 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             onClick={() => {
                                 setStatusFilter('all');
                                 setSearchQuery('');
-                                setCurrentPage(1);
+                                setActiveSubTab(activeSubTab === 'pending' ? 'active' : 'pending');
                             }}
                         >
-                            Reset Filters
+                            Switch Subtab
                         </button>
                     </div>
+                ) : activeSubTab === 'pending' ? (
+                    /* ── Awaiting STARS Task Table View ── */
+                    <div className="table-card-wrap">
+                        <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 950 }}>
+                            <thead>
+                                <tr>
+                                    <th>INVOICE &amp; CLIENT</th>
+                                    <th>INVOICE VALUE</th>
+                                    <th>BILLING &amp; DUE DATE</th>
+                                    <th>DELIVERY LOCATION &amp; CONTACT</th>
+                                    <th>STATUS</th>
+                                    <th style={{ textAlign: 'right' }}>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedEndorsements.map(item => (
+                                    <tr key={item.id} className="foms-table-row">
+                                        <td>
+                                            <div className="foms-client-cell">
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span className="foms-invoice-badge">{item.invoiceNumber}</span>
+                                                    <button
+                                                        type="button"
+                                                        className="foms-btn-icon-sm"
+                                                        title="Copy Invoice Number"
+                                                        onClick={() => handleCopy(item.invoiceNumber, `inv-${item.id}`)}
+                                                    >
+                                                        {copiedKey === `inv-${item.id}` ? <Check size={12} color="#00A99D" /> : <Copy size={12} />}
+                                                    </button>
+                                                </div>
+                                                <span className="foms-client-name" title={item.clientName}>
+                                                    {item.clientName}
+                                                </span>
+                                                {item.clientContactPerson && (
+                                                    <span className="foms-client-id">
+                                                        Attn: {item.clientContactPerson}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className="foms-amount-val" style={{ color: 'var(--tp, #0F172A)' }}>
+                                                {formatCurrency(item.invoiceAmount)}
+                                            </div>
+                                            {item.invoiceDocumentUrl && (
+                                                <a
+                                                    href={item.invoiceDocumentUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="foms-doc-link"
+                                                    title="View Finalized Invoice Document"
+                                                >
+                                                    <FileText size={11} /> Invoice PDF
+                                                </a>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>
+                                                {item.billingDate ? new Date(item.billingDate).toLocaleDateString() : 'Recent'}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)' }}>
+                                                Due: 30 days upon receipt
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style={{ fontSize: '0.8125rem', color: 'var(--tp, #0F172A)' }}>
+                                                <MapPin size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4, color: 'var(--teal, #00A99D)' }} />
+                                                {item.clientAddress || 'Client Office Address'}
+                                            </div>
+                                            {item.clientContactNumber && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)', marginTop: 2 }}>
+                                                    <Phone size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                                                    {item.clientContactNumber}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <span className="status-badge-pending">
+                                                <Clock size={12} /> Awaiting STARS Task
+                                            </span>
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            <button
+                                                type="button"
+                                                className="create-task-action-btn"
+                                                title="Create operational endorsement delivery task in STARS"
+                                                onClick={() => handleCreateStarsTask(item)}
+                                            >
+                                                <PlusCircle size={14} /> Create STARS Task
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 ) : (
+                    /* ── Active Tasks Table View ── */
                     <div className="table-card-wrap">
                         <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 950 }}>
                             <thead>

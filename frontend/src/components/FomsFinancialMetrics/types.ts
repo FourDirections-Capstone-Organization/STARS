@@ -88,6 +88,13 @@ export interface SubmitSignedEndorsementPayload {
     deliveryRemarks?: string;
 }
 
+export interface FomsEndorsementPanelProps {
+    onOpenTask?: (taskId: string) => void;
+    onViewClientTasks?: (clientName: string, accountId: string) => void;
+    onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
+    initialSubTab?: 'pending' | 'active' | 'all';
+}
+
 export interface FomsFinancialMetricsViewProps {
     embedded?: boolean;
     showHeader?: boolean;
@@ -95,4 +102,5 @@ export interface FomsFinancialMetricsViewProps {
     initialTab?: 'balances' | 'routing' | 'endorsement';
     onViewClientTasks?: (clientName: string, accountId: string) => void;
     onOpenTask?: (taskId: string) => void;
+    onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
 }

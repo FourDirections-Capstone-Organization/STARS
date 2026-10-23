@@ -88,7 +88,7 @@ import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
-import { FomsFinancialMetricsView } from '../../components/FomsFinancialMetrics';
+import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -2417,6 +2417,7 @@ const DashboardTab: React.FC<{
                     {dashboardMetricsMode === 'foms' ? (
                         <FomsFinancialMetricsView
                             embedded={true}
+                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
                             onViewClientTasks={() => {
                                 onNewTask ? onNewTask() : null;
                             }}
@@ -7968,7 +7969,26 @@ export default function OpsAdminDashboard() {
     ], [activeTab, handleNavChange]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const CLASSIFICATION_MAP: Record<number, string> = { 0: 'routine', 1: 'special' };
-    const tmTasks = useMemo(() => tasks.map(t => ({
+    const tmTasks = useMemo(() => {
+        let createdEndorsements: Set<string>;
+        try {
+            createdEndorsements = new Set(JSON.parse(localStorage.getItem('stars_created_endorsements') || '[]'));
+        } catch {
+            createdEndorsements = new Set();
+        }
+
+        return tasks.filter(t => {
+            const title = t.taskTitle || '';
+            const isEndorsement = title.includes('[FOMS Endorsement]') || title.includes('[Invoice Endorsement]') || (t.taskCategory === 'Financial Operations' && title.includes('Invoice'));
+            if (isEndorsement) {
+                const isCompletedOrInProgress = t.taskStatus === 'Completed' || t.taskStatus === 'Done' || t.taskStatus === 'In Progress' || t.taskStatus === 'InProgress' || t.taskStatus === 'Pending Admin Review';
+                const wasCreatedExplicitly = createdEndorsements.has(t.taskId) || createdEndorsements.has(t.taskNumber) || Array.from(createdEndorsements).some(id => title.includes(id));
+                if (!isCompletedOrInProgress && !wasCreatedExplicitly) {
+                    return false;
+                }
+            }
+            return true;
+        }).map(t => ({
         id: t.taskId,
         name: t.taskTitle,
         taskNumber: t.taskNumber || t.taskReferenceNumber,
@@ -7992,7 +8012,8 @@ export default function OpsAdminDashboard() {
         isArchived: false,
         isDeleted: t.deleted || t.Deleted || t.taskStatus === 'Cancelled' || false,
         isConfidential: t.isConfidential ?? false,
-    })), [tasks]);
+    }));
+    }, [tasks]);
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     const [loadingTasks, setLoadingTasks] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -8118,6 +8139,28 @@ export default function OpsAdminDashboard() {
                 dmsWaybillNo: order.waybillNo,
                 dmsStatus: order.status,
             }
+        });
+        setShowNew(true);
+    };
+
+    const handleCreateTaskFromEndorsement = (item: FomsEndorsementItem) => {
+        let deadline = '';
+        if (item.dueDate) {
+            try {
+                const ed = new Date(item.dueDate);
+                if (!isNaN(ed.getTime())) {
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    deadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                }
+            } catch { }
+        }
+        const amountStr = item.invoiceAmount ? `₱${item.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₱89,500.00';
+        setInitialTaskData({
+            taskTitle: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
+            taskDescription: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
+            taskCategory: 'Financial Operations',
+            priority: 'High',
+            dueAt: deadline,
         });
         setShowNew(true);
     };
@@ -9622,6 +9665,7 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'finance' && (
                     <div className="dashboard-content">
                         <FomsFinancialMetricsView
+                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
                             onViewClientTasks={() => {
                                 handleNavChange('tasks');
                                 setTaskTab('active');

@@ -85,7 +85,7 @@ import { performLogout } from '../../components/Auth/authRedirect';
 import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
-import { FomsFinancialMetricsView } from '../../components/FomsFinancialMetrics';
+import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3180,7 +3180,29 @@ export default function Dashboard() {
             const res = await api.get('/api/Task', { pageNumber: 1, pageSize: 500 });
             const json = res.data;
             const raw = Array.isArray(json) ? json : (Array.isArray(json?.data?.items) ? json.data.items : (Array.isArray(json?.data) ? json.data : []));
-            setTmTasks(raw.map((t: any) => {
+            
+            let createdEndorsements: Set<string>;
+            try {
+                createdEndorsements = new Set(JSON.parse(localStorage.getItem('stars_created_endorsements') || '[]'));
+            } catch {
+                createdEndorsements = new Set();
+            }
+
+            const filteredRaw = raw.filter((t: any) => {
+                const title = t.title || t.taskTitle || '';
+                const isEndorsement = title.includes('[FOMS Endorsement]') || title.includes('[Invoice Endorsement]');
+                if (isEndorsement) {
+                    const s = String(t.status || t.taskStatus || '').toLowerCase();
+                    const isCompletedOrInProgress = s === 'completed' || s === 'done' || s === 'inprogress' || s === 'in progress' || t.status === 1 || t.status === 2 || t.status === 3;
+                    const wasCreatedExplicitly = createdEndorsements.has(String(t.id || t.taskId)) || createdEndorsements.has(String(t.taskNumber || '')) || Array.from(createdEndorsements).some(id => title.includes(id));
+                    if (!isCompletedOrInProgress && !wasCreatedExplicitly) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            setTmTasks(filteredRaw.map((t: any) => {
                 let statusVal: TMTask['status'] = 'Backlog';
                 const s = t.status;
                 if (typeof s === 'number') {
@@ -3580,6 +3602,28 @@ export default function Dashboard() {
             dmsStatus: order.status,
         } as any);
         setNewEnableDelivery(true);
+        setShowNewTask(true);
+    };
+
+    const handleCreateTaskFromEndorsement = (item: FomsEndorsementItem) => {
+        let deadline = '';
+        if (item.dueDate) {
+            try {
+                const ed = new Date(item.dueDate);
+                if (!isNaN(ed.getTime())) {
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    deadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                }
+            } catch { }
+        }
+        const amountStr = item.invoiceAmount ? `₱${item.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₱89,500.00';
+        setNewTaskForm(prev => ({
+            ...prev,
+            title: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
+            description: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
+            priority: 'High',
+            deadline: deadline,
+        }));
         setShowNewTask(true);
     };
 
@@ -4521,6 +4565,7 @@ export default function Dashboard() {
                 {activeTab === 'finance' && (
                     <div className="dashboard-content">
                         <FomsFinancialMetricsView
+                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
                             onViewClientTasks={() => {
                                 handleNavChange('tasks');
                             }}

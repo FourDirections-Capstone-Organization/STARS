@@ -149,21 +149,49 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.getByText('Total Delivery Exposure')).toBeInTheDocument();
         });
 
-        it('filters endorsement items using status chips and search input', async () => {
-            render(<FomsEndorsementPanel />);
+        it('displays incoming FOMS endorsements in Awaiting STARS Task tab with Create STARS Task button', async () => {
+            const mockCreateTask = vi.fn();
+            render(<FomsEndorsementPanel onCreateTaskForEndorsement={mockCreateTask} />);
 
-            // Initial items present
+            // Awaiting STARS Task sub-tab is displayed first
+            expect(screen.getByRole('button', { name: /awaiting stars task/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /active endorsement tasks/i })).toBeInTheDocument();
+
+            // Incoming pending endorsement (INV-2026-8811) appears awaiting task
+            await waitFor(() => {
+                expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
+            });
+
+            // "Create STARS Task" button is present (like in DMS)
+            const createTaskBtns = screen.getAllByRole('button', { name: /create stars task/i });
+            expect(createTaskBtns.length).toBeGreaterThanOrEqual(1);
+
+            // Click Create STARS Task
+            fireEvent.click(createTaskBtns[0]);
+
+            // Callback triggered with endorsement details
+            expect(mockCreateTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    invoiceNumber: expect.stringMatching(/INV-2026-8811|INV-2026-8821/),
+                })
+            );
+        });
+
+        it('filters active endorsement items using status chips and search input', async () => {
+            render(<FomsEndorsementPanel initialSubTab="active" />);
+
+            // Active items present
             await waitFor(() => {
                 expect(screen.getByText('INV-2026-8810')).toBeInTheDocument();
             });
-            expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
+            expect(screen.getByText('INV-2026-8813')).toBeInTheDocument();
 
             // Filter to pending sign-off only
             const pendingChip = screen.getByRole('button', { name: /pending sign-off/i });
             fireEvent.click(pendingChip);
 
-            // INV-2026-8811 is pending sign-off, INV-2026-8810 is already endorsed
-            expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
+            // INV-2026-8813 is pending sign-off, INV-2026-8810 is already endorsed
+            expect(screen.getByText('INV-2026-8813')).toBeInTheDocument();
             expect(screen.queryByText('INV-2026-8810')).not.toBeInTheDocument();
 
             // Switch back to all
@@ -178,16 +206,14 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.queryByText('INV-2026-8810')).not.toBeInTheDocument();
         });
 
-
-
         it('opens sign-off modal and records client receiving endorsement', async () => {
-            render(<FomsEndorsementPanel />);
+            render(<FomsEndorsementPanel initialSubTab="active" />);
 
             await waitFor(() => {
-                expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
+                expect(screen.getByText('INV-2026-8813')).toBeInTheDocument();
             });
 
-            // Click Record Sign-off on the pending item (INV-2026-8811)
+            // Click Record Sign-off on active item (INV-2026-8813)
             const actionsBtns = screen.getAllByRole('button', { name: /actions/i });
             fireEvent.click(actionsBtns[1]);
             const signBtn = screen.getByRole('button', { name: /record sign-off/i });

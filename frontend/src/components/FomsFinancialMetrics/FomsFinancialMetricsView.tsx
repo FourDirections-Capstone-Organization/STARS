@@ -52,6 +52,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     initialTab = 'balances',
     onViewClientTasks,
     onOpenTask,
+    onCreateTaskForEndorsement,
 }) => {
     const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement'>(initialTab || 'balances');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
@@ -334,6 +335,8 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 <FomsEndorsementPanel
                     onOpenTask={onOpenTask}
                     onViewClientTasks={onViewClientTasks}
+                    onCreateTaskForEndorsement={onCreateTaskForEndorsement}
+                    initialSubTab="pending"
                 />
             ) : activeHubTab === 'routing' ? (
                 <FomsGraphRoutingPanel
