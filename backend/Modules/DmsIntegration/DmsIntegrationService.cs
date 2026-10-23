@@ -714,7 +714,9 @@ public class DmsIntegrationService : IDmsIntegrationService
     {
         var details = await _db.TaskDeliveryDetails
             .Include(d => d.Task)
-            .OrderByDescending(d => d.UpdatedAt ?? d.CreatedAt)
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Task != null ? d.Task.CreatedAt : d.CreatedAt)
+            .ThenByDescending(d => d.DmsOrderId ?? 0)
             .ToListAsync();
 
         var list = details.Select(d => new DmsDeliveryItemDTO

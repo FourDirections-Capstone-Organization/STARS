@@ -466,9 +466,10 @@
 .dms-modal-card {
     background: #ffffff;
     border-radius: 14px;
-    width: 100%;
-    max-width: 640px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    width: min(960px, 96vw);
+    max-width: 960px;
+    max-height: 90vh;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
     border: 1px solid var(--border);
     overflow: hidden;
     display: flex;
@@ -479,7 +480,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 16px 24px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-input, #f8fafc);
 }
@@ -523,10 +524,12 @@
 }
 
 .dms-modal-body {
-    padding: 20px;
+    padding: 20px 24px;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    max-height: calc(90vh - 130px);
 }
 
 /* Stepper */
@@ -534,9 +537,10 @@
     background: var(--bg-card, #ffffff);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 20px 16px 14px;
+    padding: 22px 20px 16px;
     margin-bottom: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    overflow-x: auto;
 }
 
 .dms-stepper {
@@ -545,13 +549,14 @@
     justify-content: space-between;
     position: relative;
     width: 100%;
+    min-width: 780px;
 }
 
 .dms-stepper-track {
     position: absolute;
     top: 15px;
-    left: 45px;
-    right: 45px;
+    left: calc(100% / 14);
+    right: calc(100% / 14);
     height: 3px;
     background: #e2e8f0;
     z-index: 1;
@@ -567,13 +572,14 @@
 
 .dms-step {
     flex: 1;
+    min-width: 105px;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
     position: relative;
     z-index: 2;
-    padding: 0 4px;
+    padding: 0 6px;
 }
 
 .dms-step-dot {

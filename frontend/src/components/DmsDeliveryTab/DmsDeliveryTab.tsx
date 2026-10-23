@@ -142,7 +142,13 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                 const res = await api.get('/api/dms-integration/deliveries');
                 const list = res?.data?.data ?? res?.data;
                 if (Array.isArray(list)) {
-                    setDeliveries(list);
+                    const sorted = [...list].sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        if (dateB !== dateA) return dateB - dateA;
+                        return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
+                    });
+                    setDeliveries(sorted);
                     return;
                 }
             } catch {
@@ -201,7 +207,13 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
 
             const fetchedDeliveries = results
                 .filter(r => r.status === 'fulfilled' && r.value !== null)
-                .map(r => (r as PromiseFulfilledResult<DmsDeliveryItem>).value);
+                .map(r => (r as PromiseFulfilledResult<DmsDeliveryItem>).value)
+                .sort((a, b) => {
+                    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    if (dateB !== dateA) return dateB - dateA;
+                    return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
+                });
 
             setDeliveries(fetchedDeliveries);
         } catch {
@@ -256,9 +268,9 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         }
     };
 
-    // Filter and search
+    // Filter, search, and sort (most recent created record first)
     const filteredDeliveries = useMemo(() => {
-        return deliveries.filter(d => {
+        const list = deliveries.filter(d => {
             // Status filter
             const s = (d.dmsStatus || '').toLowerCase();
             if (statusFilter === 'transit' && !(s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out'))) return false;
@@ -278,6 +290,21 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                 (d.courierEmployeeId && d.courierEmployeeId.toLowerCase().includes(q)) ||
                 (d.dmsStatus && d.dmsStatus.toLowerCase().includes(q))
             );
+        });
+
+        // Always sort with most recent created record on top
+        return list.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (timeB !== timeA) return timeB - timeA;
+
+            const orderA = a.dmsOrderId ?? 0;
+            const orderB = b.dmsOrderId ?? 0;
+            if (orderB !== orderA) return orderB - orderA;
+
+            const numA = parseInt(String(a.taskNumber || a.taskReferenceNumber || '0').replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(String(b.taskNumber || b.taskReferenceNumber || '0').replace(/\D/g, ''), 10) || 0;
+            return numB - numA;
         });
     }, [deliveries, statusFilter, searchQuery]);
 
