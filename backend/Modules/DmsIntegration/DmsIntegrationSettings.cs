@@ -7,7 +7,7 @@ public class DmsIntegrationSettings
     /// <summary>
     /// Base URL of the DMS API, e.g. https://dts-api-gab-byafd0h2aha6a9c9.japaneast-01.azurewebsites.net
     /// </summary>
-    public string BaseUrl { get; set; } = string.Empty;
+    public string BaseUrl { get; set; } = "https://dts-api-gab-byafd0h2aha6a9c9.japaneast-01.azurewebsites.net";
 
     /// <summary>
     /// Outbound API key presented in X-Api-Key when STARS calls DMS.

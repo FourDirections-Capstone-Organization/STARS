@@ -220,11 +220,12 @@ export interface AuthHandoffPayload {
     role?: string;
     employeeId?: string;
     employeeName?: string;
+    system?: string;
 }
 
 /**
  * Redirects the browser to the external portal with authentication parameters passed via hash fragment:
- * `${redirect_uri}#token=${token}&refreshToken=${refreshToken}&role=${role}&employeeId=${employeeId}&employeeName=${encodeURIComponent(employeeName)}`
+ * `${redirect_uri}#token=${token}&refreshToken=${refreshToken}&role=${role}&employeeId=${employeeId}&employeeName=${encodeURIComponent(employeeName)}&system=${system}`
  */
 export function redirectToExternalPortal(targetUrl: string, authData: AuthHandoffPayload): void {
     clearStoredRedirectUri();
@@ -234,10 +235,11 @@ export function redirectToExternalPortal(targetUrl: string, authData: AuthHandof
     const role = authData.role || '';
     const employeeId = authData.employeeId || '';
     const employeeName = authData.employeeName || '';
+    const system = authData.system || 'stars';
 
     // Strip existing hash fragment if any
     const baseTarget = targetUrl.split('#')[0];
-    const hashFragment = `token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}&role=${encodeURIComponent(role)}&employeeId=${encodeURIComponent(employeeId)}&employeeName=${encodeURIComponent(employeeName)}`;
+    const hashFragment = `token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}&role=${encodeURIComponent(role)}&employeeId=${encodeURIComponent(employeeId)}&employeeName=${encodeURIComponent(employeeName)}&system=${encodeURIComponent(system)}`;
 
     window.location.href = `${baseTarget}#${hashFragment}`;
 }
