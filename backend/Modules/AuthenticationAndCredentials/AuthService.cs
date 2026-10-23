@@ -462,7 +462,13 @@ public class AuthService : IAuthService
             PresenceStatus = user.LastActivityAt.HasValue
                 && (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes <= 15
                 ? "Online"
-                : "Offline"
+                : "Offline",
+            AllowedSystems = user.AllowedSystems ?? "STARS",
+            DmsRole = user.DmsRole ?? ((user.AllowedSystems != null && user.AllowedSystems.Contains("DMS")) ? "Encoder" : null),
+            DmsAreas = !string.IsNullOrWhiteSpace(user.DmsAreas)
+                ? user.DmsAreas.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                : ((user.AllowedSystems != null && user.AllowedSystems.Contains("DMS")) ? new List<string> { "Manila" } : null),
+            FomsRole = user.FomsRole ?? ((user.AllowedSystems != null && user.AllowedSystems.Contains("FOMS")) ? "Accountant" : null)
         };
 
         return ApiResponseDTO<UserResponseDTO>.Success(response);
