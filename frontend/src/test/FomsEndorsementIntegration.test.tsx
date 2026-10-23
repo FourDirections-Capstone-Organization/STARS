@@ -178,15 +178,7 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.queryByText('INV-2026-8810')).not.toBeInTheDocument();
         });
 
-        it('opens the 30-Day Term Architecture explanation modal', () => {
-            render(<FomsEndorsementPanel />);
 
-            const archBtn = screen.getByRole('button', { name: /30-day term architecture/i });
-            fireEvent.click(archBtn);
-
-            expect(screen.getByText(/FOMS Integration 1: Endorsement & 30-Day Term Flow/i)).toBeInTheDocument();
-            expect(screen.getByText('End-to-End Delivery Architecture')).toBeInTheDocument();
-        });
 
         it('opens sign-off modal and records client receiving endorsement', async () => {
             render(<FomsEndorsementPanel />);

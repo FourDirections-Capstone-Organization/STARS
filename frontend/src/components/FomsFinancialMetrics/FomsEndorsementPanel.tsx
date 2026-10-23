@@ -61,9 +61,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     });
     const [submittingSign, setSubmittingSign] = useState(false);
 
-    // Architecture details modal
-    const [showArchModal, setShowArchModal] = useState(false);
-
     // Fetch live endorsement tasks from STARS database
     const fetchLiveEndorsements = useCallback(async () => {
         try {
@@ -261,17 +258,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             task for physical invoice delivery to the client, and upon completion, returns the signed receiving copy
                             and actual received date to FOMS to trigger the <strong>30-day payment term calculation</strong>.
                         </p>
-                    </div>
-
-                    <div className="foms-graph-hero-actions">
-                        <button
-                            type="button"
-                            className="foms-btn-primary"
-                            onClick={() => setShowArchModal(true)}
-                        >
-                            <Sparkles size={14} />
-                            <span>30-Day Term Architecture</span>
-                        </button>
                     </div>
                 </div>
 
@@ -782,74 +768,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                             </button>
                         </div>
                     </form>
-                </FormModal>
-            )}
-
-
-
-            {/* ── Architecture Diagram Modal ── */}
-            {showArchModal && (
-                <FormModal
-                    isOpen={showArchModal}
-                    onClose={() => setShowArchModal(false)}
-                    title="FOMS Integration 1: Endorsement & 30-Day Term Flow"
-                    subtitle="How STARS and FOMS exchange invoice receiving data to compute accurate 30-day payment deadlines."
-                    size="lg"
-                    footer={
-                        <button
-                            type="button"
-                            className="fm-btn fm-btn-primary"
-                            onClick={() => setShowArchModal(false)}
-                        >
-                            Close Architecture
-                        </button>
-                    }
-                >
-                    <div className="foms-trace-graph-card">
-                        <h4 className="foms-trace-title">End-to-End Delivery Architecture</h4>
-                        <div className="foms-trace-steps">
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">1. FOMS Invoice Finalized</div>
-                                <span className="foms-trace-detail">
-                                    FOMS pushes <code>POST /api/integration/foms/endorsement-request</code>
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">2. STARS Task Created</div>
-                                <span className="foms-trace-detail">
-                                    <code>[FOMS Endorsement]</code> assigned to Coordinator/Courier
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step optimal">
-                                <div className="foms-trace-badge">3. Wet-Ink Sign-off</div>
-                                <span className="foms-trace-detail">
-                                    Assignee collects client signature and logs Actual Received Date
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">4. 30-Day Term Starts</div>
-                                <span className="foms-trace-detail">
-                                    STARS calls FOMS <code>/api/integration/stars/invoice-endorsed</code>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="foms-meta-inspection-grid">
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">PAYMENT TERM RULE</span>
-                            <span className="foms-meta-val">Due Date = ActualReceivedDate + 30 Days</span>
-                            <span className="foms-client-id">Standard commercial 30-day credit term (FR-028)</span>
-                        </div>
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">LEGAL EVIDENCE</span>
-                            <span className="foms-meta-val">Signed Receiving Copy PDF</span>
-                            <span className="foms-client-id">Preserved in Azure Blob Storage &amp; STARS database</span>
-                        </div>
-                    </div>
                 </FormModal>
             )}
         </div>

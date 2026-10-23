@@ -2370,4 +2370,554 @@
     vertical-align: middle;
 }
 
+/* ================================================================
+   FOMS Routing Decision Trace Modal (High-Fidelity OneUI Theme)
+   ================================================================ */
+
+.foms-trace-modal-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    padding: 0.25rem 0 0.5rem 0;
+    width: 100%;
+    color: var(--tp, #0F172A);
+}
+
+/* ── 1. Case Profile & Financial Exposure Banner ── */
+.foms-trace-hero-card {
+    background: linear-gradient(135deg, rgba(27, 37, 75, 0.04) 0%, rgba(0, 169, 157, 0.07) 100%), #ffffff;
+    border: 1px solid rgba(0, 169, 157, 0.22);
+    border-radius: 12px;
+    padding: 1.15rem 1.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    box-shadow: 0 4px 14px -3px rgba(15, 23, 42, 0.05);
+}
+
+.foms-trace-hero-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.foms-trace-client-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.foms-trace-inv-badge-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.foms-trace-inv-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: #0F172A;
+    color: #FFFFFF;
+    padding: 0.22rem 0.65rem;
+    border-radius: 6px;
+    letter-spacing: 0.03em;
+}
+
+.foms-trace-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.foms-trace-copy-btn:hover {
+    background: #008B8B;
+    color: #FFFFFF;
+    border-color: #008B8B;
+}
+
+.foms-trace-client-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #0F172A;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.foms-trace-account-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: #64748B;
+    font-weight: 500;
+}
+
+.foms-trace-badges-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.foms-trace-aging-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 9999px;
+    letter-spacing: 0.02em;
+}
+
+.foms-trace-aging-pill.aging-90-,
+.foms-trace-aging-pill.aging-61-90 {
+    background: #FEF2F2;
+    color: #DC2626;
+    border: 1px solid #FECACA;
+}
+
+.foms-trace-aging-pill.aging-31-60 {
+    background: #FFFBEB;
+    color: #D97706;
+    border: 1px solid #FDE68A;
+}
+
+.foms-trace-aging-pill.aging-1-30 {
+    background: #FFF7ED;
+    color: #EA580C;
+    border: 1px solid #FFEDD5;
+}
+
+.foms-trace-aging-pill.aging-due-soon {
+    background: #EFF6FF;
+    color: #2563EB;
+    border: 1px solid #BFDBFE;
+}
+
+.foms-trace-priority-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 9999px;
+}
+
+.foms-trace-priority-pill.priority-urgent {
+    background: rgba(220, 38, 38, 0.1);
+    color: #DC2626;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.foms-trace-priority-pill.priority-high {
+    background: rgba(234, 88, 12, 0.1);
+    color: #EA580C;
+    border: 1px solid rgba(234, 88, 12, 0.25);
+}
+
+.foms-trace-priority-pill.priority-medium {
+    background: rgba(14, 165, 233, 0.1);
+    color: #0284C7;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.foms-trace-financial-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 9px;
+    padding: 0.65rem 1.15rem;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.foms-trace-fin-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.foms-trace-fin-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.foms-trace-fin-value {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #0F172A;
+}
+
+.foms-trace-fin-value.val-amount {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #008B8B;
+}
+
+.foms-trace-fin-value.val-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: #059669;
+}
+
+.foms-trace-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10B981;
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.foms-trace-fin-divider {
+    width: 1px;
+    height: 32px;
+    background: #E2E8F0;
+}
+
+/* ── 2. Decision & Execution Pipeline Track ── */
+.foms-trace-section {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.foms-trace-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.foms-trace-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0F172A;
+}
+
+.foms-trace-section-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #008B8B;
+    background: rgba(0, 169, 157, 0.1);
+    border: 1px solid rgba(0, 169, 157, 0.25);
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.foms-trace-flow-track {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1.15fr auto 1fr;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.foms-flow-node {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 9px;
+    border: 1px solid #E2E8F0;
+    background: #F8FAFC;
+    min-width: 0;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.foms-flow-node.complete {
+    background: #FFFFFF;
+    border-color: #CBD5E1;
+}
+
+.foms-flow-node.optimal {
+    background: linear-gradient(135deg, rgba(0, 169, 157, 0.07) 0%, rgba(27, 37, 75, 0.04) 100%), #FFFFFF;
+    border: 1.5px solid #00A99D;
+    box-shadow: 0 4px 12px -2px rgba(0, 169, 157, 0.15);
+}
+
+.foms-flow-node-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: #F1F5F9;
+    color: #334155;
+}
+
+.foms-flow-node.optimal .foms-flow-node-icon {
+    background: #00A99D;
+    color: #FFFFFF;
+}
+
+.foms-flow-step-tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #94A3B8;
+    letter-spacing: 0.04em;
+}
+
+.foms-flow-step-tag-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.foms-flow-match-badge {
+    font-size: 0.58rem;
+    font-weight: 800;
+    color: #008B8B;
+    background: rgba(0, 139, 139, 0.12);
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+}
+
+.foms-flow-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #0F172A;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.foms-flow-desc {
+    font-size: 0.69rem;
+    color: #475569;
+    margin: 0;
+    line-height: 1.35;
+}
+
+.foms-flow-sub {
+    font-size: 0.65rem;
+    color: #94A3B8;
+    font-weight: 500;
+}
+
+.foms-flow-connector {
+    color: #CBD5E1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ── 3. Detail Dossier Grid ── */
+.foms-trace-dossier-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.95rem;
+}
+
+.foms-trace-dossier-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.foms-trace-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    background: #F8FAFC;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.foms-trace-card-icon {
+    color: #008B8B;
+}
+
+.foms-trace-card-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #1E293B;
+    letter-spacing: 0.02em;
+}
+
+.foms-trace-card-body {
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.foms-dossier-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+}
+
+.foms-dossier-label {
+    color: #64748B;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.foms-dossier-val {
+    color: #0F172A;
+    font-weight: 500;
+    text-align: right;
+    word-break: break-word;
+}
+
+.foms-dossier-val.font-semibold {
+    font-weight: 600;
+}
+
+.foms-dossier-val.code-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    background: #F1F5F9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #0F172A;
+}
+
+.foms-dossier-val.text-teal {
+    color: #008B8B;
+    font-weight: 700;
+}
+
+.foms-dossier-val.text-muted {
+    color: #94A3B8;
+    font-style: italic;
+}
+
+.foms-dossier-val.val-address {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    text-align: right;
+}
+
+.foms-pin-icon {
+    color: #EA580C;
+    flex-shrink: 0;
+}
+
+.foms-dossier-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: #008B8B;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+
+.foms-dossier-link:hover {
+    color: #005F5F;
+    text-decoration: underline;
+}
+
+.foms-load-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: #E0F2FE;
+    color: #0369A1;
+    border-radius: 4px;
+    border: 1px solid #BAE6FD;
+}
+
+.foms-trace-remarks-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.8rem 1rem;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 8px;
+    font-size: 0.75rem;
+}
+
+.foms-remarks-icon {
+    color: #D97706;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.foms-remarks-title {
+    font-weight: 700;
+    color: #92400E;
+    display: block;
+    margin-bottom: 0.15rem;
+}
+
+.foms-remarks-text {
+    color: #78350F;
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .foms-trace-flow-track {
+        grid-template-columns: 1fr;
+        gap: 0.6rem;
+    }
+
+    .foms-flow-connector {
+        transform: rotate(90deg);
+        margin: -0.25rem 0;
+    }
+
+    .foms-trace-dossier-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .foms-trace-badges-col {
+        align-items: flex-start;
+    }
+}
+
 

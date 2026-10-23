@@ -25,6 +25,8 @@ import {
     ChevronRight,
     ChevronDown,
     TrendingDown,
+    Network,
+    GitBranch,
 } from 'lucide-react';
 import api from '../../api';
 import { FomsOverdueAlertItem, CoordinatorWorkloadItem } from './types';
@@ -261,17 +263,6 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                             automatically compiles a <strong>Collection Follow-up</strong> task, and uses the
                             Graph Routing Engine to assign it to the optimal Coordinator based on live workload availability.
                         </p>
-                    </div>
-
-                    <div className="foms-graph-hero-actions">
-                        <button
-                            type="button"
-                            className="foms-btn-primary"
-                            onClick={() => setInspectAlert(alerts[0] || null)}
-                        >
-                            <Sparkles size={14} />
-                            <span>Routing Architecture Trace</span>
-                        </button>
                     </div>
                 </div>
 
@@ -738,8 +729,8 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                 <FormModal
                     isOpen={!!inspectAlert}
                     onClose={() => setInspectAlert(null)}
-                    title="Graph Routing Engine Decision Trace"
-                    subtitle={`Detailed execution graph and workload evaluation metrics for invoice ${inspectAlert.invoiceNumber}`}
+                    title="Routing Decision Trace"
+                    subtitle={`Autonomous Graph Workload Allocation • Invoice ${inspectAlert.invoiceNumber}`}
                     size="lg"
                     footer={
                         <>
@@ -767,63 +758,269 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                         </>
                     }
                 >
-                    <div className="foms-trace-graph-card">
-                        <h4 className="foms-trace-title">Execution Graph Architecture</h4>
-                        <div className="foms-trace-steps">
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">FOMS Aging Engine</div>
-                                <span className="foms-trace-detail">
-                                    Pushed alert: ₱{inspectAlert.amountDue.toLocaleString()} overdue ({inspectAlert.daysOverdue} days)
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">STARS Webhook Interceptor</div>
-                                <span className="foms-trace-detail">
-                                    POST /api/integration/foms/overdue-alert
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step optimal">
-                                <div className="foms-trace-badge">Graph Routing Engine</div>
-                                <span className="foms-trace-detail">
-                                    Matched: {inspectAlert.assignedCoordinatorName} (Workload: {inspectAlert.workloadAtRouting ?? 2} tasks)
-                                </span>
-                            </div>
-                            <ArrowRight size={16} className="foms-trace-arrow" />
-                            <div className="foms-trace-step">
-                                <div className="foms-trace-badge">Generated Task</div>
-                                <span className="foms-trace-detail">
-                                    #{inspectAlert.starsTaskNumber} [{inspectAlert.priorityLevel || 'Urgent'}]
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                    <div className="foms-trace-modal-container">
+                        {/* ── 1. Top Summary Banner Card ── */}
+                        <div className="foms-trace-hero-card">
+                            <div className="foms-trace-hero-main">
+                                <div className="foms-trace-client-meta">
+                                    <div className="foms-trace-inv-badge-wrap">
+                                        <span className="foms-trace-inv-badge">
+                                            {inspectAlert.invoiceNumber}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="foms-trace-copy-btn"
+                                            onClick={() => handleCopy(inspectAlert.invoiceNumber, `trace-${inspectAlert.invoiceNumber}`)}
+                                            title="Copy invoice number"
+                                        >
+                                            {copiedKey === `trace-${inspectAlert.invoiceNumber}` ? <Check size={12} /> : <Copy size={12} />}
+                                            <span>{copiedKey === `trace-${inspectAlert.invoiceNumber}` ? 'Copied' : 'Copy'}</span>
+                                        </button>
+                                    </div>
+                                    <h3 className="foms-trace-client-name">{inspectAlert.clientName}</h3>
+                                    <div className="foms-trace-account-tag">
+                                        <Building size={12} />
+                                        <span>Account ID: {inspectAlert.clientAccountId}</span>
+                                    </div>
+                                </div>
 
-                    <div className="foms-meta-inspection-grid">
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">CLIENT COMPANY</span>
-                            <span className="foms-meta-val">{inspectAlert.clientName}</span>
-                            <span className="foms-client-id">{inspectAlert.clientAccountId}</span>
+                                <div className="foms-trace-badges-col">
+                                    <span className={`foms-trace-aging-pill aging-${(inspectAlert.agingStatus || 'due-soon').toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>
+                                        <Clock size={12} />
+                                        <span>{inspectAlert.daysOverdue > 0 ? `${inspectAlert.daysOverdue} Days Overdue` : 'Due Soon'}</span>
+                                    </span>
+                                    <span className={`foms-trace-priority-pill priority-${(inspectAlert.priorityLevel || 'urgent').toLowerCase()}`}>
+                                        <ShieldAlert size={12} />
+                                        <span>{inspectAlert.priorityLevel || 'Urgent Priority'}</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="foms-trace-financial-strip">
+                                <div className="foms-trace-fin-item">
+                                    <span className="foms-trace-fin-label">OUTSTANDING BALANCE</span>
+                                    <span className="foms-trace-fin-value val-amount">{formatCurrency(inspectAlert.amountDue)}</span>
+                                </div>
+                                <div className="foms-trace-fin-divider" />
+                                <div className="foms-trace-fin-item">
+                                    <span className="foms-trace-fin-label">ORIGINAL DUE DATE</span>
+                                    <span className="foms-trace-fin-value">
+                                        {inspectAlert.dueDate ? new Date(inspectAlert.dueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                                    </span>
+                                </div>
+                                <div className="foms-trace-fin-divider" />
+                                <div className="foms-trace-fin-item">
+                                    <span className="foms-trace-fin-label">TASK DISPATCH STATUS</span>
+                                    <span className="foms-trace-fin-value val-status">
+                                        <span className="foms-trace-status-dot" />
+                                        {inspectAlert.taskStatus || 'Routed & Assigned'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">ASSIGNED COORDINATOR</span>
-                            <span className="foms-meta-val" style={{ color: '#00A99D' }}>
-                                {inspectAlert.assignedCoordinatorName || 'Optimal Coordinator'}
-                            </span>
-                            <span className="foms-client-id">Selection Method: Minimum Active Workload</span>
+
+                        {/* ── 2. Decision & Execution Pipeline ── */}
+                        <div className="foms-trace-section">
+                            <div className="foms-trace-section-header">
+                                <div className="foms-trace-section-title">
+                                    <Network size={15} />
+                                    <span>Autonomous Decision &amp; Workload Routing Trace</span>
+                                </div>
+                                <span className="foms-trace-section-badge">Zero-Touch Automation</span>
+                            </div>
+
+                            <div className="foms-trace-flow-track">
+                                {/* Step 1: Alert Ingestion */}
+                                <div className="foms-flow-node complete">
+                                    <div className="foms-flow-node-icon">
+                                        <Activity size={14} />
+                                    </div>
+                                    <div className="foms-flow-node-content">
+                                        <span className="foms-flow-step-tag">STAGE 1</span>
+                                        <h5 className="foms-flow-title">FOMS Aging Telemetry</h5>
+                                        <p className="foms-flow-desc">
+                                            Overdue trigger: {formatCurrency(inspectAlert.amountDue)} ({inspectAlert.daysOverdue}d overdue)
+                                        </p>
+                                        <span className="foms-flow-sub">
+                                            {inspectAlert.alertTimestamp ? new Date(inspectAlert.alertTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Webhook Ingested'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="foms-flow-connector">
+                                    <ArrowRight size={14} />
+                                </div>
+
+                                {/* Step 2: Policy & Priority Assessment */}
+                                <div className="foms-flow-node complete">
+                                    <div className="foms-flow-node-icon">
+                                        <ShieldAlert size={14} />
+                                    </div>
+                                    <div className="foms-flow-node-content">
+                                        <span className="foms-flow-step-tag">STAGE 2</span>
+                                        <h5 className="foms-flow-title">Policy &amp; SLA Rule</h5>
+                                        <p className="foms-flow-desc">
+                                            Ranked as <strong>{inspectAlert.priorityLevel || 'Urgent'}</strong> priority
+                                        </p>
+                                        <span className="foms-flow-sub">Aging Bracket: {inspectAlert.agingStatus}</span>
+                                    </div>
+                                </div>
+
+                                <div className="foms-flow-connector">
+                                    <ArrowRight size={14} />
+                                </div>
+
+                                {/* Step 3: Graph Evaluator (Optimal Candidate) */}
+                                <div className="foms-flow-node optimal">
+                                    <div className="foms-flow-node-icon">
+                                        <GitBranch size={14} />
+                                    </div>
+                                    <div className="foms-flow-node-content">
+                                        <div className="foms-flow-step-tag-row">
+                                            <span className="foms-flow-step-tag">STAGE 3</span>
+                                            <span className="foms-flow-match-badge">OPTIMAL MATCH</span>
+                                        </div>
+                                        <h5 className="foms-flow-title">{inspectAlert.assignedCoordinatorName || 'Coordinator'}</h5>
+                                        <p className="foms-flow-desc">
+                                            Selected by minimum active workload ({inspectAlert.workloadAtRouting ?? 2} tasks)
+                                        </p>
+                                        <span className="foms-flow-sub">Graph Workload Matrix</span>
+                                    </div>
+                                </div>
+
+                                <div className="foms-flow-connector">
+                                    <ArrowRight size={14} />
+                                </div>
+
+                                {/* Step 4: STARS Task Dispatched */}
+                                <div className="foms-flow-node complete">
+                                    <div className="foms-flow-node-icon">
+                                        <CheckCircle2 size={14} />
+                                    </div>
+                                    <div className="foms-flow-node-content">
+                                        <span className="foms-flow-step-tag">STAGE 4</span>
+                                        <h5 className="foms-flow-title">STARS Task Dispatched</h5>
+                                        <p className="foms-flow-desc">
+                                            Task #{inspectAlert.starsTaskNumber || 'Active'}
+                                        </p>
+                                        <span className="foms-flow-sub">Follow-up Workflow Active</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">CONTACT PERSON &amp; PHONE</span>
-                            <span className="foms-meta-val">
-                                {inspectAlert.clientContactPerson || 'N/A'} • {inspectAlert.clientContactNumber || 'N/A'}
-                            </span>
-                            <span className="foms-client-id">{inspectAlert.clientEmail || 'No email registered'}</span>
+
+                        {/* ── 3. Detail Dossier Grid ── */}
+                        <div className="foms-trace-dossier-grid">
+                            {/* Column 1: Client & Contact Dossier */}
+                            <div className="foms-trace-dossier-card">
+                                <div className="foms-trace-card-header">
+                                    <Building size={14} className="foms-trace-card-icon" />
+                                    <span className="foms-trace-card-title">Debtor &amp; Contact Dossier</span>
+                                </div>
+                                <div className="foms-trace-card-body">
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Client Name</span>
+                                        <span className="foms-dossier-val font-semibold">{inspectAlert.clientName}</span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Account Code</span>
+                                        <span className="foms-dossier-val code-val">{inspectAlert.clientAccountId}</span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Receiving Contact</span>
+                                        <span className="foms-dossier-val">{inspectAlert.clientContactPerson || 'Accounts Payable Officer'}</span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Phone</span>
+                                        {inspectAlert.clientContactNumber ? (
+                                            <a href={`tel:${inspectAlert.clientContactNumber}`} className="foms-dossier-link">
+                                                <Phone size={11} /> {inspectAlert.clientContactNumber}
+                                            </a>
+                                        ) : (
+                                            <span className="foms-dossier-val text-muted">Not specified</span>
+                                        )}
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Email</span>
+                                        {inspectAlert.clientEmail ? (
+                                            <a href={`mailto:${inspectAlert.clientEmail}`} className="foms-dossier-link">
+                                                <Mail size={11} /> {inspectAlert.clientEmail}
+                                            </a>
+                                        ) : (
+                                            <span className="foms-dossier-val text-muted">Not specified</span>
+                                        )}
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Service Address</span>
+                                        <span className="foms-dossier-val val-address">
+                                            <MapPin size={11} className="foms-pin-icon" />
+                                            {inspectAlert.clientAddress || 'Metro Manila Hub'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Column 2: Allocation & STARS Task Details */}
+                            <div className="foms-trace-dossier-card">
+                                <div className="foms-trace-card-header">
+                                    <Users size={14} className="foms-trace-card-icon" />
+                                    <span className="foms-trace-card-title">Dispatch &amp; Task Execution</span>
+                                </div>
+                                <div className="foms-trace-card-body">
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Assigned Coordinator</span>
+                                        <span className="foms-dossier-val font-semibold text-teal">
+                                            {inspectAlert.assignedCoordinatorName || 'Optimal Coordinator'}
+                                        </span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Selection Criteria</span>
+                                        <span className="foms-dossier-val">Minimum Workload Graph Match</span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Queue Load at Routing</span>
+                                        <span className="foms-dossier-val">
+                                            <span className="foms-load-badge">{inspectAlert.workloadAtRouting ?? 2} Active Tasks</span>
+                                        </span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">STARS Task ID</span>
+                                        <span className="foms-dossier-val code-val">
+                                            #{inspectAlert.starsTaskNumber || 'Assigned'}
+                                        </span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Routing Status</span>
+                                        <span className="foms-dossier-val val-status">
+                                            {inspectAlert.routingStatus || 'Routed & Assigned'}
+                                        </span>
+                                    </div>
+                                    <div className="foms-dossier-row">
+                                        <span className="foms-dossier-label">Telemetry Timestamp</span>
+                                        <span className="foms-dossier-val text-muted">
+                                            {inspectAlert.alertTimestamp ? new Date(inspectAlert.alertTimestamp).toLocaleString('en-US', {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) : 'Now'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="foms-inspection-item">
-                            <span className="foms-meta-label">SERVICE ADDRESS</span>
-                            <span className="foms-meta-val">{inspectAlert.clientAddress || 'Metro Manila Hub'}</span>
-                        </div>
+
+                        {/* Optional Remarks Note */}
+                        {inspectAlert.remarks && (
+                            <div className="foms-trace-remarks-box">
+                                <AlertCircle size={14} className="foms-remarks-icon" />
+                                <div>
+                                    <span className="foms-remarks-title">System &amp; Collection Note:</span>
+                                    <p className="foms-remarks-text">{inspectAlert.remarks}</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </FormModal>
             )}
