@@ -37,13 +37,76 @@ vi.mock('../components/Toast/Toast', () => ({
 }));
 
 describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1)', () => {
+    const mockEndorsementTasks = [
+        {
+            id: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
+            taskNumber: 'TK82C101',
+            title: '[FOMS Endorsement] Invoice INV-2026-8810 - Horizon Retail Holdings Inc.',
+            description: 'Deliver finalized invoice INV-2026-8810 to client Horizon Retail Holdings Inc. for official receiving endorsement and signature.\nAmount: ₱89,500.00\nDue Date: 30 days upon receipt\nAddress: 7th Floor, Commerce Tower, Ortigas Center, Pasig City\nContact: Atty. Fernando Gomez (09181234567)\nDocument: https://stars.blob.core.windows.net/invoices/INV-2026-8810.pdf\nRemarks: Delivered and endorsed with client wet signature and receiving stamp.',
+            status: 3,
+            deadline: new Date(Date.now() + 26 * 86400000).toISOString(),
+            assignees: [{ fullName: 'Jane Coordinator' }],
+            createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+            updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        },
+        {
+            id: 'c201a9e3-4f2b-42e1-884b-703c90e22002',
+            taskNumber: 'TK82C102',
+            title: '[FOMS Endorsement] Invoice INV-2026-8811 - Trans-Pacific Express Cargo',
+            description: 'Deliver finalized invoice INV-2026-8811 to client Trans-Pacific Express Cargo for official receiving endorsement and signature.\nAmount: ₱145,000.00\nDue Date: 30 days upon receipt\nAddress: Km 18, West Service Road, Parañaque City\nContact: Mr. Victor Ramos (09201234567)\nDocument: https://stars.blob.core.windows.net/invoices/INV-2026-8811.pdf',
+            status: 0,
+            deadline: new Date(Date.now() + 29 * 86400000).toISOString(),
+            assignees: [{ fullName: 'Elena Bautista' }],
+            createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+            updatedAt: null,
+        },
+        {
+            id: 'c201a9e3-4f2b-42e1-884b-703c90e22004',
+            taskNumber: 'TK82C104',
+            title: '[FOMS Endorsement] Invoice INV-2026-8813 - Bayan Logistics & Supply Corp.',
+            description: 'Deliver finalized invoice INV-2026-8813 to client Bayan Logistics & Supply Corp. for official receiving endorsement and signature.\nAmount: ₱320,000.00\nDue Date: 30 days upon receipt\nAddress: Block 4, South Expressway Industrial Estate, Biñan, Laguna\nContact: Mr. Eduardo Garcia (09171122334)\nDocument: https://stars.blob.core.windows.net/invoices/INV-2026-8813.pdf',
+            status: 1,
+            deadline: new Date(Date.now() + 30 * 86400000).toISOString(),
+            assignees: [{ fullName: 'Jane Coordinator' }],
+            createdAt: new Date().toISOString(),
+            updatedAt: null,
+        },
+    ];
+
     beforeEach(() => {
         vi.clearAllMocks();
-        (api.get as any).mockResolvedValue({
-            data: {
-                isSuccess: true,
-                data: [],
-            },
+        (api.get as any).mockImplementation((url: string) => {
+            if (url.includes('[FOMS Endorsement]')) {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: { items: mockEndorsementTasks },
+                    },
+                });
+            }
+            if (url.includes('dashboard-summary')) {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: {
+                            totalOutstandingBalance: 500000,
+                            totalOverdueBalance: 100000,
+                            totalInvoicesTracked: 10,
+                            overdueInvoicesCount: 1,
+                            paidInvoicesCount: 7,
+                            pendingInvoicesCount: 2,
+                            lastUpdatedAt: new Date().toISOString(),
+                            topOutstandingClients: [],
+                        },
+                    },
+                });
+            }
+            return Promise.resolve({
+                data: {
+                    isSuccess: true,
+                    data: [],
+                },
+            });
         });
         (api.post as any).mockResolvedValue({
             data: {
@@ -75,20 +138,24 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.getByRole('heading', { level: 2, name: /finalized invoice endorsement/i })).toBeInTheDocument();
         });
 
-        it('directly mounts with initialTab="endorsement"', () => {
+        it('directly mounts with initialTab="endorsement"', async () => {
             render(<FomsFinancialMetricsView initialTab="endorsement" />);
 
             expect(screen.getByRole('heading', { level: 2, name: /finalized invoice endorsement/i })).toBeInTheDocument();
-            expect(screen.getAllByText('Pending Client Sign-off').length).toBeGreaterThanOrEqual(1);
+            await waitFor(() => {
+                expect(screen.getAllByText('Pending Client Sign-off').length).toBeGreaterThanOrEqual(1);
+            });
             expect(screen.getByText('Endorsed & Transmitted')).toBeInTheDocument();
             expect(screen.getByText('Total Delivery Exposure')).toBeInTheDocument();
         });
 
-        it('filters endorsement items using status chips and search input', () => {
+        it('filters endorsement items using status chips and search input', async () => {
             render(<FomsEndorsementPanel />);
 
             // Initial items present
-            expect(screen.getByText('INV-2026-8810')).toBeInTheDocument();
+            await waitFor(() => {
+                expect(screen.getByText('INV-2026-8810')).toBeInTheDocument();
+            });
             expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
 
             // Filter to pending sign-off only
@@ -139,6 +206,10 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
 
         it('opens sign-off modal and records client receiving endorsement', async () => {
             render(<FomsEndorsementPanel />);
+
+            await waitFor(() => {
+                expect(screen.getByText('INV-2026-8811')).toBeInTheDocument();
+            });
 
             // Click Record Sign-off on the pending item (INV-2026-8811)
             const actionsBtns = screen.getAllByRole('button', { name: /actions/i });

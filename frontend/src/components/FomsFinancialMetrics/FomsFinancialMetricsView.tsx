@@ -33,81 +33,16 @@ import FormModal from '../FormModal/FormModal';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
-// Realistic fallback preview dataset when FOMS database has no webhook updates yet
-const DEMO_PREVIEW_SUMMARY: FomsDashboardFinancialSummary = {
-    totalOutstandingBalance: 881600.0,
-    totalOverdueBalance: 450300.0,
-    totalInvoicesTracked: 38,
-    overdueInvoicesCount: 4,
-    paidInvoicesCount: 24,
-    pendingInvoicesCount: 10,
+// Initial empty dataset before live FOMS synchronization
+const EMPTY_FINANCIAL_SUMMARY: FomsDashboardFinancialSummary = {
+    totalOutstandingBalance: 0,
+    totalOverdueBalance: 0,
+    totalInvoicesTracked: 0,
+    overdueInvoicesCount: 0,
+    paidInvoicesCount: 0,
+    pendingInvoicesCount: 0,
     lastUpdatedAt: new Date().toISOString(),
-    topOutstandingClients: [
-        {
-            clientAccountId: 'CLI-HORIZON-01',
-            clientName: 'Horizon Retail Holdings Inc.',
-            outstandingBalance: 89500.0,
-            overdueInvoicesCount: 2,
-            latestStatus: 'Overdue',
-            nextDueDate: new Date(Date.now() - 5 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-TRANSPAC-02',
-            clientName: 'Trans-Pacific Express Cargo',
-            outstandingBalance: 145000.0,
-            overdueInvoicesCount: 1,
-            latestStatus: 'Overdue',
-            nextDueDate: new Date(Date.now() - 35 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-UNIV-06',
-            clientName: 'Universal Freight Express',
-            outstandingBalance: 215800.0,
-            overdueInvoicesCount: 1,
-            latestStatus: 'Overdue',
-            nextDueDate: new Date(Date.now() - 3 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-BAYAN-03',
-            clientName: 'Bayan Logistics & Supply Corp.',
-            outstandingBalance: 320000.0,
-            overdueInvoicesCount: 0,
-            latestStatus: 'Sent',
-            nextDueDate: new Date(Date.now() + 14 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-METRO-05',
-            clientName: 'Metro Manila Retailers Guild',
-            outstandingBalance: 62400.0,
-            overdueInvoicesCount: 0,
-            latestStatus: 'Approved',
-            nextDueDate: new Date(Date.now() + 8 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-EAST-08',
-            clientName: 'Eastern Archipelago Trading',
-            outstandingBalance: 48900.0,
-            overdueInvoicesCount: 0,
-            latestStatus: 'Sent',
-            nextDueDate: new Date(Date.now() + 20 * 86400000).toISOString(),
-        },
-        {
-            clientAccountId: 'CLI-APEX-04',
-            clientName: 'Apex Wholesale Distribution',
-            outstandingBalance: 0.0,
-            overdueInvoicesCount: 0,
-            latestStatus: 'Paid',
-            nextDueDate: null,
-        },
-        {
-            clientAccountId: 'CLI-PRIME-07',
-            clientName: 'Prime Commercial Ventures',
-            outstandingBalance: 0.0,
-            overdueInvoicesCount: 0,
-            latestStatus: 'Paid',
-            nextDueDate: null,
-        },
-    ],
+    topOutstandingClients: [],
 };
 
 export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> = ({
@@ -124,7 +59,6 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastSyncedTime, setLastSyncedTime] = useState<Date | null>(null);
-    const [usePreviewFallback, setUsePreviewFallback] = useState<boolean>(false);
 
     // Filter and Sort states
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -150,24 +84,15 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 setLiveData(data);
                 setError(null);
                 setLastSyncedTime(new Date());
-
-                // If no invoices exist in the backend yet, automatically enable the demo preview
-                if (data.totalInvoicesTracked === 0 && !liveData) {
-                    setUsePreviewFallback(true);
-                }
             }
         } catch (err: any) {
             console.warn('[FOMS] Failed to fetch live financial summary from backend:', err?.message || err);
-            // If backend call fails, keep demo fallback ready
             setError(err?.response?.data?.message || 'Unable to synchronize with FOMS financial service.');
-            if (!liveData) {
-                setUsePreviewFallback(true);
-            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [liveData]);
+    }, []);
 
     // Initial load and periodic silent polling (near-real-time update per FR-038)
     useEffect(() => {
@@ -180,15 +105,10 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
         return () => clearInterval(interval);
     }, [fetchFomsSummary, pollingInterval]);
 
-    // Choose active dataset (Live vs. Demo Preview if live has 0 records)
+    // Active dataset strictly from live FOMS integration
     const activeSummary = useMemo(() => {
-        if (usePreviewFallback && (!liveData || liveData.totalInvoicesTracked === 0)) {
-            return DEMO_PREVIEW_SUMMARY;
-        }
-        return liveData || DEMO_PREVIEW_SUMMARY;
-    }, [usePreviewFallback, liveData]);
-
-    const isShowingDemo = usePreviewFallback && (!liveData || liveData.totalInvoicesTracked === 0);
+        return liveData || EMPTY_FINANCIAL_SUMMARY;
+    }, [liveData]);
 
     // Copy Account ID Helper
     const handleCopyAccountId = (id: string, e: React.MouseEvent) => {
@@ -319,25 +239,29 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
 
     return (
         <div className={`foms-container ${embedded ? 'foms-embedded' : ''}`}>
-            {/* ── Demo / Simulation Notice Banner ── */}
-            {isShowingDemo && (
-                <div className="foms-demo-banner">
+            {/* ── Live Integration Error Notice (if sync fails) ── */}
+            {error && (
+                <div
+                    className="foms-demo-banner"
+                    style={{
+                        background: '#fef2f2',
+                        borderColor: '#fecaca',
+                        color: '#991b1b',
+                    }}
+                >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <span className="foms-demo-badge">Preview Mode</span>
-                        <span>
-                            Displaying simulated FOMS live invoice feed. Live machine-to-machine updates from FOMS webhook will automatically replace this view once records arrive.
-                        </span>
+                        <AlertCircle size={16} color="#dc2626" />
+                        <span style={{ fontWeight: 600 }}>Sync Notice:</span>
+                        <span>{error}</span>
                     </div>
-                    {liveData && liveData.totalInvoicesTracked > 0 && (
-                        <button
-                            type="button"
-                            className="foms-btn-action"
-                            onClick={() => setUsePreviewFallback(false)}
-                            style={{ background: '#ffffff', borderColor: '#cbd5e1' }}
-                        >
-                            Switch to Live ({liveData.totalInvoicesTracked} Invoices)
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        className="foms-btn-action"
+                        onClick={() => fetchFomsSummary(false)}
+                        style={{ background: '#ffffff', borderColor: '#fca5a5', color: '#991b1b' }}
+                    >
+                        Retry Sync
+                    </button>
                 </div>
             )}
 
@@ -792,9 +716,19 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         <tbody>
                             {paginatedClients.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--tt, #6B7280)' }}>
-                                        <AlertCircle size={24} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.5 }} />
-                                        No client accounts match the selected search or filter criteria.
+                                    <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--tt, #6B7280)' }}>
+                                        {activeSummary.topOutstandingClients.length === 0 ? (
+                                            <>
+                                                <Building size={32} style={{ margin: '0 auto 0.75rem', display: 'block', opacity: 0.35 }} />
+                                                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--tp, #0F172A)' }}>No Client Financial Records Available</div>
+                                                <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>Real-time client balances and invoice payment statuses will appear here once synchronized from FOMS.</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <AlertCircle size={24} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.5 }} />
+                                                No client accounts match the selected search or filter criteria.
+                                            </>
+                                        )}
                                     </td>
                                 </tr>
                             ) : (

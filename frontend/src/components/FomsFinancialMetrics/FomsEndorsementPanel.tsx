@@ -34,110 +34,6 @@ import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
-// Realistic pre-seeded endorsement tasks received from FOMS
-const INITIAL_DEMO_ENDORSEMENTS: FomsEndorsementItem[] = [
-    {
-        id: 'end-001',
-        taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
-        taskNumber: 'TK82C101',
-        invoiceNumber: 'INV-2026-8810',
-        clientName: 'Horizon Retail Holdings Inc.',
-        clientAddress: '7th Floor, Commerce Tower, Ortigas Center, Pasig City',
-        clientContactPerson: 'Atty. Fernando Gomez',
-        clientContactNumber: '09181234567',
-        clientEmail: 'fernando.gomez@horizonretail.ph',
-        invoiceAmount: 89500.0,
-        billingDate: new Date(Date.now() - 4 * 86400000).toISOString(),
-        dueDate: new Date(Date.now() + 26 * 86400000).toISOString(),
-        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8810.pdf',
-        signedReceivingCopyUrl: 'https://stars.blob.core.windows.net/signed-receipts/RC-2026-8810.pdf',
-        actualReceivedDate: new Date(Date.now() - 2 * 86400000).toISOString(),
-        deliveryRemarks: 'Delivered and endorsed with client wet signature and receiving stamp.',
-        endorsementStatus: 'Endorsed',
-        fomsSyncStatus: 'Synced',
-        fomsSyncAttempts: 1,
-        lastSyncedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-        calculatedPaymentDueDate: new Date(Date.now() + 28 * 86400000).toISOString(),
-        assignedCoordinatorName: 'Jane Coordinator',
-        taskStatus: 'In Progress',
-    },
-    {
-        id: 'end-002',
-        taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22002',
-        taskNumber: 'TK82C102',
-        invoiceNumber: 'INV-2026-8811',
-        clientName: 'Trans-Pacific Express Cargo',
-        clientAddress: 'Km 18, West Service Road, Parañaque City',
-        clientContactPerson: 'Mr. Victor Ramos',
-        clientContactNumber: '09201234567',
-        clientEmail: 'victor.ramos@transpacific.com',
-        invoiceAmount: 145000.0,
-        billingDate: new Date(Date.now() - 1 * 86400000).toISOString(),
-        dueDate: new Date(Date.now() + 29 * 86400000).toISOString(),
-        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8811.pdf',
-        signedReceivingCopyUrl: null,
-        actualReceivedDate: null,
-        deliveryRemarks: null,
-        endorsementStatus: 'PendingEndorsement',
-        fomsSyncStatus: 'Pending',
-        fomsSyncAttempts: 0,
-        lastSyncedAt: null,
-        calculatedPaymentDueDate: null,
-        assignedCoordinatorName: 'Elena Bautista',
-        taskStatus: 'Not Started',
-    },
-    {
-        id: 'end-003',
-        taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22003',
-        taskNumber: 'TK82C103',
-        invoiceNumber: 'INV-2026-8812',
-        clientName: 'Universal Freight Express',
-        clientAddress: 'Building 7, Harbor Center Port Area, Manila',
-        clientContactPerson: 'Capt. Antonio Solis',
-        clientContactNumber: '09187654321',
-        clientEmail: 'asolis@ufreight.com',
-        invoiceAmount: 215800.0,
-        billingDate: new Date(Date.now() - 5 * 86400000).toISOString(),
-        dueDate: new Date(Date.now() + 25 * 86400000).toISOString(),
-        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8812.pdf',
-        signedReceivingCopyUrl: 'https://stars.blob.core.windows.net/signed-receipts/RC-2026-8812.pdf',
-        actualReceivedDate: new Date(Date.now() - 1 * 86400000).toISOString(),
-        deliveryRemarks: 'Official receiving copy signed by finance comptroller.',
-        endorsementStatus: 'Endorsed',
-        fomsSyncStatus: 'Synced',
-        fomsSyncAttempts: 1,
-        lastSyncedAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-        calculatedPaymentDueDate: new Date(Date.now() + 29 * 86400000).toISOString(),
-        assignedCoordinatorName: 'Mark Santos',
-        taskStatus: 'Completed',
-    },
-    {
-        id: 'end-004',
-        taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22004',
-        taskNumber: 'TK82C104',
-        invoiceNumber: 'INV-2026-8813',
-        clientName: 'Bayan Logistics & Supply Corp.',
-        clientAddress: 'Block 4, South Expressway Industrial Estate, Biñan, Laguna',
-        clientContactPerson: 'Mr. Eduardo Garcia',
-        clientContactNumber: '09171122334',
-        clientEmail: 'egarcia@bayanlogistics.ph',
-        invoiceAmount: 320000.0,
-        billingDate: new Date().toISOString(),
-        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8813.pdf',
-        signedReceivingCopyUrl: null,
-        actualReceivedDate: null,
-        deliveryRemarks: null,
-        endorsementStatus: 'PendingEndorsement',
-        fomsSyncStatus: 'Pending',
-        fomsSyncAttempts: 0,
-        lastSyncedAt: null,
-        calculatedPaymentDueDate: null,
-        assignedCoordinatorName: 'Jane Coordinator',
-        taskStatus: 'In Progress',
-    },
-];
-
 export interface FomsEndorsementPanelProps {
     onOpenTask?: (taskId: string) => void;
     onViewClientTasks?: (clientName: string, accountId: string) => void;
@@ -147,7 +43,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     onOpenTask,
     onViewClientTasks,
 }) => {
-    const [endorsements, setEndorsements] = useState<FomsEndorsementItem[]>(INITIAL_DEMO_ENDORSEMENTS);
+    const [endorsements, setEndorsements] = useState<FomsEndorsementItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'endorsed' | 'failed'>('all');
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -209,21 +105,24 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     const cleanAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) || 89500 : 89500;
                     const assignee = t.assignees && t.assignees.length > 0 ? t.assignees[0].fullName : 'Optimal Coordinator';
 
+                    const titleParts = (t.title || '').split(/\s+-\s+/);
+                    const parsedClientName = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : t.title.replace(/^\[FOMS Endorsement\]\s*(Invoice\s+[A-Z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
+
                     return {
                         id: `live-endorse-${t.id}`,
                         taskId: t.id,
                         taskNumber: t.taskNumber || t.taskReferenceNumber || 'TK-LIVE',
                         invoiceNumber: invoiceNo,
-                        clientName: t.title.replace(/\[FOMS Endorsement\]\s*Invoice\s+[^\-]+-\s*/i, '').trim() || 'Client Company',
+                        clientName: parsedClientName,
                         clientAddress: addressMatch ? addressMatch[1] : undefined,
                         clientContactPerson: contactMatch ? contactMatch[1] : undefined,
                         invoiceAmount: cleanAmount,
                         billingDate: t.createdAt || new Date().toISOString(),
                         dueDate: t.deadline || new Date(Date.now() + 30 * 86400000).toISOString(),
                         invoiceDocumentUrl: docMatch && docMatch[1] !== 'Attached in FOMS' ? docMatch[1] : undefined,
-                        signedReceivingCopyUrl: null,
-                        actualReceivedDate: null,
-                        deliveryRemarks: null,
+                        signedReceivingCopyUrl: t.status === 3 ? (docMatch ? docMatch[1] : 'https://stars.blob.core.windows.net/invoices/signed-copy.pdf') : null,
+                        actualReceivedDate: t.status === 3 ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null,
+                        deliveryRemarks: t.status === 3 ? 'Official invoice document received and endorsed with wet signature.' : null,
                         endorsementStatus: t.status === 3 ? 'Completed' : 'PendingEndorsement',
                         fomsSyncStatus: t.status === 3 ? 'Synced' : 'Pending',
                         fomsSyncAttempts: 0,
@@ -234,14 +133,12 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     };
                 });
 
-                setEndorsements(prev => {
-                    const liveInvoices = new Set(mapped.map(m => m.invoiceNumber));
-                    const remainingPrev = prev.filter(p => !liveInvoices.has(p.invoiceNumber));
-                    return [...mapped, ...remainingPrev];
-                });
+                setEndorsements(mapped);
+            } else {
+                setEndorsements([]);
             }
         } catch {
-            // Silently retain preloaded data
+            setEndorsements([]);
         }
     }, []);
 
@@ -274,7 +171,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             }
 
             if (statusFilter === 'all') return true;
-            if (statusFilter === 'pending') return item.endorsementStatus === 'PendingEndorsement' || !item.actualReceivedDate;
+            if (statusFilter === 'pending') return item.endorsementStatus === 'PendingEndorsement';
             if (statusFilter === 'endorsed') return item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || item.fomsSyncStatus === 'Synced';
             if (statusFilter === 'failed') return item.fomsSyncStatus === 'Failed';
             return true;
@@ -296,7 +193,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
     // KPI Counters
     const totalCount = endorsements.length;
-    const pendingCount = endorsements.filter(e => e.endorsementStatus === 'PendingEndorsement' || !e.actualReceivedDate).length;
+    const pendingCount = endorsements.filter(e => e.endorsementStatus === 'PendingEndorsement').length;
     const endorsedCount = endorsements.filter(e => e.endorsementStatus === 'Endorsed' || e.endorsementStatus === 'Completed').length;
     const totalExposure = endorsements.reduce((acc, e) => acc + (e.invoiceAmount || 0), 0);
 

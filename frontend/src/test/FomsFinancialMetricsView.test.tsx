@@ -57,13 +57,91 @@ describe('FomsFinancialMetricsView', () => {
         ],
     };
 
+    const mockCoordinators = [
+        {
+            userId: 'user-coord-01',
+            fullName: 'Jane Coordinator',
+            role: 'Coordinator',
+            department: 'Operations',
+            workload: 2,
+            isAvailable: true,
+            availabilityStatus: 'Active',
+            isOptimalCandidate: true,
+        },
+        {
+            userId: 'user-coord-02',
+            fullName: 'Mark Santos',
+            role: 'Coordinator',
+            department: 'Operations',
+            workload: 4,
+            isAvailable: true,
+            availabilityStatus: 'Active',
+            isOptimalCandidate: false,
+        },
+    ];
+
+    const mockCollectionTasks = [
+        {
+            id: 'c102a9e3-4f2b-42e1-884b-703c90e21a01',
+            taskNumber: 'TK48B901',
+            title: '[Collection Follow-up] Invoice INV-2026-9481 - Trans-Pacific Express Cargo',
+            description: 'Automated collection follow-up routed from FOMS.\nInvoice: INV-2026-9481\nAmount Due: ₱145,000.00\nAging: 31-60 (35 days overdue)\nDue Date: 2026-09-18\nClient Account: CLI-TRANSPAC-02 (Trans-Pacific Express Cargo)\nContact: Mr. Victor Ramos (09201234567)\nEmail: victor.ramos@transpacific.com\nAddress: Km 18, West Service Road, Parañaque City',
+            priorityLevel: 3,
+            status: 1,
+            deadline: new Date(Date.now() - 35 * 86400000).toISOString(),
+            assignees: [{ fullName: 'Jane Coordinator' }],
+            createdAt: new Date().toISOString(),
+        },
+        {
+            id: 'c102a9e3-4f2b-42e1-884b-703c90e21a02',
+            taskNumber: 'TK71C342',
+            title: '[Collection Follow-up] Invoice INV-2026-9482 - Horizon Retail Holdings Inc.',
+            description: 'Automated collection follow-up routed from FOMS.\nInvoice: INV-2026-9482\nAmount Due: ₱89,500.00\nAging: 1-30 (15 days overdue)\nDue Date: 2026-10-08\nClient Account: CLI-HORIZON-01\nContact: Ms. Clara Dizon',
+            priorityLevel: 2,
+            status: 0,
+            deadline: new Date(Date.now() - 15 * 86400000).toISOString(),
+            assignees: [{ fullName: 'Mark Santos' }],
+            createdAt: new Date().toISOString(),
+        },
+    ];
+
     beforeEach(() => {
         vi.clearAllMocks();
-        (api.get as any).mockResolvedValue({
-            data: {
-                isSuccess: true,
-                data: mockSummary,
-            },
+        (api.get as any).mockImplementation((url: string) => {
+            if (url.includes('dashboard-summary')) {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: mockSummary,
+                    },
+                });
+            }
+            if (url.includes('[Collection Follow-up]')) {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: {
+                            items: mockCollectionTasks,
+                        },
+                    },
+                });
+            }
+            if (url.includes('assignable-users')) {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: {
+                            items: mockCoordinators,
+                        },
+                    },
+                });
+            }
+            return Promise.resolve({
+                data: {
+                    isSuccess: true,
+                    data: [],
+                },
+            });
         });
     });
 
@@ -182,19 +260,25 @@ describe('FomsFinancialMetricsView', () => {
 
         // Verify Coordinator Workload Matrix
         expect(screen.getByText('Real-Time Coordinator Workload Matrix')).toBeInTheDocument();
-        expect(screen.getAllByText(/Jane Coordinator/i).length).toBeGreaterThanOrEqual(1);
+        await waitFor(() => {
+            expect(screen.getAllByText(/Jane Coordinator/i).length).toBeGreaterThanOrEqual(1);
+        });
         expect(screen.getAllByText(/Optimal Workload Match/i).length).toBeGreaterThanOrEqual(1);
 
         // Verify Intercepted Overdue Accounts Table
         expect(screen.getByText('Intercepted Overdue Accounts & Generated Tasks')).toBeInTheDocument();
-        expect(screen.getByText('INV-2026-9481')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByText('INV-2026-9481')).toBeInTheDocument();
+        });
         expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
     });
 
     it('filters collection alerts by aging status dropdown in Graph Routing tab', async () => {
         render(<FomsFinancialMetricsView initialTab="routing" />);
 
-        expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        });
         expect(screen.getByText('Horizon Retail Holdings Inc.')).toBeInTheDocument();
 
         // Select "31-60 Days Overdue" from dropdown
@@ -228,6 +312,10 @@ describe('FomsFinancialMetricsView', () => {
     it('opens Graph Routing Engine Decision Trace modal', async () => {
         render(<FomsFinancialMetricsView initialTab="routing" />);
 
+        await waitFor(() => {
+            expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        });
+
         const traceBtns = screen.getAllByRole('button', { name: /trace/i });
         fireEvent.click(traceBtns[0]);
 
@@ -241,6 +329,10 @@ describe('FomsFinancialMetricsView', () => {
     it('calls onOpenTask when clicking View Task in the alerts stream', async () => {
         const handleOpenTask = vi.fn();
         render(<FomsFinancialMetricsView initialTab="routing" onOpenTask={handleOpenTask} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Trans-Pacific Express Cargo')).toBeInTheDocument();
+        });
 
         const actionsBtns = screen.getAllByRole('button', { name: /actions/i });
         fireEvent.click(actionsBtns[0]);

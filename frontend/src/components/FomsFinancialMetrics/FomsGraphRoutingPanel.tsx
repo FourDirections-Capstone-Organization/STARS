@@ -35,157 +35,7 @@ import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
-// Realistic pre-seeded collection alerts intercepted from FOMS aging logic
-const INITIAL_DEMO_ALERTS: FomsOverdueAlertItem[] = [
-    {
-        id: 'alert-foms-001',
-        invoiceNumber: 'INV-2026-9481',
-        clientAccountId: 'CLI-TRANSPAC-02',
-        clientName: 'Trans-Pacific Express Cargo',
-        clientContactPerson: 'Mr. Victor Ramos',
-        clientContactNumber: '09201234567',
-        clientEmail: 'victor.ramos@transpacific.com',
-        clientAddress: 'Km 18, West Service Road, Parañaque City',
-        amountDue: 145000.0,
-        dueDate: new Date(Date.now() - 35 * 86400000).toISOString(),
-        daysOverdue: 35,
-        agingStatus: '31-60',
-        alertTimestamp: new Date(Date.now() - 18 * 60000).toISOString(),
-        remarks: 'Account severely overdue (35 days). Immediate field collection routing required.',
-        starsTaskId: 'c102a9e3-4f2b-42e1-884b-703c90e21a01',
-        starsTaskNumber: 'TK48B901',
-        assignedCoordinatorName: 'Jane Coordinator',
-        assignedCoordinatorId: 'user-coord-01',
-        taskStatus: 'In Progress',
-        priorityLevel: 'Urgent',
-        workloadAtRouting: 2,
-        routingStatus: 'Routed & Assigned',
-    },
-    {
-        id: 'alert-foms-002',
-        invoiceNumber: 'INV-2026-9482',
-        clientAccountId: 'CLI-HORIZON-01',
-        clientName: 'Horizon Retail Holdings Inc.',
-        clientContactPerson: 'Ms. Clara Dizon',
-        clientContactNumber: '09178901234',
-        clientEmail: 'c.dizon@horizonretail.ph',
-        clientAddress: '4th Floor Commerce Tower, Ortigas Center, Pasig City',
-        amountDue: 89500.0,
-        dueDate: new Date(Date.now() - 15 * 86400000).toISOString(),
-        daysOverdue: 15,
-        agingStatus: '1-30',
-        alertTimestamp: new Date(Date.now() - 42 * 60000).toISOString(),
-        remarks: 'First notice of overdue receivable. Scheduled for telephone reminder and payment verification.',
-        starsTaskId: 'c102a9e3-4f2b-42e1-884b-703c90e21a02',
-        starsTaskNumber: 'TK71C342',
-        assignedCoordinatorName: 'Mark Santos',
-        assignedCoordinatorId: 'user-coord-02',
-        taskStatus: 'Not Started',
-        priorityLevel: 'High',
-        workloadAtRouting: 3,
-        routingStatus: 'Routed & Assigned',
-    },
-    {
-        id: 'alert-foms-003',
-        invoiceNumber: 'INV-2026-9483',
-        clientAccountId: 'CLI-UNIV-06',
-        clientName: 'Universal Freight Express',
-        clientContactPerson: 'Capt. Antonio Solis',
-        clientContactNumber: '09187654321',
-        clientEmail: 'asolis@ufreight.com',
-        clientAddress: 'Building 7, Harbor Center Port Area, Manila',
-        amountDue: 215800.0,
-        dueDate: new Date(Date.now() - 48 * 86400000).toISOString(),
-        daysOverdue: 48,
-        agingStatus: '31-60',
-        alertTimestamp: new Date(Date.now() - 95 * 60000).toISOString(),
-        remarks: 'Multiple reminder notices unanswered in FOMS. Escalated to STARS Graph Routing Engine for priority collection.',
-        starsTaskId: 'c102a9e3-4f2b-42e1-884b-703c90e21a03',
-        starsTaskNumber: 'TK92A519',
-        assignedCoordinatorName: 'Jane Coordinator',
-        assignedCoordinatorId: 'user-coord-01',
-        taskStatus: 'In Progress',
-        priorityLevel: 'Urgent',
-        workloadAtRouting: 2,
-        routingStatus: 'Routed & Assigned',
-    },
-    {
-        id: 'alert-foms-004',
-        invoiceNumber: 'INV-2026-9484',
-        clientAccountId: 'CLI-EAST-08',
-        clientName: 'Eastern Archipelago Trading',
-        clientContactPerson: 'Ms. Teresa Lim',
-        clientContactNumber: '09223344556',
-        clientEmail: 'tlim@archipelagotrading.ph',
-        clientAddress: 'Warehouse B, North Reclamation Area, Cebu City / Manila Hub',
-        amountDue: 48900.0,
-        dueDate: new Date(Date.now() + 2 * 86400000).toISOString(),
-        daysOverdue: 0,
-        agingStatus: 'Due Soon',
-        alertTimestamp: new Date(Date.now() - 140 * 60000).toISOString(),
-        remarks: 'Preventive follow-up: invoice due in 48 hours. Pre-billing confirmation task generated.',
-        starsTaskId: 'c102a9e3-4f2b-42e1-884b-703c90e21a04',
-        starsTaskNumber: 'TK15F803',
-        assignedCoordinatorName: 'Elena Bautista',
-        assignedCoordinatorId: 'user-coord-03',
-        taskStatus: 'Not Started',
-        priorityLevel: 'High',
-        workloadAtRouting: 1,
-        routingStatus: 'Routed & Assigned',
-    },
-];
-
-// Fallback Coordinators list for graph routing matrix
-const DEFAULT_COORDINATORS: CoordinatorWorkloadItem[] = [
-    {
-        userId: 'coord-01',
-        fullName: 'Jane Coordinator',
-        employeeNumber: 'EMP-COR-001',
-        role: 'Coordinator',
-        department: 'Operations',
-        workload: 2,
-        isAvailable: true,
-        availabilityStatus: 'Active',
-        isOptimalCandidate: true,
-        capacityPercentage: 25,
-    },
-    {
-        userId: 'coord-02',
-        fullName: 'Mark Santos',
-        employeeNumber: 'EMP-COR-002',
-        role: 'Coordinator',
-        department: 'Operations',
-        workload: 4,
-        isAvailable: true,
-        availabilityStatus: 'Active',
-        isOptimalCandidate: false,
-        capacityPercentage: 50,
-    },
-    {
-        userId: 'coord-03',
-        fullName: 'Elena Bautista',
-        employeeNumber: 'EMP-COR-003',
-        role: 'Coordinator',
-        department: 'Operations',
-        workload: 3,
-        isAvailable: true,
-        availabilityStatus: 'Active',
-        isOptimalCandidate: false,
-        capacityPercentage: 38,
-    },
-    {
-        userId: 'coord-04',
-        fullName: 'Carlos Mendoza',
-        employeeNumber: 'EMP-COR-004',
-        role: 'Coordinator',
-        department: 'Customer Logistics',
-        workload: 6,
-        isAvailable: true,
-        availabilityStatus: 'Active',
-        isOptimalCandidate: false,
-        capacityPercentage: 75,
-    },
-];
+const DEFAULT_COORDINATORS: CoordinatorWorkloadItem[] = [];
 
 export interface FomsGraphRoutingPanelProps {
     onOpenTask?: (taskId: string) => void;
@@ -196,7 +46,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
     onOpenTask,
     onViewClientTasks,
 }) => {
-    const [alerts, setAlerts] = useState<FomsOverdueAlertItem[]>(INITIAL_DEMO_ALERTS);
+    const [alerts, setAlerts] = useState<FomsOverdueAlertItem[]>([]);
     const [coordinators, setCoordinators] = useState<CoordinatorWorkloadItem[]>(DEFAULT_COORDINATORS);
     const [loadingCoordinators, setLoadingCoordinators] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -307,11 +157,16 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                     const cleanAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) || 50000 : 75000;
                     const assignee = t.assignees && t.assignees.length > 0 ? t.assignees[0].fullName : 'Optimal Coordinator';
 
+                    const titleParts = (t.title || '').split(/\s+-\s+/);
+                    const clientNameFromTitle = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : '';
+                    const clientNameFromAccount = accountMatch && accountMatch[1].includes('(') ? accountMatch[1].match(/\(([^)]+)\)/)?.[1]?.trim() : '';
+                    const parsedClientName = clientNameFromTitle || clientNameFromAccount || 'Client Enterprise';
+
                     return {
                         id: `stars-task-${t.id}`,
                         invoiceNumber: invoiceNo,
                         clientAccountId: accountMatch ? accountMatch[1].split('(')[0].trim() : 'CLI-FOMS',
-                        clientName: t.title.replace(/\[Collection Follow-up\]\s*Invoice\s+[^\-]+-\s*/i, '').trim() || 'Client Enterprise',
+                        clientName: parsedClientName,
                         clientContactPerson: contactMatch ? contactMatch[1] : undefined,
                         clientEmail: emailMatch ? emailMatch[1] : undefined,
                         clientAddress: addressMatch ? addressMatch[1] : undefined,
@@ -331,15 +186,13 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                     };
                 });
 
-                // Merge deduplicating by invoice number
-                setAlerts(prev => {
-                    const existingInvoices = new Set(mapped.map(m => m.invoiceNumber));
-                    const remainingPrev = prev.filter(p => !existingInvoices.has(p.invoiceNumber));
-                    return [...mapped, ...remainingPrev];
-                });
+                // Set live collection tasks from STARS database
+                setAlerts(mapped);
+            } else {
+                setAlerts([]);
             }
         } catch {
-            // Silently maintain current list
+            setAlerts([]);
         }
     }, []);
 
@@ -920,7 +773,16 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {paginatedAlerts.map(alert => {
+                                {paginatedAlerts.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--tt, #6B7280)' }}>
+                                            <ShieldAlert size={28} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.4 }} />
+                                            <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--tp, #0F172A)' }}>No Overdue Collection Alerts</div>
+                                            <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>Automated collection tasks routed from FOMS aging logic will appear here.</div>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    paginatedAlerts.map(alert => {
                                     const isCritical = alert.daysOverdue >= 30 || alert.agingStatus.includes('60') || alert.agingStatus.includes('90');
                                     const isDueSoon = alert.daysOverdue <= 0 || alert.agingStatus.toLowerCase().includes('due');
 
@@ -1030,7 +892,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                }))}
                             </tbody>
                         </table>
                     </div>
