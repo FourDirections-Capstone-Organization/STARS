@@ -61,6 +61,8 @@ import EmployeeDetailPanel from './EmployeeDetailPanel/EmployeeDetailPanel';
 import { autoCorrectEmail, cleanEmail } from '../../utils/emailHelper';
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import ConfirmationModal from '../../components/ConfirmationModal/ConfirmationModal';
+import { SystemAccessConfigCard, DepartmentOption, JobPositionOption, getRolesForPosition } from '../../components/SystemAccessConfigCard/SystemAccessConfigCard';
+import { ManagerPasswordGateModal } from '../../components/ManagerPasswordGateModal/ManagerPasswordGateModal';
 import RoleManagementTab, { DepartmentResponseDTO, JobPositionResponseDTO } from './RoleManagementTab/RoleManagementTab';
 import GlobalHeader from '../../components/GlobalHeader/GlobalHeader';
 import Sidebar from '../../components/Sidebar/Sidebar';
@@ -199,6 +201,14 @@ interface RecentEmployee {
     presenceStatus?: string;
     email?: string;
     departmentName?: string;
+    departmentId?: string;
+    jobPositionName?: string;
+    jobPositionId?: string;
+    allowedSystems?: string;
+    targetSystems?: string[];
+    dmsRole?: string;
+    dmsAreas?: string[];
+    fomsRole?: string;
     employmentStatus?: string;
     hireDate?: string;
     attachments?: Array<{
@@ -952,457 +962,61 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     badgeStatus: 'Pending',
                 } : undefined}
             >
-                {/* ── Section 1: System Access & Role Configuration (Collapsible) ── */}
-                <div className="fm-section" style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: 10,
-                    background: 'var(--bg-card, #ffffff)',
-                    overflow: 'hidden',
-                    marginBottom: 20,
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
-                }}>
-                    <div
-                        onClick={() => setSystemAccessCollapsed(prev => !prev)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '12px 16px',
-                            background: 'rgba(248, 250, 252, 0.85)',
-                            borderBottom: systemAccessCollapsed ? 'none' : '1px solid var(--border)',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            transition: 'background 0.15s ease'
-                        }}
-                    >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 6,
-                                background: 'rgba(59, 130, 246, 0.1)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--primary, #3b82f6)'
-                            }}>
-                                <Shield size={16} />
-                            </div>
-                            <div>
-                                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span>System Access & Role Configuration</span>
-                                    <span style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        padding: '2px 8px',
-                                        borderRadius: 12,
-                                        background: (form.targetSystems?.length || 0) > 0 ? 'rgba(59, 130, 246, 0.12)' : 'var(--status-pending-bg, #f1f5f9)',
-                                        color: (form.targetSystems?.length || 0) > 0 ? 'var(--primary, #3b82f6)' : 'var(--text-secondary, #64748b)'
-                                    }}>
-                                        {(form.targetSystems?.length || 0)} of 3 Selected
-                                    </span>
-                                </div>
-                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                    Authorize operational platforms and configure employee roles directly
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>
-                                {systemAccessCollapsed ? 'Expand' : 'Collapse'}
-                            </span>
-                            {systemAccessCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-                        </div>
-                    </div>
-
-                    {!systemAccessCollapsed && (
-                        <div style={{ padding: '16px' }}>
-                            {/* STARS System Card */}
-                            {(() => {
-                                const isChecked = form.targetSystems?.includes('STARS');
-                                return (
-                                    <div style={{
-                                        borderRadius: 8,
-                                        border: isChecked ? '1.5px solid var(--primary, #3b82f6)' : '1px solid var(--border)',
-                                        background: isChecked ? 'rgba(59, 130, 246, 0.02)' : 'var(--bg-card, transparent)',
-                                        marginBottom: 12,
-                                        overflow: 'hidden',
-                                        transition: 'all 0.15s ease'
-                                    }}>
-                                        <label style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            padding: '12px 14px',
-                                            cursor: 'pointer',
-                                            background: isChecked ? 'rgba(59, 130, 246, 0.06)' : 'transparent',
-                                            userSelect: 'none'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    style={{ width: 17, height: 17, accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
-                                                    onChange={e => {
-                                                        setDirty(true);
-                                                        const current = form.targetSystems || [];
-                                                        const next = e.target.checked
-                                                            ? [...current, 'STARS']
-                                                            : current.filter(s => s !== 'STARS');
-                                                        setForm(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next,
-                                                            targetSystem: next.join(','),
-                                                        }));
-                                                        setErrors(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
-                                                        }));
-                                                    }}
-                                                />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <Shield size={16} style={{ color: 'var(--primary, #3b82f6)' }} />
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-                                                            STARS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Head Office & Operations Review</span>
-                                                        </div>
-                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                                                            Task allocation, operational review, workflow control
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <span style={{
-                                                fontSize: 11,
-                                                fontWeight: 600,
-                                                padding: '2px 8px',
-                                                borderRadius: 4,
-                                                background: isChecked ? 'rgba(59, 130, 246, 0.15)' : 'rgba(100, 116, 139, 0.1)',
-                                                color: isChecked ? 'var(--primary, #3b82f6)' : 'var(--text-secondary)'
-                                            }}>
-                                                {isChecked ? 'Active' : 'Not Granted'}
-                                            </span>
-                                        </label>
-
-                                        {isChecked && (
-                                            <div style={{
-                                                padding: '14px 16px',
-                                                borderTop: '1px solid rgba(59, 130, 246, 0.15)',
-                                                background: 'var(--s0, #ffffff)'
-                                            }}>
-                                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary, #3b82f6)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    STARS Role & Department Assignment
-                                                </div>
-                                                <div className="fm-field-grid">
-                                                    {/* Department */}
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="emp-dept">
-                                                            Department <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                                        </label>
-                                                        <select
-                                                            id="emp-dept"
-                                                            value={form.departmentId}
-                                                            onChange={handleChange('departmentId')}
-                                                            className="fm-select"
-                                                            style={inputStyle(errors.departmentId)}
-                                                            disabled={loadingOrg}
-                                                        >
-                                                            <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
-                                                            {departments.map(d => <option key={d.departmentId} value={d.departmentId}>{d.name}</option>)}
-                                                        </select>
-                                                        <FieldErr msg={errors.departmentId} />
-                                                    </div>
-
-                                                    {/* Position */}
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="emp-position">
-                                                            Position <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                                        </label>
-                                                        <select
-                                                            id="emp-position"
-                                                            value={form.jobPositionId}
-                                                            onChange={handleChange('jobPositionId')}
-                                                            className="fm-select"
-                                                            style={{
-                                                                ...inputStyle(errors.jobPositionId),
-                                                                opacity: !form.departmentId ? 0.6 : 1,
-                                                                cursor: !form.departmentId ? 'not-allowed' : 'pointer',
-                                                            }}
-                                                            disabled={!form.departmentId || loadingOrg}
-                                                        >
-                                                            <option value="">
-                                                                {form.departmentId ? 'Select a position' : 'Select department first'}
-                                                            </option>
-                                                            {availablePositions.map(p => <option key={p.jobPositionId} value={p.jobPositionId}>{p.name}</option>)}
-                                                        </select>
-                                                        <FieldErr msg={errors.jobPositionId} />
-                                                    </div>
-
-                                                    {/* System Role */}
-                                                    <div className="fm-field" style={{ gridColumn: 'span 2' }}>
-                                                        <label className="fm-label" htmlFor="emp-role">
-                                                            STARS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span>
-                                                        </label>
-                                                        <select
-                                                            id="emp-role"
-                                                            value={form.role}
-                                                            onChange={handleChange('role')}
-                                                            className="fm-select"
-                                                            style={{
-                                                                ...inputStyle(errors.role),
-                                                                opacity: !form.jobPositionId ? 0.6 : 1,
-                                                                cursor: !form.jobPositionId ? 'not-allowed' : 'pointer',
-                                                            }}
-                                                            disabled={!form.jobPositionId || loadingOrg}
-                                                        >
-                                                            <option value="">
-                                                                {!form.departmentId
-                                                                    ? 'Select department first'
-                                                                    : !form.jobPositionId
-                                                                        ? 'Select position first'
-                                                                        : 'Select a role'}
-                                                            </option>
-                                                            {allowedRoles.map(r => (
-                                                                <option key={r} value={r}>
-                                                                    {r}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <FieldErr msg={errors.role} />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-
-                            {/* DMS System Card */}
-                            {(() => {
-                                const isChecked = form.targetSystems?.includes('DMS');
-                                return (
-                                    <div style={{
-                                        borderRadius: 8,
-                                        border: isChecked ? '1.5px solid #10b981' : '1px solid var(--border)',
-                                        background: isChecked ? 'rgba(16, 185, 129, 0.02)' : 'var(--bg-card, transparent)',
-                                        marginBottom: 12,
-                                        overflow: 'hidden',
-                                        transition: 'all 0.15s ease'
-                                    }}>
-                                        <label style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            padding: '12px 14px',
-                                            cursor: 'pointer',
-                                            background: isChecked ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
-                                            userSelect: 'none'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    style={{ width: 17, height: 17, accentColor: '#10b981', cursor: 'pointer' }}
-                                                    onChange={e => {
-                                                        setDirty(true);
-                                                        const current = form.targetSystems || [];
-                                                        const next = e.target.checked
-                                                            ? [...current, 'DMS']
-                                                            : current.filter(s => s !== 'DMS');
-                                                        setForm(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next,
-                                                            targetSystem: next.join(','),
-                                                        }));
-                                                        setErrors(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
-                                                        }));
-                                                    }}
-                                                />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <Truck size={16} style={{ color: '#10b981' }} />
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-                                                            DMS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Delivery & Fleet System</span>
-                                                        </div>
-                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                                                            Driver routing, parcel dispatch, courier management
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <span style={{
-                                                fontSize: 11,
-                                                fontWeight: 600,
-                                                padding: '2px 8px',
-                                                borderRadius: 4,
-                                                background: isChecked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.1)',
-                                                color: isChecked ? '#059669' : 'var(--text-secondary)'
-                                            }}>
-                                                {isChecked ? 'Active' : 'Not Granted'}
-                                            </span>
-                                        </label>
-
-                                        {isChecked && (
-                                            <div style={{
-                                                padding: '14px 16px',
-                                                borderTop: '1px solid rgba(16, 185, 129, 0.15)',
-                                                background: 'var(--s0, #ffffff)'
-                                            }}>
-                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#059669', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    DMS Fleet & Dispatch Assignment
-                                                </div>
-                                                <div className="fm-field-grid">
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="dms-role">DMS Operational Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                                        <select
-                                                            id="dms-role"
-                                                            value={form.dmsRole || 'Encoder'}
-                                                            onChange={e => {
-                                                                setDirty(true);
-                                                                setForm(prev => ({ ...prev, dmsRole: e.target.value }));
-                                                            }}
-                                                            className="fm-select"
-                                                        >
-                                                            <option value="Admin">Admin (Fleet Administrator)</option>
-                                                            <option value="Encoder">Encoder (Operations Team)</option>
-                                                            <option value="Driver">Driver (Courier / Rider)</option>
-                                                            <option value="Client">Client (Consignor / Order Creator)</option>
-                                                        </select>
-                                                        <FieldErr msg={errors.dmsRole} />
-                                                    </div>
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="dms-areas">Assigned Delivery Area / Hub <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                                        <input
-                                                            id="dms-areas"
-                                                            type="text"
-                                                            placeholder="e.g. Manila, Quezon City, Makati"
-                                                            value={form.dmsAreas ? form.dmsAreas.join(', ') : 'Manila'}
-                                                            onChange={e => {
-                                                                setDirty(true);
-                                                                const areas = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                                                setForm(prev => ({ ...prev, dmsAreas: areas }));
-                                                            }}
-                                                            className="fm-input"
-                                                        />
-                                                        <FieldErr msg={errors.dmsAreas} />
-                                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>Comma-separated service hubs or delivery operational zones</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-
-                            {/* FOMS System Card */}
-                            {(() => {
-                                const isChecked = form.targetSystems?.includes('FOMS');
-                                return (
-                                    <div style={{
-                                        borderRadius: 8,
-                                        border: isChecked ? '1.5px solid #f59e0b' : '1px solid var(--border)',
-                                        background: isChecked ? 'rgba(245, 158, 11, 0.02)' : 'var(--bg-card, transparent)',
-                                        marginBottom: 4,
-                                        overflow: 'hidden',
-                                        transition: 'all 0.15s ease'
-                                    }}>
-                                        <label style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            padding: '12px 14px',
-                                            cursor: 'pointer',
-                                            background: isChecked ? 'rgba(245, 158, 11, 0.06)' : 'transparent',
-                                            userSelect: 'none'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    style={{ width: 17, height: 17, accentColor: '#f59e0b', cursor: 'pointer' }}
-                                                    onChange={e => {
-                                                        setDirty(true);
-                                                        const current = form.targetSystems || [];
-                                                        const next = e.target.checked
-                                                            ? [...current, 'FOMS']
-                                                            : current.filter(s => s !== 'FOMS');
-                                                        setForm(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next,
-                                                            targetSystem: next.join(','),
-                                                        }));
-                                                        setErrors(prev => ({
-                                                            ...prev,
-                                                            targetSystems: next.length === 0 ? 'Please select at least one operational system.' : undefined
-                                                        }));
-                                                    }}
-                                                />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <FileText size={16} style={{ color: '#f59e0b' }} />
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-                                                            FOMS <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>• Finance & Billing System</span>
-                                                        </div>
-                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                                                            Financial accounting, audits, payroll, order ledger
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <span style={{
-                                                fontSize: 11,
-                                                fontWeight: 600,
-                                                padding: '2px 8px',
-                                                borderRadius: 4,
-                                                background: isChecked ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.1)',
-                                                color: isChecked ? '#d97706' : 'var(--text-secondary)'
-                                            }}>
-                                                {isChecked ? 'Active' : 'Not Granted'}
-                                            </span>
-                                        </label>
-
-                                        {isChecked && (
-                                            <div style={{
-                                                padding: '14px 16px',
-                                                borderTop: '1px solid rgba(245, 158, 11, 0.15)',
-                                                background: 'var(--s0, #ffffff)'
-                                            }}>
-                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d97706', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    FOMS Finance & Payroll Assignment
-                                                </div>
-                                                <div className="fm-field-grid">
-                                                    <div className="fm-field">
-                                                        <label className="fm-label" htmlFor="foms-role">FOMS Finance Role <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                                                        <select
-                                                            id="foms-role"
-                                                            value={form.fomsRole || 'Accountant'}
-                                                            onChange={e => {
-                                                                setDirty(true);
-                                                                setForm(prev => ({ ...prev, fomsRole: e.target.value }));
-                                                            }}
-                                                            className="fm-select"
-                                                        >
-                                                            <option value="Financial Manager">Financial Manager</option>
-                                                            <option value="Head Accountant">Head Accountant</option>
-                                                            <option value="Accountant">Accountant</option>
-                                                            <option value="Assistant Financial Manager">Assistant Financial Manager</option>
-                                                        </select>
-                                                        <FieldErr msg={errors.fomsRole} />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-
-                            <FieldErr msg={errors.targetSystems} />
-                        </div>
-                    )}
-                </div>
+                {/* ── Section 1: System Access & Role Assignment ── */}
+                <SystemAccessConfigCard
+                    targetSystems={form.targetSystems || []}
+                    onChangeTargetSystems={next => {
+                        setForm(prev => ({ ...prev, targetSystems: next, targetSystem: next.join(',') }));
+                        setDirty(true);
+                        if (errors.targetSystems) setErrors(prev => ({ ...prev, targetSystems: undefined }));
+                    }}
+                    departmentId={form.departmentId}
+                    jobPositionId={form.jobPositionId}
+                    role={form.role}
+                    onChangeDepartmentId={deptId => {
+                        setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                        setDirty(true);
+                        if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
+                    }}
+                    onChangeJobPositionId={posId => {
+                        const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
+                        const roles = getRolesForPosition(pos?.name, availableRoles);
+                        const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
+                        setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                        setDirty(true);
+                        if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
+                    }}
+                    onChangeRole={r => {
+                        setForm(prev => ({ ...prev, role: r }));
+                        setDirty(true);
+                        if (errors.role) setErrors(prev => ({ ...prev, role: undefined }));
+                    }}
+                    departments={departments}
+                    jobPositions={jobPositions}
+                    availableRoles={availableRoles}
+                    loadingOrg={loadingOrg}
+                    dmsRole={form.dmsRole}
+                    dmsAreas={form.dmsAreas}
+                    onChangeDmsRole={r => {
+                        setForm(prev => ({ ...prev, dmsRole: r }));
+                        setDirty(true);
+                        if (errors.dmsRole) setErrors(prev => ({ ...prev, dmsRole: undefined }));
+                    }}
+                    onChangeDmsAreas={areas => {
+                        setForm(prev => ({ ...prev, dmsAreas: areas }));
+                        setDirty(true);
+                        if (errors.dmsAreas) setErrors(prev => ({ ...prev, dmsAreas: undefined }));
+                    }}
+                    fomsRole={form.fomsRole}
+                    onChangeFomsRole={r => {
+                        setForm(prev => ({ ...prev, fomsRole: r }));
+                        setDirty(true);
+                        if (errors.fomsRole) setErrors(prev => ({ ...prev, fomsRole: undefined }));
+                    }}
+                    errors={errors}
+                    isCollapsed={systemAccessCollapsed}
+                    onToggleCollapse={() => setSystemAccessCollapsed(prev => !prev)}
+                />
 
                 {/* ── Section 2: General Profile & Employment Info ── */}
                 <div className="fm-section">
@@ -1755,6 +1369,15 @@ interface EmployeeDetailModalProps {
 }
 
 function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = false, rolesList = SYSTEM_ROLES }: EmployeeDetailModalProps) {
+    const parseSystems = (systemsStr?: string, systemsArr?: string[]): string[] => {
+        if (systemsArr && systemsArr.length > 0) return systemsArr;
+        if (!systemsStr) return ['STARS'];
+        const parts = systemsStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        return parts.length > 0 ? parts : ['STARS'];
+    };
+
+    const initialSystems = parseSystems(employee.allowedSystems, employee.targetSystems);
+
     const [isEditing, setIsEditing] = useState(initialEditMode);
     const [form, setForm] = useState({
         firstName: employee.firstName ?? '',
@@ -1765,38 +1388,134 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
         role: toDisplayRole(employee.role),
         accountStatus: employee.accountStatus,
         email: employee.email ?? '',
+        targetSystems: initialSystems,
+        departmentId: employee.departmentId ?? '',
+        jobPositionId: employee.jobPositionId ?? '',
+        dmsRole: employee.dmsRole || 'Encoder',
+        dmsAreas: employee.dmsAreas && employee.dmsAreas.length > 0 ? employee.dmsAreas : ['Manila'],
+        fomsRole: employee.fomsRole || 'Accountant',
     });
-    // Snapshot of form values at the moment edit mode is entered
+
+    const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+    const [jobPositions, setJobPositions] = useState<JobPositionOption[]>([]);
+    const [availableRoles, setAvailableRoles] = useState<string[]>(['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier', 'Accountant']);
+    const [loadingOrg, setLoadingOrg] = useState(true);
+    const [isSystemCardCollapsed, setIsSystemCardCollapsed] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+
     const initialFormRef = useRef<typeof form | null>(
-        initialEditMode ? {
-            firstName: employee.firstName ?? '',
-            middleName: employee.middleName ?? '',
-            lastName: employee.lastName ?? '',
-            suffix: employee.suffix ?? '',
-            contactNumber: employee.contactNumber,
-            role: toDisplayRole(employee.role),
-            accountStatus: employee.accountStatus,
-            email: employee.email ?? '',
-        } : null
+        initialEditMode ? { ...form } : null
     );
+
     const [submitting, setSubmitting] = useState(false);
     const [apiError, setApiError] = useState('');
     const [confirmModal, setConfirmModal] = useState<ConfirmModalState>(CONFIRM_CLOSED);
     const { success, error } = useToast();
     const displayName = getEmployeeDisplayName(employee);
-    const [gatePassword, setGatePassword] = useState('');
-    const [gateError, setGateError] = useState('');
-    const [gateLoading, setGateLoading] = useState(false);
-    const [showGatePassword, setShowGatePassword] = useState(false);
-    const [gateConsent, setGateConsent] = useState(false);
-const gateConsentRef = useRef(false);
 
-    // Track whether the form has unsaved changes compared to when editing started
+    // Two-stage confirmation states
+    const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const [gateModalOpen, setGateModalOpen] = useState(false);
+
+    const [initialSnapshot, setInitialSnapshot] = useState({
+        firstName: employee.firstName ?? '',
+        middleName: employee.middleName ?? '',
+        lastName: employee.lastName ?? '',
+        suffix: employee.suffix ?? '',
+        contactNumber: employee.contactNumber,
+        role: toDisplayRole(employee.role),
+        accountStatus: employee.accountStatus,
+        email: employee.email ?? '',
+        targetSystems: initialSystems,
+        departmentId: employee.departmentId ?? '',
+        jobPositionId: employee.jobPositionId ?? '',
+        dmsRole: employee.dmsRole || 'Encoder',
+        dmsAreas: employee.dmsAreas && employee.dmsAreas.length > 0 ? employee.dmsAreas : ['Manila'],
+        fomsRole: employee.fomsRole || 'Accountant',
+    });
+
     const isDirty = isEditing && initialFormRef.current !== null &&
         JSON.stringify(form) !== JSON.stringify(initialFormRef.current);
 
+    useEffect(() => {
+        let isMounted = true;
+        const loadOrgAndDetails = async () => {
+            setLoadingOrg(true);
+            try {
+                const [uRes, dRes, pRes, rRes] = await Promise.all([
+                    api.get(`/api/User/employee-number/${encodeURIComponent(employee.employeeNumber)}`),
+                    api.get('/api/Department'),
+                    api.get('/api/job-positions?pageSize=100'),
+                    api.get('/api/Role'),
+                ]);
+
+                if (!isMounted) return;
+
+                const deptsData = dRes.data;
+                const posData = pRes.data;
+                const rolesData = rRes.data;
+
+                const rawDepts = Array.isArray(deptsData) ? deptsData : (deptsData.data?.items ?? (Array.isArray(deptsData.data) ? deptsData.data : deptsData.$values ?? []));
+                const rawPos = Array.isArray(posData) ? posData : (posData.data?.items ?? (Array.isArray(posData.data) ? posData.data : posData.$values ?? []));
+                const rawRoles = Array.isArray(rolesData) ? rolesData : (rolesData.data?.items ?? (Array.isArray(rolesData.data) ? rolesData.data : rolesData.$values ?? []));
+
+                const parsedDepts: DepartmentOption[] = rawDepts.map((d: any) => ({
+                    departmentId: d.id ?? d.departmentId ?? d.DepartmentId,
+                    name: d.name ?? d.Name,
+                }));
+                const parsedPos: JobPositionOption[] = rawPos.map((p: any) => ({
+                    jobPositionId: p.id ?? p.jobPositionId ?? p.JobPositionId,
+                    name: p.name ?? p.Name,
+                    departmentId: p.departmentId ?? p.DepartmentId,
+                }));
+                const parsedRoles: string[] = rawRoles.map((r: any) => typeof r === 'string' ? r : (r.name ?? r.Name)).filter(Boolean);
+
+                setDepartments(parsedDepts);
+                setJobPositions(parsedPos);
+                if (parsedRoles.length > 0) setAvailableRoles(parsedRoles);
+
+                const uData = uRes.data?.data ?? uRes.data;
+                if (uData) {
+                    const loadedSystems = parseSystems(uData.allowedSystems, uData.targetSystems);
+                    const dmsAreasList = Array.isArray(uData.dmsAreas)
+                        ? uData.dmsAreas
+                        : (uData.dmsAreas ? uData.dmsAreas.split(',').map((s: string) => s.trim()) : ['Manila']);
+
+                    const loadedForm = {
+                        firstName: uData.firstName ?? employee.firstName ?? '',
+                        middleName: uData.middleName ?? employee.middleName ?? '',
+                        lastName: uData.lastName ?? employee.lastName ?? '',
+                        suffix: uData.suffix ?? employee.suffix ?? '',
+                        contactNumber: uData.contactNumber ?? employee.contactNumber ?? '',
+                        role: toDisplayRole(uData.role) || toDisplayRole(employee.role),
+                        accountStatus: uData.accountStatus ?? (uData.isDeactivated ? 'Deactivated' : (uData.isActive ? 'Active' : 'Inactive')),
+                        email: uData.email ?? employee.email ?? '',
+                        targetSystems: loadedSystems,
+                        departmentId: uData.departmentId ?? employee.departmentId ?? '',
+                        jobPositionId: uData.jobPositionId ?? employee.jobPositionId ?? '',
+                        dmsRole: uData.dmsRole || employee.dmsRole || 'Encoder',
+                        dmsAreas: dmsAreasList.length > 0 ? dmsAreasList : ['Manila'],
+                        fomsRole: uData.fomsRole || employee.fomsRole || 'Accountant',
+                    };
+
+                    setForm(loadedForm);
+                    setInitialSnapshot(loadedForm);
+                    if (initialEditMode) {
+                        initialFormRef.current = { ...loadedForm };
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching employee full profile / org info:', err);
+            } finally {
+                if (isMounted) setLoadingOrg(false);
+            }
+        };
+
+        loadOrgAndDetails();
+        return () => { isMounted = false; };
+    }, [employee.employeeNumber, initialEditMode]);
+
     const enterEditMode = () => {
-        // Capture snapshot so we can detect changes later
         initialFormRef.current = { ...form };
         setIsEditing(true);
     };
@@ -1819,7 +1538,6 @@ const gateConsentRef = useRef(false);
                 ),
                 confirmLabel: 'Discard changes',
                 onConfirm: async () => {
-                    // Restore the form back to the snapshot
                     if (initialFormRef.current) setForm({ ...initialFormRef.current });
                     initialFormRef.current = null;
                     setIsEditing(false);
@@ -1834,133 +1552,136 @@ const gateConsentRef = useRef(false);
         }
     };
 
-
     const handleChange = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setForm(prev => ({ ...prev, [key]: e.target.value }));
         setApiError('');
+        if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }));
     };
 
-    // ── Save (always guarded by password verification) ──────────────────────
-    const handleSave = async () => {
-        const doSave = async () => {
-            setSubmitting(true);
-            setApiError('');
-            try {
-                // Look up user GUID by employee number
-                const lookupRes = await api.get(`/api/User/employee-number/${encodeURIComponent(employee.employeeNumber)}`);
-                const lookupData = lookupRes.data;
-                const userId = lookupData?.data?.id ?? lookupData?.id;
-                if (!userId) throw new Error('Employee not found.');
+    const doSave = async () => {
+        setSubmitting(true);
+        setApiError('');
+        try {
+            const lookupRes = await api.get(`/api/User/employee-number/${encodeURIComponent(employee.employeeNumber)}`);
+            const lookupData = lookupRes.data;
+            const userId = lookupData?.data?.id ?? lookupData?.id;
+            if (!userId) throw new Error('Employee not found.');
 
-                // When deactivating: update personal details FIRST (while user is still active),
-                // then deactivate. When activating: activate first so PUT can succeed.
-                const statusChanged = form.accountStatus !== employee.accountStatus;
-                if (statusChanged && form.accountStatus === 'Active') {
-                    await api.patch(`/api/User/${userId}/activate`);
-                }
+            const statusChanged = form.accountStatus !== employee.accountStatus;
+            if (statusChanged && form.accountStatus === 'Active') {
+                await api.patch(`/api/User/${userId}/activate`);
+            }
 
-                await api.put(`/api/User/${userId}`, {
-                    firstName: form.firstName.trim(),
-                    middleName: form.middleName.trim(),
-                    lastName: form.lastName.trim(),
-                    suffix: form.suffix.trim(),
-                    contactNumber: form.contactNumber,
-                    email: form.email.trim(),
-                });
+            const cleanMail = cleanEmail(form.email);
+            const isStars = form.targetSystems.includes('STARS');
+            const isDms = form.targetSystems.includes('DMS');
+            const isFoms = form.targetSystems.includes('FOMS');
 
-                if (statusChanged && form.accountStatus !== 'Active') {
-                    await api.patch(`/api/User/${userId}/deactivate`);
-                }
+            const payload: any = {
+                firstName: form.firstName.trim(),
+                middleName: form.middleName.trim(),
+                lastName: form.lastName.trim(),
+                suffix: form.suffix.trim(),
+                contactNumber: form.contactNumber,
+                email: cleanMail,
+                allowedSystems: form.targetSystems.join(','),
+                targetSystems: form.targetSystems,
+                role: isStars ? toBackendRole(form.role) : undefined,
+                departmentId: isStars && form.departmentId ? form.departmentId : undefined,
+                jobPositionId: isStars && form.jobPositionId ? form.jobPositionId : undefined,
+                dmsRole: isDms ? (form.dmsRole || 'Encoder') : undefined,
+                dmsAreas: isDms ? (form.dmsAreas || ['Manila']) : undefined,
+                fomsRole: isFoms ? (form.fomsRole || 'Accountant') : undefined,
+            };
+
+            await api.put(`/api/User/${userId}`, payload);
+
+            if (statusChanged && form.accountStatus !== 'Active') {
+                await api.patch(`/api/User/${userId}/deactivate`);
+            }
+
+            if (isStars) {
                 const newRoleVal = toBackendRole(form.role);
                 const oldRoleVal = typeof employee.role === 'number' ? employee.role : parseInt(employee.role, 10);
                 if (newRoleVal !== oldRoleVal) {
                     await api.patch(`/api/Role/user/${userId}/role`, { newRole: newRoleVal, reason: 'Role updated via admin panel' });
                 }
-                onUpdated({
-                    ...employee,
-                    firstName: form.firstName.trim(),
-                    middleName: form.middleName.trim(),
-                    lastName: form.lastName.trim(),
-                    suffix: form.suffix.trim(),
-                    employeeName: editDisplayName,
-                    contactNumber: form.contactNumber,
-                    role: toBackendRole(form.role),
-                    accountStatus: form.accountStatus,
-                    email: form.email.trim(),
-                });
-                initialFormRef.current = null;
-                setIsEditing(false);
-                success('Employee details updated successfully!');
-                onClose();
-            } catch (err: any) {
-                const msg = err.response?.data?.message || err.response?.data?.Message || err.message || 'Something went wrong. Please try again.';
-                error(msg);
-                setApiError(msg);
-            } finally {
-                setSubmitting(false);
-                setConfirmModal(CONFIRM_CLOSED);
             }
-        };
 
-        // Always verify the admin's password before any save
-        setGatePassword('');
-        setGateError('');
-        setShowGatePassword(false);
-        gateConsentRef.current = false;
-        setConfirmModal({
-            isOpen: true,
-            variant: form.accountStatus !== employee.accountStatus
-                ? (form.accountStatus === 'Active' ? 'success' : 'warning')
-                : 'info',
-            title: form.accountStatus !== employee.accountStatus
-                ? `${form.accountStatus === 'Active' ? 'Activate' : 'Deactivate'} employee account?`
-                : 'Confirm your identity',
-            description: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {form.accountStatus !== employee.accountStatus && (
-                        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                            You are about to <strong>{form.accountStatus === 'Active' ? 'activate' : 'deactivate'}</strong> the account of{' '}
-                            <strong>{displayName}</strong>.{' '}
-                            {form.accountStatus === 'Active'
-                                ? 'This will restore their access to the system.'
-                                : 'This will revoke their access until reactivated.'}
-                        </p>
-                    )}
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                        Enter your password to confirm these changes.
-                    </p>
-                </div>
-            ),
-            notice: 'For security, your identity must be verified before saving any changes.',
-            confirmLabel: 'Verify & save',
-            onConfirm: async () => {
-                const isDeactivating = form.accountStatus !== 'Active' && form.accountStatus !== employee.accountStatus;
-                if (isDeactivating && !gateConsentRef.current) {
-                    setGateError('You must agree to the archiving of historical data before deactivating.');
-                    return;
-                }
-                const pw = (document.getElementById('gate-pw-input') as HTMLInputElement)?.value ?? gatePassword;
-                if (!pw) { setGateError('Please enter your password.'); return; }
-                setGateLoading(true);
-                setConfirmModal(prev => ({ ...prev, isLoading: true }));
-                setGateError('');
-                try {
-                    const adminId = localStorage.getItem('employeeId') ?? '';
-                    const res = await api.post('/api/Auth/verify-password', { employeeID: adminId, password: pw });
-                    const verifyData = res.data;
-                    if (!verifyData.isSuccess) { throw new Error(verifyData.message || verifyData.Message || 'Incorrect password. Please try again.'); }
-                    setConfirmModal(CONFIRM_CLOSED);
-                    await doSave();
-                } catch (err: any) {
-                    setGateError(err.response?.data?.message || err.response?.data?.Message || err.message || 'Incorrect password. Please try again.');
-                } finally {
-                    setGateLoading(false);
-                }
-            },
-        });
+            const deptObj = departments.find(d => (d.departmentId ?? d.id) === form.departmentId);
+            const posObj = jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId);
+            const editDisplayName = buildDisplayName(form.firstName, form.middleName, form.lastName, form.suffix);
+
+            onUpdated({
+                ...employee,
+                firstName: form.firstName.trim(),
+                middleName: form.middleName.trim(),
+                lastName: form.lastName.trim(),
+                suffix: form.suffix.trim(),
+                employeeName: editDisplayName,
+                contactNumber: form.contactNumber,
+                role: String(isStars ? toBackendRole(form.role) : employee.role),
+                accountStatus: form.accountStatus,
+                email: cleanMail,
+                departmentName: deptObj?.name || employee.departmentName,
+                departmentId: form.departmentId,
+                jobPositionId: form.jobPositionId,
+                jobPositionName: posObj?.name,
+                allowedSystems: form.targetSystems.join(','),
+                targetSystems: form.targetSystems,
+                dmsRole: form.dmsRole,
+                dmsAreas: form.dmsAreas,
+                fomsRole: form.fomsRole,
+            });
+
+            initialFormRef.current = null;
+            setIsEditing(false);
+            success('Employee and system access updated successfully!');
+            onClose();
+        } catch (err: any) {
+            const msg = err.response?.data?.message || err.response?.data?.Message || err.message || 'Something went wrong. Please try again.';
+            error(msg);
+            setApiError(msg);
+        } finally {
+            setSubmitting(false);
+            setReviewModalOpen(false);
+            setGateModalOpen(false);
+        }
     };
 
-    // ── Delete ────────────────────────────────────────────────────────────────
+    const handleStartSave = (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const errs: Record<string, string | undefined> = {};
+        if (!form.firstName.trim()) errs.firstName = 'First name is required.';
+        if (!form.lastName.trim()) errs.lastName = 'Last name is required.';
+        if (!form.targetSystems || form.targetSystems.length === 0) {
+            errs.targetSystems = 'Please select at least one operational system.';
+        }
+        if (form.targetSystems.includes('STARS')) {
+            if (!form.departmentId) errs.departmentId = 'Please select a department.';
+            if (!form.jobPositionId) errs.jobPositionId = 'Please select a position.';
+            if (!form.role) errs.role = 'Please select a STARS role.';
+        }
+        if (form.targetSystems.includes('DMS')) {
+            if (!form.dmsRole) errs.dmsRole = 'Please select a DMS role.';
+        }
+        if (form.targetSystems.includes('FOMS')) {
+            if (!form.fomsRole) errs.fomsRole = 'Please select a FOMS role.';
+        }
+
+        if (Object.keys(errs).length > 0) {
+            setErrors(errs);
+            if (errs.targetSystems || errs.departmentId || errs.jobPositionId || errs.role || errs.dmsRole || errs.fomsRole) {
+                setIsSystemCardCollapsed(false);
+            }
+            return;
+        }
+
+        setErrors({});
+        setApiError('');
+        setReviewModalOpen(true);
+    };
+
     const handleDelete = () => {
         setConfirmModal({
             isOpen: true,
@@ -1996,8 +1717,12 @@ const gateConsentRef = useRef(false);
         });
     };
 
-    const editDisplayName = buildDisplayName(form.firstName, form.middleName, form.lastName, form.suffix);
+    const addedSystems = form.targetSystems.filter(s => !initialSnapshot.targetSystems.includes(s));
+    const removedSystems = initialSnapshot.targetSystems.filter(s => !form.targetSystems.includes(s));
+    const hasSystemRemovals = removedSystems.length > 0;
+    const statusChanged = form.accountStatus !== initialSnapshot.accountStatus;
 
+    const editDisplayName = buildDisplayName(form.firstName, form.middleName, form.lastName, form.suffix);
     const resolvedTitle = isEditing ? 'Edit employee' : 'Employee Details';
     const resolvedSubtitle = isEditing ? 'Update details for this employee record' : `Viewing profile of ${displayName}`;
 
@@ -2018,7 +1743,7 @@ const gateConsentRef = useRef(false);
                 subtitle={resolvedSubtitle}
                 infoCard={infoCard}
                 apiError={apiError}
-                onSubmit={isEditing ? handleSave : undefined}
+                onSubmit={isEditing ? handleStartSave : undefined}
                 isSubmitting={submitting}
                 size="md"
                 confirmOnCancel={true}
@@ -2042,36 +1767,17 @@ const gateConsentRef = useRef(false);
                 {isEditing ? (
                     <>
                         <div className="fm-section">
-                            <h5 className="fm-section-title">Account</h5>
-                            <div className="fm-field-grid">
-                                <div className="fm-field">
-                                    <label className="fm-label">Role</label>
-                                    <select value={form.role} onChange={handleChange('role')} className="fm-select">
-                                        {rolesList.map(r => <option key={r} value={r}>{r}</option>)}
-                                    </select>
-                                </div>
-                                <div className="fm-field">
-                                    <label className="fm-label">Account Status</label>
-                                    <select value={form.accountStatus} onChange={handleChange('accountStatus')} className="fm-select">
-                                        <option value="Active">Active</option>
-                                        <option value="Inactive">Inactive</option>
-                                        <option value="Deactivated">Deactivated</option>
-                                        {employee.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="fm-section">
                             <h5 className="fm-section-title">Personal Information</h5>
                             <div className="fm-field-grid">
                                 <div className="fm-field">
-                                    <label className="fm-label">First Name</label>
+                                    <label className="fm-label">First Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
                                     <input type="text" value={form.firstName} onChange={handleChange('firstName')} className="fm-input" maxLength={50} />
+                                    {errors.firstName && <span style={{ fontSize: 11, color: 'var(--status-failed)', marginTop: 4 }}>{errors.firstName}</span>}
                                 </div>
                                 <div className="fm-field">
-                                    <label className="fm-label">Last Name</label>
+                                    <label className="fm-label">Last Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
                                     <input type="text" value={form.lastName} onChange={handleChange('lastName')} className="fm-input" maxLength={50} />
+                                    {errors.lastName && <span style={{ fontSize: 11, color: 'var(--status-failed)', marginTop: 4 }}>{errors.lastName}</span>}
                                 </div>
                                 <div className="fm-field">
                                     <label className="fm-label">Middle Name <span className="optional">optional</span></label>
@@ -2097,22 +1803,115 @@ const gateConsentRef = useRef(false);
                                 </div>
                             </div>
                         </div>
+
+                        {/* System Access & Role Configuration Collapsible Card */}
+                        <SystemAccessConfigCard
+                            targetSystems={form.targetSystems}
+                            onChangeTargetSystems={next => {
+                                setForm(prev => ({ ...prev, targetSystems: next }));
+                                if (errors.targetSystems) setErrors(prev => ({ ...prev, targetSystems: undefined }));
+                            }}
+                            departmentId={form.departmentId}
+                            jobPositionId={form.jobPositionId}
+                            role={form.role}
+                            onChangeDepartmentId={deptId => {
+                                setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                                if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
+                            }}
+                            onChangeJobPositionId={posId => {
+                                const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
+                                const roles = getRolesForPosition(pos?.name, availableRoles);
+                                const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
+                                setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                                if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
+                            }}
+                            onChangeRole={r => {
+                                setForm(prev => ({ ...prev, role: r }));
+                                if (errors.role) setErrors(prev => ({ ...prev, role: undefined }));
+                            }}
+                            departments={departments}
+                            jobPositions={jobPositions}
+                            availableRoles={availableRoles}
+                            loadingOrg={loadingOrg}
+                            dmsRole={form.dmsRole}
+                            dmsAreas={form.dmsAreas}
+                            onChangeDmsRole={r => {
+                                setForm(prev => ({ ...prev, dmsRole: r }));
+                                if (errors.dmsRole) setErrors(prev => ({ ...prev, dmsRole: undefined }));
+                            }}
+                            onChangeDmsAreas={areas => {
+                                setForm(prev => ({ ...prev, dmsAreas: areas }));
+                                if (errors.dmsAreas) setErrors(prev => ({ ...prev, dmsAreas: undefined }));
+                            }}
+                            fomsRole={form.fomsRole}
+                            onChangeFomsRole={r => {
+                                setForm(prev => ({ ...prev, fomsRole: r }));
+                                if (errors.fomsRole) setErrors(prev => ({ ...prev, fomsRole: undefined }));
+                            }}
+                            errors={errors}
+                            isCollapsed={isSystemCardCollapsed}
+                            onToggleCollapse={() => setIsSystemCardCollapsed(prev => !prev)}
+                        />
+
+                        <div className="fm-section">
+                            <h5 className="fm-section-title">Account Status</h5>
+                            <div className="fm-field-grid">
+                                <div className="fm-field">
+                                    <label className="fm-label">Account Status</label>
+                                    <select value={form.accountStatus} onChange={handleChange('accountStatus')} className="fm-select">
+                                        <option value="Active">Active</option>
+                                        <option value="Inactive">Inactive</option>
+                                        <option value="Deactivated">Deactivated</option>
+                                        {employee.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </>
                 ) : (
                     <div className="detail-grid">
                         <div className="detail-item"><span className="detail-label">Employee Number</span><span className="detail-value">{employee.employeeNumber}</span></div>
-                        <div className="detail-item"><span className="detail-label">Role</span><span className="detail-value">{form.role || '—'}</span></div>
+                        <div className="detail-item">
+                            <span className="detail-label">Authorized Systems</span>
+                            <span className="detail-value" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {form.targetSystems.map(s => (
+                                    <span key={s} style={{
+                                        padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: 11,
+                                        background: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary, #3b82f6)'
+                                    }}>
+                                        {s}
+                                    </span>
+                                ))}
+                            </span>
+                        </div>
+                        {form.targetSystems.includes('STARS') && (
+                            <>
+                                <div className="detail-item"><span className="detail-label">STARS Department</span><span className="detail-value">{departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || employee.departmentName || '—'}</span></div>
+                                <div className="detail-item"><span className="detail-label">STARS Position</span><span className="detail-value">{jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId)?.name || employee.jobPositionName || '—'}</span></div>
+                                <div className="detail-item"><span className="detail-label">STARS Role</span><span className="detail-value">{form.role || '—'}</span></div>
+                            </>
+                        )}
+                        {form.targetSystems.includes('DMS') && (
+                            <>
+                                <div className="detail-item"><span className="detail-label">DMS Role</span><span className="detail-value">{form.dmsRole || 'Encoder'}</span></div>
+                                <div className="detail-item"><span className="detail-label">DMS Hubs</span><span className="detail-value">{form.dmsAreas.join(', ') || 'Manila'}</span></div>
+                            </>
+                        )}
+                        {form.targetSystems.includes('FOMS') && (
+                            <div className="detail-item"><span className="detail-label">FOMS Role</span><span className="detail-value">{form.fomsRole || 'Accountant'}</span></div>
+                        )}
                         <div className="detail-item"><span className="detail-label">First Name</span><span className="detail-value">{form.firstName || '—'}</span></div>
                         <div className="detail-item"><span className="detail-label">Last Name</span><span className="detail-value">{form.lastName || '—'}</span></div>
                         <div className="detail-item"><span className="detail-label">Middle Name</span><span className="detail-value">{form.middleName || '—'}</span></div>
                         <div className="detail-item"><span className="detail-label">Suffix</span><span className="detail-value">{form.suffix || '—'}</span></div>
                         <div className="detail-item"><span className="detail-label">Contact Number</span><span className="detail-value">{form.contactNumber || '—'}</span></div>
                         <div className="detail-item"><span className="detail-label">Email</span><span className="detail-value">{form.email || '—'}</span></div>
+                        <div className="detail-item"><span className="detail-label">Account Status</span><span className="detail-value">{form.accountStatus}</span></div>
                     </div>
                 )}
             </FormModal>
 
-            {/* ── Confirmation Modal ── */}
+            {/* Discard changes confirm modal */}
             <ConfirmationModal
                 isOpen={confirmModal.isOpen}
                 variant={confirmModal.variant}
@@ -2120,57 +1919,105 @@ const gateConsentRef = useRef(false);
                 description={confirmModal.description}
                 notice={confirmModal.notice}
                 confirmLabel={confirmModal.confirmLabel}
-                isLoading={confirmModal.isLoading || submitting || gateLoading}
-                extraContent={confirmModal.isOpen ? (
+                isLoading={confirmModal.isLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(CONFIRM_CLOSED)}
+            />
+
+            {/* Stage 1: Review Changes & Historical Safety Notice Modal */}
+            <ConfirmationModal
+                isOpen={reviewModalOpen}
+                variant={hasSystemRemovals || (statusChanged && form.accountStatus !== 'Active') ? 'warning' : 'info'}
+                title="Review Account & System Access Changes"
+                description={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {confirmModal.variant === 'warning' && form.accountStatus !== 'Active' && (
-                            <div style={{ padding: '10px 12px', background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                <strong style={{ color: 'var(--status-failed)' }}>Warning:</strong> Historical tasks, comment logs, and recommendations will be archived in a read-only state.
-                                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, cursor: 'pointer', fontWeight: 500 }}>
-                                    <input type="checkbox" checked={gateConsent} onChange={e => { setGateConsent(e.target.checked); gateConsentRef.current = e.target.checked; setGateError(''); }} style={{ marginTop: 2, accentColor: 'var(--status-failed)' }} />
-                                    <span>I understand and agree to proceed with deactivation.</span>
-                                </label>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                            Please review the requested changes for <strong>{editDisplayName || displayName}</strong> before authorizing.
+                        </p>
+
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)', padding: 12, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>System Access</span>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {form.targetSystems.map(s => (
+                                        <span key={s} style={{
+                                            padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: 11,
+                                            background: addedSystems.includes(s) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                            color: addedSystems.includes(s) ? '#059669' : 'var(--primary, #3b82f6)'
+                                        }}>
+                                            {s} {addedSystems.includes(s) ? '(Added)' : ''}
+                                        </span>
+                                    ))}
+                                    {removedSystems.map(s => (
+                                        <span key={s} style={{
+                                            padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: 11,
+                                            background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', textDecoration: 'line-through'
+                                        }}>
+                                            {s} (Revoked)
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {form.targetSystems.includes('STARS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>STARS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.role} {form.departmentId ? `(${departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || 'Dept'})` : ''}</strong>
+                                </div>
+                            )}
+                            {form.targetSystems.includes('DMS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>DMS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.dmsRole} (Hubs: {form.dmsAreas.join(', ')})</strong>
+                                </div>
+                            )}
+                            {form.targetSystems.includes('FOMS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>FOMS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.fomsRole}</strong>
+                                </div>
+                            )}
+                            {statusChanged && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Account Status</span>
+                                    <strong style={{ color: form.accountStatus === 'Active' ? '#059669' : '#dc2626' }}>{initialSnapshot.accountStatus} → {form.accountStatus}</strong>
+                                </div>
+                            )}
+                        </div>
+
+                        {hasSystemRemovals && (
+                            <div style={{ padding: '10px 12px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                                <strong style={{ color: '#d97706' }}>Floating Records & Historical Preservation:</strong> Revoking access to <strong>{removedSystems.join(', ')}</strong> disables active login and operations in those systems, but all existing tasks, deliveries, waybills, and financial transactions will remain safely linked and preserved for audit compliance.
                             </div>
                         )}
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                id="gate-pw-input"
-                                type={showGatePassword ? 'text' : 'password'}
-                                placeholder="Enter your current password"
-                                style={{ width: '100%', paddingRight: 40, boxSizing: 'border-box', height: 38, borderRadius: 8, border: `1.5px solid ${gateError ? '#dc2626' : '#e2e8f0'}`, padding: '0 40px 0 12px', fontSize: 13, outline: 'none' }}
-                                autoFocus
-                                onChange={e => { setGatePassword(e.target.value); setGateError(''); }}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        const btn = document.getElementById('gate-confirm-btn');
-                                        btn?.click();
-                                    }
-                                }}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowGatePassword(p => !p)}
-                                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
-                                tabIndex={-1}
-                            >
-                                {showGatePassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                            </button>
-                        </div>
-                        {gateError && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#dc2626' }}>
-                                <AlertCircle size={12} />{gateError}
+                        {statusChanged && form.accountStatus !== 'Active' && (
+                            <div style={{ padding: '10px 12px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.2)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                                <strong style={{ color: 'var(--status-failed)' }}>Notice:</strong> Deactivating this account revokes active system logins while keeping historical activity archived in a read-only state.
                             </div>
                         )}
                     </div>
-                ) : undefined}
-                onConfirm={confirmModal.onConfirm}
-                onCancel={() => setConfirmModal(CONFIRM_CLOSED)}
+                }
+                confirmLabel="Proceed to Password Verification"
+                cancelLabel="Cancel"
+                onConfirm={() => {
+                    setReviewModalOpen(false);
+                    setGateModalOpen(true);
+                }}
+                onCancel={() => setReviewModalOpen(false)}
+            />
+
+            {/* Stage 2: Manager Password Gate Modal */}
+            <ManagerPasswordGateModal
+                isOpen={gateModalOpen}
+                onClose={() => setGateModalOpen(false)}
+                onSuccess={doSave}
+                title="Authorize Employee & System Changes"
+                subtitle={`Enter your manager password to authorize and apply the changes for ${editDisplayName || displayName}.`}
+                confirmLabel="Verify & Save"
             />
         </>
     );
 }
-
-
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 
@@ -4261,6 +4108,14 @@ export default function Dashboard() {
                     presenceStatus: e.presenceStatus ?? 'Offline',
                     email: e.email ?? '',
                     departmentName: e.departmentName ?? e.DepartmentName ?? '',
+                    departmentId: e.departmentId ?? '',
+                    jobPositionName: e.jobPositionName ?? '',
+                    jobPositionId: e.jobPositionId ?? '',
+                    allowedSystems: e.allowedSystems ?? 'STARS',
+                    targetSystems: (e.allowedSystems ? e.allowedSystems.split(',') : ['STARS']).map((s: string) => s.trim().toUpperCase()),
+                    dmsRole: e.dmsRole,
+                    dmsAreas: Array.isArray(e.dmsAreas) ? e.dmsAreas : (e.dmsAreas ? e.dmsAreas.split(',').map((s: string) => s.trim()) : undefined),
+                    fomsRole: e.fomsRole,
                     employmentStatus: e.employmentStatus ?? 'Regular',
                     hireDate: e.hireDate ?? null,
                     attachments: e.attachments ?? [],

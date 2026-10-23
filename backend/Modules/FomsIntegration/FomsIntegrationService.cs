@@ -582,8 +582,9 @@ public class FomsIntegrationService : IFomsIntegrationService
         string? password,
         string? role,
         string? phone,
-        decimal? salaryRate,
-        DateTime? dateHired)
+        decimal? salaryRate = null,
+        DateTime? dateHired = null,
+        string? status = "Active")
     {
         if (!IsConfigured)
         {
@@ -601,7 +602,8 @@ public class FomsIntegrationService : IFomsIntegrationService
             role = string.IsNullOrWhiteSpace(role) ? "Accountant" : role,
             phone,
             salaryRate,
-            dateHired
+            dateHired,
+            status = string.IsNullOrWhiteSpace(status) ? "Active" : status
         };
 
         try

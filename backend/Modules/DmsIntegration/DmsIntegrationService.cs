@@ -643,7 +643,8 @@ public class DmsIntegrationService : IDmsIntegrationService
         string? role,
         string? systemAccess,
         string? temporaryPassword,
-        List<string>? areas)
+        List<string>? areas,
+        string? status = "Active")
     {
         if (!IsConfigured)
         {
@@ -668,7 +669,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             systemAccess = !string.IsNullOrWhiteSpace(systemAccess) && systemAccess != "Both" && systemAccess != "Mobile" && systemAccess != "Web"
                 ? systemAccess
                 : canonicalAccess,
-            status = "Active",
+            status = string.IsNullOrWhiteSpace(status) ? "Active" : status,
             temporaryPassword,
             areas = areas ?? new List<string>()
         };

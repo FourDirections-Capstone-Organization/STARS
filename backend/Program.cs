@@ -307,8 +307,11 @@ using (var scope = app.Services.CreateScope())
                 ON CONFLICT (""MigrationId"") DO NOTHING;
 
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""AllowedSystems"" character varying(100) NOT NULL DEFAULT 'STARS';
+                ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DmsRole"" character varying(50) NULL;
+                ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DmsAreas"" character varying(250) NULL;
+                ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""FomsRole"" character varying(50) NULL;
             ");
-            Console.WriteLine("[STARTUP] FOMS Integration tables and AllowedSystems column verified/created.");
+            Console.WriteLine("[STARTUP] FOMS Integration tables and multi-system user columns verified/created.");
         }
         catch (Exception ddlEx)
         {

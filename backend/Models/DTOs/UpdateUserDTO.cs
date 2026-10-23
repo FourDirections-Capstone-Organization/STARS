@@ -32,4 +32,12 @@ public class UpdateUserDTO
     public string? AllowedSystems { get; set; }
 
     public List<string>? TargetSystems { get; set; }
+    public Backend.Models.Enums.UserRole? Role { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public Guid? JobPositionId { get; set; }
+    [MaxLength(50)]
+    public string? DmsRole { get; set; }
+    public List<string>? DmsAreas { get; set; }
+    [MaxLength(50)]
+    public string? FomsRole { get; set; }
 }

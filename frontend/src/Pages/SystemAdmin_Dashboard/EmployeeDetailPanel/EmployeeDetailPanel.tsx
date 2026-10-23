@@ -34,6 +34,8 @@ import './EmployeeDetailPanel.css';
 import { useToast } from '../../../components/Toast/Toast';
 import FormModal from '../../../components/FormModal/FormModal';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
+import { SystemAccessConfigCard, DepartmentOption, JobPositionOption } from '../../../components/SystemAccessConfigCard/SystemAccessConfigCard';
+import { ManagerPasswordGateModal } from '../../../components/ManagerPasswordGateModal/ManagerPasswordGateModal';
 import DataTable from '../../../components/ui/DataTable';
 import Pagination from '../../../components/ui/Pagination';
 import api from '../../../api';
@@ -75,6 +77,14 @@ interface RecentEmployee {
     presenceStatus?: string;
     email?: string;
     departmentName?: string;
+    departmentId?: string;
+    jobPositionName?: string;
+    jobPositionId?: string;
+    allowedSystems?: string;
+    targetSystems?: string[];
+    dmsRole?: string;
+    dmsAreas?: string[];
+    fomsRole?: string;
     employmentStatus?: string;
     hireDate?: string;
     attachments?: Array<{
@@ -243,6 +253,15 @@ interface EditModalProps {
 }
 
 function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalProps) {
+    const parseSystems = (systemsStr?: string, systemsArr?: string[]): string[] => {
+        if (systemsArr && systemsArr.length > 0) return systemsArr;
+        if (!systemsStr) return ['STARS'];
+        const parts = systemsStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        return parts.length > 0 ? parts : ['STARS'];
+    };
+
+    const initialSystems = parseSystems(profile.allowedSystems, profile.targetSystems);
+
     const [form, setForm] = useState({
         firstName: profile.firstName ?? '',
         middleName: profile.middleName ?? '',
@@ -252,19 +271,30 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
         role: toDisplayRole(profile.role),
         accountStatus: profile.accountStatus,
         email: profile.email ?? '',
+        targetSystems: initialSystems,
+        departmentId: profile.departmentId ?? '',
+        jobPositionId: profile.jobPositionId ?? '',
+        dmsRole: profile.dmsRole || 'Encoder',
+        dmsAreas: profile.dmsAreas && profile.dmsAreas.length > 0 ? profile.dmsAreas : ['Manila'],
+        fomsRole: profile.fomsRole || 'Accountant',
     });
+
+    const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+    const [jobPositions, setJobPositions] = useState<JobPositionOption[]>([]);
+    const [availableRoles, setAvailableRoles] = useState<string[]>(['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier', 'Accountant']);
+    const [loadingOrg, setLoadingOrg] = useState(true);
+    const [isSystemCardCollapsed, setIsSystemCardCollapsed] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+
     const [submitting, setSubmitting] = useState(false);
     const [apiError, setApiError] = useState('');
     const { success, error } = useToast();
-    const [confirmModal, setConfirmModal] = useState<ConfirmModalState>(CONFIRM_CLOSED);
-    const [gatePassword, setGatePassword] = useState('');
-    const [gateError, setGateError] = useState('');
-    const [gateLoading, setGateLoading] = useState(false);
-    const [showGatePassword, setShowGatePassword] = useState(false);
-    const [gateConsent, setGateConsent] = useState(false);
-    const gateConsentRef = useRef(false);
 
-    const initialValues = {
+    // Two-stage confirmation states
+    const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const [gateModalOpen, setGateModalOpen] = useState(false);
+
+    const [initialSnapshot, setInitialSnapshot] = useState({
         firstName: profile.firstName ?? '',
         middleName: profile.middleName ?? '',
         lastName: profile.lastName ?? '',
@@ -273,58 +303,154 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
         role: toDisplayRole(profile.role),
         accountStatus: profile.accountStatus,
         email: profile.email ?? '',
-    };
-    const isDirty = JSON.stringify(form) !== JSON.stringify(initialValues);
+        targetSystems: initialSystems,
+        departmentId: profile.departmentId ?? '',
+        jobPositionId: profile.jobPositionId ?? '',
+        dmsRole: profile.dmsRole || 'Encoder',
+        dmsAreas: profile.dmsAreas && profile.dmsAreas.length > 0 ? profile.dmsAreas : ['Manila'],
+        fomsRole: profile.fomsRole || 'Accountant',
+    });
+
+    const isDirty = JSON.stringify(form) !== JSON.stringify(initialSnapshot);
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadOrgAndDetails = async () => {
+            setLoadingOrg(true);
+            try {
+                const [uRes, dRes, pRes, rRes] = await Promise.all([
+                    api.get(`/api/User/employee-number/${encodeURIComponent(profile.employeeNumber)}`),
+                    api.get('/api/Department'),
+                    api.get('/api/job-positions?pageSize=100'),
+                    api.get('/api/Role'),
+                ]);
+
+                if (!isMounted) return;
+
+                const deptsData = dRes.data;
+                const posData = pRes.data;
+                const rolesData = rRes.data;
+
+                const rawDepts = Array.isArray(deptsData) ? deptsData : (deptsData.data?.items ?? (Array.isArray(deptsData.data) ? deptsData.data : deptsData.$values ?? []));
+                const rawPos = Array.isArray(posData) ? posData : (posData.data?.items ?? (Array.isArray(posData.data) ? posData.data : posData.$values ?? []));
+                const rawRoles = Array.isArray(rolesData) ? rolesData : (rolesData.data?.items ?? (Array.isArray(rolesData.data) ? rolesData.data : rolesData.$values ?? []));
+
+                const parsedDepts: DepartmentOption[] = rawDepts.map((d: any) => ({
+                    departmentId: d.id ?? d.departmentId ?? d.DepartmentId,
+                    name: d.name ?? d.Name,
+                }));
+                const parsedPos: JobPositionOption[] = rawPos.map((p: any) => ({
+                    jobPositionId: p.id ?? p.jobPositionId ?? p.JobPositionId,
+                    name: p.name ?? p.Name,
+                    departmentId: p.departmentId ?? p.DepartmentId,
+                }));
+                const parsedRoles: string[] = rawRoles.map((r: any) => typeof r === 'string' ? r : (r.name ?? r.Name)).filter(Boolean);
+
+                setDepartments(parsedDepts);
+                setJobPositions(parsedPos);
+                if (parsedRoles.length > 0) setAvailableRoles(parsedRoles);
+
+                const uData = uRes.data?.data ?? uRes.data;
+                if (uData) {
+                    const loadedSystems = parseSystems(uData.allowedSystems, uData.targetSystems);
+                    const dmsAreasList = Array.isArray(uData.dmsAreas)
+                        ? uData.dmsAreas
+                        : (uData.dmsAreas ? uData.dmsAreas.split(',').map((s: string) => s.trim()) : ['Manila']);
+
+                    const loadedForm = {
+                        firstName: uData.firstName ?? profile.firstName ?? '',
+                        middleName: uData.middleName ?? profile.middleName ?? '',
+                        lastName: uData.lastName ?? profile.lastName ?? '',
+                        suffix: uData.suffix ?? profile.suffix ?? '',
+                        contactNumber: uData.contactNumber ?? profile.contactNumber ?? '',
+                        role: toDisplayRole(uData.role) || toDisplayRole(profile.role),
+                        accountStatus: uData.accountStatus ?? (uData.isDeactivated ? 'Deactivated' : (uData.isActive ? 'Active' : 'Inactive')),
+                        email: uData.email ?? profile.email ?? '',
+                        targetSystems: loadedSystems,
+                        departmentId: uData.departmentId ?? profile.departmentId ?? '',
+                        jobPositionId: uData.jobPositionId ?? profile.jobPositionId ?? '',
+                        dmsRole: uData.dmsRole || profile.dmsRole || 'Encoder',
+                        dmsAreas: dmsAreasList.length > 0 ? dmsAreasList : ['Manila'],
+                        fomsRole: uData.fomsRole || profile.fomsRole || 'Accountant',
+                    };
+
+                    setForm(loadedForm);
+                    setInitialSnapshot(loadedForm);
+                }
+            } catch (err) {
+                console.error('Error fetching employee full profile / org info:', err);
+            } finally {
+                if (isMounted) setLoadingOrg(false);
+            }
+        };
+
+        loadOrgAndDetails();
+        return () => { isMounted = false; };
+    }, [profile.employeeNumber]);
 
     const handleClose = () => {
         onClose();
     };
 
-    const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const setField = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setForm(prev => ({ ...prev, [key]: e.target.value }));
         setApiError('');
+        if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }));
     };
 
     const doSave = async () => {
         setSubmitting(true);
         try {
-            // Look up user GUID by employee number
             const lookupRes = await api.get(`/api/User/employee-number/${encodeURIComponent(profile.employeeNumber)}`);
             const lookupData = lookupRes.data;
             const userId = lookupData?.data?.id ?? lookupData?.id;
             if (!userId) throw new Error('Employee not found.');
 
-            // When deactivating: update personal details FIRST (while still active), then deactivate
             const statusChanged = form.accountStatus !== profile.accountStatus;
             if (statusChanged && form.accountStatus === 'Active') {
                 await api.patch(`/api/User/${userId}/activate`);
             }
 
             const cleanMail = cleanEmail(form.email);
+            const isStars = form.targetSystems.includes('STARS');
+            const isDms = form.targetSystems.includes('DMS');
+            const isFoms = form.targetSystems.includes('FOMS');
 
-            // Update personal details
-            await api.put(`/api/User/${userId}`, {
+            const payload: any = {
                 firstName: form.firstName.trim(),
                 middleName: form.middleName.trim(),
                 lastName: form.lastName.trim(),
                 suffix: form.suffix.trim(),
                 contactNumber: form.contactNumber,
                 email: cleanMail,
-            });
+                allowedSystems: form.targetSystems.join(','),
+                targetSystems: form.targetSystems,
+                role: isStars ? toBackendRole(form.role) : undefined,
+                departmentId: isStars && form.departmentId ? form.departmentId : undefined,
+                jobPositionId: isStars && form.jobPositionId ? form.jobPositionId : undefined,
+                dmsRole: isDms ? (form.dmsRole || 'Encoder') : undefined,
+                dmsAreas: isDms ? (form.dmsAreas || ['Manila']) : undefined,
+                fomsRole: isFoms ? (form.fomsRole || 'Accountant') : undefined,
+            };
 
-            // Deactivate AFTER updating personal details (backend blocks PUT on deactivated users)
+            await api.put(`/api/User/${userId}`, payload);
+
             if (statusChanged && form.accountStatus !== 'Active') {
                 await api.patch(`/api/User/${userId}/deactivate`);
             }
 
-            // Update role if changed
-            const newRoleVal = toBackendRole(form.role);
-            const oldRoleVal = typeof profile.role === 'number' ? profile.role : parseInt(profile.role, 10);
-            if (newRoleVal !== oldRoleVal) {
-                await api.patch(`/api/Role/user/${userId}/role`, { newRole: newRoleVal, reason: 'Role updated via admin panel' });
+            if (isStars) {
+                const newRoleVal = toBackendRole(form.role);
+                const oldRoleVal = typeof profile.role === 'number' ? profile.role : parseInt(profile.role, 10);
+                if (newRoleVal !== oldRoleVal) {
+                    await api.patch(`/api/Role/user/${userId}/role`, { newRole: newRoleVal, reason: 'Role updated via admin panel' });
+                }
             }
 
-            const newEmployeeName = [form.firstName.trim(), form.middleName.trim(), form.lastName.trim()].filter(Boolean).join(' ');
+            const deptObj = departments.find(d => (d.departmentId ?? d.id) === form.departmentId);
+            const posObj = jobPositions.find(p => (p.jobPositionId ?? p.id) === form.jobPositionId);
+            const newEmployeeName = [form.firstName.trim(), form.middleName.trim(), form.lastName.trim(), form.suffix.trim()].filter(Boolean).join(' ');
+
             onSaved({
                 ...profile,
                 firstName: form.firstName.trim(),
@@ -333,11 +459,20 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                 suffix: form.suffix.trim(),
                 employeeName: newEmployeeName || form.lastName.trim(),
                 contactNumber: form.contactNumber,
-                role: String(toBackendRole(form.role)),
+                role: String(isStars ? toBackendRole(form.role) : profile.role),
                 accountStatus: form.accountStatus,
                 email: cleanMail,
+                departmentName: deptObj?.name || profile.departmentName,
+                departmentId: form.departmentId,
+                jobPositionId: form.jobPositionId,
+                jobPositionName: posObj?.name,
+                allowedSystems: form.targetSystems.join(','),
+                targetSystems: form.targetSystems,
+                dmsRole: form.dmsRole,
+                dmsAreas: form.dmsAreas,
+                fomsRole: form.fomsRole,
             });
-            success('Employee details updated successfully!');
+            success('Employee and system access updated successfully!');
             onClose();
         } catch (err: any) {
             const msg = err?.response?.data?.message || err.message;
@@ -345,57 +480,47 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
             setApiError(msg ?? 'Something went wrong.');
         } finally {
             setSubmitting(false);
-            setConfirmModal(CONFIRM_CLOSED);
+            setReviewModalOpen(false);
+            setGateModalOpen(false);
         }
     };
 
-    const handleSave = () => {
-        if (!form.firstName.trim() || !form.lastName.trim()) {
-            setApiError('First name and last name are required.');
+    const handleStartSave = () => {
+        const errs: Record<string, string | undefined> = {};
+        if (!form.firstName.trim()) errs.firstName = 'First name is required.';
+        if (!form.lastName.trim()) errs.lastName = 'Last name is required.';
+        if (!form.targetSystems || form.targetSystems.length === 0) {
+            errs.targetSystems = 'Please select at least one operational system.';
+        }
+        if (form.targetSystems.includes('STARS')) {
+            if (!form.departmentId) errs.departmentId = 'Please select a department.';
+            if (!form.jobPositionId) errs.jobPositionId = 'Please select a position.';
+            if (!form.role) errs.role = 'Please select a STARS role.';
+        }
+        if (form.targetSystems.includes('DMS')) {
+            if (!form.dmsRole) errs.dmsRole = 'Please select a DMS role.';
+        }
+        if (form.targetSystems.includes('FOMS')) {
+            if (!form.fomsRole) errs.fomsRole = 'Please select a FOMS role.';
+        }
+
+        if (Object.keys(errs).length > 0) {
+            setErrors(errs);
+            if (errs.targetSystems || errs.departmentId || errs.jobPositionId || errs.role || errs.dmsRole || errs.fomsRole) {
+                setIsSystemCardCollapsed(false);
+            }
             return;
         }
-        setGatePassword('');
-        setGateError('');
-        setShowGatePassword(false);
-        setGateConsent(false);
-        gateConsentRef.current = false;
-        const isStatusChanging = form.accountStatus !== profile.accountStatus;
-        const isDeactivating = isStatusChanging && form.accountStatus !== 'Active';
-        setConfirmModal({
-            isOpen: true,
-            variant: isStatusChanging ? (form.accountStatus === 'Active' ? 'success' : 'warning') : 'info',
-            title: isStatusChanging
-                ? `${form.accountStatus === 'Active' ? 'Activate' : 'Deactivate'} Account`
-                : 'Confirm your identity',
-            description: isStatusChanging
-                ? `You are about to ${form.accountStatus === 'Active' ? 'activate' : 'deactivate'} ${[profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.employeeName}. Enter your password to confirm.`
-                : 'Enter your password to save these changes.',
-            confirmLabel: 'Verify & save',
-            isLoading: false,
-            onConfirm: async () => {
-                if (isDeactivating && !gateConsentRef.current) {
-                    setGateError('You must agree to the archiving of historical data before deactivating.');
-                    return;
-                }
-                const pw = (document.getElementById('gate-pw-input') as HTMLInputElement)?.value ?? gatePassword;
-                if (!pw) { setGateError('Please enter your password.'); return; }
-                setConfirmModal(prev => ({ ...prev, isLoading: true }));
-                setGateError('');
-                try {
-                    const adminId = localStorage.getItem('employeeId') ?? '';
-                    const verifyRes = await api.post('/api/Auth/verify-password', { employeeID: adminId, password: pw });
-                    const verifyData = verifyRes.data;
-                    if (!verifyData.isSuccess) { throw new Error(verifyData.message || verifyData.Message || 'Incorrect password. Please try again.'); }
-                    setConfirmModal(CONFIRM_CLOSED);
-                    await doSave();
-                } catch (err: any) {
-                    const msg = err?.response?.data?.message || err.message;
-                    setGateError(msg ?? 'Incorrect password. Please try again.');
-                    setConfirmModal(prev => ({ ...prev, isLoading: false }));
-                }
-            },
-        });
+
+        setErrors({});
+        setApiError('');
+        setReviewModalOpen(true);
     };
+
+    const addedSystems = form.targetSystems.filter(s => !initialSnapshot.targetSystems.includes(s));
+    const removedSystems = initialSnapshot.targetSystems.filter(s => !form.targetSystems.includes(s));
+    const hasSystemRemovals = removedSystems.length > 0;
+    const statusChanged = form.accountStatus !== initialSnapshot.accountStatus;
 
     const infoCard = {
         avatarText: [form.firstName, form.lastName].filter(Boolean).join(' ') || '?',
@@ -410,11 +535,11 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
             <FormModal
                 isOpen={true}
                 onClose={handleClose}
-                title="Edit Employee"
-                subtitle={`Update details for ${profile.employeeName}`}
+                title="Edit Employee & System Access"
+                subtitle={`Manage credentials, operational platforms, and roles for ${profile.employeeName}`}
                 infoCard={infoCard}
                 apiError={apiError}
-                onSubmit={handleSave}
+                onSubmit={handleStartSave}
                 isSubmitting={submitting}
                 size="md"
                 confirmOnCancel={true}
@@ -425,26 +550,28 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                     <div className="fm-field-grid">
                         <div className="fm-field">
                             <label className="fm-label">First Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                            <input type="text" value={form.firstName} onChange={set('firstName')} className="fm-input" maxLength={50} placeholder="e.g. Juan" />
+                            <input type="text" value={form.firstName} onChange={setField('firstName')} className="fm-input" maxLength={50} placeholder="e.g. Juan" />
+                            {errors.firstName && <span style={{ fontSize: 11, color: 'var(--status-failed)', marginTop: 4 }}>{errors.firstName}</span>}
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Middle Initial <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
-                            <input type="text" value={form.middleName} onChange={set('middleName')} className="fm-input" maxLength={50} placeholder="e.g. S" />
+                            <input type="text" value={form.middleName} onChange={setField('middleName')} className="fm-input" maxLength={50} placeholder="e.g. S" />
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Last Name <span style={{ color: 'var(--status-failed)' }}>*</span></label>
-                            <input type="text" value={form.lastName} onChange={set('lastName')} className="fm-input" maxLength={50} placeholder="e.g. Dela Cruz" />
+                            <input type="text" value={form.lastName} onChange={setField('lastName')} className="fm-input" maxLength={50} placeholder="e.g. Dela Cruz" />
+                            {errors.lastName && <span style={{ fontSize: 11, color: 'var(--status-failed)', marginTop: 4 }}>{errors.lastName}</span>}
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Suffix <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
-                            <input type="text" value={form.suffix} onChange={set('suffix')} className="fm-input" maxLength={10} placeholder="e.g. Jr., III" />
+                            <input type="text" value={form.suffix} onChange={setField('suffix')} className="fm-input" maxLength={10} placeholder="e.g. Jr., III" />
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Email</label>
                             <input
                                 type="email"
                                 value={form.email}
-                                onChange={set('email')}
+                                onChange={setField('email')}
                                 onBlur={() => {
                                     const corrected = autoCorrectEmail(form.email);
                                     if (corrected.wasCorrected) {
@@ -456,27 +583,66 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                         </div>
                         <div className="fm-field">
                             <label className="fm-label">Contact Number</label>
-                            <input type="tel" value={form.contactNumber} onChange={set('contactNumber')} className="fm-input" />
+                            <input type="tel" value={form.contactNumber} onChange={setField('contactNumber')} className="fm-input" />
                         </div>
                     </div>
                 </div>
 
+                {/* System Access & Role Configuration Collapsible Card */}
+                <SystemAccessConfigCard
+                    targetSystems={form.targetSystems}
+                    onChangeTargetSystems={next => {
+                        setForm(prev => ({ ...prev, targetSystems: next }));
+                        if (errors.targetSystems) setErrors(prev => ({ ...prev, targetSystems: undefined }));
+                    }}
+                    departmentId={form.departmentId}
+                    jobPositionId={form.jobPositionId}
+                    role={form.role}
+                    onChangeDepartmentId={deptId => {
+                        setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                        if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
+                    }}
+                    onChangeJobPositionId={posId => {
+                        const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
+                        const roles = getRolesForPosition(pos?.name, availableRoles);
+                        const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
+                        setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                        if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
+                    }}
+                    onChangeRole={r => {
+                        setForm(prev => ({ ...prev, role: r }));
+                        if (errors.role) setErrors(prev => ({ ...prev, role: undefined }));
+                    }}
+                    departments={departments}
+                    jobPositions={jobPositions}
+                    availableRoles={availableRoles}
+                    loadingOrg={loadingOrg}
+                    dmsRole={form.dmsRole}
+                    dmsAreas={form.dmsAreas}
+                    onChangeDmsRole={r => {
+                        setForm(prev => ({ ...prev, dmsRole: r }));
+                        if (errors.dmsRole) setErrors(prev => ({ ...prev, dmsRole: undefined }));
+                    }}
+                    onChangeDmsAreas={areas => {
+                        setForm(prev => ({ ...prev, dmsAreas: areas }));
+                        if (errors.dmsAreas) setErrors(prev => ({ ...prev, dmsAreas: undefined }));
+                    }}
+                    fomsRole={form.fomsRole}
+                    onChangeFomsRole={r => {
+                        setForm(prev => ({ ...prev, fomsRole: r }));
+                        if (errors.fomsRole) setErrors(prev => ({ ...prev, fomsRole: undefined }));
+                    }}
+                    errors={errors}
+                    isCollapsed={isSystemCardCollapsed}
+                    onToggleCollapse={() => setIsSystemCardCollapsed(prev => !prev)}
+                />
+
                 <div className="fm-section">
-                    <h5 className="fm-section-title">Account</h5>
+                    <h5 className="fm-section-title">Account Status</h5>
                     <div className="fm-field-grid">
                         <div className="fm-field">
-                            <label className="fm-label">Role</label>
-                            <select value={form.role} onChange={set('role')} className="fm-select">
-                                {(rolesList && rolesList.length > 0 ? rolesList : ROLES).map(r => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="fm-field">
                             <label className="fm-label">Account Status</label>
-                            <select value={form.accountStatus} onChange={set('accountStatus')} className="fm-select">
+                            <select value={form.accountStatus} onChange={setField('accountStatus')} className="fm-select">
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                                 <option value="Deactivated">Deactivated</option>
@@ -488,34 +654,96 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                 </div>
             </FormModal>
 
+            {/* Stage 1: Review Changes & Audit Safety Notice Modal */}
             <ConfirmationModal
-                isOpen={confirmModal.isOpen}
-                variant={confirmModal.variant}
-                title={confirmModal.title}
-                description={confirmModal.description}
-                confirmLabel={confirmModal.confirmLabel}
-                cancelLabel={confirmModal.cancelLabel}
-                isLoading={confirmModal.isLoading}
-                extraContent={confirmModal.isOpen ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {confirmModal.variant === 'warning' && form.accountStatus !== 'Active' && (
-                            <div style={{ padding: '10px 12px', background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                                <strong style={{ color: 'var(--status-failed)' }}>Warning:</strong> Historical tasks, comment logs, and recommendations will be archived in a read-only state.
-                                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, cursor: 'pointer', fontWeight: 500 }}>
-                                    <input type="checkbox" checked={gateConsent} onChange={e => { setGateConsent(e.target.checked); gateConsentRef.current = e.target.checked; setGateError(''); }} style={{ marginTop: 2, accentColor: 'var(--status-failed)' }} />
-                                    <span>I understand and agree to proceed with deactivation.</span>
-                                </label>
+                isOpen={reviewModalOpen}
+                variant={hasSystemRemovals || (statusChanged && form.accountStatus !== 'Active') ? 'warning' : 'info'}
+                title="Review Account & System Access Changes"
+                description={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                            Please review the requested changes for <strong>{[form.firstName, form.lastName].filter(Boolean).join(' ') || profile.employeeName}</strong> before authorizing.
+                        </p>
+
+                        <div style={{ background: 'var(--bg-input, #f8fafc)', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)', padding: 12, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>System Access</span>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {form.targetSystems.map(s => (
+                                        <span key={s} style={{
+                                            padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: 11,
+                                            background: addedSystems.includes(s) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                            color: addedSystems.includes(s) ? '#059669' : 'var(--primary, #3b82f6)'
+                                        }}>
+                                            {s} {addedSystems.includes(s) ? '(Added)' : ''}
+                                        </span>
+                                    ))}
+                                    {removedSystems.map(s => (
+                                        <span key={s} style={{
+                                            padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: 11,
+                                            background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', textDecoration: 'line-through'
+                                        }}>
+                                            {s} (Revoked)
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {form.targetSystems.includes('STARS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>STARS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.role} {form.departmentId ? `(${departments.find(d => (d.departmentId ?? d.id) === form.departmentId)?.name || 'Dept'})` : ''}</strong>
+                                </div>
+                            )}
+                            {form.targetSystems.includes('DMS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>DMS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.dmsRole} (Hubs: {form.dmsAreas.join(', ')})</strong>
+                                </div>
+                            )}
+                            {form.targetSystems.includes('FOMS') && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>FOMS Role</span>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{form.fomsRole}</strong>
+                                </div>
+                            )}
+                            {statusChanged && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Account Status</span>
+                                    <strong style={{ color: form.accountStatus === 'Active' ? '#059669' : '#dc2626' }}>{initialSnapshot.accountStatus} → {form.accountStatus}</strong>
+                                </div>
+                            )}
+                        </div>
+
+                        {hasSystemRemovals && (
+                            <div style={{ padding: '10px 12px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                                <strong style={{ color: '#d97706' }}>Floating Records & Historical Preservation:</strong> Revoking access to <strong>{removedSystems.join(', ')}</strong> disables active login and operations in those systems, but all existing tasks, deliveries, waybills, and financial transactions will remain safely linked and preserved for audit compliance.
                             </div>
                         )}
-                        <div style={{ position: 'relative' }}>
-                            <input id="gate-pw-input" type={showGatePassword ? 'text' : 'password'} placeholder="Enter your current password" style={{ width: '100%', paddingRight: 40, boxSizing: 'border-box', height: 38, borderRadius: 8, border: `1.5px solid ${gateError ? '#dc2626' : '#e2e8f0'}`, padding: '0 40px 0 12px', fontSize: 13, outline: 'none' }} autoFocus onChange={e => { setGatePassword(e.target.value); setGateError(''); }} onKeyDown={e => { if (e.key === 'Enter') document.getElementById('gate-confirm-btn')?.click(); }} />
-                            <button type="button" onClick={() => setShowGatePassword(p => !p)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }} tabIndex={-1}>{showGatePassword ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-                        </div>
-                        {gateError && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#dc2626' }}><AlertCircle size={12} />{gateError}</div>}
+                        {statusChanged && form.accountStatus !== 'Active' && (
+                            <div style={{ padding: '10px 12px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.2)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                                <strong style={{ color: 'var(--status-failed)' }}>Notice:</strong> Deactivating this account revokes active system logins while keeping historical activity archived in a read-only state.
+                            </div>
+                        )}
                     </div>
-                ) : undefined}
-                onConfirm={confirmModal.onConfirm}
-                onCancel={() => setConfirmModal(CONFIRM_CLOSED)}
+                }
+                confirmLabel="Proceed to Password Verification"
+                cancelLabel="Cancel"
+                onConfirm={() => {
+                    setReviewModalOpen(false);
+                    setGateModalOpen(true);
+                }}
+                onCancel={() => setReviewModalOpen(false)}
+            />
+
+            {/* Stage 2: Manager Password Gate Modal */}
+            <ManagerPasswordGateModal
+                isOpen={gateModalOpen}
+                onClose={() => setGateModalOpen(false)}
+                onSuccess={doSave}
+                title="Authorize Account & System Changes"
+                subtitle={`Enter your manager password to authorize and apply the changes for ${[form.firstName, form.lastName].filter(Boolean).join(' ') || profile.employeeName}.`}
+                confirmLabel="Verify & Save"
             />
         </>
     );
@@ -947,6 +1175,7 @@ export default function EmployeeDetailPanel({
                                     { label: 'Department', value: profile.departmentName || '—', icon: Building },
                                     { label: 'Employment Status', value: profile.employmentStatus || 'Regular', icon: Briefcase },
                                     { label: 'Hire Date', value: fmtDate(profile.hireDate ?? null), icon: Calendar },
+                                    { label: 'Authorized Systems', value: profile.allowedSystems || profile.targetSystems?.join(', ') || 'STARS', icon: Shield },
                                     { label: 'Account Status', value: profile.accountStatus, icon: CheckCircle2 },
                                 ].map(({ label, value, icon: Icon }) => (
                                     <div key={label} className="ed-info-row">

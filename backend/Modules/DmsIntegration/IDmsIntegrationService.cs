@@ -62,7 +62,8 @@ public interface IDmsIntegrationService
         string? role,
         string? systemAccess,
         string? temporaryPassword,
-        List<string>? areas);
+        List<string>? areas,
+        string? status = "Active");
 
     /// <summary>
     /// Checks whether an employee ID already exists in DMS.

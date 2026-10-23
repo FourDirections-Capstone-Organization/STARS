@@ -140,6 +140,9 @@ public class UserService : IUserService
             HireDate = dto.HireDate,
             EmploymentStatus = dto.EmploymentStatus ?? "Regular",
             AllowedSystems = string.Join(",", targetSystems),
+            DmsRole = targetSystems.Contains("DMS") ? (dto.DmsRole ?? "Encoder") : null,
+            DmsAreas = targetSystems.Contains("DMS") ? (dto.DmsAreas != null && dto.DmsAreas.Any() ? string.Join(", ", dto.DmsAreas) : "Manila") : null,
+            FomsRole = targetSystems.Contains("FOMS") ? (dto.FomsRole ?? "Accountant") : null,
             IsActive = false,
             IsDeactivated = false,
             IsEmailVerified = false,
@@ -354,6 +357,27 @@ public class UserService : IUserService
         var oldContact = user.ContactNumber ?? string.Empty;
         var oldEmail = user.Email;
         var oldAllowedSystems = user.AllowedSystems ?? "STARS";
+        var oldRole = user.Role;
+        var oldDepartmentId = user.DepartmentId;
+        var oldJobPositionId = user.JobPositionId;
+        var oldDmsRole = user.DmsRole ?? string.Empty;
+        var oldDmsAreas = user.DmsAreas ?? string.Empty;
+        var oldFomsRole = user.FomsRole ?? string.Empty;
+
+        // Minimum 1 operational system validation
+        if (dto.TargetSystems != null)
+        {
+            var cleanedSystems = dto.TargetSystems
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Distinct()
+                .ToList();
+
+            if (!cleanedSystems.Any())
+            {
+                return ApiResponseDTO<UserResponseDTO>.Failure("At least one target operational system must be selected.");
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(dto.Email))
         {
@@ -372,7 +396,7 @@ public class UserService : IUserService
             user.IsEmailVerified = false; // Reset verification if email changed
         }
 
-        // Update fields
+        // Update profile fields
         if (!string.IsNullOrWhiteSpace(dto.FirstName))
             user.FirstName = dto.FirstName;
 
@@ -394,20 +418,127 @@ public class UserService : IUserService
         if (dto.EmploymentStatus != null)
             user.EmploymentStatus = dto.EmploymentStatus;
 
+        // Resolve Target Systems
+        List<string> targetSystems;
         if (dto.TargetSystems != null && dto.TargetSystems.Any())
         {
-            user.AllowedSystems = string.Join(",", dto.TargetSystems.Select(s => s.Trim().ToUpperInvariant()).Distinct());
+            targetSystems = dto.TargetSystems.Select(s => s.Trim().ToUpperInvariant()).Distinct().ToList();
+            user.AllowedSystems = string.Join(",", targetSystems);
         }
         else if (!string.IsNullOrWhiteSpace(dto.AllowedSystems))
         {
-            user.AllowedSystems = string.Join(",", dto.AllowedSystems.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s.ToUpperInvariant()).Distinct());
+            targetSystems = dto.AllowedSystems.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s.ToUpperInvariant()).Distinct().ToList();
+            user.AllowedSystems = string.Join(",", targetSystems);
         }
+        else
+        {
+            targetSystems = (user.AllowedSystems ?? "STARS").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s.ToUpperInvariant()).Distinct().ToList();
+        }
+
+        // Update STARS department, position, and role if specified
+        if (dto.Role.HasValue)
+            user.Role = dto.Role.Value;
+
+        if (dto.DepartmentId.HasValue)
+            user.DepartmentId = dto.DepartmentId.Value;
+
+        if (dto.JobPositionId.HasValue)
+            user.JobPositionId = dto.JobPositionId.Value;
+
+        // Update multi-system role assignments
+        if (dto.DmsRole != null)
+            user.DmsRole = dto.DmsRole;
+
+        if (dto.DmsAreas != null)
+            user.DmsAreas = string.Join(", ", dto.DmsAreas.Where(a => !string.IsNullOrWhiteSpace(a)));
+
+        if (dto.FomsRole != null)
+            user.FomsRole = dto.FomsRole;
 
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
 
         var fullName = $"{user.FirstName} {user.MiddleName} {user.LastName} {user.Suffix}".Replace("  ", " ").Trim();
+
+        // Multi-System Safe Cross-System Dispatch (Floating record / audit trail preservation)
+        if (_dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                if (targetSystems.Contains("DMS"))
+                {
+                    var dmsAreasList = !string.IsNullOrWhiteSpace(user.DmsAreas)
+                        ? user.DmsAreas.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                        : new List<string> { "Manila" };
+
+                    await _dmsService.ProvisionEmployeeAsync(
+                        user.EmployeeNumber,
+                        fullName,
+                        user.DmsRole ?? "Encoder",
+                        null,
+                        null,
+                        dmsAreasList,
+                        status: "Active");
+                }
+                else if (oldAllowedSystems.Contains("DMS") && !targetSystems.Contains("DMS"))
+                {
+                    // DMS access removed: Set Status to Inactive, NEVER hard delete to preserve historical deliveries
+                    await _dmsService.ProvisionEmployeeAsync(
+                        user.EmployeeNumber,
+                        fullName,
+                        user.DmsRole ?? "Encoder",
+                        null,
+                        null,
+                        new List<string>(),
+                        status: "Inactive");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync DMS status for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
+        if (_fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                if (targetSystems.Contains("FOMS"))
+                {
+                    await _fomsService.ProvisionUserAsync(
+                        user.EmployeeNumber,
+                        user.EmployeeNumber,
+                        fullName,
+                        user.Email,
+                        null,
+                        user.FomsRole ?? "Accountant",
+                        user.ContactNumber,
+                        null,
+                        user.HireDate,
+                        status: "Active");
+                }
+                else if (oldAllowedSystems.Contains("FOMS") && !targetSystems.Contains("FOMS"))
+                {
+                    // FOMS access removed: Set Status to Inactive, NEVER hard delete to preserve historical accounting logs
+                    await _fomsService.ProvisionUserAsync(
+                        user.EmployeeNumber,
+                        user.EmployeeNumber,
+                        fullName,
+                        user.Email,
+                        null,
+                        user.FomsRole ?? "Accountant",
+                        user.ContactNumber,
+                        null,
+                        user.HireDate,
+                        status: "Inactive");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync FOMS status for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
 
         // AL-002 step 7: capture Old Value and New Value for the changed fields
         var oldParts = new List<string>();
@@ -427,6 +558,10 @@ public class UserService : IUserService
         Track("ContactNumber", oldContact, user.ContactNumber ?? string.Empty);
         Track("Email", oldEmail, user.Email);
         Track("AllowedSystems", oldAllowedSystems, user.AllowedSystems ?? "STARS");
+        Track("Role", oldRole.ToString(), user.Role.ToString());
+        Track("DmsRole", oldDmsRole, user.DmsRole ?? string.Empty);
+        Track("DmsAreas", oldDmsAreas, user.DmsAreas ?? string.Empty);
+        Track("FomsRole", oldFomsRole, user.FomsRole ?? string.Empty);
 
         await _auditLogService.LogAsync(
             requestUserId,
@@ -434,7 +569,7 @@ public class UserService : IUserService
             "User",
             user.Id,
             null,
-            $"User {fullName} ({user.EmployeeNumber}) profile updated",
+            $"User {fullName} ({user.EmployeeNumber}) profile and system access updated",
             "UserManagement",
             oldValue: oldParts.Count > 0 ? "{" + string.Join(",", oldParts) + "}" : null,
             newValue: newParts.Count > 0 ? "{" + string.Join(",", newParts) + "}" : null);
@@ -614,7 +749,12 @@ public class UserService : IUserService
                 && (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes <= 15
                 ? "Online"
                 : "Offline",
-            AllowedSystems = user.AllowedSystems ?? "STARS"
+            AllowedSystems = user.AllowedSystems ?? "STARS",
+            DmsRole = user.DmsRole ?? ((user.AllowedSystems != null && user.AllowedSystems.Contains("DMS")) ? "Encoder" : null),
+            DmsAreas = !string.IsNullOrWhiteSpace(user.DmsAreas)
+                ? user.DmsAreas.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                : ((user.AllowedSystems != null && user.AllowedSystems.Contains("DMS")) ? new List<string> { "Manila" } : null),
+            FomsRole = user.FomsRole ?? ((user.AllowedSystems != null && user.AllowedSystems.Contains("FOMS")) ? "Accountant" : null)
         };
     }
 

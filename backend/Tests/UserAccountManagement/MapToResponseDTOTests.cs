@@ -1,4 +1,4 @@
-﻿using Backend.Models;
+using Backend.Models;
 using Xunit;
 
 namespace Backend.Tests.UserAccountManagement;
@@ -65,4 +65,30 @@ public class MapToResponseDTOTests
 
         Assert.Equal("Engineering", user.Department?.Name);
     }
-}
+
+    [Fact]
+    public void MapToResponseDTO_MultiSystemFields_MappedCorrectly()
+    {
+        var user = new User
+        {
+            AllowedSystems = "STARS,DMS,FOMS",
+            DmsRole = "Driver",
+            DmsAreas = "Manila, Makati",
+            FomsRole = "Head Accountant"
+        };
+
+        var dto = new Backend.Models.DTOs.UserResponseDTO
+        {
+            AllowedSystems = user.AllowedSystems,
+            DmsRole = user.DmsRole,
+            DmsAreas = user.DmsAreas?.Split(',').Select(s => s.Trim()).ToList(),
+            FomsRole = user.FomsRole
+        };
+
+        Assert.Equal("STARS,DMS,FOMS", dto.AllowedSystems);
+        Assert.Equal("Driver", dto.DmsRole);
+        Assert.Contains("Manila", dto.DmsAreas!);
+        Assert.Contains("Makati", dto.DmsAreas!);
+        Assert.Equal("Head Accountant", dto.FomsRole);
+    }
+}
