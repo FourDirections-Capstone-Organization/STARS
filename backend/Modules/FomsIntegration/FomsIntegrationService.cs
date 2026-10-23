@@ -520,7 +520,7 @@ public class FomsIntegrationService : IFomsIntegrationService
             }
 
             item.OutstandingBalance += r.OutstandingBalance;
-            if (r.CurrentStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(r.CurrentStatus, "Overdue", StringComparison.OrdinalIgnoreCase))
             {
                 item.OverdueInvoicesCount++;
                 item.LatestStatus = "Overdue";
@@ -645,11 +645,11 @@ public class FomsIntegrationService : IFomsIntegrationService
             .ToList();
 
         var totalOutstanding = records.Sum(r => r.OutstandingBalance);
-        var totalOverdue = records.Where(r => r.CurrentStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase)).Sum(r => r.OutstandingBalance);
-        var overdueCount = records.Count(r => r.CurrentStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase));
-        var paidCount = records.Count(r => r.CurrentStatus.Equals("Paid", StringComparison.OrdinalIgnoreCase));
-        var pendingCount = records.Count(r => r.CurrentStatus.Equals("Sent", StringComparison.OrdinalIgnoreCase) ||
-                                              r.CurrentStatus.Equals("Approved", StringComparison.OrdinalIgnoreCase));
+        var totalOverdue = records.Where(r => string.Equals(r.CurrentStatus, "Overdue", StringComparison.OrdinalIgnoreCase)).Sum(r => r.OutstandingBalance);
+        var overdueCount = records.Count(r => string.Equals(r.CurrentStatus, "Overdue", StringComparison.OrdinalIgnoreCase));
+        var paidCount = records.Count(r => string.Equals(r.CurrentStatus, "Paid", StringComparison.OrdinalIgnoreCase));
+        var pendingCount = records.Count(r => string.Equals(r.CurrentStatus, "Sent", StringComparison.OrdinalIgnoreCase) ||
+                                              string.Equals(r.CurrentStatus, "Approved", StringComparison.OrdinalIgnoreCase));
 
         // Add task invoices not in records
         foreach (var inv in taskInvoices)

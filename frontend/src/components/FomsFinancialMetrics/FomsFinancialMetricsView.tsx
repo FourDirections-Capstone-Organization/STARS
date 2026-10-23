@@ -166,34 +166,37 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
 
         return clients
             .filter(client => {
+                if (!client) return false;
                 // Search match
                 if (query) {
-                    const matchName = client.clientName.toLowerCase().includes(query);
-                    const matchId = client.clientAccountId.toLowerCase().includes(query);
+                    const matchName = (client.clientName || '').toLowerCase().includes(query);
+                    const matchId = (client.clientAccountId || '').toLowerCase().includes(query);
                     if (!matchName && !matchId) return false;
                 }
 
+                const clientStatus = (client.latestStatus || '').toLowerCase();
+
                 // Status chip filter
                 if (statusFilter === 'overdue') {
-                    return client.overdueInvoicesCount > 0 || client.latestStatus.toLowerCase() === 'overdue';
+                    return (client.overdueInvoicesCount || 0) > 0 || clientStatus === 'overdue';
                 }
                 if (statusFilter === 'with_balance') {
-                    return client.outstandingBalance > 0;
+                    return (client.outstandingBalance || 0) > 0;
                 }
                 if (statusFilter === 'paid') {
-                    return client.latestStatus.toLowerCase() === 'paid' || client.outstandingBalance === 0;
+                    return clientStatus === 'paid' || (client.outstandingBalance || 0) === 0;
                 }
                 if (statusFilter === 'pending') {
-                    const st = client.latestStatus.toLowerCase();
-                    return st === 'sent' || st === 'approved' || st === 'draft' || st === 'pending';
+                    return clientStatus === 'sent' || clientStatus === 'approved' || clientStatus === 'draft' || clientStatus === 'pending';
                 }
                 return true;
             })
             .sort((a, b) => {
-                if (sortBy === 'balance_desc') return b.outstandingBalance - a.outstandingBalance;
-                if (sortBy === 'balance_asc') return a.outstandingBalance - b.outstandingBalance;
-                if (sortBy === 'overdue_desc') return b.overdueInvoicesCount - a.overdueInvoicesCount;
-                if (sortBy === 'name_asc') return a.clientName.localeCompare(b.clientName);
+                if (!a || !b) return 0;
+                if (sortBy === 'balance_desc') return (b.outstandingBalance || 0) - (a.outstandingBalance || 0);
+                if (sortBy === 'balance_asc') return (a.outstandingBalance || 0) - (b.outstandingBalance || 0);
+                if (sortBy === 'overdue_desc') return (b.overdueInvoicesCount || 0) - (a.overdueInvoicesCount || 0);
+                if (sortBy === 'name_asc') return (a.clientName || '').localeCompare(b.clientName || '');
                 if (sortBy === 'date_asc') {
                     if (!a.nextDueDate) return 1;
                     if (!b.nextDueDate) return -1;
@@ -598,7 +601,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             <div className="foms-stat-metric">
                                 <span className="foms-stat-label">Delinquent Clients</span>
                                 <span className="foms-stat-val" style={{ color: '#DC2626' }}>
-                                    {activeSummary.topOutstandingClients.filter(c => c.overdueInvoicesCount > 0).length}
+                                    {(activeSummary.topOutstandingClients || []).filter(c => (c.overdueInvoicesCount || 0) > 0).length}
                                 </span>
                             </div>
                         </div>
@@ -619,7 +622,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         </p>
                     </div>
                     <span className="table-card-results-info">
-                        {filteredClients.length} of {activeSummary.topOutstandingClients.length} accounts
+                        {filteredClients.length} of {(activeSummary.topOutstandingClients || []).length} accounts
                     </span>
                 </div>
 
@@ -649,7 +652,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             }}
                         >
                             <span>All</span>
-                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.length}</span>
+                            <span className="foms-filter-chip-count">{(activeSummary.topOutstandingClients || []).length}</span>
                         </button>
                         <button
                             type="button"
@@ -660,7 +663,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             }}
                         >
                             <span>Overdue Only</span>
-                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.overdueInvoicesCount > 0).length}</span>
+                            <span className="foms-filter-chip-count">{(activeSummary.topOutstandingClients || []).filter(c => (c.overdueInvoicesCount || 0) > 0).length}</span>
                         </button>
                         <button
                             type="button"
@@ -671,7 +674,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             }}
                         >
                             <span>With Balance</span>
-                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.outstandingBalance > 0).length}</span>
+                            <span className="foms-filter-chip-count">{(activeSummary.topOutstandingClients || []).filter(c => (c.outstandingBalance || 0) > 0).length}</span>
                         </button>
                         <button
                             type="button"
@@ -682,7 +685,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             }}
                         >
                             <span>Paid / Settled</span>
-                            <span className="foms-filter-chip-count">{activeSummary.topOutstandingClients.filter(c => c.latestStatus.toLowerCase() === 'paid').length}</span>
+                            <span className="foms-filter-chip-count">{(activeSummary.topOutstandingClients || []).filter(c => (c.latestStatus || '').toLowerCase() === 'paid').length}</span>
                         </button>
                     </div>
 
@@ -736,9 +739,9 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                                 </tr>
                             ) : (
                                 paginatedClients.map(client => {
-                                    const statusLower = client.latestStatus.toLowerCase();
+                                    const statusLower = (client.latestStatus || '').toLowerCase();
                                     const dueMeta = formatDueDateRelative(client.nextDueDate);
-                                    const hasOverdue = client.overdueInvoicesCount > 0;
+                                    const hasOverdue = (client.overdueInvoicesCount || 0) > 0;
 
                                     return (
                                         <tr key={client.clientAccountId}>

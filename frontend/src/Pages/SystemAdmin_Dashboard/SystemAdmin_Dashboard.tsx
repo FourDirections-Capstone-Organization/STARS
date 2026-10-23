@@ -2124,10 +2124,13 @@ interface DashboardTabProps {
     activityLogTotalPages?: number;
     onActivityLogPageChange?: (page: number) => void;
     onNavigateToFinance?: () => void;
+    onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
+    onOpenTask?: (taskId: string) => void;
 }
 
-function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance }: DashboardTabProps) {
+function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance, onCreateTaskForEndorsement, onOpenTask }: DashboardTabProps) {
     const [searchQuery, setSearchQuery] = useState('');
+    const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
     const activeCount = (employees || []).filter(e => e.accountStatus === 'Active').length;
     const deactivatedCount = (employees || []).filter(e => e.accountStatus === 'Deactivated').length;
 
@@ -2172,53 +2175,75 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
 
     return (
         <div className="dashboard-content">
-            {/* Live FOMS Financial Integration Ribbon */}
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '9px 16px',
-                    marginBottom: 16,
-                    background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 139, 139, 0.07) 100%)',
-                    border: '1px solid rgba(0, 139, 139, 0.22)',
-                    borderRadius: 10,
-                    fontSize: 12,
-                    flexWrap: 'wrap',
-                    gap: 8,
-                }}
-            >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #008B8B)' }}>
-                        <Activity size={14} /> FOMS Real-Time Stream
-                    </span>
-                    <span style={{ color: 'var(--text-muted)' }}>•</span>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                        Live invoice payment status updates & client balance monitoring connected
-                    </span>
-                </div>
-                {onNavigateToFinance && (
-                    <button
-                        type="button"
-                        onClick={onNavigateToFinance}
+            {/* ── Sub-Nav: Operations & Workload Overview vs FOMS Financial Metrics View ── */}
+            <div style={{ marginBottom: 14 }}>
+                <SubTabNav
+                    className="dashboard-metrics-subtab-nav"
+                    tabs={[
+                        { key: 'workload', label: 'Operations & Workload Overview' },
+                        { key: 'foms', label: 'FOMS Client Financial Status & Invoices' },
+                    ]}
+                    activeTab={dashboardMetricsMode}
+                    onTabChange={key => setDashboardMetricsMode(key as 'workload' | 'foms')}
+                />
+            </div>
+
+            {dashboardMetricsMode === 'foms' ? (
+                <FomsFinancialMetricsView
+                    embedded={true}
+                    onCreateTaskForEndorsement={onCreateTaskForEndorsement}
+                    onViewClientTasks={onNavigateToFinance}
+                    onOpenTask={onOpenTask}
+                />
+            ) : (
+                <>
+                    {/* Live FOMS Financial Integration Ribbon */}
+                    <div
                         style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--teal, #008B8B)',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            display: 'inline-flex',
+                            display: 'flex',
                             alignItems: 'center',
-                            gap: 4,
-                            padding: 0,
+                            justifyContent: 'space-between',
+                            padding: '9px 16px',
+                            marginBottom: 16,
+                            background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 139, 139, 0.07) 100%)',
+                            border: '1px solid rgba(0, 139, 139, 0.22)',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            flexWrap: 'wrap',
+                            gap: 8,
                         }}
                     >
-                        <span>View FOMS Financial Overview</span>
-                        <ChevronRight size={13} />
-                    </button>
-                )}
-            </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #008B8B)' }}>
+                                <Activity size={14} /> FOMS Real-Time Stream
+                            </span>
+                            <span style={{ color: 'var(--text-muted)' }}>•</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                                Live invoice payment status updates & client balance monitoring connected
+                            </span>
+                        </div>
+                        {onNavigateToFinance && (
+                            <button
+                                type="button"
+                                onClick={() => setDashboardMetricsMode('foms')}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--teal, #008B8B)',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    fontSize: 12,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: 0,
+                                }}
+                            >
+                                <span>Monitor Client Financial Statuses</span>
+                                <ChevronRight size={13} />
+                            </button>
+                        )}
+                    </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
                 <div className="header-search-wrap" style={{ margin: 0, width: 300 }}>
@@ -2416,6 +2441,8 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                     )}
                 </div>
             </div>
+                </>
+            )}
         </div>
     );
 }
@@ -4415,6 +4442,11 @@ export default function Dashboard() {
                             activityLogPage={activityLogPage}
                             activityLogTotalPages={activityLogTotalPages}
                             onActivityLogPageChange={fetchActivityLogs}
+                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
+                            onOpenTask={(taskId) => {
+                                handleManagerTaskView(taskId);
+                                handleNavChange('tasks');
+                            }}
                         />
                     </>
                 )}

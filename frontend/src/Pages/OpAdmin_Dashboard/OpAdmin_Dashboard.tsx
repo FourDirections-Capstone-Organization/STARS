@@ -2278,7 +2278,9 @@ const DashboardTab: React.FC<{
     onNewTask: () => void;
     tasks?: any[];
     onViewTask?: (task: any) => void;
-}> = ({ dashboardData, dashboardEmployees, dashboardDepartments, dashboardLoading, dashboardError, filters, onFilterChange, onClearFilters, onNewTask, tasks, onViewTask }) => {
+    onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
+    onOpenTask?: (taskId: string) => void;
+}> = ({ dashboardData, dashboardEmployees, dashboardDepartments, dashboardLoading, dashboardError, filters, onFilterChange, onClearFilters, onNewTask, tasks, onViewTask, onCreateTaskForEndorsement, onOpenTask }) => {
     // Local filters for Workload Summary only — does NOT trigger full dashboard re-fetch
     const [wlFilters, setWlFilters] = useState({ employeeId: '', departmentId: '', assignmentScope: '', taskStatus: '', dateStart: '', dateEnd: '' });
     const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
@@ -2419,26 +2421,11 @@ const DashboardTab: React.FC<{
                     {dashboardMetricsMode === 'foms' ? (
                         <FomsFinancialMetricsView
                             embedded={true}
-                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
+                            onCreateTaskForEndorsement={onCreateTaskForEndorsement}
                             onViewClientTasks={() => {
                                 onNewTask ? onNewTask() : null;
                             }}
-                            onOpenTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                } else {
-                                    api.get(`/api/Task/${taskId}`).then(res => {
-                                        if (res.data?.data) {
-                                            setActiveTab('tasks');
-                                            setDetailTask(mapTaskDetailToTaskView(res.data.data));
-                                        }
-                                    }).catch(() => {
-                                        setActiveTab('tasks');
-                                    });
-                                }
-                            }}
+                            onOpenTask={onOpenTask}
                         />
                     ) : (
                         <>
@@ -9381,6 +9368,23 @@ export default function OpsAdminDashboard() {
                             onNewTask={() => { handleNavChange('tasks'); setTaskSubTab('create'); }}
                             tasks={tasks}
                             onViewTask={task => { setActiveTab('tasks'); setDetailTask(task); }}
+                            onCreateTaskForEndorsement={handleCreateTaskFromEndorsement}
+                            onOpenTask={(taskId) => {
+                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                                if (found) {
+                                    setActiveTab('tasks');
+                                    setDetailTask(found as any);
+                                } else {
+                                    api.get(`/api/Task/${taskId}`).then(res => {
+                                        if (res.data?.data) {
+                                            setActiveTab('tasks');
+                                            setDetailTask(mapTaskDetailToTaskView(res.data.data));
+                                        }
+                                    }).catch(() => {
+                                        setActiveTab('tasks');
+                                    });
+                                }
+                            }}
                         />
                     </>
                 )}
