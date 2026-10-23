@@ -26,6 +26,7 @@ import { useToast } from '../../../components/Toast/Toast';
 import api from '../../../api';
 import { TaskTemplateCard } from './TaskTemplateCard';
 import { TaskTemplateEditor } from './TaskTemplateEditor';
+import { ActionsDropdown } from '../../../components/ui/DataTable';
 import { TaskTemplateItem, FilterChip, ViewMode, QueueEmployee, DeployResult, ChecklistItem, DepartmentItem } from './types';
 import './TaskTemplates.css';
 
@@ -715,23 +716,22 @@ export const TaskTemplatesTab: React.FC<TaskTemplatesTabProps> = ({ teamMembers 
                                         </label>
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                            <button
-                                                type="button"
-                                                className="tt-btn-deploy"
-                                                onClick={() => handleDeployNow({ id: t.id })}
-                                                title="Deploy task now"
-                                            >
-                                                <Play size={12} /> Deploy
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="tt-btn-edit"
-                                                onClick={() => handleOpenEditor(t)}
-                                            >
-                                                <Pencil size={12} /> Edit
-                                            </button>
-                                        </div>
+                                        <ActionsDropdown
+                                            actions={[
+                                                {
+                                                    label: 'Deploy Now',
+                                                    icon: <Play size={13} />,
+                                                    onClick: () => handleDeployNow({ id: t.id }),
+                                                    disabled: !t.isActive,
+                                                    variant: 'success'
+                                                },
+                                                {
+                                                    label: 'Edit Template',
+                                                    icon: <Pencil size={13} />,
+                                                    onClick: () => handleOpenEditor(t)
+                                                }
+                                            ]}
+                                        />
                                     </td>
                                 </tr>
                             ))}

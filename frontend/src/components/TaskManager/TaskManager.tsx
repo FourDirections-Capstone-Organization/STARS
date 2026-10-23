@@ -298,20 +298,21 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} />
                                                     <div className="tm-board-card-actions" onClick={e => e.stopPropagation()}>
-                                                        <button className="tm-board-action-btn" title="View Details" onClick={() => onView(t.id)}>
-                                                            <Eye size={12} />
-                                                        </button>
-                                                        <button className="tm-board-action-btn" title="Edit Task" onClick={() => onEdit(t.id)}>
-                                                            <Pencil size={12} />
-                                                        </button>
-                                                        {t.status !== 'Done' && (
-                                                            <button className="tm-board-action-btn" title="Mark Done" onClick={() => onMarkDone([t.id])} style={{ color: '#059669' }}>
-                                                                <CheckCircle2 size={12} />
-                                                            </button>
-                                                        )}
-                                                        <button className="tm-board-action-btn" title="Archive" onClick={() => onArchive([t.id])} style={{ color: '#dc2626' }}>
-                                                            <Trash2 size={12} />
-                                                        </button>
+                                                        <ActionsDropdown
+                                                            actions={[
+                                                                { label: 'View Details', icon: <Eye size={13} />, onClick: () => onView(t.id) },
+                                                                { label: 'Edit Task', icon: <Pencil size={13} />, onClick: () => onEdit(t.id) },
+                                                                ...(t.status !== 'Done' ? [
+                                                                    { label: 'Mark Done', icon: <CheckCircle2 size={13} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                                ] : []),
+                                                                {
+                                                                    label: 'Archive',
+                                                                    icon: <Trash2 size={13} />,
+                                                                    onClick: () => onArchive([t.id]),
+                                                                    variant: 'danger' as const
+                                                                }
+                                                            ]}
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>
@@ -769,6 +770,9 @@ export default function TaskManager({
                                             ...(tab !== 'bin' ? [
                                                 { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },
                                                 { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEdit(t.id) },
+                                                ...(t.status !== 'Done' ? [
+                                                    { label: 'Mark Done', icon: <CheckCircle2 size={12} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                ] : []),
                                                 { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
                                             ] as const : [
                                                 { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },

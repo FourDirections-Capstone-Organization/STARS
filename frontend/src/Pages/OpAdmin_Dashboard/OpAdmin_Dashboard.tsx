@@ -3441,14 +3441,12 @@ const TeamTab: React.FC<{
                                                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
                                                     <span className="badge badge-blue">{t.memberCount} member{t.memberCount !== 1 ? 's' : ''}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: 4 }}>
-                                                    <button className="btn btn-sm" onClick={() => openEdit(t)} title="Edit team" style={{ padding: '4px 6px' }}>
-                                                        <Pencil size={12} />
-                                                    </button>
-                                                    <button className="btn btn-sm" onClick={() => setDeleteTeamId(t.id)} title="Delete team" style={{ padding: '4px 6px', color: '#dc2626' }}>
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                </div>
+                                                <ActionsDropdown
+                                                    actions={[
+                                                        { label: 'Edit Team', icon: <Pencil size={13} />, onClick: () => openEdit(t) },
+                                                        { label: 'Delete Team', icon: <Trash2 size={13} />, onClick: () => setDeleteTeamId(t.id), variant: 'danger' }
+                                                    ]}
+                                                />
                                             </div>
                                             {t.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.description}</div>}
                                             {t.departmentName && <div style={{ fontSize: 11, color: '#94a3b8' }}>Department: {t.departmentName}</div>}

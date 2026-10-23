@@ -30,6 +30,7 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import { FomsEndorsementItem, SubmitSignedEndorsementPayload } from './types';
 import FormModal from '../FormModal/FormModal';
+import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
@@ -843,50 +844,32 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
                                             {/* Actions */}
                                             <td style={{ textAlign: 'right' }}>
-                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                    {!isSigned ? (
-                                                        <button
-                                                            type="button"
-                                                            className="foms-btn-action"
-                                                            onClick={() => {
+                                                <ActionsDropdown
+                                                    actions={[
+                                                        ...(!isSigned ? [{
+                                                            label: 'Record Sign-off',
+                                                            icon: <Upload size={13} />,
+                                                            onClick: () => {
                                                                 setSigningItem(item);
                                                                 setSignForm({
                                                                     actualReceivedDate: new Date().toISOString().substring(0, 10),
                                                                     signedCopyUrl: `https://stars.blob.core.windows.net/signed-receipts/RC-${item.invoiceNumber}.pdf`,
                                                                     deliveryRemarks: 'Official receiving copy endorsed with wet signature and stamp.',
                                                                 });
-                                                            }}
-                                                            title="Submit Client Wet Signature & Received Date"
-                                                        >
-                                                            <Upload size={12} />
-                                                            <span>Record Sign-off</span>
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            className="foms-btn-action-outline"
-                                                            onClick={() => handleResendCallback(item)}
-                                                            title="Re-send completion callback to FOMS"
-                                                        >
-                                                            <Send size={11} />
-                                                            <span>Resend to FOMS</span>
-                                                        </button>
-                                                    )}
-
-                                                    <button
-                                                        type="button"
-                                                        className="foms-btn-action-outline"
-                                                        onClick={() => {
-                                                            if (item.taskId && onOpenTask) {
-                                                                onOpenTask(item.taskId);
-                                                            }
-                                                        }}
-                                                        title="Open Task Details"
-                                                    >
-                                                        <ExternalLink size={12} />
-                                                        <span>Task</span>
-                                                    </button>
-                                                </div>
+                                                            },
+                                                            variant: 'success' as const
+                                                        }] : [{
+                                                            label: 'Resend to FOMS',
+                                                            icon: <Send size={13} />,
+                                                            onClick: () => handleResendCallback(item)
+                                                        }]),
+                                                        ...(item.taskId && onOpenTask ? [{
+                                                            label: 'Open Task Details',
+                                                            icon: <ExternalLink size={13} />,
+                                                            onClick: () => onOpenTask(item.taskId!)
+                                                        }] : [])
+                                                    ]}
+                                                />
                                             </td>
                                         </tr>
                                     );

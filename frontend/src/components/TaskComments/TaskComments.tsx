@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
 import EmptyState from '../ui/EmptyState';
+import { ActionsDropdown } from '../ui/DataTable';
 import api from '../../api';
 import axios from 'axios';
 import './TaskComments.css';
@@ -294,12 +295,13 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                             {c.updatedAt && <span className="tc-edited">(edited)</span>}
                                             {isMe && (
                                                 <div className="tc-actions">
-                                                    <button className="tc-action-btn" onClick={() => startEdit(c)} title="Edit">
-                                                        <Pencil size={12} />
-                                                    </button>
-                                                    <button className="tc-action-btn tc-action-delete" onClick={() => deleteComment(c.taskCommentId)} title="Delete">
-                                                        <Trash2 size={12} />
-                                                    </button>
+                                                    <ActionsDropdown
+                                                        triggerTitle="Comment actions"
+                                                        actions={[
+                                                            { label: 'Edit Comment', icon: <Pencil size={13} />, onClick: () => startEdit(c) },
+                                                            { label: 'Delete Comment', icon: <Trash2 size={13} />, onClick: () => deleteComment(c.taskCommentId), variant: 'danger' }
+                                                        ]}
+                                                    />
                                                 </div>
                                             )}
                                         </div>

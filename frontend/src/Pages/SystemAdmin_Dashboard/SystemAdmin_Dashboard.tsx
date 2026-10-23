@@ -2429,10 +2429,12 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                                             </div>
                                         </div>
                                         <div className="cell-actions" onClick={e => e.stopPropagation()}>
-                                            <button className="action-icon-btn" title="View Details" onClick={() => onSelectEmployee(emp)}><Eye size={14} /></button>
-                                            {onEditEmployee && (
-                                                <button className="action-icon-btn" title="Edit" onClick={() => onEditEmployee(emp)}><Pencil size={14} /></button>
-                                            )}
+                                            <ActionsDropdown
+                                                actions={[
+                                                    { label: 'View Details', icon: <Eye size={13} />, onClick: () => onSelectEmployee(emp) },
+                                                    ...(onEditEmployee ? [{ label: 'Edit Profile', icon: <Pencil size={13} />, onClick: () => onEditEmployee(emp) }] : [])
+                                                ]}
+                                            />
                                         </div>
                                     </div>
                                 );
