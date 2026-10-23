@@ -242,8 +242,11 @@ describe('FomsFinancialMetricsView', () => {
         const handleOpenTask = vi.fn();
         render(<FomsFinancialMetricsView initialTab="routing" onOpenTask={handleOpenTask} />);
 
-        const viewTaskBtns = screen.getAllByRole('button', { name: /view task/i });
-        fireEvent.click(viewTaskBtns[0]);
+        const actionsBtns = screen.getAllByRole('button', { name: /actions/i });
+        fireEvent.click(actionsBtns[0]);
+
+        const viewTaskBtn = screen.getByRole('button', { name: /view stars task/i });
+        fireEvent.click(viewTaskBtn);
 
         expect(handleOpenTask).toHaveBeenCalledWith('c102a9e3-4f2b-42e1-884b-703c90e21a01');
     });

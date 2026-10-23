@@ -298,20 +298,21 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} />
                                                     <div className="tm-board-card-actions" onClick={e => e.stopPropagation()}>
-                                                        <button className="tm-board-action-btn" title="View Details" onClick={() => onView(t.id)}>
-                                                            <Eye size={12} />
-                                                        </button>
-                                                        <button className="tm-board-action-btn" title="Edit Task" onClick={() => onEdit(t.id)}>
-                                                            <Pencil size={12} />
-                                                        </button>
-                                                        {t.status !== 'Done' && (
-                                                            <button className="tm-board-action-btn" title="Mark Done" onClick={() => onMarkDone([t.id])} style={{ color: '#059669' }}>
-                                                                <CheckCircle2 size={12} />
-                                                            </button>
-                                                        )}
-                                                        <button className="tm-board-action-btn" title="Archive" onClick={() => onArchive([t.id])} style={{ color: '#dc2626' }}>
-                                                            <Trash2 size={12} />
-                                                        </button>
+                                                        <ActionsDropdown
+                                                            actions={[
+                                                                { label: 'View Details', icon: <Eye size={13} />, onClick: () => onView(t.id) },
+                                                                { label: 'Edit Task', icon: <Pencil size={13} />, onClick: () => onEdit(t.id) },
+                                                                ...(t.status !== 'Done' ? [
+                                                                    { label: 'Mark Done', icon: <CheckCircle2 size={13} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                                ] : []),
+                                                                {
+                                                                    label: 'Archive',
+                                                                    icon: <Trash2 size={13} />,
+                                                                    onClick: () => onArchive([t.id]),
+                                                                    variant: 'danger' as const
+                                                                }
+                                                            ]}
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>
@@ -405,15 +406,15 @@ export default function TaskManager({
     const availableStatuses: string[] = useMemo(() => {
         if (tab === 'active') return ['Backlog', 'To do', 'In progress', 'In review', 'Overdue'];
         if (tab === 'on_hold') return ['On hold', 'Overdue'];
-        if (tab === 'completed') return ['Done'];
+        if (tab === 'completed') return ['Done', 'Completed'];
         return ['Cancelled'];
     }, [tab]);
 
     const tabTasks = useMemo(() => {
-        if (tab === 'active') return tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && t.status !== 'On hold' && !t.isArchived && !t.isDeleted);
-        if (tab === 'on_hold') return tasks.filter(t => t.status === 'On hold' && !t.isArchived && !t.isDeleted);
-        if (tab === 'completed') return tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted);
-        return tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled');
+        if (tab === 'active') return tasks.filter(t => t.status !== 'Done' && (t.status as string) !== 'Completed' && t.status !== 'Cancelled' && (t.status as string) !== 'Canceled' && t.status !== 'On hold' && (t.status as string) !== 'OnHold' && !t.isArchived && !t.isDeleted);
+        if (tab === 'on_hold') return tasks.filter(t => (t.status === 'On hold' || (t.status as string) === 'OnHold') && !t.isArchived && !t.isDeleted);
+        if (tab === 'completed') return tasks.filter(t => (t.status === 'Done' || (t.status as string) === 'Completed') && !t.isArchived && !t.isDeleted);
+        return tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled' || (t.status as string) === 'Canceled');
     }, [tasks, tab]);
 
     const filtered = useMemo(() => {
@@ -422,10 +423,11 @@ export default function TaskManager({
         if (q) list = list.filter(t => t.name.toLowerCase().includes(q) || (t.assignee?.name || '').toLowerCase().includes(q) || (t.project || '').toLowerCase().includes(q));
         if (filterPrio) list = list.filter(t => t.priority === filterPrio);
         if (filterStatus) {
-            if (filterStatus.toLowerCase() === 'overdue') {
+            const fsLower = filterStatus.toLowerCase();
+            if (fsLower === 'overdue') {
                 const now = new Date();
                 list = list.filter(t => {
-                    if (t.status === 'Done' || t.status === 'Cancelled') return false;
+                    if (t.status === 'Done' || (t.status as string) === 'Completed' || t.status === 'Cancelled' || (t.status as string) === 'Canceled') return false;
                     if (!t.dueDate) return false;
                     try {
                         return new Date(t.dueDate) < now;
@@ -433,8 +435,16 @@ export default function TaskManager({
                         return false;
                     }
                 });
+            } else if (fsLower === 'done' || fsLower === 'completed') {
+                list = list.filter(t => t.status === 'Done' || (t.status as string) === 'Completed');
+            } else if (fsLower === 'in progress' || fsLower === 'inprogress') {
+                list = list.filter(t => t.status === 'In progress' || (t.status as string) === 'InProgress');
+            } else if (fsLower === 'in review' || fsLower === 'pending admin review') {
+                list = list.filter(t => t.status === 'In review' || (t.status as string) === 'Pending Admin Review');
+            } else if (fsLower === 'on hold' || fsLower === 'onhold') {
+                list = list.filter(t => t.status === 'On hold' || (t.status as string) === 'On Hold');
             } else {
-                list = list.filter(t => t.status === filterStatus);
+                list = list.filter(t => t.status.toLowerCase() === fsLower);
             }
         }
         if (filterDueDate) {
@@ -467,9 +477,9 @@ export default function TaskManager({
 
     const totalPages = serverPagination?.totalPages ?? Math.ceil(filtered.length / 8);
     const paginated = serverPagination ? filtered : filtered.slice((page - 1) * 8, page * 8);
-    const totalInProgress = summary?.inProgress ?? tasks.filter(t => t.status === 'In progress' && !t.isArchived && !t.isDeleted).length;
-    const totalDone = summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length;
-    const totalOverdue = summary?.overdue ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && t.status !== 'On hold' && !t.isArchived && !t.isDeleted && t.dueDate).filter(t => { try { return new Date(t.dueDate!) < new Date(); } catch { return false; } }).length;
+    const totalInProgress = summary?.inProgress ?? tasks.filter(t => (t.status === 'In progress' || (t.status as string) === 'InProgress') && !t.isArchived && !t.isDeleted).length;
+    const totalDone = summary?.completed ?? tasks.filter(t => (t.status === 'Done' || (t.status as string) === 'Completed') && !t.isArchived && !t.isDeleted).length;
+    const totalOverdue = summary?.overdue ?? tasks.filter(t => t.status !== 'Done' && (t.status as string) !== 'Completed' && t.status !== 'Cancelled' && t.status !== 'On hold' && !t.isArchived && !t.isDeleted && t.dueDate).filter(t => { try { return new Date(t.dueDate!) < new Date(); } catch { return false; } }).length;
     const activeTotal = summary?.active ?? tabTasks.length;
     const completionRate = summary ? (activeTotal + totalDone > 0 ? Math.round(totalDone / (activeTotal + totalDone) * 100) : 0) : (tasks.length ? Math.round(totalDone / tasks.length * 100) : 0);
 
@@ -516,10 +526,10 @@ export default function TaskManager({
                     {/* ── Tabs ── */}
                     <div className="table-card-tabs">
                         {[
-                            { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled' && t.status !== 'On hold' && !t.isArchived && !t.isDeleted).length },
-                            { key: 'on_hold', label: 'On Hold', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />, badge: summary?.onHold ?? tasks.filter(t => t.status === 'On hold' && !t.isArchived && !t.isDeleted).length },
-                            { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => t.status === 'Done' && !t.isArchived && !t.isDeleted).length },
-                            { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: summary?.cancelled ?? tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled').length },
+                            { key: 'active', label: 'Active', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />, badge: summary?.active ?? tasks.filter(t => t.status !== 'Done' && (t.status as string) !== 'Completed' && t.status !== 'Cancelled' && (t.status as string) !== 'Canceled' && t.status !== 'On hold' && (t.status as string) !== 'OnHold' && !t.isArchived && !t.isDeleted).length },
+                            { key: 'on_hold', label: 'On Hold', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />, badge: summary?.onHold ?? tasks.filter(t => (t.status === 'On hold' || (t.status as string) === 'OnHold') && !t.isArchived && !t.isDeleted).length },
+                            { key: 'completed', label: 'Completed', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />, badge: summary?.completed ?? tasks.filter(t => (t.status === 'Done' || (t.status as string) === 'Completed') && !t.isArchived && !t.isDeleted).length },
+                            { key: 'bin', label: 'Bin', icon: <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />, badge: summary?.cancelled ?? tasks.filter(t => t.isArchived || t.isDeleted || t.status === 'Cancelled' || (t.status as string) === 'Canceled').length },
                         ].map(({ key, label, icon, badge }) => (
                             <button key={key} onClick={() => handleTabChange(key)} className={`table-card-tab-btn${tab === key ? ' active' : ''}`}>
                                 {icon}<span>{label}</span>
@@ -769,6 +779,9 @@ export default function TaskManager({
                                             ...(tab !== 'bin' ? [
                                                 { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },
                                                 { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEdit(t.id) },
+                                                ...(t.status !== 'Done' ? [
+                                                    { label: 'Mark Done', icon: <CheckCircle2 size={12} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
+                                                ] : []),
                                                 { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },
                                             ] as const : [
                                                 { label: 'View Details', icon: <Eye size={12} />, onClick: () => onView(t.id) },

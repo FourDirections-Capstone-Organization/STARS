@@ -1323,10 +1323,16 @@
 }
 
 .actions-dropdown-item:hover { background: rgba(15, 21, 53, 0.04); }
-.actions-dropdown-item.danger { color: var(--status-failed); }
-.actions-dropdown-item.danger:hover { background: var(--status-failed-bg); }
-.actions-dropdown-item.success { color: var(--status-active); }
-.actions-dropdown-item.success:hover { background: var(--status-active-bg); }
+.actions-dropdown-item.danger { color: var(--status-failed, #ef4444); }
+.actions-dropdown-item.danger:hover { background: var(--status-failed-bg, rgba(239, 68, 68, 0.08)); }
+.actions-dropdown-item.success { color: var(--status-active, #059669); }
+.actions-dropdown-item.success:hover { background: var(--status-active-bg, rgba(5, 150, 105, 0.08)); }
+.actions-dropdown-item.disabled,
+.actions-dropdown-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
 
 .role-badge {
     display: inline-block;

@@ -31,6 +31,7 @@ import {
 import api from '../../api';
 import { FomsOverdueAlertItem, CoordinatorWorkloadItem } from './types';
 import FormModal from '../FormModal/FormModal';
+import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
 
@@ -1006,32 +1007,26 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
 
                                             {/* Actions */}
                                             <td style={{ textAlign: 'right' }}>
-                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                    <button
-                                                        type="button"
-                                                        className="foms-btn-action"
-                                                        onClick={() => {
-                                                            if (alert.starsTaskId && onOpenTask) {
-                                                                onOpenTask(alert.starsTaskId);
-                                                            } else {
-                                                                setInspectAlert(alert);
+                                                <ActionsDropdown
+                                                    actions={[
+                                                        {
+                                                            label: 'View STARS Task',
+                                                            icon: <ExternalLink size={13} />,
+                                                            onClick: () => {
+                                                                if (alert.starsTaskId && onOpenTask) {
+                                                                    onOpenTask(alert.starsTaskId);
+                                                                } else {
+                                                                    setInspectAlert(alert);
+                                                                }
                                                             }
-                                                        }}
-                                                        title="Open STARS Task View"
-                                                    >
-                                                        <ExternalLink size={12} />
-                                                        <span>View Task</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="foms-btn-action-outline"
-                                                        onClick={() => setInspectAlert(alert)}
-                                                        title="Trace Graph Routing Decision"
-                                                    >
-                                                        <Sparkles size={12} />
-                                                        <span>Trace</span>
-                                                    </button>
-                                                </div>
+                                                        },
+                                                        {
+                                                            label: 'Trace Routing Decision',
+                                                            icon: <Sparkles size={13} />,
+                                                            onClick: () => setInspectAlert(alert)
+                                                        }
+                                                    ]}
+                                                />
                                             </td>
                                         </tr>
                                     );

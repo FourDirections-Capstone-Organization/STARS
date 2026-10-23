@@ -194,7 +194,7 @@ public class TaskService : ITaskService
                 break;
 
             case UserRole.Coordinator:
-                query = query.Where(t => t.CreatedById == requestUserId);
+                query = query.Where(t => t.CreatedById == requestUserId || t.Assignments.Any(a => a.AssignedUserId == requestUserId));
                 break;
 
             case UserRole.Dispatcher:

@@ -89,15 +89,16 @@ public class TaskController : ControllerBase
         Models.Enums.TaskStatus? parsedStatus = null;
         if (!string.IsNullOrEmpty(status))
         {
-            if (status.Equals("Overdue", StringComparison.OrdinalIgnoreCase))
+            var firstStatus = status.Split(',')[0].Trim();
+            if (firstStatus.Equals("Overdue", StringComparison.OrdinalIgnoreCase))
             {
                 isOverdue = true;
             }
-            else if (int.TryParse(status, out var sInt) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), sInt))
+            else if (int.TryParse(firstStatus, out var sInt) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), sInt))
             {
                 parsedStatus = (Models.Enums.TaskStatus)sInt;
             }
-            else if (Enum.TryParse<Models.Enums.TaskStatus>(status, true, out var sEnum))
+            else if (Enum.TryParse<Models.Enums.TaskStatus>(firstStatus, true, out var sEnum))
             {
                 parsedStatus = sEnum;
             }

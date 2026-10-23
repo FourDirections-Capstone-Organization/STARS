@@ -34,8 +34,8 @@ public class DashboardService : IDashboardService
                 .ThenInclude(a => a.AssignedUser)
             .AsQueryable();
 
-        if (requestUserRole == UserRole.Coordinator && requestUserDepartmentId.HasValue)
-            query = query.Where(t => t.AssignedDepartmentId == requestUserDepartmentId.Value);
+        if (requestUserRole == UserRole.Coordinator)
+            query = query.Where(t => t.CreatedById == requestUserId || t.Assignments.Any(a => a.AssignedUserId == requestUserId));
 
         if (filters != null)
         {
@@ -95,14 +95,15 @@ public class DashboardService : IDashboardService
             .ToList();
 
         // ── Department workload summary ─────────────────────────────────────────
-        // Spans ALL departments (not just the coordinator's own) so the summary
-        // card shows every department's load. Explicit dashboard filters still
-        // apply, but the coordinator's implicit department scope does not.
+        // For coordinators, scoped to tasks handled by that coordinator account.
         var deptWorkloadQuery = _db.Tasks
             .Include(t => t.AssignedDepartment)
             .Include(t => t.Assignments)
             .Where(t => t.AssignedDepartmentId.HasValue && activeStatuses.Contains(t.Status))
             .AsQueryable();
+
+        if (requestUserRole == UserRole.Coordinator)
+            deptWorkloadQuery = deptWorkloadQuery.Where(t => t.CreatedById == requestUserId || t.Assignments.Any(a => a.AssignedUserId == requestUserId));
 
         if (filters != null)
         {
@@ -186,6 +187,9 @@ public class DashboardService : IDashboardService
             .Include(t => t.AssignedDepartment)
             .Include(t => t.Assignments)
             .AsQueryable();
+
+        if (requestUserRole == UserRole.Coordinator)
+            query = query.Where(t => t.CreatedById == requestUserId || t.Assignments.Any(a => a.AssignedUserId == requestUserId));
 
         if (filters != null)
         {

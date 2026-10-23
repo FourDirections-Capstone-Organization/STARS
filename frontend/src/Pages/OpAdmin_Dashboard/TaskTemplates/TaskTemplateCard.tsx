@@ -13,6 +13,7 @@ import {
     Sparkles,
     Building2
 } from 'lucide-react';
+import { ActionsDropdown } from '../../../components/ui/DataTable';
 import { TaskTemplateItem } from './types';
 
 interface TaskTemplateCardProps {
@@ -165,24 +166,22 @@ export const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({
                 </div>
 
                 <div className="tt-card-actions">
-                    <button
-                        type="button"
-                        className="tt-btn-deploy"
-                        onClick={() => onDeploy(template.id)}
-                        disabled={isDeploying || !template.isActive}
-                        title={template.isActive ? 'Deploy task now from this template' : 'Activate template to deploy'}
-                        aria-label={`Deploy task from ${template.templateName}`}
-                    >
-                        <Play size={12} /> Deploy
-                    </button>
-                    <button
-                        type="button"
-                        className="tt-btn-edit"
-                        onClick={() => onEdit(template)}
-                        aria-label={`Edit ${template.templateName}`}
-                    >
-                        <Pencil size={12} /> Edit
-                    </button>
+                    <ActionsDropdown
+                        actions={[
+                            {
+                                label: isDeploying ? 'Deploying...' : 'Deploy Now',
+                                icon: <Play size={13} />,
+                                onClick: () => onDeploy(template.id),
+                                disabled: isDeploying || !template.isActive,
+                                variant: 'success'
+                            },
+                            {
+                                label: 'Edit Template',
+                                icon: <Pencil size={13} />,
+                                onClick: () => onEdit(template)
+                            }
+                        ]}
+                    />
                 </div>
             </div>
         </div>

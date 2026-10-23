@@ -214,6 +214,11 @@ export default function Login() {
                     }
                 }
                 if (me) {
+                    const uId = me.id ?? me.userId ?? me.Id ?? d.id ?? d.userId;
+                    if (uId) {
+                        localStorage.setItem('userId', String(uId));
+                        localStorage.setItem('accountId', String(uId));
+                    }
                     const contact = me.contactNumber ?? me.ContactNumber ?? me.phoneNumber ?? me.PhoneNumber ?? me.phone ?? '';
                     if (contact) {
                         localStorage.setItem('contactNumber', contact);
@@ -232,6 +237,11 @@ export default function Login() {
                 }
             } catch {
                 // Fallback: use login response values
+                const fallbackId = d.id ?? d.userId;
+                if (fallbackId) {
+                    localStorage.setItem('userId', String(fallbackId));
+                    localStorage.setItem('accountId', String(fallbackId));
+                }
                 localStorage.setItem('employeeName', d.fullName || d.employeeName || '');
             }
 

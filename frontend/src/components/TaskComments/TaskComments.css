@@ -225,7 +225,9 @@
     transition: opacity 0.15s;
 }
 
-.tc-msg:hover .tc-actions {
+.tc-msg:hover .tc-actions,
+.tc-actions:focus-within,
+.tc-actions:has(.active) {
     opacity: 1;
 }
 

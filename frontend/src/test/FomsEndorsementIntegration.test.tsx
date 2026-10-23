@@ -141,8 +141,10 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             render(<FomsEndorsementPanel />);
 
             // Click Record Sign-off on the pending item (INV-2026-8811)
-            const signBtns = screen.getAllByRole('button', { name: /record sign-off/i });
-            fireEvent.click(signBtns[0]);
+            const actionsBtns = screen.getAllByRole('button', { name: /actions/i });
+            fireEvent.click(actionsBtns[1]);
+            const signBtn = screen.getByRole('button', { name: /record sign-off/i });
+            fireEvent.click(signBtn);
 
             expect(screen.getByText(/Record Client Receiving Endorsement/i)).toBeInTheDocument();
             expect(screen.getByText(/Calculated 30-Day Payment Due Date/i)).toBeInTheDocument();

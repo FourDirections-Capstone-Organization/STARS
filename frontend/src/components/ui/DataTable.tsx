@@ -143,61 +143,8 @@ function defaultCSVExport<T>(rows: T[], cols: DataTableColumn<T>[]) {
 
 // ─── Actions Dropdown ────────────────────────────────────────────────────────────
 
-export function ActionsDropdown({ actions }: { actions: DropdownAction[] }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const triggerRef = useRef<HTMLButtonElement>(null);
-    const menuRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as Node;
-            const inContainer = containerRef.current?.contains(target);
-            const inMenu = menuRef.current?.contains(target);
-            if (!inContainer && !inMenu) setIsOpen(false);
-        };
-        const handleScroll = () => setIsOpen(false);
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-            window.addEventListener('scroll', handleScroll, true);
-        }
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-            window.removeEventListener('scroll', handleScroll, true);
-        };
-    }, [isOpen]);
-
-    const handleOpen = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isOpen) { setIsOpen(false); return; }
-        if (triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect();
-            setMenuPos({ top: rect.bottom + 4, left: rect.right - 160 });
-        }
-        setIsOpen(true);
-    };
-
-    const menu = isOpen && menuPos ? ReactDOM.createPortal(
-        <div ref={menuRef} className="actions-dropdown-menu" style={{ top: menuPos.top, left: menuPos.left }} onClick={e => e.stopPropagation()}>
-            {actions.map((act, i) => (
-                <button key={i} type="button" className={`actions-dropdown-item ${act.variant ?? ''}`} onClick={() => { setIsOpen(false); act.onClick(); }}>
-                    {act.icon}<span>{act.label}</span>
-                </button>
-            ))}
-        </div>,
-        document.body
-    ) : null;
-
-    return (
-        <div className="actions-dropdown-container" ref={containerRef}>
-            <button ref={triggerRef} type="button" className={`actions-dropdown-trigger${isOpen ? ' active' : ''}`} onClick={handleOpen} aria-label="Actions">
-                <MoreVertical size={16} />
-            </button>
-            {menu}
-        </div>
-    );
-}
+export { ActionsDropdown } from './ActionsDropdown';
+export type { DropdownAction, ActionsDropdownProps } from './ActionsDropdown';
 
 // ─── DataTable Component ─────────────────────────────────────────────────────────
 
