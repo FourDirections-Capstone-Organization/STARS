@@ -196,6 +196,9 @@ export default function Login() {
             localStorage.setItem('hasAcceptedTerms', (d.hasAcceptedTerms ?? false).toString());
             localStorage.setItem('termsVersionAccepted', d.termsVersionAccepted ?? '');
             localStorage.setItem('email', d.email ?? '');
+            if (d.allowedSystems) {
+                localStorage.setItem('allowedSystems', d.allowedSystems);
+            }
 
             // Fetch full profile to populate localStorage
             try {
@@ -259,6 +262,7 @@ export default function Login() {
                     role: normalizedRole,
                     employeeId: d.employeeNumber ?? employeeId.trim(),
                     employeeName: fullName,
+                    allowedSystems: d.allowedSystems,
                 });
                 return;
             }

@@ -182,13 +182,15 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
         const roleToHandoff = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
         const employeeIdToHandoff = localStorage.getItem('employeeId') || '';
         const employeeNameToHandoff = localStorage.getItem('employeeName') || '';
+        const allowedSystemsToHandoff = localStorage.getItem('allowedSystems') || '';
 
         // Clear local subsystem storage
         [
             'authToken', 'refreshToken', 'employeeId', 'employeeName',
             'firstName', 'middleName', 'lastName', 'suffix',
             'contactNumber', 'email', 'role', 'userRole',
-            'isPasswordChanged', 'hasAcceptedTerms', 'termsVersionAccepted'
+            'isPasswordChanged', 'hasAcceptedTerms', 'termsVersionAccepted',
+            'allowedSystems'
         ].forEach(k => localStorage.removeItem(k));
         clearStoredRedirectUri();
 
@@ -204,6 +206,7 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
                     role: roleToHandoff,
                     employeeId: employeeIdToHandoff,
                     employeeName: employeeNameToHandoff,
+                    allowedSystems: allowedSystemsToHandoff,
                 });
             } else {
                 window.location.href = portalUrl;
@@ -220,6 +223,7 @@ export interface AuthHandoffPayload {
     role?: string;
     employeeId?: string;
     employeeName?: string;
+    allowedSystems?: string;
     system?: string;
 }
 
@@ -235,11 +239,12 @@ export function redirectToExternalPortal(targetUrl: string, authData: AuthHandof
     const role = authData.role || '';
     const employeeId = authData.employeeId || '';
     const employeeName = authData.employeeName || '';
+    const allowedSystems = authData.allowedSystems || '';
     const system = authData.system || 'stars';
 
     // Strip existing hash fragment if any
     const baseTarget = targetUrl.split('#')[0];
-    const hashFragment = `token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}&role=${encodeURIComponent(role)}&employeeId=${encodeURIComponent(employeeId)}&employeeName=${encodeURIComponent(employeeName)}&system=${encodeURIComponent(system)}`;
+    const hashFragment = `token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}&role=${encodeURIComponent(role)}&employeeId=${encodeURIComponent(employeeId)}&employeeName=${encodeURIComponent(employeeName)}${allowedSystems ? `&allowedSystems=${encodeURIComponent(allowedSystems)}` : ''}&system=${encodeURIComponent(system)}`;
 
     window.location.href = `${baseTarget}#${hashFragment}`;
 }
