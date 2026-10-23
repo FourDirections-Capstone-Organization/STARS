@@ -7953,7 +7953,7 @@ export default function OpsAdminDashboard() {
                     label: 'Financial Management System (FOMS)',
                     icon: 'ti ti-currency-dollar',
                     subItems: [
-                        { label: 'Client Financial Status', onClick: () => handleNavChange('finance'), active: activeTab === 'finance' },
+                        { label: 'Finance', onClick: () => handleNavChange('finance'), active: activeTab === 'finance' },
                     ],
                 },
                 {

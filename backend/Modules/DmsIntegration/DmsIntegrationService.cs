@@ -919,7 +919,12 @@ public class DmsIntegrationService : IDmsIntegrationService
                 .Select(d => d.DmsOrderId!.Value)
                 .ToListAsync();
 
-            var pending = orders.Where(o => !linkedDmsOrderIds.Contains(o.OrderId)).ToList();
+            var pending = orders
+                .Where(o => !linkedDmsOrderIds.Contains(o.OrderId))
+                .Where(o => !IsMockOrder(o))
+                .OrderByDescending(o => o.OrderDate)
+                .ThenByDescending(o => o.OrderId)
+                .ToList();
             return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(pending);
         }
         catch (Exception ex)
@@ -927,6 +932,18 @@ public class DmsIntegrationService : IDmsIntegrationService
             _logger.LogWarning(ex, "Failed to retrieve pending orders from DMS");
             return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(new List<DmsPendingOrderDTO>());
         }
+    }
+
+    private static bool IsMockOrder(DmsPendingOrderDTO o)
+    {
+        if (o == null) return false;
+        var pattern = @"\b(mock|sample|dummy|test\s*order|test\s*recipient|dummy\s*data)\b";
+        var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return regex.IsMatch(o.RecipientName ?? "") ||
+               regex.IsMatch(o.ClientName ?? "") ||
+               regex.IsMatch(o.WaybillNo ?? "") ||
+               regex.IsMatch(o.PackageDescription ?? "") ||
+               regex.IsMatch(o.SpecialInstructions ?? "");
     }
 
     private static TaskDeliveryDetailResponseDTO MapToDTO(TaskDeliveryDetail d) => new()

@@ -57,6 +57,65 @@ interface PreDeliveryTabProps {
     onViewTask?: (taskId: string) => void;
 }
 
+// Helpers to detect mock data and sort newly created records to the top
+const isMockOrder = (o: any): boolean => {
+    if (!o) return false;
+    if (o.isMock || o.mock) return true;
+    const testPattern = /\b(mock|sample|dummy|test\s*order|test\s*recipient|dummy\s*data)\b/i;
+    const checkFields = [
+        o.recipientName,
+        o.clientName,
+        o.waybillNo,
+        o.packageDescription,
+        o.specialInstructions,
+    ];
+    return checkFields.some(f => typeof f === 'string' && testPattern.test(f));
+};
+
+const isMockTask = (t: any): boolean => {
+    if (!t) return false;
+    if (t.isMock || t.mock) return true;
+    const testPattern = /\b(mock|sample|dummy|demo\s*task|test\s*task|dummy\s*data)\b/i;
+    const checkFields = [
+        t.taskTitle,
+        t.title,
+        t.taskDescription,
+        t.description,
+        t.assignedEmployee,
+    ];
+    return checkFields.some(f => typeof f === 'string' && testPattern.test(f));
+};
+
+const parseOrderTimestamp = (order: any): number => {
+    const raw = order.orderDate || order.createdAt || order.order_date || order.created_at;
+    if (raw) {
+        const time = new Date(raw).getTime();
+        if (!isNaN(time) && time > 0) return time;
+    }
+    return 0;
+};
+
+const extractOrderId = (order: any): number => {
+    if (typeof order.orderId === 'number') return order.orderId;
+    if (typeof order.id === 'number') return order.id;
+    const num = parseInt(String(order.orderId || order.id || '0').replace(/\D/g, ''), 10);
+    return isNaN(num) ? 0 : num;
+};
+
+const sortPendingOrdersDesc = (orders: DmsPendingOrder[]): DmsPendingOrder[] => {
+    return [...orders].sort((a, b) => {
+        const timeA = parseOrderTimestamp(a);
+        const timeB = parseOrderTimestamp(b);
+        const idA = extractOrderId(a);
+        const idB = extractOrderId(b);
+
+        // Sort by creation timestamp (most recent first)
+        if (timeB !== timeA) return timeB - timeA;
+        // Newly created orders in DMS with higher auto-increment IDs appear on top
+        return idB - idA;
+    });
+};
+
 export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
     tasks = [],
     onCreateTaskForOrder,
@@ -76,12 +135,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
             const res = await api.get('/api/dms-integration/pending-orders');
             const data = res?.data?.data ?? res?.data;
             if (Array.isArray(data)) {
-                const sorted = [...data].sort((a, b) => {
-                    const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
-                    const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
-                    if (dateB !== dateA) return dateB - dateA;
-                    return (b.orderId || 0) - (a.orderId || 0);
-                });
+                const nonMock = data.filter(o => !isMockOrder(o));
+                const sorted = sortPendingOrdersDesc(nonMock);
                 setPendingOrders(sorted);
             } else {
                 setPendingOrders([]);
@@ -106,14 +161,10 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         setTimeout(() => setCopiedWaybill(null), 2500);
     };
 
-    // Filter pending orders (most recently created order on top)
+    // Filter pending orders (mock data excluded, most recently created order strictly on top)
     const filteredPending = useMemo(() => {
-        const sorted = [...pendingOrders].sort((a, b) => {
-            const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
-            const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
-            if (dateB !== dateA) return dateB - dateA;
-            return (b.orderId || 0) - (a.orderId || 0);
-        });
+        const nonMock = pendingOrders.filter(o => !isMockOrder(o));
+        const sorted = sortPendingOrdersDesc(nonMock);
         return sorted.filter(o => {
             if (priorityFilter !== 'all' && (o.priority || '').toLowerCase() !== priorityFilter.toLowerCase()) {
                 return false;
@@ -131,19 +182,23 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         });
     }, [pendingOrders, priorityFilter, searchQuery]);
 
-    // Active operational tasks in pre-delivery validation (most recently created task on top)
+    // Active operational tasks in pre-delivery validation (mock data excluded, most recently created task on top)
     const operationalValidationTasks = useMemo(() => {
         const list = tasks.filter(t => {
+            if (isMockTask(t)) return false;
             const isDelivery = t.taskCategory === 'Delivery Operations' ||
                 (t.taskTitle && t.taskTitle.toLowerCase().includes('delivery')) ||
                 t.deliveryDetails;
             return isDelivery;
         });
         return [...list].sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.taskId || a.id || 0);
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.taskId || b.id || 0);
-            if (typeof dateA === 'number' && typeof dateB === 'number') return dateB - dateA;
-            return String(dateB).localeCompare(String(dateA));
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (dateB !== dateA) return dateB - dateA;
+            const idA = extractOrderId(a);
+            const idB = extractOrderId(b);
+            if (idB !== idA) return idB - idA;
+            return String(b.taskId || b.id || '').localeCompare(String(a.taskId || a.id || ''));
         });
     }, [tasks]);
 
@@ -187,8 +242,9 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
 
     // Stats calculations
     const stats = useMemo(() => {
-        const totalPending = pendingOrders.length;
-        const urgentOrHigh = pendingOrders.filter(o => {
+        const validPending = pendingOrders.filter(o => !isMockOrder(o));
+        const totalPending = validPending.length;
+        const urgentOrHigh = validPending.filter(o => {
             const p = (o.priority || '').toLowerCase();
             return p === 'urgent' || p === 'high';
         }).length;
@@ -278,7 +334,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                 >
                     <Package size={16} />
                     Awaiting STARS Task
-                    <span className="pre-delivery-tab-count">{pendingOrders.length}</span>
+                    <span className="pre-delivery-tab-count">{stats.totalPending}</span>
                 </button>
                 <button
                     className={`pre-delivery-tab-btn ${activeSubTab === 'in_validation' ? 'active' : ''}`}
