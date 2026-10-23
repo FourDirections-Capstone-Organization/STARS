@@ -28,7 +28,7 @@
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 999px;
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
     line-height: 1.6;
 }
@@ -74,9 +74,9 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     overflow-y: auto;
-    padding: 20px 20px 16px;
+    padding: 14px 16px 12px;
     scroll-behavior: smooth;
 }
 
@@ -114,7 +114,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
     display: flex;
     align-items: center;
@@ -135,7 +135,15 @@
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    flex: 1;
+    max-width: 100%;
+}
+
+.tc-msg-mine .tc-body {
+    align-items: flex-end;
+}
+
+.tc-msg-theirs .tc-body {
+    align-items: flex-start;
 }
 
 .tc-author {
@@ -147,12 +155,15 @@
 
 /* ── Bubbles ── */
 .tc-bubble {
-    padding: 10px 14px;
-    border-radius: 14px;
+    padding: 8px 12px;
+    border-radius: 12px;
     font-size: 0.83rem;
-    line-height: 1.55;
+    line-height: 1.45;
     word-break: break-word;
     position: relative;
+    width: fit-content;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .tc-bubble-theirs {
@@ -163,7 +174,7 @@
 }
 
 .tc-bubble-mine {
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
     border-bottom-right-radius: 4px;
 }
@@ -174,7 +185,7 @@
     align-items: center;
     gap: 5px;
     font-size: 0.73rem;
-    color: var(--primary);
+    color: var(--teal, #00A99D);
     text-decoration: none;
     font-weight: 500;
     margin-top: 4px;
@@ -245,7 +256,7 @@
 
 .tc-action-btn:hover {
     background: var(--bg-main);
-    color: var(--primary);
+    color: var(--teal, #00A99D);
 }
 
 .tc-action-delete:hover {
@@ -277,8 +288,8 @@
 }
 
 .tc-edit-textarea:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+    border-color: var(--teal, #00A99D);
+    box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.15);
 }
 
 .tc-edit-actions {
@@ -308,7 +319,7 @@
 
 .tc-btn:hover:not(:disabled) {
     background: var(--bg-main);
-    border-color: var(--primary);
+    border-color: var(--teal, #00A99D);
 }
 
 .tc-btn:disabled {
@@ -317,14 +328,14 @@
 }
 
 .tc-btn-primary {
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border-color: var(--primary);
+    border-color: var(--teal, #00A99D);
 }
 
 .tc-btn-primary:hover:not(:disabled) {
     opacity: 0.88;
-    background: var(--primary);
+    background: #008B8B;
 }
 
 .tc-btn-sm {
@@ -336,10 +347,10 @@
 /* ── Input area ── */
 .tc-input-area {
     border-top: 1px solid var(--border);
-    padding: 14px 20px 18px;
+    padding: 10px 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     flex-shrink: 0;
     background: var(--bg-card);
 }
@@ -378,13 +389,13 @@
 }
 
 .tc-input-box:focus-within {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+    border-color: var(--teal, #00A99D);
+    box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.15);
 }
 
 .tc-textarea {
     width: 100%;
-    padding: 10px 14px 8px;
+    padding: 8px 12px 6px;
     border: none;
     background: transparent;
     font-size: 0.83rem;
@@ -392,9 +403,9 @@
     color: var(--text-primary);
     resize: none;
     outline: none;
-    min-height: 40px;
+    min-height: 36px;
     max-height: 120px;
-    line-height: 1.5;
+    line-height: 1.45;
 }
 
 .tc-textarea::placeholder {
@@ -405,7 +416,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px 8px;
+    padding: 5px 10px 6px;
     border-top: 1px solid var(--border);
     background: var(--bg-card);
 }
@@ -424,7 +435,7 @@
 
 .tc-attach-btn:hover {
     background: var(--bg-main);
-    color: var(--primary);
+    color: var(--teal, #00A99D);
 }
 
 .tc-char-count {
@@ -440,7 +451,7 @@
     height: 32px;
     border-radius: 50%;
     border: none;
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
     display: flex;
     align-items: center;

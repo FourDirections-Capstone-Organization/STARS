@@ -2174,6 +2174,11 @@ interface DashboardTabProps {
 function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance, onCreateTaskForEndorsement, onOpenTask, onNavigateToTeams }: DashboardTabProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
+    const [dashboardViewMode, setDashboardViewMode] = useState<'overview' | 'tables'>('overview');
+    const [tableRosterPage, setTableRosterPage] = useState(1);
+    const [tableRoleFilter, setTableRoleFilter] = useState('');
+    const [tableStatusFilter, setTableStatusFilter] = useState('');
+
     const activeCount = (employees || []).filter(e => e.accountStatus === 'Active').length;
     const deactivatedCount = (employees || []).filter(e => e.accountStatus === 'Deactivated').length;
 
@@ -2215,6 +2220,49 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
             return acc;
         }, {})
     ).map(([role, data]) => ({ role, avg: Math.round(data.tasks / data.count) })).sort((a, b) => b.avg - a.avg);
+
+    // Compute detailed role & workload summary for table view
+    const roleTableSummary = useMemo(() => {
+        const map: Record<string, { role: string; total: number; active: number; deactivated: number; avgWorkload: number }> = {};
+        (employees || []).forEach(emp => {
+            const role = toDisplayRole(emp.role) || 'Unassigned';
+            if (!map[role]) {
+                map[role] = { role, total: 0, active: 0, deactivated: 0, avgWorkload: 0 };
+            }
+            map[role].total++;
+            if (emp.accountStatus === 'Active') map[role].active++;
+            else if (emp.accountStatus === 'Deactivated') map[role].deactivated++;
+        });
+        avgWorkloadByRole.forEach(a => {
+            if (map[a.role]) map[a.role].avgWorkload = a.avg;
+        });
+        return Object.values(map).sort((a, b) => b.total - a.total);
+    }, [employees, avgWorkloadByRole]);
+
+    // Filtered roster for table view
+    const filteredRoster = useMemo(() => {
+        return (employees || []).filter(emp => {
+            const q = searchQuery.toLowerCase().trim();
+            const name = getEmployeeDisplayName(emp).toLowerCase();
+            const num = (emp.employeeNumber || '').toLowerCase();
+            const role = (toDisplayRole(emp.role) || '').toLowerCase();
+            const contact = (emp.contactNumber || '').toLowerCase();
+            const email = (emp.email || '').toLowerCase();
+
+            const matchesQuery = !q || name.includes(q) || num.includes(q) || role.includes(q) || contact.includes(q) || email.includes(q);
+            const matchesRole = !tableRoleFilter || toDisplayRole(emp.role) === tableRoleFilter;
+            const matchesStatus = !tableStatusFilter || (emp.accountStatus || 'Active') === tableStatusFilter;
+
+            return matchesQuery && matchesRole && matchesStatus;
+        });
+    }, [employees, searchQuery, tableRoleFilter, tableStatusFilter]);
+
+    const ROSTER_PAGE_SIZE = 10;
+    const rosterTotalPages = Math.max(1, Math.ceil(filteredRoster.length / ROSTER_PAGE_SIZE));
+    const paginatedRoster = useMemo(() => {
+        const start = (tableRosterPage - 1) * ROSTER_PAGE_SIZE;
+        return filteredRoster.slice(start, start + ROSTER_PAGE_SIZE);
+    }, [filteredRoster, tableRosterPage]);
 
     return (
         <div className="dashboard-content">
@@ -2288,20 +2336,47 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                         )}
                     </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-                <div className="header-search-wrap" style={{ margin: 0, width: 300 }}>
-                    <Search size={14} className="header-search-icon" />
-                    <input type="text" className="header-search-input" placeholder="Search employee, task…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                {/* View Options Toggle: Overview & Visuals vs Data Tables View */}
+                <div className="view-toggle-group">
+                    <button
+                        type="button"
+                        onClick={() => setDashboardViewMode('overview')}
+                        className={`view-toggle-btn ${dashboardViewMode === 'overview' ? 'active' : ''}`}
+                    >
+                        <LayoutDashboard size={14} /> Overview & Visuals
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setDashboardViewMode('tables')}
+                        className={`view-toggle-btn ${dashboardViewMode === 'tables' ? 'active' : ''}`}
+                    >
+                        <ClipboardList size={14} /> Data Tables View
+                    </button>
                 </div>
-                {onNavigateToTeams && (
-                    <ActionButton icon={<Users size={18} />} variant="secondary" onClick={onNavigateToTeams}>
-                        Team Management
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div className="header-search-wrap" style={{ margin: 0, width: 280 }}>
+                        <Search size={14} className="header-search-icon" />
+                        <input
+                            type="text"
+                            className="header-search-input"
+                            placeholder="Search employee, task…"
+                            value={searchQuery}
+                            onChange={e => { setSearchQuery(e.target.value); setTableRosterPage(1); }}
+                        />
+                    </div>
+                    {onNavigateToTeams && (
+                        <ActionButton icon={<Users size={18} />} variant="secondary" onClick={onNavigateToTeams}>
+                            Team Management
+                        </ActionButton>
+                    )}
+                    <ActionButton icon={<Users size={18} />} onClick={onAddEmployee}>
+                        Add Employee
                     </ActionButton>
-                )}
-                <ActionButton icon={<Users size={18} />} onClick={onAddEmployee}>
-                    Add Employee
-                </ActionButton>
+                </div>
             </div>
+
             <div className="stats-row">
                 {([
                     { icon: <Users size={20} strokeWidth={2.3} />, variant: 'teal', label: 'TOTAL EMPLOYEES', value: employees.length, subtext: 'All registered staff' },
@@ -2313,182 +2388,433 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                 ))}
             </div>
 
-            {/* ── Charts Row ── */}
-            <div className="dashboard-bottom-row">
-                <div className="card">
-                    <div className="card-header-layout">
-                        <span className="text-link">Role Distribution</span>
-                    </div>
-                    {loading || employees.length === 0 ? (
-                        <EmptyState message="No data" />
-                    ) : (
-                        <ResponsiveContainer width="100%" height={260}>
-                            <BarChart data={roleDistribution} margin={{ top: 16, right: 16, left: 0, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
-                                <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                <Tooltip
-                                    contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-                                />
-                                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
-                                    {roleDistribution.map((_, i) => (
-                                        <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
-                <div className="card">
-                    <div className="card-header-layout">
-                        <span className="text-link">Account Status</span>
-                    </div>
-                    {loading || employees.length === 0 ? (
-                        <EmptyState message="No data" />
-                    ) : (
-                        <ResponsiveContainer width="100%" height={260}>
-                            <PieChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                                <Pie
-                                    data={statusDistribution}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={55}
-                                    outerRadius={85}
-                                    paddingAngle={3}
-                                    dataKey="value"
-                                    label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-                                    labelLine={false}
-                                >
-                                    {statusDistribution.map((entry) => (
-                                        <Cell key={entry.name} fill={PIE_COLORS[entry.name] || '#94A3B8'} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                />
-                                <Legend
-                                    verticalAlign="bottom"
-                                    iconType="circle"
-                                    iconSize={10}
-                                    formatter={(value: string) => <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{value}</span>}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
-                <div className="card">
-                    <div className="card-header-layout">
-                        <span className="text-link"><ClipboardList size={14} /> Avg Workload by Role</span>
-                    </div>
-                    {loading || avgWorkloadByRole.length === 0 ? (
-                        <EmptyState message="No data" />
-                    ) : (
-                        <ResponsiveContainer width="100%" height={260}>
-                            <BarChart data={avgWorkloadByRole} margin={{ top: 16, right: 16, left: 0, bottom: 8 }} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                                <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                <YAxis dataKey="role" type="category" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={90} />
-                                <Tooltip
-                                    contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                    labelStyle={{ fontWeight: 700, marginBottom: 4 }}
-                                    formatter={(value: unknown) => [`${Number(value ?? 0)} tasks/emp`, 'Avg Workload'] as [string, string]}
-                                />
-                                <Bar dataKey="avg" radius={[0, 6, 6, 0]} maxBarSize={28}>
-                                    {avgWorkloadByRole.map((_, i) => (
-                                        <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
-            </div>
-
-            {/* Main Content Grid */}
-            <div className="dashboard-grid">
-                <div className="card">
-                    <div className="card-header-layout"><span className="text-link">Recent Employees</span><button className="view-all-link" onClick={onViewAll}>View more →</button></div>
-                    {loading ? (
-                        <EmptyState icon={<Loader2 size={22} className="spin" />} message="Loading..." />
-                    ) : recentEmployees.length === 0 ? (
-                        <EmptyState message="No data available" />
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {(recentEmployees || []).filter(emp => {
-                                if (!searchQuery) return true;
-                                const q = searchQuery.toLowerCase();
-                                return getEmployeeDisplayName(emp).toLowerCase().includes(q)
-                                    || (emp.employeeNumber && emp.employeeNumber.toLowerCase().includes(q))
-                                    || (emp.role != null && String(emp.role).toLowerCase().includes(q));
-                            }).slice(0, 7).map(emp => {
-                                const name = getEmployeeDisplayName(emp);
-                                return (
-                                    <div key={emp.employeeNumber} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.12s' }} onClick={() => onSelectEmployee(emp)} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-main)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                        <div style={{ position: 'relative', flexShrink: 0 }}>
-                                            <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
-                                            <span style={{ position: 'absolute', bottom: 1, right: 1, width: 9, height: 9, borderRadius: '50%', background: emp.presenceStatus === 'Online' ? 'var(--status-active)' : 'var(--text-secondary)', border: '2px solid var(--bg-card)', display: 'block' }} title={emp.presenceStatus ?? 'Offline'} />
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{name}</div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                                                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{emp.employeeNumber}</span>
-                                                <RoleBadge role={toDisplayRole(emp.role)} size="sm" />
-                                                <StatusBadge status={emp.accountStatus || 'Active'} size="sm" />
-                                            </div>
-                                        </div>
-                                        <div className="cell-actions" onClick={e => e.stopPropagation()}>
-                                            <ActionsDropdown
-                                                actions={[
-                                                    { label: 'View Details', icon: <Eye size={13} />, onClick: () => onSelectEmployee(emp) },
-                                                    ...(onEditEmployee ? [{ label: 'Edit Profile', icon: <Pencil size={13} />, onClick: () => onEditEmployee(emp) }] : [])
-                                                ]}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
+            {dashboardViewMode === 'tables' ? (
+                <div className="dashboard-tables-container">
+                    {/* Table 1: Role & Workload Distribution Matrix */}
+                    <div className="dashboard-table-card">
+                        <div className="dashboard-table-header">
+                            <div className="dashboard-table-title">
+                                <Shield size={16} color="var(--teal, #00A99D)" />
+                                <span>Role Distribution & Workload Matrix</span>
+                            </div>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                {roleTableSummary.length} Roles Registered
+                            </span>
                         </div>
-                    )}
-                </div>
-                <div className="card activity-card">
-                    <div className="card-header-layout"><span className="text-link">Recent Activity</span></div>
-                    <div className="activity-feed-list">
-                        {loading
-                            ? <EmptyState icon={<Loader2 size={22} className="spin" />} message="Loading..." />
-                            : activityLogs.length === 0
-                                ? <EmptyState icon={<ClipboardList size={22} />} message="No recent activity" />
-                                : (activityLogs || []).filter(log => {
-                                    if (!searchQuery) return true;
-                                    const q = searchQuery.toLowerCase();
-                                    return log.description.toLowerCase().includes(q)
-                                        || log.activityType.toLowerCase().includes(q);
-                                }).slice(0, 8).map((log, index) => {
-                                    let dotColor = 'var(--primary)';
-                                    let ringColor = 'rgba(0, 169, 157, 0.15)';
-                                    if (log.activityType === 'Login') { dotColor = 'var(--status-active)'; ringColor = 'rgba(5, 150, 105, 0.15)'; }
-                                    else if (log.activityType === 'Logout') { dotColor = 'var(--status-pending)'; ringColor = 'rgba(217, 119, 6, 0.15)'; }
-                                    else if (log.activityType === 'Profile Update') { dotColor = 'var(--status-transit)'; ringColor = 'rgba(2, 132, 199, 0.15)'; }
-                                    return (
-                                        <div key={log.activityLogId} className="activity-feed-item" style={{ display: 'flex', gap: 16, marginBottom: 20, position: 'relative' }}>
-                                            {index < Math.min(activityLogs.length, 8) - 1 && <div style={{ position: 'absolute', left: 4, top: 16, bottom: -24, width: 2, background: 'var(--border)', zIndex: 0 }} />}
-                                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, boxShadow: `0 0 0 4px ${ringColor}`, zIndex: 1, flexShrink: 0, marginTop: 4 }} />
-                                            <div className="activity-feed-content" style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-                                                <span className="activity-feed-text" style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: 13, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{log.description}</span>
-                                                <span className="activity-feed-time" style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                    <Clock size={10} />
-                                                    {log.createdAt ? new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                        <div className="dashboard-table-scroll">
+                            <table className="dashboard-custom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Role Name</th>
+                                        <th style={{ textAlign: 'center' }}>Active Accounts</th>
+                                        <th style={{ textAlign: 'center' }}>Deactivated</th>
+                                        <th style={{ textAlign: 'center' }}>Total Staff</th>
+                                        <th style={{ textAlign: 'center' }}>Avg Est. Workload</th>
+                                        <th style={{ minWidth: 160 }}>Workforce Share</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {roleTableSummary.map(r => {
+                                        const pct = employees.length > 0 ? Math.round((r.total / employees.length) * 100) : 0;
+                                        return (
+                                            <tr key={r.role}>
+                                                <td>
+                                                    <RoleBadge role={r.role} size="sm" />
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--status-active, #059669)' }}>
+                                                    {r.active}
+                                                </td>
+                                                <td style={{ textAlign: 'center', color: r.deactivated > 0 ? 'var(--status-failed, #ee5d50)' : 'var(--text-muted)' }}>
+                                                    {r.deactivated}
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 700 }}>
+                                                    {r.total}
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                    {r.avgWorkload ? `${r.avgWorkload} tasks/emp` : '—'}
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <div style={{ flex: 1, height: 6, background: 'var(--border, #e2e8f0)', borderRadius: 3, overflow: 'hidden' }}>
+                                                            <div style={{ width: `${pct}%`, height: '100%', background: 'var(--teal, #00A99D)', borderRadius: 3 }} />
+                                                        </div>
+                                                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', minWidth: 32, textAlign: 'right' }}>
+                                                            {pct}%
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    {activityLogs.length > 0 && activityLogTotalPages && activityLogTotalPages > 1 && (
-                        <Pagination currentPage={activityLogPage ?? 1} totalPages={activityLogTotalPages} onPageChange={p => onActivityLogPageChange?.(p)} />
-                    )}
+
+                    {/* Table 2: Complete Staff Roster */}
+                    <div className="dashboard-table-card">
+                        <div className="dashboard-table-header">
+                            <div className="dashboard-table-title">
+                                <Users size={16} color="var(--teal, #00A99D)" />
+                                <span>Staff Directory & Account Roster</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <select
+                                    value={tableRoleFilter}
+                                    onChange={e => { setTableRoleFilter(e.target.value); setTableRosterPage(1); }}
+                                    style={{ height: 32, borderRadius: 6, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                                >
+                                    <option value="">All Roles</option>
+                                    {SYSTEM_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+                                <select
+                                    value={tableStatusFilter}
+                                    onChange={e => { setTableStatusFilter(e.target.value); setTableRosterPage(1); }}
+                                    style={{ height: 32, borderRadius: 6, border: '1px solid var(--border)', padding: '0 8px', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                                >
+                                    <option value="">All Statuses</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Inactive">Inactive</option>
+                                    <option value="Deactivated">Deactivated</option>
+                                </select>
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    {filteredRoster.length} employees
+                                </span>
+                            </div>
+                        </div>
+                        <div className="dashboard-table-scroll">
+                            <table className="dashboard-custom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee Name</th>
+                                        <th>Employee ID</th>
+                                        <th>Role</th>
+                                        <th>Contact</th>
+                                        <th>Status</th>
+                                        <th style={{ textAlign: 'center' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedRoster.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+                                                No employees match the current filters.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        paginatedRoster.map(emp => {
+                                            const name = getEmployeeDisplayName(emp);
+                                            return (
+                                                <tr key={emp.employeeNumber} onClick={() => onSelectEmployee(emp)} style={{ cursor: 'pointer' }}>
+                                                    <td>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                                                                <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
+                                                                <span
+                                                                    style={{
+                                                                        position: 'absolute',
+                                                                        bottom: 1,
+                                                                        right: 1,
+                                                                        width: 8,
+                                                                        height: 8,
+                                                                        borderRadius: '50%',
+                                                                        background: emp.presenceStatus === 'Online' ? 'var(--status-active)' : 'var(--text-secondary)',
+                                                                        border: '2px solid var(--bg-card)',
+                                                                        display: 'block',
+                                                                    }}
+                                                                    title={emp.presenceStatus ?? 'Offline'}
+                                                                />
+                                                            </div>
+                                                            <span style={{ fontWeight: 600 }}>{name}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{emp.employeeNumber}</td>
+                                                    <td><RoleBadge role={toDisplayRole(emp.role)} size="sm" /></td>
+                                                    <td style={{ fontSize: 12 }}>{emp.contactNumber || emp.email || '—'}</td>
+                                                    <td><StatusBadge status={emp.accountStatus || 'Active'} size="sm" /></td>
+                                                    <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                                        <div style={{ display: 'inline-flex', gap: 6 }}>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-outline btn-sm"
+                                                                style={{ padding: '3px 8px', fontSize: 11.5 }}
+                                                                onClick={() => onSelectEmployee(emp)}
+                                                            >
+                                                                <Eye size={12} /> View
+                                                            </button>
+                                                            {onEditEmployee && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-primary btn-sm"
+                                                                    style={{ padding: '3px 8px', fontSize: 11.5 }}
+                                                                    onClick={() => onEditEmployee(emp)}
+                                                                >
+                                                                    <Pencil size={12} /> Edit
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {rosterTotalPages > 1 && (
+                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                                <Pagination currentPage={tableRosterPage} totalPages={rosterTotalPages} onPageChange={setTableRosterPage} />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Table 3: System Activity Audit Table */}
+                    <div className="dashboard-table-card">
+                        <div className="dashboard-table-header">
+                            <div className="dashboard-table-title">
+                                <Activity size={16} color="var(--teal, #00A99D)" />
+                                <span>Recent System Activity Audit Log</span>
+                            </div>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                Live Operations Activity
+                            </span>
+                        </div>
+                        <div className="dashboard-table-scroll">
+                            <table className="dashboard-custom-table">
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: 160 }}>Timestamp</th>
+                                        <th style={{ width: 140 }}>Activity Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {activityLogs.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={3} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+                                                No recent activity logs available.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        activityLogs.map(log => {
+                                            let badgeBg = '#f1f5f9';
+                                            let badgeColor = '#475569';
+                                            if (log.activityType === 'Login') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; }
+                                            else if (log.activityType === 'Logout') { badgeBg = '#fef3c7'; badgeColor = '#b45309'; }
+                                            else if (log.activityType === 'Profile Update') { badgeBg = '#e0f2fe'; badgeColor = '#0369a1'; }
+                                            else if (log.activityType === 'Create') { badgeBg = '#ecfdf5'; badgeColor = '#047857'; }
+                                            else if (log.activityType === 'Delete') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; }
+
+                                            return (
+                                                <tr key={log.activityLogId}>
+                                                    <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <Clock size={11} />
+                                                            {log.createdAt ? new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: badgeBg, color: badgeColor, display: 'inline-block' }}>
+                                                            {log.activityType}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>
+                                                        {log.description}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {activityLogs.length > 0 && activityLogTotalPages && activityLogTotalPages > 1 && (
+                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                                <Pagination currentPage={activityLogPage ?? 1} totalPages={activityLogTotalPages} onPageChange={p => onActivityLogPageChange?.(p)} />
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <>
+                    {/* ── Charts Row ── */}
+                    <div className="dashboard-bottom-row">
+                        <div className="card">
+                            <div className="card-header-layout">
+                                <span className="text-link">Role Distribution</span>
+                            </div>
+                            {loading || employees.length === 0 ? (
+                                <EmptyState message="No data" />
+                            ) : (
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <BarChart data={roleDistribution} margin={{ top: 16, right: 16, left: 0, bottom: 8 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                            labelStyle={{ fontWeight: 700, marginBottom: 4 }}
+                                        />
+                                        <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                                            {roleDistribution.map((_, i) => (
+                                                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                        <div className="card">
+                            <div className="card-header-layout">
+                                <span className="text-link">Account Status</span>
+                            </div>
+                            {loading || employees.length === 0 ? (
+                                <EmptyState message="No data" />
+                            ) : (
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <PieChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                                        <Pie
+                                            data={statusDistribution}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={55}
+                                            outerRadius={85}
+                                            paddingAngle={3}
+                                            dataKey="value"
+                                            label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {statusDistribution.map((entry) => (
+                                                <Cell key={entry.name} fill={PIE_COLORS[entry.name] || '#94A3B8'} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                        />
+                                        <Legend
+                                            verticalAlign="bottom"
+                                            iconType="circle"
+                                            iconSize={10}
+                                            formatter={(value: string) => <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{value}</span>}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                        <div className="card">
+                            <div className="card-header-layout">
+                                <span className="text-link"><ClipboardList size={14} /> Avg Workload by Role</span>
+                            </div>
+                            {loading || avgWorkloadByRole.length === 0 ? (
+                                <EmptyState message="No data" />
+                            ) : (
+                                <ResponsiveContainer width="100%" height={260}>
+                                    <BarChart data={avgWorkloadByRole} margin={{ top: 16, right: 16, left: 0, bottom: 8 }} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                                        <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                        <YAxis dataKey="role" type="category" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={90} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                            labelStyle={{ fontWeight: 700, marginBottom: 4 }}
+                                            formatter={(value: unknown) => [`${Number(value ?? 0)} tasks/emp`, 'Avg Workload'] as [string, string]}
+                                        />
+                                        <Bar dataKey="avg" radius={[0, 6, 6, 0]} maxBarSize={28}>
+                                            {avgWorkloadByRole.map((_, i) => (
+                                                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Main Content Grid */}
+                    <div className="dashboard-grid">
+                        <div className="card">
+                            <div className="card-header-layout"><span className="text-link">Recent Employees</span><button className="view-all-link" onClick={onViewAll}>View more →</button></div>
+                            {loading ? (
+                                <EmptyState icon={<Loader2 size={22} className="spin" />} message="Loading..." />
+                            ) : recentEmployees.length === 0 ? (
+                                <EmptyState message="No data available" />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    {(recentEmployees || []).filter(emp => {
+                                        if (!searchQuery) return true;
+                                        const q = searchQuery.toLowerCase();
+                                        return getEmployeeDisplayName(emp).toLowerCase().includes(q)
+                                            || (emp.employeeNumber && emp.employeeNumber.toLowerCase().includes(q))
+                                            || (emp.role != null && String(emp.role).toLowerCase().includes(q));
+                                    }).slice(0, 7).map(emp => {
+                                        const name = getEmployeeDisplayName(emp);
+                                        return (
+                                            <div key={emp.employeeNumber} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.12s' }} onClick={() => onSelectEmployee(emp)} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-main)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                <div style={{ position: 'relative', flexShrink: 0 }}>
+                                                    <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
+                                                    <span style={{ position: 'absolute', bottom: 1, right: 1, width: 9, height: 9, borderRadius: '50%', background: emp.presenceStatus === 'Online' ? 'var(--status-active)' : 'var(--text-secondary)', border: '2px solid var(--bg-card)', display: 'block' }} title={emp.presenceStatus ?? 'Offline'} />
+                                                </div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{name}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{emp.employeeNumber}</span>
+                                                        <RoleBadge role={toDisplayRole(emp.role)} size="sm" />
+                                                        <StatusBadge status={emp.accountStatus || 'Active'} size="sm" />
+                                                    </div>
+                                                </div>
+                                                <div className="cell-actions" onClick={e => e.stopPropagation()}>
+                                                    <ActionsDropdown
+                                                        actions={[
+                                                            { label: 'View Details', icon: <Eye size={13} />, onClick: () => onSelectEmployee(emp) },
+                                                            ...(onEditEmployee ? [{ label: 'Edit Profile', icon: <Pencil size={13} />, onClick: () => onEditEmployee(emp) }] : [])
+                                                        ]}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="card activity-card">
+                            <div className="card-header-layout"><span className="text-link">Recent Activity</span></div>
+                            <div className="activity-feed-list">
+                                {loading
+                                    ? <EmptyState icon={<Loader2 size={22} className="spin" />} message="Loading..." />
+                                    : activityLogs.length === 0
+                                        ? <EmptyState icon={<ClipboardList size={22} />} message="No recent activity" />
+                                        : (activityLogs || []).filter(log => {
+                                            if (!searchQuery) return true;
+                                            const q = searchQuery.toLowerCase();
+                                            return log.description.toLowerCase().includes(q)
+                                                || log.activityType.toLowerCase().includes(q);
+                                        }).slice(0, 8).map((log, index) => {
+                                            let dotColor = 'var(--primary)';
+                                            let ringColor = 'rgba(0, 169, 157, 0.15)';
+                                            if (log.activityType === 'Login') { dotColor = 'var(--status-active)'; ringColor = 'rgba(5, 150, 105, 0.15)'; }
+                                            else if (log.activityType === 'Logout') { dotColor = 'var(--status-pending)'; ringColor = 'rgba(217, 119, 6, 0.15)'; }
+                                            else if (log.activityType === 'Profile Update') { dotColor = 'var(--status-transit)'; ringColor = 'rgba(2, 132, 199, 0.15)'; }
+                                            return (
+                                                <div key={log.activityLogId} className="activity-feed-item" style={{ display: 'flex', gap: 16, marginBottom: 20, position: 'relative' }}>
+                                                    {index < Math.min(activityLogs.length, 8) - 1 && <div style={{ position: 'absolute', left: 4, top: 16, bottom: -24, width: 2, background: 'var(--border)', zIndex: 0 }} />}
+                                                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, boxShadow: `0 0 0 4px ${ringColor}`, zIndex: 1, flexShrink: 0, marginTop: 4 }} />
+                                                    <div className="activity-feed-content" style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+                                                        <span className="activity-feed-text" style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: 13, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{log.description}</span>
+                                                        <span className="activity-feed-time" style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                            <Clock size={10} />
+                                                            {log.createdAt ? new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                            </div>
+                            {activityLogs.length > 0 && activityLogTotalPages && activityLogTotalPages > 1 && (
+                                <Pagination currentPage={activityLogPage ?? 1} totalPages={activityLogTotalPages} onPageChange={p => onActivityLogPageChange?.(p)} />
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
                 </>
             )}
         </div>
@@ -2525,10 +2851,34 @@ export function ManageEmployeesTab({
     const [search, setSearch] = useState('');
     const [filterRole, setFilterRole] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
     useEffect(() => {
         onEmpPageChange(1, { search, role: filterRole, status: filterStatus });
     }, [search, filterRole, filterStatus]);
+
+    const viewSwitcher = (
+        <div className="view-toggle-group" style={{ height: 36, padding: 2 }}>
+            <button
+                type="button"
+                title="Table View"
+                onClick={() => setViewMode('table')}
+                className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                style={{ padding: '4px 10px', height: '100%' }}
+            >
+                <FileText size={13} /> Table
+            </button>
+            <button
+                type="button"
+                title="Cards Grid View"
+                onClick={() => setViewMode('cards')}
+                className={`view-toggle-btn ${viewMode === 'cards' ? 'active' : ''}`}
+                style={{ padding: '4px 10px', height: '100%' }}
+            >
+                <LayoutDashboard size={13} /> Cards
+            </button>
+        </div>
+    );
 
     // ── Shared table card wrapper ──────────────────────────────────────────────
     return (
@@ -2551,69 +2901,226 @@ export function ManageEmployeesTab({
 
             {/* ── All Employees ── */}
             {subTab === 'employees' && (
-                <DataTable
-                    searchQuery={search}
-                    onSearchChange={setSearch}
-                    searchPlaceholder="Search by name or ID…"
-                    filterElements={
-                        <>
-                            <Select value={filterRole} onChange={setFilterRole} placeholder="All Roles"
-                                options={rolesList.map(r => ({ value: r, label: r }))} />
-                            <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
-                                options={[
-                                    { value: 'Active', label: 'Active' },
-                                    { value: 'Inactive', label: 'Inactive' },
-                                    { value: 'Deactivated', label: 'Deactivated' }
-                                ]} />
-                            {onNavigateToTeams && (
-                                <button
-                                    type="button"
-                                    className="btn btn-outline"
-                                    onClick={onNavigateToTeams}
-                                    style={{ height: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-                                >
-                                    <Users size={14} /> Manage Teams
-                                </button>
-                            )}
-                        </>
-                    }
-                    actionButton={{ label: 'Add Employee', icon: <Plus size={14} />, onClick: onAddEmployee }}
-                    headers={['NAME', 'EMPLOYEE NO', 'ROLE', 'CONTACT', 'STATUS', 'ACTION']}
-                    loading={loading}
-                    emptyMessage="No employees match your filters"
-                    currentPage={empPage}
-                    totalPages={empTotalPages}
-                    onPageChange={p => onEmpPageChange(p, { search, role: filterRole, status: filterStatus })}
-                    totalRecords={employees.length}
-                >
-                    {employees.map(emp => {
-                        const name = getEmployeeDisplayName(emp) || 'Unknown';
-                        return (
-                            <tr key={emp.employeeNumber} onClick={() => onSelectEmployee(emp)} style={{ cursor: 'pointer' }}>
-                                <td>
-                                    <div className="emp-name-cell">
-                                        <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
-                                            <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
-                                            <span style={{ position: 'absolute', bottom: 1, right: 1, width: 9, height: 9, borderRadius: '50%', background: emp.presenceStatus === 'Online' ? 'var(--status-active)' : 'var(--text-secondary)', border: '2px solid var(--bg-card)', display: 'block' }} title={emp.presenceStatus ?? 'Offline'} />
-                                        </div>
-                                        <span style={{ fontWeight: 600 }}>{name}</span>
-                                    </div>
-                                </td>
-                                <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{emp.employeeNumber}</td>
-                                <td style={{ fontSize: 13 }}>{emp.role ? toDisplayRole(emp.role) : <span className="no-role">—</span>}</td>
-                                <td style={{ fontSize: 13 }}>{emp.contactNumber}</td>
-                                <td><StatusBadge status={emp.accountStatus || 'Active'} /></td>
-                                <td onClick={e => e.stopPropagation()}>
-                                    <ActionsDropdown actions={[
-                                        { label: 'View Details', icon: <Eye size={12} />, onClick: () => onViewEmployee(emp) },
-                                        { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
-                                        { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'danger' },
+                viewMode === 'table' ? (
+                    <DataTable
+                        searchQuery={search}
+                        onSearchChange={setSearch}
+                        searchPlaceholder="Search by name or ID…"
+                        filterElements={
+                            <>
+                                <Select value={filterRole} onChange={setFilterRole} placeholder="All Roles"
+                                    options={rolesList.map(r => ({ value: r, label: r }))} />
+                                <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
+                                    options={[
+                                        { value: 'Active', label: 'Active' },
+                                        { value: 'Inactive', label: 'Inactive' },
+                                        { value: 'Deactivated', label: 'Deactivated' }
                                     ]} />
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </DataTable>
+                                {onNavigateToTeams && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline"
+                                        onClick={onNavigateToTeams}
+                                        style={{ height: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                                    >
+                                        <Users size={14} /> Manage Teams
+                                    </button>
+                                )}
+                                {viewSwitcher}
+                            </>
+                        }
+                        actionButton={{ label: 'Add Employee', icon: <Plus size={14} />, onClick: onAddEmployee }}
+                        headers={['NAME', 'EMPLOYEE NO', 'ROLE', 'CONTACT', 'STATUS', 'ACTION']}
+                        loading={loading}
+                        emptyMessage="No employees match your filters"
+                        currentPage={empPage}
+                        totalPages={empTotalPages}
+                        onPageChange={p => onEmpPageChange(p, { search, role: filterRole, status: filterStatus })}
+                        totalRecords={employees.length}
+                    >
+                        {employees.map(emp => {
+                            const name = getEmployeeDisplayName(emp) || 'Unknown';
+                            return (
+                                <tr key={emp.employeeNumber} onClick={() => onSelectEmployee(emp)} style={{ cursor: 'pointer' }}>
+                                    <td>
+                                        <div className="emp-name-cell">
+                                            <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
+                                                <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
+                                                <span style={{ position: 'absolute', bottom: 1, right: 1, width: 9, height: 9, borderRadius: '50%', background: emp.presenceStatus === 'Online' ? 'var(--status-active)' : 'var(--text-secondary)', border: '2px solid var(--bg-card)', display: 'block' }} title={emp.presenceStatus ?? 'Offline'} />
+                                            </div>
+                                            <span style={{ fontWeight: 600 }}>{name}</span>
+                                        </div>
+                                    </td>
+                                    <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{emp.employeeNumber}</td>
+                                    <td style={{ fontSize: 13 }}>{emp.role ? toDisplayRole(emp.role) : <span className="no-role">—</span>}</td>
+                                    <td style={{ fontSize: 13 }}>{emp.contactNumber}</td>
+                                    <td><StatusBadge status={emp.accountStatus || 'Active'} /></td>
+                                    <td onClick={e => e.stopPropagation()}>
+                                        <ActionsDropdown actions={[
+                                            { label: 'View Details', icon: <Eye size={12} />, onClick: () => onViewEmployee(emp) },
+                                            { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
+                                            { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'danger' },
+                                        ]} />
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </DataTable>
+                ) : (
+                    <div className="dashboard-emp-cards-section">
+                        {/* Top Filters Row matching DataTable */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1, minWidth: 280 }}>
+                                <div style={{ width: 240, maxWidth: '100%' }}>
+                                    <SearchBar value={search} onChange={setSearch} placeholder="Search by name or ID…" />
+                                </div>
+                                <Select
+                                    value={filterRole}
+                                    onChange={setFilterRole}
+                                    placeholder="All Roles"
+                                    options={rolesList.map(r => ({ value: r, label: r }))}
+                                />
+                                <Select
+                                    value={filterStatus}
+                                    onChange={setFilterStatus}
+                                    placeholder="All Statuses"
+                                    options={[
+                                        { value: 'Active', label: 'Active' },
+                                        { value: 'Inactive', label: 'Inactive' },
+                                        { value: 'Deactivated', label: 'Deactivated' }
+                                    ]}
+                                />
+                                {onNavigateToTeams && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline"
+                                        onClick={onNavigateToTeams}
+                                        style={{ height: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                                    >
+                                        <Users size={14} /> Manage Teams
+                                    </button>
+                                )}
+                                {viewSwitcher}
+                            </div>
+                            <ActionButton icon={<Plus size={14} />} onClick={onAddEmployee}>
+                                Add Employee
+                            </ActionButton>
+                        </div>
+
+                        {loading ? (
+                            <div className="card" style={{ padding: 48 }}>
+                                <EmptyState icon={<Loader2 size={24} className="spin" />} message="Loading employees..." />
+                            </div>
+                        ) : employees.length === 0 ? (
+                            <div className="card" style={{ padding: 48 }}>
+                                <EmptyState message="No employees match your filters" />
+                            </div>
+                        ) : (
+                            <div className="manage-emp-cards-grid">
+                                {employees.map(emp => {
+                                    const name = getEmployeeDisplayName(emp) || 'Unknown';
+                                    return (
+                                        <div
+                                            key={emp.employeeNumber}
+                                            className="manage-emp-card"
+                                            onClick={() => onSelectEmployee(emp)}
+                                        >
+                                            <div className="manage-emp-card-header">
+                                                <div style={{ position: 'relative', flexShrink: 0 }}>
+                                                    <div className="emp-avatar">{name.charAt(0).toUpperCase()}</div>
+                                                    <span
+                                                        style={{
+                                                            position: 'absolute',
+                                                            bottom: 0,
+                                                            right: 0,
+                                                            width: 9,
+                                                            height: 9,
+                                                            borderRadius: '50%',
+                                                            background: emp.presenceStatus === 'Online' ? 'var(--status-active, #059669)' : 'var(--text-secondary, #64748b)',
+                                                            border: '2px solid var(--bg-card, #ffffff)',
+                                                            display: 'block',
+                                                        }}
+                                                        title={emp.presenceStatus ?? 'Offline'}
+                                                    />
+                                                </div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {name}
+                                                    </h4>
+                                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                        {emp.employeeNumber}
+                                                    </span>
+                                                </div>
+                                                <div onClick={e => e.stopPropagation()}>
+                                                    <ActionsDropdown
+                                                        actions={[
+                                                            { label: 'View Details', icon: <Eye size={12} />, onClick: () => onViewEmployee(emp) },
+                                                            { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
+                                                            { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'danger' },
+                                                        ]}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="manage-emp-card-badges">
+                                                <RoleBadge role={emp.role ? toDisplayRole(emp.role) : undefined} size="sm" />
+                                                <StatusBadge status={emp.accountStatus || 'Active'} size="sm" />
+                                            </div>
+
+                                            <div className="manage-emp-card-info">
+                                                {emp.contactNumber && (
+                                                    <div className="manage-emp-card-info-item">
+                                                        <Phone size={12} />
+                                                        <span>{emp.contactNumber}</span>
+                                                    </div>
+                                                )}
+                                                {emp.email && (
+                                                    <div className="manage-emp-card-info-item">
+                                                        <Mail size={12} />
+                                                        <span title={emp.email}>{emp.email}</span>
+                                                    </div>
+                                                )}
+                                                {emp.departmentName && (
+                                                    <div className="manage-emp-card-info-item">
+                                                        <Shield size={12} />
+                                                        <span>{emp.departmentName}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="manage-emp-card-actions" onClick={e => e.stopPropagation()}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-outline btn-sm"
+                                                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}
+                                                    onClick={() => onViewEmployee(emp)}
+                                                >
+                                                    <Eye size={13} /> Details
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-primary btn-sm"
+                                                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, padding: '0 12px' }}
+                                                    onClick={() => onEditEmployee(emp)}
+                                                >
+                                                    <Pencil size={13} /> Edit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: 16 }}>
+                            <Pagination
+                                currentPage={empPage}
+                                totalPages={empTotalPages}
+                                onPageChange={p => onEmpPageChange(p, { search, role: filterRole, status: filterStatus })}
+                            />
+                        </div>
+                    </div>
+                )
             )}
 
 

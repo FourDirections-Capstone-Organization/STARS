@@ -67,7 +67,8 @@
     border: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
-    min-height: 480px;
+    min-height: 440px;
+    max-height: calc(100vh - 220px);
     min-width: 270px;
     transition: background-color 0.2s, border-color 0.2s;
     overflow: hidden;
@@ -82,7 +83,7 @@
 }
 
 .tm-board-col-header {
-    padding: 12px 14px;
+    padding: 10px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -112,21 +113,34 @@
 }
 
 .tm-board-col-cards {
-    padding: 12px;
+    padding: 10px 10px 24px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    max-height: calc(100vh - 340px);
+    max-height: calc(100vh - 260px);
+}
+
+.tm-board-col-cards::-webkit-scrollbar {
+    width: 5px;
+}
+
+.tm-board-col-cards::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tm-board-col-cards::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
 }
 
 .tm-board-card {
     background: #ffffff;
-    border-radius: 10px;
+    border-radius: 9px;
     border: 1px solid #e2e8f0;
-    padding: 12px 14px;
+    padding: 10px 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     cursor: grab;
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -154,7 +168,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     gap: 8px;
 }
 
@@ -171,8 +185,8 @@
     font-size: 13px;
     font-weight: 600;
     color: #0f172a;
-    line-height: 1.35;
-    margin-bottom: 6px;
+    line-height: 1.3;
+    margin-bottom: 4px;
     cursor: pointer;
     word-break: break-word;
     overflow-wrap: break-word;
@@ -187,7 +201,7 @@
     align-items: center;
     gap: 5px;
     flex-wrap: wrap;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     max-width: 100%;
 }
 
@@ -197,10 +211,10 @@
     justify-content: space-between;
     font-size: 11px;
     color: #64748b;
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px solid #f1f5f9;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     max-width: 100%;
 }

@@ -2006,7 +2006,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                         <div className="tv-panel-header">
                             <div className="tv-panel-header-top">
                                 <div className="tv-panel-header-title">
-                                    <MessageSquare size={16} color="var(--primary, #0284c7)" />
+                                    <MessageSquare size={16} color="var(--teal, #00A99D)" />
                                     <span>Task Discussion & AI</span>
                                 </div>
                                 <button

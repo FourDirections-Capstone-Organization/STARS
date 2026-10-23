@@ -2089,4 +2089,186 @@ input.emp-picker-checkbox {
         max-height: 92vh;
     }
 }
+
+/* ─── DASHBOARD & MANAGE EMPLOYEES VIEW OPTIONS ─────────────────────────── */
+.view-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--r-sm, 8px);
+    padding: 3px;
+    gap: 4px;
+}
+
+.view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.view-toggle-btn:hover {
+    color: var(--text-primary, #0f172a);
+    background: rgba(0, 169, 157, 0.08);
+}
+
+.view-toggle-btn.active {
+    background: var(--teal, #00A99D) !important;
+    color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 169, 157, 0.25);
+}
+
+.dashboard-tables-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 18px;
+}
+
+.dashboard-table-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--r-md, 12px);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dashboard-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    background: var(--bg-main, #f8fafc);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dashboard-table-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+}
+
+.dashboard-table-scroll {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.dashboard-custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+
+.dashboard-custom-table th {
+    background: var(--bg-main, #f8fafc);
+    color: var(--text-secondary, #64748b);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    white-space: nowrap;
+}
+
+.dashboard-custom-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    color: var(--text-primary, #0f172a);
+    vertical-align: middle;
+}
+
+.dashboard-custom-table tr:last-child td {
+    border-bottom: none;
+}
+
+.dashboard-custom-table tr:hover td {
+    background: rgba(0, 169, 157, 0.02);
+}
+
+/* ─── MANAGE EMPLOYEES CARD GRID ─────────────────────────────────────────── */
+.manage-emp-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.manage-emp-card {
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--r-md, 12px);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    position: relative;
+}
+
+.manage-emp-card:hover {
+    border-color: var(--teal, #00A99D);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 169, 157, 0.08);
+}
+
+.manage-emp-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.manage-emp-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.manage-emp-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #64748b);
+    padding: 8px 10px;
+    background: var(--bg-main, #f8fafc);
+    border-radius: 8px;
+}
+
+.manage-emp-card-info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.manage-emp-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 6px;
+}
+
 

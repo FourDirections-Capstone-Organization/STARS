@@ -2286,6 +2286,7 @@ const DashboardTab: React.FC<{
     // Local filters for Workload Summary only — does NOT trigger full dashboard re-fetch
     const [wlFilters, setWlFilters] = useState({ employeeId: '', departmentId: '', assignmentScope: '', taskStatus: '', dateStart: '', dateEnd: '' });
     const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
+    const [dashboardViewMode, setDashboardViewMode] = useState<'overview' | 'tables'>('overview');
     const hasAnyFilter = wlFilters.employeeId || wlFilters.departmentId || wlFilters.assignmentScope || wlFilters.taskStatus || wlFilters.dateStart || wlFilters.dateEnd;
     const td = dashboardData;
 
@@ -2476,6 +2477,27 @@ const DashboardTab: React.FC<{
                                     <ChevronRight size={13} />
                                 </button>
                             </div>
+
+                    {/* View Options Toggle: Overview & Visuals vs Data Tables View */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 14 }}>
+                        <div className="view-toggle-group">
+                            <button
+                                type="button"
+                                onClick={() => setDashboardViewMode('overview')}
+                                className={`view-toggle-btn ${dashboardViewMode === 'overview' ? 'active' : ''}`}
+                            >
+                                <LayoutDashboard size={14} /> Overview & Visuals
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDashboardViewMode('tables')}
+                                className={`view-toggle-btn ${dashboardViewMode === 'tables' ? 'active' : ''}`}
+                            >
+                                <ClipboardList size={14} /> Data Tables View
+                            </button>
+                        </div>
+                    </div>
+
                     {td ? (
                         <div className="coordinator-stats-row-6 stats-row-6">
                             <StatusCard icon={<ClipboardList size={20} strokeWidth={2.3} />} variant="teal" label="TOTAL TASKS" value={total} subtext={`${total} task${total !== 1 ? 's' : ''}`} />
@@ -2496,156 +2518,191 @@ const DashboardTab: React.FC<{
                         </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                            <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-                                <svg viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                                    <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
-                                    <circle cx="40" cy="40" r="34" fill="none" stroke={total > 0 ? 'var(--status-active)' : 'var(--border)'} strokeWidth="6"
-                                        strokeDasharray={`${2 * Math.PI * 34}`}
-                                        strokeDashoffset={`${2 * Math.PI * 34 * (1 - (total > 0 ? Math.round(completedToday / total * 100) : 0) / 100)}`}
-                                        strokeLinecap="round"
-                                        style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
-                                </svg>
-                                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{total > 0 ? Math.round(completedToday / total * 100) : 0}%</span>
-                                    <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600 }}>done</span>
+                    {dashboardViewMode === 'overview' ? (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                    <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+                                        <svg viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
+                                            <circle cx="40" cy="40" r="34" fill="none" stroke={total > 0 ? 'var(--status-active)' : 'var(--border)'} strokeWidth="6"
+                                                strokeDasharray={`${2 * Math.PI * 34}`}
+                                                strokeDashoffset={`${2 * Math.PI * 34 * (1 - (total > 0 ? Math.round(completedToday / total * 100) : 0) / 100)}`}
+                                                strokeLinecap="round"
+                                                style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+                                        </svg>
+                                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{total > 0 ? Math.round(completedToday / total * 100) : 0}%</span>
+                                            <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600 }}>done</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>TODAY'S COMPLETION RATE</span>
+                                        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '4px 0 0', fontWeight: 500 }}>
+                                            {completedToday} of {total} tasks completed today
+                                        </p>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                            {overdue > 0 ? `${overdue} overdue — ` : ''}
+                                            {pendingReview > 0 ? `${pendingReview} pending review` : 'No pending reviews'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 13 }}>Quick Summary</h3>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: 12 }}>
+                                        {[
+                                            { label: 'Total Tasks', value: total },
+                                            { label: 'Employees', value: workloads.length },
+                                            { label: 'Avg/Employee', value: avgPerEmployee },
+                                            { label: 'In Progress', value: inProgress },
+                                            { label: 'Not Started', value: notStarted },
+                                            { label: 'On Hold', value: onHold },
+                                        ].map(s => (
+                                            <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                                                <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{s.label}</span>
+                                                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>TODAY'S COMPLETION RATE</span>
-                                <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '4px 0 0', fontWeight: 500 }}>
-                                    {completedToday} of {total} tasks completed today
-                                </p>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                    {overdue > 0 ? `${overdue} overdue — ` : ''}
-                                    {pendingReview > 0 ? `${pendingReview} pending review` : 'No pending reviews'}
-                                </span>
-                            </div>
-                        </div>
 
-                        <div className="card">
-                            <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
-                                <h3 style={{ fontSize: 13 }}>Quick Summary</h3>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: 12 }}>
-                                {[
-                                    { label: 'Total Tasks', value: total },
-                                    { label: 'Employees', value: workloads.length },
-                                    { label: 'Avg/Employee', value: avgPerEmployee },
-                                    { label: 'In Progress', value: inProgress },
-                                    { label: 'Not Started', value: notStarted },
-                                    { label: 'On Hold', value: onHold },
-                                ].map(s => (
-                                    <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-                                        <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{s.label}</span>
-                                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.value}</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                                <div className="card">
+                                    <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
+                                        <h3>Employee Workload Distribution</h3>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{workloads.length} employees</span>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                                    {workloadChartData.length === 0 ? (
+                                        <EmptyState title="No workload data available." />
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height={Math.max(200, workloads.length * 36)}>
+                                            <BarChart data={workloadChartData} margin={{ left: -10, right: 10, top: 0, bottom: 0 }} barCategoryGap="20%">
+                                                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                                                <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                                                <Tooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontSize: 12 }} />
+                                                <Bar dataKey="Total" fill="var(--primary)" radius={[3, 3, 0, 0]} name="Total" />
+                                                <Bar dataKey="Overdue" fill="var(--status-failed)" radius={[3, 3, 0, 0]} name="Overdue" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                        <div className="card">
-                            <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
-                                <h3>Employee Workload Distribution</h3>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{workloads.length} employees</span>
-                            </div>
-                            {workloadChartData.length === 0 ? (
-                                <EmptyState title="No workload data available." />
-                            ) : (
-                                <ResponsiveContainer width="100%" height={Math.max(200, workloads.length * 36)}>
-                                    <BarChart data={workloadChartData} margin={{ left: -10, right: 10, top: 0, bottom: 0 }} barCategoryGap="20%">
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                                        <Tooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontSize: 12 }} />
-                                        <Bar dataKey="Total" fill="var(--primary)" radius={[3, 3, 0, 0]} name="Total" />
-                                        <Bar dataKey="Overdue" fill="var(--status-failed)" radius={[3, 3, 0, 0]} name="Overdue" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-
-                        <div className="card">
-                            <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
-                                <h3>Task Status Distribution</h3>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{total} total</span>
-                            </div>
-                            {statusChartData.length === 0 ? (
-                                <EmptyState title="No data to display." />
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <ResponsiveContainer width={180} height={180}>
-                                        <PieChart>
-                                            <Pie data={statusChartData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" stroke="none">
-                                                {statusChartData.map((_, idx) => (<Cell key={idx} fill={donutColors[idx]} />))}
-                                            </Pie>
-                                            <Tooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontSize: 12 }} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {statusChartData.map(d => {
-                                            const pctVal = Math.round(d.value / total * 100);
-                                            return (
-                                                <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                                            <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{d.name}</span>
-                                                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{d.value} ({pctVal}%)</span>
+                                <div className="card">
+                                    <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
+                                        <h3>Task Status Distribution</h3>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{total} total</span>
+                                    </div>
+                                    {statusChartData.length === 0 ? (
+                                        <EmptyState title="No data to display." />
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <ResponsiveContainer width={180} height={180}>
+                                                <PieChart>
+                                                    <Pie data={statusChartData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" stroke="none">
+                                                        {statusChartData.map((_, idx) => (<Cell key={idx} fill={donutColors[idx]} />))}
+                                                    </Pie>
+                                                    <Tooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontSize: 12 }} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                {statusChartData.map(d => {
+                                                    const pctVal = Math.round(d.value / total * 100);
+                                                    return (
+                                                        <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                                                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{d.name}</span>
+                                                                    <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{d.value} ({pctVal}%)</span>
+                                                                </div>
+                                                                <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 2, overflow: 'hidden' }}>
+                                                                    <div style={{ width: `${pctVal}%`, height: '100%', background: d.color, borderRadius: 2 }} />
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 2, overflow: 'hidden' }}>
-                                                            <div style={{ width: `${pctVal}%`, height: '100%', background: d.color, borderRadius: 2 }} />
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 16 }}>
+                                <div className="card">
+                                    <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
+                                        <h3>Department Workload</h3>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{deptWorkloads.length} departments</span>
+                                    </div>
+                                    {deptWorkloads.length === 0 ? (
+                                        <EmptyState title="No department workload data." />
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                            {deptWorkloads.map(d => {
+                                                const total = d.totalActiveTasks + d.totalOverdueTasks;
+                                                const pct = total > 0 ? Math.round((1 - d.totalOverdueTasks / total) * 100) : 100;
+                                                const barColor = pct >= 80 ? 'var(--status-active)' : pct >= 50 ? 'var(--status-pending)' : 'var(--status-failed)';
+                                                return (
+                                                    <div key={d.departmentId} style={{ padding: '10px 12px', background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{d.departmentName}</span>
+                                                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.employeeCount} employees</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 6 }}>
+                                                            <span style={{ color: 'var(--status-pending)', fontWeight: 600 }}>{d.totalActiveTasks} active</span>
+                                                            <span style={{ color: d.totalOverdueTasks > 0 ? 'var(--status-failed)' : 'var(--text-muted)', fontWeight: 600 }}>{d.totalOverdueTasks} overdue</span>
+                                                        </div>
+                                                        <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                                            <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3 }} />
                                                         </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* ── Department Workload Row ──
-                        Team Workload Distribution card hidden until the team
-                        management feature is planned and tested. */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 16 }}>
-                        <div className="card">
-                            <div className="card-header-layout" style={{ margin: 0, marginBottom: 12 }}>
-                                <h3>Department Workload</h3>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{deptWorkloads.length} departments</span>
                             </div>
-                            {deptWorkloads.length === 0 ? (
-                                <EmptyState title="No department workload data." />
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                    {deptWorkloads.map(d => {
-                                        const total = d.totalActiveTasks + d.totalOverdueTasks;
-                                        const pct = total > 0 ? Math.round((1 - d.totalOverdueTasks / total) * 100) : 100;
-                                        const barColor = pct >= 80 ? 'var(--status-active)' : pct >= 50 ? 'var(--status-pending)' : 'var(--status-failed)';
-                                        return (
-                                            <div key={d.departmentId} style={{ padding: '10px 12px', background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                                                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{d.departmentName}</span>
-                                                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.employeeCount} employees</span>
+                        </>
+                    ) : (
+                        <div style={{ marginBottom: 16 }}>
+                            <DataTable
+                                title={`Department Performance & Workload Matrix (${deptWorkloads.length} Departments)`}
+                                headers={['DEPARTMENT', 'STAFF COUNT', 'ACTIVE TASKS', 'OVERDUE TASKS', 'COMPLIANCE / HEALTH']}
+                                loading={false}
+                                emptyMessage="No department workload data available."
+                                totalRecords={deptWorkloads.length}
+                            >
+                                {deptWorkloads.map(d => {
+                                    const totalDept = d.totalActiveTasks + d.totalOverdueTasks;
+                                    const pct = totalDept > 0 ? Math.round((1 - d.totalOverdueTasks / totalDept) * 100) : 100;
+                                    const barColor = pct >= 80 ? 'var(--status-active)' : pct >= 50 ? 'var(--status-pending)' : 'var(--status-failed)';
+                                    return (
+                                        <tr key={d.departmentId}>
+                                            <td style={{ fontWeight: 600 }}>{d.departmentName}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>{d.employeeCount}</td>
+                                            <td style={{ textAlign: 'center', color: 'var(--status-pending)', fontWeight: 700 }}>{d.totalActiveTasks}</td>
+                                            <td style={{ textAlign: 'center', color: d.totalOverdueTasks > 0 ? 'var(--status-failed)' : 'var(--text-muted)', fontWeight: 700 }}>
+                                                {d.totalOverdueTasks}
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ flex: 1, maxWidth: 120, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                                                        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3 }} />
+                                                    </div>
+                                                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{pct}%</span>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 6 }}>
-                                                    <span style={{ color: 'var(--status-pending)', fontWeight: 600 }}>{d.totalActiveTasks} active</span>
-                                                    <span style={{ color: d.totalOverdueTasks > 0 ? 'var(--status-failed)' : 'var(--text-muted)', fontWeight: 600 }}>{d.totalOverdueTasks} overdue</span>
-                                                </div>
-                                                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                                                    <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3 }} />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </DataTable>
                         </div>
-                    </div>
+                    )}
 
                     <DataTable
                         title="Workload Summary per Employee"
@@ -3702,25 +3759,195 @@ export const TeamTab: React.FC<{
                 )}
             </div>
 
-            {/* Workload Distribution (all employees) */}
-            <div className="card">
-                <div className="card-header-layout"><h3>Workload Distribution</h3></div>
-                {teamMembers.length === 0 ? (
-                    <EmptyState icon={<Users size={20} />} title="No employees found" />
+            {/* Workload Distribution by Teams (Card View) */}
+            <div className="card" style={{ padding: '20px 22px' }}>
+                <div className="card-header-layout" style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Users size={18} style={{ color: 'var(--teal, #00A99D)' }} />
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Team Workload Distribution</h3>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Showing workload by team ({filteredTeams.length} teams)
+                    </span>
+                </div>
+
+                {filteredTeams.length === 0 ? (
+                    <EmptyState icon={<Users size={24} />} title="No teams available for workload distribution" />
                 ) : (
-                    <div className="perf-bars">
-                        {teamMembers.map(m => {
-                            const mt = tasks.filter(t => t.assignedEmployee === m.employeeName);
-                            const mc = mt.filter(t => t.taskStatus === 'Completed').length;
-                            const pct = mt.length > 0 ? Math.round(mc / mt.length * 100) : 0;
-                            const memberTeam = teams.find(t => t.members.some(x => x.userId === m.accountId));
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+                        {filteredTeams.map(t => {
+                            // Map members of this team to their task statistics
+                            const memberWorkloads = t.members.map(m => {
+                                const mTasks = tasks.filter(task => {
+                                    const assigned = (task.assignedEmployee || '').toLowerCase();
+                                    return assigned === m.fullName.toLowerCase() ||
+                                        (task as any).assignedTo === m.userId;
+                                });
+                                const completed = mTasks.filter(task => task.taskStatus === 'Completed').length;
+                                const inProgress = mTasks.filter(task => task.taskStatus === 'In Progress' || task.taskStatus === 'In review').length;
+                                const total = mTasks.length;
+                                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                                return {
+                                    member: m,
+                                    completed,
+                                    inProgress,
+                                    total,
+                                    pct,
+                                };
+                            });
+
+                            const teamTotalTasks = memberWorkloads.reduce((acc, curr) => acc + curr.total, 0);
+                            const teamCompletedTasks = memberWorkloads.reduce((acc, curr) => acc + curr.completed, 0);
+                            const teamInProgressTasks = memberWorkloads.reduce((acc, curr) => acc + curr.inProgress, 0);
+                            const teamPct = teamTotalTasks > 0 ? Math.round((teamCompletedTasks / teamTotalTasks) * 100) : 0;
+
                             return (
-                                <div key={m.accountId} className="perf-item">
-                                    <span className="perf-label">{(m.employeeName || 'Employee').split(' ')[0]}{memberTeam ? ` (${memberTeam.name})` : ''}</span>
-                                    <div className="perf-track">
-                                        <div className="perf-fill" style={{ width: `${pct}%`, background: pct >= 80 ? 'var(--status-active)' : pct >= 50 ? 'var(--status-pending)' : 'var(--status-failed)', borderRadius: 3, height: '100%', transition: 'width 0.4s ease' }} />
+                                <div
+                                    key={t.id}
+                                    style={{
+                                        background: 'var(--s0, #ffffff)',
+                                        border: '1px solid var(--border, #E2E8F0)',
+                                        borderRadius: 12,
+                                        padding: '16px 18px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 14,
+                                        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                                        transition: 'all 0.2s ease',
+                                    }}
+                                >
+                                    {/* Team Card Header */}
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                    {t.name}
+                                                </h4>
+                                                <span className="badge badge-blue" style={{ fontSize: 10, padding: '2px 7px' }}>
+                                                    {t.members.length} {t.members.length === 1 ? 'member' : 'members'}
+                                                </span>
+                                            </div>
+                                            {t.departmentName && (
+                                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginTop: 2 }}>
+                                                    {t.departmentName}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: 16, fontWeight: 800, color: teamPct >= 80 ? 'var(--status-active)' : teamPct >= 50 ? 'var(--status-pending)' : 'var(--teal, #00A99D)' }}>
+                                                {teamPct}%
+                                            </span>
+                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block' }}>Done</span>
+                                        </div>
                                     </div>
-                                    <span className="perf-pct">{mc}/{mt.length}</span>
+
+                                    {/* Team Overall Progress Bar & Quick Stats */}
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                                            <span>Team Completion ({teamCompletedTasks}/{teamTotalTasks} tasks)</span>
+                                            <span>{teamInProgressTasks} in progress</span>
+                                        </div>
+                                        <div style={{ height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                                            <div
+                                                style={{
+                                                    width: `${teamPct}%`,
+                                                    height: '100%',
+                                                    background: teamPct >= 80 ? 'var(--status-active, #059669)' : teamPct >= 50 ? 'var(--status-pending, #d97706)' : 'var(--teal, #00A99D)',
+                                                    transition: 'width 0.4s ease',
+                                                    borderRadius: 4,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Members Workload List */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 2 }}>
+                                        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                            Team Members ({t.members.length})
+                                        </span>
+
+                                        {t.members.length === 0 ? (
+                                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                                No members assigned to this team.
+                                            </span>
+                                        ) : (
+                                            memberWorkloads.map(({ member, completed, total, pct }) => {
+                                                const isSelected = selectedMemberId === member.userId;
+                                                const isLeader = member.isLeader || (t.teamLeaderId && member.userId === t.teamLeaderId);
+
+                                                return (
+                                                    <div
+                                                        key={member.userId}
+                                                        onClick={() => setSelectedMemberId(isSelected ? '' : member.userId)}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: 10,
+                                                            padding: '6px 8px',
+                                                            borderRadius: 8,
+                                                            border: isSelected ? '1.5px solid var(--teal, #00A99D)' : '1px solid var(--border, #f1f5f9)',
+                                                            background: isSelected ? 'rgba(0, 169, 157, 0.05)' : 'var(--bg-main, #f8fafc)',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.15s ease',
+                                                        }}
+                                                        title="Click to view assigned tasks below"
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                width: 26,
+                                                                height: 26,
+                                                                borderRadius: '50%',
+                                                                background: 'var(--teal, #00A99D)',
+                                                                color: '#ffffff',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: 10.5,
+                                                                fontWeight: 700,
+                                                                flexShrink: 0,
+                                                            }}
+                                                        >
+                                                            {(member.fullName || 'U').charAt(0).toUpperCase()}
+                                                        </div>
+
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    {member.fullName}
+                                                                </span>
+                                                                {isLeader && (
+                                                                    <span style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 4px', borderRadius: 4 }}>
+                                                                        Leader
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+                                                                <div
+                                                                    style={{
+                                                                        width: `${pct}%`,
+                                                                        height: '100%',
+                                                                        background: pct >= 80 ? 'var(--status-active, #059669)' : pct >= 50 ? 'var(--status-pending, #d97706)' : 'var(--status-failed, #ee5d50)',
+                                                                        borderRadius: 2,
+                                                                        transition: 'width 0.3s ease',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                                {completed}/{total}
+                                                            </span>
+                                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block' }}>
+                                                                {pct}%
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}

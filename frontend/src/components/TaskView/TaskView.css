@@ -717,13 +717,13 @@
 }
 
 .tv-comments-toggle button.active {
-    background: var(--primary);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border-color: var(--primary);
+    border-color: var(--teal, #00A99D);
 }
 
 .tv-comments-toggle button:last-child.active {
-    border-left: 1px solid var(--primary);
+    border-left: 1px solid var(--teal, #00A99D);
 }
 
 /* Wrapper that actually holds TaskComments / TaskRecommendations so their
@@ -2251,7 +2251,7 @@
 
 .tv-panel-tab-btn.active {
     background: #ffffff;
-    color: var(--primary, #0284c7);
+    color: var(--teal, #00A99D);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
@@ -2270,7 +2270,7 @@
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-    background: #0284c7;
+    background: var(--teal, #00A99D);
     color: #ffffff;
     border: none;
     border-radius: 8px 0 0 8px;
@@ -2283,13 +2283,13 @@
     font-weight: 700;
     letter-spacing: 0.03em;
     cursor: pointer;
-    box-shadow: -3px 2px 14px rgba(2, 132, 199, 0.4);
+    box-shadow: -3px 2px 14px rgba(0, 169, 157, 0.4);
     z-index: 1050;
     transition: all 0.2s ease;
 }
 
 .tv-floating-panel-toggle:hover {
-    background: #0369a1;
+    background: #008B8B;
     padding-left: 14px;
 }
 

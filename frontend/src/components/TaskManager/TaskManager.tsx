@@ -272,37 +272,41 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                             onClick={() => onView(t.id)}
                                         >
                                             <div className="tm-board-card-top">
-                                                <span className="tm-board-card-ref">#{refDisplay}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span className="tm-board-card-ref">#{refDisplay}</span>
+                                                    <span title="AI Insights" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)' }}>
+                                                        <Brain size={12} />
+                                                    </span>
+                                                </div>
                                                 <PriorityBadge p={t.priority} />
                                             </div>
 
                                             <div className="tm-board-card-title">{t.name}</div>
 
-                                            <div className="tm-board-card-badges">
-                                                {t.classification && (
-                                                    <span
-                                                        style={{
-                                                            fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                                                            background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
-                                                            color: t.classification === 'special' ? '#4318FF' : '#059669',
-                                                            whiteSpace: 'nowrap', letterSpacing: '0.03em'
-                                                        }}
-                                                    >
-                                                        {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
-                                                    </span>
-                                                )}
-                                                {t.isConfidential && (
-                                                    <span
-                                                        title="Confidential"
-                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: 'var(--status-failed, #ee5d50)', background: 'rgba(238, 93, 80, 0.08)', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}
-                                                    >
-                                                        <Lock size={9} /> CONFIDENTIAL
-                                                    </span>
-                                                )}
-                                                <span title="AI Insights" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)' }}>
-                                                    <Brain size={12} />
-                                                </span>
-                                            </div>
+                                            {(t.classification || t.isConfidential) && (
+                                                <div className="tm-board-card-badges">
+                                                    {t.classification && (
+                                                        <span
+                                                            style={{
+                                                                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                                                                background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
+                                                                color: t.classification === 'special' ? '#4318FF' : '#059669',
+                                                                whiteSpace: 'nowrap', letterSpacing: '0.03em'
+                                                            }}
+                                                        >
+                                                            {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
+                                                        </span>
+                                                    )}
+                                                    {t.isConfidential && (
+                                                        <span
+                                                            title="Confidential"
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: 'var(--status-failed, #ee5d50)', background: 'rgba(238, 93, 80, 0.08)', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}
+                                                        >
+                                                            <Lock size={9} /> CONFIDENTIAL
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
 
 
 
