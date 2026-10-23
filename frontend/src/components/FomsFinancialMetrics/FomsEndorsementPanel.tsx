@@ -64,13 +64,35 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     // Fetch live endorsement tasks from STARS database
     const fetchLiveEndorsements = useCallback(async () => {
         try {
-            const res = await api.get('/api/Task?search=[FOMS Endorsement]&pageSize=30');
+            // Priority 1: Direct structured records from STARS database
+            try {
+                const directRes = await api.get('/api/foms-integration/endorsements');
+                const directData = directRes.data;
+                const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
+                    ? directData.data
+                    : [];
+                if (directItems.length > 0) {
+                    setEndorsements(directItems as FomsEndorsementItem[]);
+                    return;
+                }
+            } catch {
+                // Fall through to Task search
+            }
+
+            // Priority 2: Query Tasks matching either [FOMS Endorsement] or [Invoice Endorsement]
+            const res = await api.get('/api/Task?pageSize=50');
             const data = res.data;
-            const items: any[] = data.isSuccess && Array.isArray(data.data?.items)
+            const allItems: any[] = data.isSuccess && Array.isArray(data.data?.items)
                 ? data.data.items
                 : data.isSuccess && Array.isArray(data.data)
                     ? data.data
                     : [];
+
+            const items = allItems.filter((t: any) =>
+                (t.title || '').includes('[FOMS Endorsement]') ||
+                (t.title || '').includes('[Invoice Endorsement]') ||
+                (t.title || '').toLowerCase().includes('invoice endorsement')
+            );
 
             if (items.length > 0) {
                 const mapped: FomsEndorsementItem[] = items.map((t: any) => {
@@ -81,12 +103,16 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     const contactMatch = desc.match(/Contact:\s*([^\n]+)/i);
                     const docMatch = desc.match(/Document:\s*([^\n]+)/i);
 
-                    const invoiceNo = invoiceMatch ? invoiceMatch[1].trim() : 'INV-2026-LIVE';
+                    const invoiceNo = invoiceMatch ? invoiceMatch[1].trim() : (t.title.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-2026-LIVE');
                     const cleanAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) || 89500 : 89500;
                     const assignee = t.assignees && t.assignees.length > 0 ? t.assignees[0].fullName : 'Optimal Coordinator';
 
                     const titleParts = (t.title || '').split(/\s+-\s+/);
-                    const parsedClientName = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : t.title.replace(/^\[FOMS Endorsement\]\s*(Invoice\s+[A-Z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
+                    const parsedClientName = titleParts.length > 1
+                        ? titleParts.slice(1).join(' - ').trim()
+                        : t.title.replace(/^\[(FOMS|Invoice)\s+Endorsement\]\s*(Invoice\s+[A-Z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
+
+                    const isDone = t.status === 3 || t.taskStatus === 'Completed';
 
                     return {
                         id: `live-endorse-${t.id}`,
@@ -100,16 +126,16 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         billingDate: t.createdAt || new Date().toISOString(),
                         dueDate: t.deadline || new Date(Date.now() + 30 * 86400000).toISOString(),
                         invoiceDocumentUrl: docMatch && docMatch[1] !== 'Attached in FOMS' ? docMatch[1] : undefined,
-                        signedReceivingCopyUrl: t.status === 3 ? (docMatch ? docMatch[1] : 'https://stars.blob.core.windows.net/invoices/signed-copy.pdf') : null,
-                        actualReceivedDate: t.status === 3 ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null,
-                        deliveryRemarks: t.status === 3 ? 'Official invoice document received and endorsed with wet signature.' : null,
-                        endorsementStatus: t.status === 3 ? 'Completed' : 'PendingEndorsement',
-                        fomsSyncStatus: t.status === 3 ? 'Synced' : 'Pending',
+                        signedReceivingCopyUrl: isDone ? (docMatch ? docMatch[1] : 'https://stars.blob.core.windows.net/invoices/signed-copy.pdf') : null,
+                        actualReceivedDate: isDone ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null,
+                        deliveryRemarks: isDone ? 'Official invoice document received and endorsed with wet signature.' : null,
+                        endorsementStatus: isDone ? 'Completed' : 'PendingEndorsement',
+                        fomsSyncStatus: isDone ? 'Synced' : 'Pending',
                         fomsSyncAttempts: 0,
                         lastSyncedAt: t.updatedAt || null,
                         calculatedPaymentDueDate: null,
                         assignedCoordinatorName: assignee,
-                        taskStatus: t.status === 1 ? 'In Progress' : t.status === 3 ? 'Completed' : 'Not Started',
+                        taskStatus: t.status === 1 ? 'In Progress' : isDone ? 'Completed' : 'Not Started',
                     };
                 });
 

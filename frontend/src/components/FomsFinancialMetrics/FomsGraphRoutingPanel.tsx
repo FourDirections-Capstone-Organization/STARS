@@ -113,13 +113,34 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
     // ── Fetch Collection Tasks from STARS DB ──
     const fetchExistingCollectionTasks = useCallback(async () => {
         try {
-            const res = await api.get('/api/Task?search=[Collection Follow-up]&pageSize=20');
+            // Priority 1: Direct structured records from STARS database
+            try {
+                const directRes = await api.get('/api/foms-integration/collection-alerts');
+                const directData = directRes.data;
+                const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
+                    ? directData.data
+                    : [];
+                if (directItems.length > 0) {
+                    setAlerts(directItems as FomsOverdueAlertItem[]);
+                    return;
+                }
+            } catch {
+                // Fall through to Task search
+            }
+
+            // Priority 2: Query Tasks matching [Collection Follow-up]
+            const res = await api.get('/api/Task?pageSize=50');
             const data = res.data;
-            const items: any[] = data.isSuccess && Array.isArray(data.data?.items)
+            const allItems: any[] = data.isSuccess && Array.isArray(data.data?.items)
                 ? data.data.items
                 : data.isSuccess && Array.isArray(data.data)
                     ? data.data
                     : [];
+
+            const items = allItems.filter((t: any) =>
+                (t.title || '').includes('[Collection Follow-up]') ||
+                (t.title || '').toLowerCase().includes('collection follow-up')
+            );
 
             if (items.length > 0) {
                 const mapped: FomsOverdueAlertItem[] = items.map((t: any) => {

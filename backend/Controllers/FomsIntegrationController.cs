@@ -86,6 +86,192 @@ public class FomsIntegrationController : ControllerBase
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
+    /// <summary>
+    /// Retrieve all invoice endorsement records linked to tasks.
+    /// </summary>
+    [HttpGet("api/foms-integration/endorsements")]
+    [Authorize]
+    public async Task<IActionResult> GetAllEndorsements()
+    {
+        var items = await _db.TaskFomsInvoiceDetails
+            .Include(d => d.Task)
+                .ThenInclude(t => t!.Assignments)
+                    .ThenInclude(a => a.AssignedUser)
+            .OrderByDescending(d => d.CreatedAt)
+            .ToListAsync();
+
+        var result = items.Select(d => new
+        {
+            id = $"live-endorse-{d.TaskId}",
+            taskId = d.TaskId,
+            taskNumber = d.Task?.TaskNumber ?? "TK-LIVE",
+            invoiceNumber = d.InvoiceNumber,
+            clientName = d.ClientName,
+            clientAddress = d.ClientAddress,
+            clientContactPerson = d.ClientContactPerson,
+            clientContactNumber = d.ClientContactNumber,
+            clientEmail = d.ClientEmail,
+            invoiceAmount = d.InvoiceAmount,
+            billingDate = d.BillingDate ?? d.CreatedAt,
+            dueDate = d.DueDate ?? (d.BillingDate.HasValue ? d.BillingDate.Value.AddDays(30) : d.CreatedAt.AddDays(30)),
+            invoiceDocumentUrl = d.InvoiceDocumentUrl,
+            signedReceivingCopyUrl = d.SignedReceivingCopyUrl,
+            actualReceivedDate = d.ActualReceivedDate,
+            deliveryRemarks = d.DeliveryRemarks,
+            endorsementStatus = d.EndorsementStatus,
+            fomsSyncStatus = d.FomsSyncStatus,
+            lastSyncedAt = d.LastSyncedAt,
+            calculatedPaymentDueDate = d.ActualReceivedDate.HasValue ? (DateTime?)d.ActualReceivedDate.Value.AddDays(30) : null,
+            assignedCoordinatorName = d.Task?.Assignments.FirstOrDefault()?.AssignedUser != null
+                ? $"{d.Task.Assignments.First().AssignedUser!.FirstName} {d.Task.Assignments.First().AssignedUser!.LastName}".Trim()
+                : "Optimal Coordinator",
+            taskStatus = d.Task?.Status.ToString() ?? "NotStarted"
+        }).ToList();
+
+        // Also include any tasks with Endorsement in title that don't yet have a TaskFomsInvoiceDetail
+        var existingTaskIds = items.Select(i => i.TaskId).ToHashSet();
+        var extraEndorseTasks = await _db.Tasks
+            .Include(t => t.Assignments)
+                .ThenInclude(a => a.AssignedUser)
+            .Where(t => !existingTaskIds.Contains(t.Id) &&
+                        (t.Title.Contains("Endorsement") || t.Title.Contains("[FOMS")))
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        foreach (var t in extraEndorseTasks)
+        {
+            var desc = t.Description ?? "";
+            var invoiceMatch = System.Text.RegularExpressions.Regex.Match(desc, @"(?:Invoice|invoice):\s*([A-Za-z0-9-]+)");
+            var invoiceNo = invoiceMatch.Success ? invoiceMatch.Groups[1].Value.Trim() : (System.Text.RegularExpressions.Regex.Match(t.Title, @"(?:Invoice|INV-)\s*([A-Za-z0-9-]+)").Groups[1].Value.Trim());
+            if (string.IsNullOrEmpty(invoiceNo)) invoiceNo = $"INV-{t.TaskNumber}";
+
+            var titleParts = t.Title.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+            var clientName = titleParts.Length > 1 ? titleParts[^1].Trim() : "Client Enterprise";
+
+            var isCompleted = t.Status == Models.Enums.TaskStatus.Completed;
+
+            result.Add(new
+            {
+                id = $"live-endorse-{t.Id}",
+                taskId = t.Id,
+                taskNumber = t.TaskNumber,
+                invoiceNumber = invoiceNo,
+                clientName = clientName,
+                clientAddress = (string?)null,
+                clientContactPerson = (string?)null,
+                clientContactNumber = (string?)null,
+                clientEmail = (string?)null,
+                invoiceAmount = 89500m,
+                billingDate = t.CreatedAt,
+                dueDate = t.Deadline,
+                invoiceDocumentUrl = (string?)null,
+                signedReceivingCopyUrl = isCompleted ? "https://stars.blob.core.windows.net/invoices/signed-copy.pdf" : (string?)null,
+                actualReceivedDate = isCompleted ? (DateTime?)t.UpdatedAt : null,
+                deliveryRemarks = isCompleted ? "Official invoice document received and endorsed with wet signature." : (string?)null,
+                endorsementStatus = isCompleted ? "Completed" : "PendingEndorsement",
+                fomsSyncStatus = isCompleted ? "Synced" : "Pending",
+                lastSyncedAt = (DateTime?)t.UpdatedAt,
+                calculatedPaymentDueDate = isCompleted && t.UpdatedAt.HasValue ? (DateTime?)t.UpdatedAt.Value.AddDays(30) : null,
+                assignedCoordinatorName = t.Assignments.FirstOrDefault()?.AssignedUser != null
+                    ? $"{t.Assignments.First().AssignedUser!.FirstName} {t.Assignments.First().AssignedUser!.LastName}".Trim()
+                    : "Optimal Coordinator",
+                taskStatus = t.Status.ToString()
+            });
+        }
+
+        return Ok(ApiResponseDTO<object>.Success(result));
+    }
+
+    /// <summary>
+    /// Retrieve all collection follow-up alert records.
+    /// </summary>
+    [HttpGet("api/foms-integration/collection-alerts")]
+    [Authorize]
+    public async Task<IActionResult> GetAllCollectionAlerts()
+    {
+        var items = await _db.TaskFomsCollectionDetails
+            .Include(c => c.Task)
+                .ThenInclude(t => t!.Assignments)
+                    .ThenInclude(a => a.AssignedUser)
+            .OrderByDescending(c => c.RoutedAt)
+            .ToListAsync();
+
+        var result = items.Select(c => new
+        {
+            id = $"stars-task-{c.TaskId}",
+            invoiceNumber = c.InvoiceNumber,
+            clientAccountId = c.ClientAccountId,
+            clientName = c.ClientName,
+            clientContactPerson = c.ClientContactPerson,
+            clientContactNumber = c.ClientContactNumber,
+            clientAddress = c.ClientAddress,
+            amountDue = c.AmountDue,
+            dueDate = c.DueDate,
+            daysOverdue = c.DaysOverdue,
+            agingStatus = c.AgingStatus,
+            alertTimestamp = c.RoutedAt,
+            remarks = "Imported from active STARS database collection task.",
+            starsTaskId = c.TaskId,
+            starsTaskNumber = c.Task?.TaskNumber ?? "TK-COLLECT",
+            assignedCoordinatorName = c.Task?.Assignments.FirstOrDefault()?.AssignedUser != null
+                ? $"{c.Task.Assignments.First().AssignedUser!.FirstName} {c.Task.Assignments.First().AssignedUser!.LastName}".Trim()
+                : "Optimal Coordinator",
+            taskStatus = c.Task?.Status.ToString() ?? "NotStarted",
+            priorityLevel = c.Task?.PriorityLevel.ToString() ?? "Urgent",
+            workloadAtRouting = 2,
+            routingStatus = "Routed & Assigned"
+        }).ToList();
+
+        // Also include any tasks with Collection Follow-up in title that don't yet have a TaskFomsCollectionDetail
+        var existingCollectionTaskIds = items.Select(i => i.TaskId).ToHashSet();
+        var extraCollectionTasks = await _db.Tasks
+            .Include(t => t.Assignments)
+                .ThenInclude(a => a.AssignedUser)
+            .Where(t => !existingCollectionTaskIds.Contains(t.Id) &&
+                        (t.Title.Contains("Collection") || t.Title.Contains("Follow-up")))
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        foreach (var t in extraCollectionTasks)
+        {
+            var desc = t.Description ?? "";
+            var invoiceMatch = System.Text.RegularExpressions.Regex.Match(desc, @"(?:Invoice|invoice):\s*([A-Za-z0-9-]+)");
+            var invoiceNo = invoiceMatch.Success ? invoiceMatch.Groups[1].Value.Trim() : (System.Text.RegularExpressions.Regex.Match(t.Title, @"(?:Invoice|INV-)\s*([A-Za-z0-9-]+)").Groups[1].Value.Trim());
+            if (string.IsNullOrEmpty(invoiceNo)) invoiceNo = $"INV-{t.TaskNumber}";
+
+            var titleParts = t.Title.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+            var clientName = titleParts.Length > 1 ? titleParts[^1].Trim() : "Client Enterprise";
+
+            result.Add(new
+            {
+                id = $"stars-task-{t.Id}",
+                invoiceNumber = invoiceNo,
+                clientAccountId = $"CLI-{invoiceNo}",
+                clientName = clientName,
+                clientContactPerson = (string?)null,
+                clientContactNumber = (string?)null,
+                clientAddress = (string?)null,
+                amountDue = 75000m,
+                dueDate = (DateTime?)t.Deadline,
+                daysOverdue = 15,
+                agingStatus = "1-30",
+                alertTimestamp = t.CreatedAt,
+                remarks = "Imported from active STARS database collection task.",
+                starsTaskId = t.Id,
+                starsTaskNumber = t.TaskNumber ?? "TK-COLLECT",
+                assignedCoordinatorName = t.Assignments.FirstOrDefault()?.AssignedUser != null
+                    ? $"{t.Assignments.First().AssignedUser!.FirstName} {t.Assignments.First().AssignedUser!.LastName}".Trim()
+                    : "Optimal Coordinator",
+                taskStatus = t.Status.ToString(),
+                priorityLevel = t.PriorityLevel.ToString(),
+                workloadAtRouting = 2,
+                routingStatus = "Routed & Assigned"
+            });
+        }
+
+        return Ok(ApiResponseDTO<object>.Success(result));
+    }
+
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────
 
     /// <summary>

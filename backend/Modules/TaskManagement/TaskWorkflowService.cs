@@ -80,6 +80,22 @@ public class TaskWorkflowService : ITaskWorkflowService
                 task.Id);
         }
 
+        if (newStatus == Models.Enums.TaskStatus.Completed)
+        {
+            try
+            {
+                var fomsService = _serviceProvider.GetService<Backend.Modules.FomsIntegration.IFomsIntegrationService>();
+                if (fomsService != null)
+                {
+                    await fomsService.SendInvoiceEndorsementCompletionAsync(taskId, userId);
+                }
+            }
+            catch
+            {
+                // Task completion should not fail if FOMS callback is temporarily unreachable
+            }
+        }
+
         return ApiResponseDTO<TaskResponseDTO>.Success(
             await MapToResponseDTOAsync(task),
             "Task status updated successfully");
