@@ -194,11 +194,20 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
         ].forEach(k => localStorage.removeItem(k));
         clearStoredRedirectUri();
 
+        const systemsList = allowedSystemsToHandoff
+            .split(',')
+            .map(s => s.trim().toUpperCase())
+            .filter(Boolean);
+        const isSingleSystem = (systemsList.length === 1 || (systemsList.length === 0 && employeeIdToHandoff !== '0000')) && employeeIdToHandoff !== '0000';
+
         if (reason === 'inactivity' || reason === 'session_expired') {
             // Force return to Central Login on actual session timeout
             window.location.href = `${loginUrl}?action=logout&reason=${encodeURIComponent(reason)}&system=stars`;
+        } else if (isSingleSystem) {
+            // Accounts tied to strictly ONE system must go directly to Central Login page upon logout
+            window.location.href = `${loginUrl}?action=logout&reason=logged_out&system=stars`;
         } else if (options?.redirectToPortal !== false) {
-            // Return to Central Landing Page (/portal) so user can switch systems
+            // Multi-system accounts (or superadmin 0000): Return to Central Landing Page (/portal) so user can switch systems
             if (tokenToHandoff) {
                 redirectToExternalPortal(portalUrl, {
                     token: tokenToHandoff,
@@ -207,6 +216,7 @@ export async function performLogout(options?: { redirectToPortal?: boolean; fall
                     employeeId: employeeIdToHandoff,
                     employeeName: employeeNameToHandoff,
                     allowedSystems: allowedSystemsToHandoff,
+                    system: 'stars',
                 });
             } else {
                 window.location.href = portalUrl;
@@ -359,6 +369,8 @@ export function bootstrapIncomingAuth(): IncomingAuthResult {
     let role = getParam('role', 'userRole', 'roles') || '';
     const employeeId = getParam('employeeId', 'employeeNumber', 'userId', 'id') || '';
     const employeeNameRaw = getParam('employeeName', 'name', 'fullName', 'userName') || '';
+    const rawAllowedSystems = getParam('allowedSystems', 'allowed_systems', 'systems', 'targetSystems');
+    const allowedSystems = rawAllowedSystems ? rawAllowedSystems.trim() : '';
 
     // If role wasn't explicitly provided, attempt decoding from JWT payload
     if (!role && token.includes('.')) {
@@ -395,6 +407,9 @@ export function bootstrapIncomingAuth(): IncomingAuthResult {
     if (employeeName) {
         localStorage.setItem('employeeName', employeeName);
     }
+    if (allowedSystems) {
+        localStorage.setItem('allowedSystems', allowedSystems);
+    }
     localStorage.setItem('isPasswordChanged', 'true');
     localStorage.setItem('hasAcceptedTerms', 'true');
     localStorage.setItem('termsVersionAccepted', 'v1.0');
@@ -411,6 +426,7 @@ export function bootstrapIncomingAuth(): IncomingAuthResult {
         role: normalizedRole,
         employeeId,
         employeeName,
+        allowedSystems,
         targetRoute,
     };
 }
