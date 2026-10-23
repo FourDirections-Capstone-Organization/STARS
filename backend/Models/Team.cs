@@ -23,6 +23,8 @@ public class Team
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public Guid? TeamLeaderId { get; set; }
+    public User? TeamLeader { get; set; }
 
     public ICollection<TeamMember> Members { get; set; } = new List<TeamMember>();
 }

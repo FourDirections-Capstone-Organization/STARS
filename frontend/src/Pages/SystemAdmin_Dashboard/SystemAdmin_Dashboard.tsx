@@ -72,7 +72,7 @@ import DataTable, { ActionsDropdown } from '../../components/ui/DataTable';
 import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
-import { ReportsTab } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
+import { ReportsTab, TeamTab, TeamMember } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import TaskManager from '../../components/TaskManager/TaskManager';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
@@ -102,6 +102,7 @@ type NavTab =
     | 'notifications'
     | 'activity_logs'
     | 'tasks'
+    | 'team'
     | 'profile'
     | 'org-structure'
     | 'biomarker';
@@ -326,6 +327,7 @@ const NAV_GROUPS = [
         items: [
             { tab: 'dashboard' as NavTab, icon: 'LayoutDashboard', label: 'Dashboard' },
             { tab: 'employees' as NavTab, icon: 'Users', label: 'Manage Employee' },
+            { tab: 'team' as NavTab, icon: 'Users', label: 'Team Management' },
         ],
     },
     {
@@ -2126,9 +2128,10 @@ interface DashboardTabProps {
     onNavigateToFinance?: () => void;
     onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
     onOpenTask?: (taskId: string) => void;
+    onNavigateToTeams?: () => void;
 }
 
-function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance, onCreateTaskForEndorsement, onOpenTask }: DashboardTabProps) {
+function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSelectEmployee, onEditEmployee, onViewAll, onAddEmployee, rolesCount, activityLogPage, activityLogTotalPages, onActivityLogPageChange, onNavigateToFinance, onCreateTaskForEndorsement, onOpenTask, onNavigateToTeams }: DashboardTabProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [dashboardMetricsMode, setDashboardMetricsMode] = useState<'workload' | 'foms'>('workload');
     const activeCount = (employees || []).filter(e => e.accountStatus === 'Active').length;
@@ -2250,6 +2253,11 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                     <Search size={14} className="header-search-icon" />
                     <input type="text" className="header-search-input" placeholder="Search employee, task…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                 </div>
+                {onNavigateToTeams && (
+                    <ActionButton icon={<Users size={18} />} variant="secondary" onClick={onNavigateToTeams}>
+                        Team Management
+                    </ActionButton>
+                )}
                 <ActionButton icon={<Users size={18} />} onClick={onAddEmployee}>
                     Add Employee
                 </ActionButton>
@@ -2463,6 +2471,7 @@ interface ManageEmployeesTabProps {
     onArchiveEmployee: (emp: RecentEmployee) => void;
     onViewEmployee: (emp: RecentEmployee) => void;
     rolesList?: string[];
+    onNavigateToTeams?: () => void;
 }
 
 export function ManageEmployeesTab({
@@ -2470,6 +2479,7 @@ export function ManageEmployeesTab({
     empPage, empTotalPages, onEmpPageChange,
     onEditEmployee, onArchiveEmployee, onViewEmployee,
     rolesList = SYSTEM_ROLES,
+    onNavigateToTeams,
 }: ManageEmployeesTabProps) {
     const [subTab, setSubTab] = useState<EmployeeSubTab>('employees');
     const [search, setSearch] = useState('');
@@ -2485,11 +2495,18 @@ export function ManageEmployeesTab({
         <div className="dashboard-content">
             {/* ── Unified sub-tab nav ── */}
             <SubTabNav
-                    tabs={[
-                        { key: 'employees', label: 'All Employees', icon: <Users size={14} /> },
-                    ]}
+                tabs={[
+                    { key: 'employees', label: 'All Employees', icon: <Users size={14} /> },
+                    { key: 'teams', label: 'Team Management', icon: <Users size={14} /> },
+                ]}
                 activeTab={subTab}
-                onTabChange={(key) => setSubTab(key as EmployeeSubTab)}
+                onTabChange={(key) => {
+                    if (key === 'teams' && onNavigateToTeams) {
+                        onNavigateToTeams();
+                    } else {
+                        setSubTab(key as EmployeeSubTab);
+                    }
+                }}
             />
 
             {/* ── All Employees ── */}
@@ -2508,6 +2525,16 @@ export function ManageEmployeesTab({
                                     { value: 'Inactive', label: 'Inactive' },
                                     { value: 'Deactivated', label: 'Deactivated' }
                                 ]} />
+                            {onNavigateToTeams && (
+                                <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    onClick={onNavigateToTeams}
+                                    style={{ height: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                                >
+                                    <Users size={14} /> Manage Teams
+                                </button>
+                            )}
                         </>
                     }
                     actionButton={{ label: 'Add Employee', icon: <Plus size={14} />, onClick: onAddEmployee }}
@@ -2992,6 +3019,7 @@ export default function Dashboard() {
         { label: 'Dashboard', onClick: () => handleNavChange('dashboard'), active: activeTab === 'dashboard' },
         { label: 'Manage Employee', onClick: () => handleNavChange('employees'), active: activeTab === 'employees' },
         { label: 'Task Management', onClick: () => handleNavChange('tasks'), active: activeTab === 'tasks' },
+        { label: 'Team Management', onClick: () => handleNavChange('team'), active: activeTab === 'team' },
         { label: 'Reports', onClick: () => handleNavChange('reports'), active: activeTab === 'reports' },
         { label: 'Role Management', onClick: () => handleNavChange('roles'), active: activeTab === 'roles' },
         { label: 'Org Structure', onClick: () => handleNavChange('org-structure'), active: activeTab === 'org-structure' },
@@ -3357,11 +3385,25 @@ export default function Dashboard() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'tasks') {
+        if (activeTab === 'tasks' || activeTab === 'team') {
             fetchManagerTasks();
             fetchManagerTeamMembers();
         }
     }, [activeTab]);
+
+    const managerTeamMembers: TeamMember[] = useMemo(() => {
+        return tmTeamMembers.map(m => {
+            const emp = employees.find(e => e.employeeName === m.employeeName) || recentEmployees.find(e => e.employeeName === m.employeeName);
+            return {
+                accountId: m.accountId,
+                employeeName: m.employeeName,
+                role: emp?.role || 'Staff',
+                departmentId: emp?.departmentId,
+                department: emp?.departmentName,
+                presenceStatus: emp?.presenceStatus,
+            };
+        });
+    }, [tmTeamMembers, employees, recentEmployees]);
 
     const managerAssignees = useMemo(() => {
         const map = new Map<string, string>();
@@ -4372,6 +4414,7 @@ export default function Dashboard() {
         delivery: 'Delivery Summary', pre_delivery: 'Pre-Delivery Validation', finance: 'Financial Overview', settings: 'Settings',
         roles: 'Role Management', reports: 'Reports', announcements: 'Announcements', notifications: 'Notifications', activity_logs: 'Activity Logs', profile: 'My Profile',
         tasks: 'Task Manager',
+        team: 'Team Management',
         'org-structure': 'Organizational Structure',
         biomarker: 'Biomarker Alert Dashboard'
     };
@@ -4438,6 +4481,7 @@ export default function Dashboard() {
                             onViewAll={() => { handleNavChange('employees'); setSelectedPanelEmployee(null); }}
                             onAddEmployee={() => setShowAddModal(true)}
                             onNavigateToFinance={() => handleNavChange('finance')}
+                            onNavigateToTeams={() => handleNavChange('team')}
                             rolesCount={rolesList.length}
                             activityLogPage={activityLogPage}
                             activityLogTotalPages={activityLogTotalPages}
@@ -4470,6 +4514,7 @@ export default function Dashboard() {
                             employees={employees} loading={empLoading}
                             onSelectEmployee={emp => { setSelectedPanelEmployee(emp); setDetailPanelInitialSection('overview'); }}
                             onAddEmployee={() => setShowAddModal(true)}
+                            onNavigateToTeams={() => handleNavChange('team')}
                             empPage={empPage} empTotalPages={empTotalPages} onEmpPageChange={fetchEmployees}
                             onEditEmployee={emp => { setEmpModalEditMode(true); setSelectedEmployee(emp); }}
                             onArchiveEmployee={emp => setarchiveConfirmEmp(emp)}
@@ -4483,6 +4528,22 @@ export default function Dashboard() {
                 {(activeTab === 'profile' || activeTab === 'settings') && <ProfileTab onProfileUpdate={setEmployeeName} />}
 
                 {activeTab === 'roles' && <RoleManagementTab />}
+
+                {activeTab === 'team' && (
+                    <TeamTab
+                        tasks={tmTasks.map(t => ({ ...t, taskId: t.taskId || t.id, taskTitle: t.taskTitle || t.title }))}
+                        teamMembers={managerTeamMembers}
+                        onView={(taskId) => {
+                            const found = tmTasks.find(t => t.id === taskId || t.taskId === taskId);
+                            if (found) {
+                                setActiveTab('tasks');
+                                setTmDetailTask(mapManagerTaskToView(found));
+                            } else {
+                                openManagerTaskById(taskId);
+                            }
+                        }}
+                    />
+                )}
 
                 {activeTab === 'org-structure' && <OrgStructureTab />}
                 {activeTab === 'biomarker' && <BiomarkerDashboard />}

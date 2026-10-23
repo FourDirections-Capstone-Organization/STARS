@@ -124,6 +124,11 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(t => t.CreatedById)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.TeamLeader)
+                .WithMany()
+                .HasForeignKey(t => t.TeamLeaderId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // TeamMember Configuration

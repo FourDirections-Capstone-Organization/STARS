@@ -421,7 +421,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                 <div className="foms-graph-hero-top">
                     <div className="foms-graph-hero-content">
                         <h2 className="foms-graph-hero-title">
-                            Finalized Invoice Endorsement &amp; Physical Delivery
+                            Finalized Invoice Endorsement
                         </h2>
                         <p className="foms-graph-hero-desc">
                             STARS receives finalized invoice endorsement requests from FOMS, displays them first for operational review,

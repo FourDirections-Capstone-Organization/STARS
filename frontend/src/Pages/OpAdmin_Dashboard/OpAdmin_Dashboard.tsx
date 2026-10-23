@@ -194,11 +194,13 @@ type NavTab =
     | 'notifications'
     | 'notification_settings';
 
-interface TeamMember {
+export interface TeamMember {
     accountId: string;
     employeeName: string;
     role: string;
     presenceStatus?: string;
+    departmentId?: string;
+    department?: string;
 }
 
 interface Task {
@@ -3059,6 +3061,8 @@ interface TeamDTO {
     departmentId: string | null;
     departmentName: string | null;
     description: string | null;
+    teamLeaderId?: string | null;
+    teamLeaderName?: string | null;
     isActive: boolean;
     memberCount: number;
     members: {
@@ -3069,6 +3073,7 @@ interface TeamDTO {
         department: string | null;
         availabilityStatus: string | null;
         isAvailable: boolean;
+        isLeader?: boolean;
         joinedAt: string;
     }[];
     createdAt: string;
@@ -3081,7 +3086,7 @@ const REC_MONTH_PRESETS = [
     { label: '12m', months: 12 },
 ] as const;
 
-const TeamTab: React.FC<{
+export const TeamTab: React.FC<{
     tasks: Task[];
     teamMembers: TeamMember[];
     onView: (id: string) => void;
@@ -3093,22 +3098,133 @@ const TeamTab: React.FC<{
 
     // Create / edit modal state
     const [showTeamModal, setShowTeamModal] = useState(false);
+    const [showConfirmTeamModal, setShowConfirmTeamModal] = useState(false);
     const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
     const [departmentsList, setDepartmentsList] = useState<Array<{ id: string; name: string }>>([]);
-    const [teamForm, setTeamForm] = useState({ name: '', description: '', departmentId: '', memberUserIds: [] as string[] });
+    const [deptEmployees, setDeptEmployees] = useState<Array<{ id: string; fullName: string; role?: string; employeeNumber?: string }>>([]);
+    const [deptEmployeesLoading, setDeptEmployeesLoading] = useState(false);
+    const [teamMemberSearch, setTeamMemberSearch] = useState('');
+    const [teamForm, setTeamForm] = useState({
+        name: '',
+        description: '',
+        departmentId: '',
+        teamLeaderId: '',
+        memberUserIds: [] as string[],
+    });
     const [teamSaving, setTeamSaving] = useState(false);
     const [teamError, setTeamError] = useState('');
 
-    useEffect(() => {
-        api.get('/api/Department').then(res => {
+    // Remove member confirmation state
+    const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{ teamId: string; memberId: string; memberName: string; teamName: string } | null>(null);
+
+    const fetchDepartments = useCallback(async () => {
+        try {
+            const res = await api.get('/api/Department', { pageSize: 100 });
             const body = res?.data;
             const list: any[] = Array.isArray(body?.data?.items) ? body.data.items : (Array.isArray(body?.data) ? body.data : (Array.isArray(body) ? body : []));
-            setDepartmentsList(list.map((d: any) => ({
-                id: String(d.id ?? d.departmentId),
-                name: d.name ?? d.departmentName ?? 'Department',
-            })));
-        }).catch(() => {});
+            if (list.length > 0) {
+                setDepartmentsList(list.map((d: any) => ({
+                    id: String(d.id ?? d.departmentId),
+                    name: d.name ?? d.departmentName ?? 'Department',
+                })));
+                return;
+            }
+        } catch {}
+
+        // Fallback: build from existing team/user records if API empty
+        try {
+            const userRes = await api.get('/api/User', { pageSize: 100 });
+            const uData = userRes?.data?.data?.items || userRes?.data?.items || [];
+            const deptMap = new Map<string, string>();
+            uData.forEach((u: any) => {
+                if (u.departmentId && u.departmentName) {
+                    deptMap.set(String(u.departmentId), u.departmentName);
+                }
+            });
+            if (deptMap.size > 0) {
+                setDepartmentsList(Array.from(deptMap.entries()).map(([id, name]) => ({ id, name })));
+            }
+        } catch {}
     }, []);
+
+    useEffect(() => {
+        fetchDepartments();
+    }, [fetchDepartments]);
+
+    const fetchDeptEmployeesForTeam = async (deptId: string) => {
+        if (!deptId) {
+            setDeptEmployees([]);
+            return;
+        }
+        setDeptEmployeesLoading(true);
+        try {
+            // Priority 1: dedicated roster endpoint for exact department members
+            const rosterRes = await api.get(`/api/Department/roster/${deptId}`);
+            const rData = rosterRes?.data?.data;
+            if (rosterRes?.data?.isSuccess && rData?.members && Array.isArray(rData.members) && rData.members.length > 0) {
+                setDeptEmployees(rData.members.map((u: any) => ({
+                    id: String(u.id ?? u.userId),
+                    fullName: (u.fullName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`).trim(),
+                    role: u.role ?? u.roleName ?? u.jobPositionName ?? '',
+                    employeeNumber: u.employeeNumber ?? '',
+                })));
+                setDeptEmployeesLoading(false);
+                return;
+            }
+        } catch {}
+
+        try {
+            // Priority 2: query users filtered strictly by departmentId
+            const res = await api.get('/api/User', {
+                departmentId: deptId,
+                pageSize: 100,
+                status: 'Active',
+            });
+            const rd = res.data;
+            const raw = rd?.data?.items ?? (Array.isArray(rd?.data) ? rd.data : (Array.isArray(rd) ? rd : rd?.$values ?? []));
+            if (raw.length > 0) {
+                const list = raw
+                    .filter((u: any) => !u.departmentId || String(u.departmentId).toLowerCase() === deptId.toLowerCase())
+                    .map((u: any) => ({
+                        id: String(u.id ?? u.userId ?? u.employeeId),
+                        fullName: (u.fullName ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`).trim(),
+                        role: u.roleName ?? (typeof u.role === 'string' ? u.role : ''),
+                        employeeNumber: u.employeeNumber ?? u.EmployeeNumber ?? '',
+                    }));
+                setDeptEmployees(list);
+                setDeptEmployeesLoading(false);
+                return;
+            }
+        } catch {}
+
+        // Priority 3: Fallback strictly filtered to the target department
+        const targetDeptName = departmentsList.find(d => d.id === deptId)?.name;
+        const fallback = teamMembers
+            .filter(m => (m.departmentId && String(m.departmentId).toLowerCase() === deptId.toLowerCase()) || (targetDeptName && m.department === targetDeptName))
+            .map(m => ({
+                id: m.accountId,
+                fullName: m.employeeName,
+                role: m.role,
+            }));
+        setDeptEmployees(fallback);
+        setDeptEmployeesLoading(false);
+    };
+
+    const handleDeptChange = (newDeptId: string) => {
+        setTeamMemberSearch('');
+        // Rule: team is strictly under one department. If department changes, clear previous team leader and members.
+        setTeamForm(p => ({
+            ...p,
+            departmentId: newDeptId,
+            teamLeaderId: '',
+            memberUserIds: [],
+        }));
+        if (newDeptId) {
+            fetchDeptEmployeesForTeam(newDeptId);
+        } else {
+            setDeptEmployees([]);
+        }
+    };
 
     // Delete confirmation
     const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
@@ -3201,30 +3317,46 @@ const TeamTab: React.FC<{
 
     const openCreate = () => {
         setEditingTeam(null);
+        setTeamMemberSearch('');
+        const initialDept = departmentsList.length === 1 ? departmentsList[0].id : '';
         setTeamForm({
             name: '',
             description: '',
-            departmentId: departmentsList[0]?.id || '',
+            departmentId: initialDept,
+            teamLeaderId: '',
             memberUserIds: [],
         });
+        if (initialDept) {
+            fetchDeptEmployeesForTeam(initialDept);
+        } else {
+            setDeptEmployees([]);
+        }
         setTeamError('');
         setShowTeamModal(true);
     };
 
     const openEdit = (t: TeamDTO) => {
         setEditingTeam(t);
+        setTeamMemberSearch('');
         setTeamForm({
             name: t.name,
             description: t.description ?? '',
             departmentId: t.departmentId || '',
+            teamLeaderId: t.teamLeaderId || '',
             memberUserIds: t.members.map(m => m.userId),
         });
+        if (t.departmentId) {
+            fetchDeptEmployeesForTeam(t.departmentId);
+        } else {
+            setDeptEmployees([]);
+        }
         setTeamError('');
         setShowTeamModal(true);
     };
 
     const handleSaveTeam = async () => {
         if (!teamForm.name.trim()) { setTeamError('Team name is required.'); return; }
+        if (!teamForm.departmentId) { setTeamError('Department is required. A team must belong to a specific department.'); return; }
         setTeamSaving(true);
         setTeamError('');
         try {
@@ -3233,6 +3365,7 @@ const TeamTab: React.FC<{
                     name: teamForm.name.trim(),
                     description: teamForm.description.trim() || null,
                     departmentId: teamForm.departmentId || null,
+                    teamLeaderId: teamForm.teamLeaderId || null,
                     isActive: true,
                 });
                 // Replace members: remove all then re-add the selected ones.
@@ -3250,8 +3383,9 @@ const TeamTab: React.FC<{
                 const body: any = {
                     name: teamForm.name.trim(),
                     description: teamForm.description.trim() || null,
+                    departmentId: teamForm.departmentId || null,
+                    teamLeaderId: teamForm.teamLeaderId || null,
                 };
-                if (teamForm.departmentId) body.departmentId = teamForm.departmentId;
                 if (teamForm.memberUserIds.length > 0) body.memberUserIds = teamForm.memberUserIds;
                 await api.post('/api/Team', body);
                 success('Team created successfully.');
@@ -3474,6 +3608,11 @@ const TeamTab: React.FC<{
                                             </div>
                                             {t.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.description}</div>}
                                             {t.departmentName && <div style={{ fontSize: 11, color: '#94a3b8' }}>Department: {t.departmentName}</div>}
+                                            {t.teamLeaderName && (
+                                                <div style={{ fontSize: 11, color: 'var(--primary, #2563eb)', fontWeight: 600 }}>
+                                                    Team Leader: {t.teamLeaderName}
+                                                </div>
+                                            )}
 
                                             {/* Member dropdown */}
                                             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>MEMBERS</div>
@@ -3496,7 +3635,14 @@ const TeamTab: React.FC<{
                                             {t.members.map(m => (
                                                 <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px' }}>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.fullName}</div>
+                                                        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span>{m.fullName}</span>
+                                                            {(m.isLeader || (t.teamLeaderId && m.userId === t.teamLeaderId)) && (
+                                                                <span style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>
+                                                                    Leader
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div style={{ fontSize: 10, color: '#94a3b8' }}>{m.employeeNumber}{m.department ? ` · ${m.department}` : ''}</div>
                                                     </div>
                                                     <button
@@ -3507,35 +3653,46 @@ const TeamTab: React.FC<{
                                                     >
                                                         <Lightbulb size={11} /> Recs
                                                     </button>
-                                                    <button className="btn btn-sm" onClick={() => handleRemoveMember(t.id, m.userId)} title="Remove from team" style={{ padding: '4px 6px', color: '#dc2626' }}>
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        onClick={() => setRemoveMemberConfirm({ teamId: t.id, memberId: m.userId, memberName: m.fullName, teamName: t.name })}
+                                                        title="Remove from team"
+                                                        style={{ padding: '4px 6px', color: '#dc2626' }}
+                                                    >
                                                         <X size={12} />
                                                     </button>
                                                 </div>
                                             ))}
 
-                                            {/* Add members */}
-                                            {unassignedEmployees.length > 0 && (
-                                                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
-                                                    <select
-                                                        value={addMembersTeamId === t.id ? addMemberIds[0] ?? '' : ''}
-                                                        onChange={e => { setAddMembersTeamId(t.id); setAddMemberIds(e.target.value ? [e.target.value] : []); }}
-                                                        style={{ flex: 1, height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff' }}
-                                                    >
-                                                        <option value="">Add member…</option>
-                                                        {unassignedEmployees.map(m => (
-                                                            <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
-                                                        ))}
-                                                    </select>
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        disabled={addMembersTeamId !== t.id || addMemberIds.length === 0 || addingMembers}
-                                                        onClick={handleAddMembers}
-                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                                    >
-                                                        {addingMembers && addMembersTeamId === t.id ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add
-                                                    </button>
-                                                </div>
-                                            )}
+                                            {/* Add members (filtered to same department) */}
+                                            {(() => {
+                                                const deptUnassigned = unassignedEmployees.filter(m =>
+                                                    !t.departmentId || !m.departmentId || String(m.departmentId).toLowerCase() === String(t.departmentId).toLowerCase() || (t.departmentName && m.department === t.departmentName)
+                                                );
+                                                if (deptUnassigned.length === 0) return null;
+                                                return (
+                                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                                                        <select
+                                                            value={addMembersTeamId === t.id ? addMemberIds[0] ?? '' : ''}
+                                                            onChange={e => { setAddMembersTeamId(t.id); setAddMemberIds(e.target.value ? [e.target.value] : []); }}
+                                                            style={{ flex: 1, height: 32, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none', background: '#fff' }}
+                                                        >
+                                                            <option value="">Add member…</option>
+                                                            {deptUnassigned.map(m => (
+                                                                <option key={m.accountId} value={m.accountId}>{m.employeeName}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            disabled={addMembersTeamId !== t.id || addMemberIds.length === 0 || addingMembers}
+                                                            onClick={handleAddMembers}
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                                        >
+                                                            {addingMembers && addMembersTeamId === t.id ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     ))}
                                 </div>
@@ -3588,13 +3745,22 @@ const TeamTab: React.FC<{
                 isOpen={showTeamModal}
                 onClose={() => setShowTeamModal(false)}
                 title={editingTeam ? 'Edit Team' : 'Create Team'}
-                subtitle={editingTeam ? `Editing ${editingTeam.name}` : 'Create a team and assign employees to it.'}
+                subtitle={editingTeam ? `Editing ${editingTeam.name}` : 'Create a team, assign a team leader, and select department members.'}
                 size="md"
                 footer={
                     <>
                         <button className="fm-btn fm-btn-cancel" onClick={() => setShowTeamModal(false)} disabled={teamSaving}>Cancel</button>
-                        <button className="fm-btn fm-btn-primary" onClick={handleSaveTeam} disabled={teamSaving || !teamForm.name.trim()}>
-                            {teamSaving ? <><Loader2 size={13} className="fm-spin" /> Saving…</> : 'Save Team'}
+                        <button
+                            className="fm-btn fm-btn-primary"
+                            onClick={() => {
+                                if (!teamForm.name.trim()) { setTeamError('Team name is required.'); return; }
+                                if (!teamForm.departmentId) { setTeamError('Department is required. A team must belong to a specific department.'); return; }
+                                setTeamError('');
+                                setShowConfirmTeamModal(true);
+                            }}
+                            disabled={teamSaving || !teamForm.name.trim()}
+                        >
+                            {teamSaving ? <><Loader2 size={13} className="fm-spin" /> Saving…</> : (editingTeam ? 'Save Team' : 'Create Team')}
                         </button>
                     </>
                 }
@@ -3613,17 +3779,52 @@ const TeamTab: React.FC<{
                         />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Department</label>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Department *</label>
                         <select
                             value={teamForm.departmentId}
-                            onChange={e => setTeamForm(p => ({ ...p, departmentId: e.target.value }))}
+                            onChange={e => handleDeptChange(e.target.value)}
                             style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
                         >
-                            <option value="">Select Department (Optional)</option>
+                            <option value="">Select Department</option>
                             {departmentsList.map(d => (
                                 <option key={d.id} value={d.id}>{d.name}</option>
                             ))}
                         </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                            Team Leader <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(Optional)</span>
+                        </label>
+                        <select
+                            value={teamForm.teamLeaderId}
+                            onChange={e => {
+                                const leaderId = e.target.value;
+                                setTeamForm(p => {
+                                    const nextMembers = leaderId && !p.memberUserIds.includes(leaderId)
+                                        ? [...p.memberUserIds, leaderId]
+                                        : p.memberUserIds;
+                                    return { ...p, teamLeaderId: leaderId, memberUserIds: nextMembers };
+                                });
+                            }}
+                            disabled={!teamForm.departmentId}
+                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                        >
+                            <option value="">— Select Team Leader (Optional) —</option>
+                            {deptEmployees.map(emp => (
+                                <option key={emp.id} value={emp.id}>
+                                    {emp.fullName} {emp.role ? `(${emp.role})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        {!teamForm.departmentId ? (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                Please select a department first to assign a team leader.
+                            </span>
+                        ) : (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                Team Leader is automatically included in team members.
+                            </span>
+                        )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Description</label>
@@ -3636,37 +3837,141 @@ const TeamTab: React.FC<{
                             style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none' }}
                         />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                            Assign Employees {editingTeam && '(employees already in another team are skipped)'}
-                        </label>
-                        <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {teamMembers.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8' }}>No employees available.</div>}
-                            {teamMembers.map(m => {
-                                const isCurrent = editingTeam?.members.some(x => x.userId === m.accountId);
-                                const takenByOther = assignedUserIds.has(m.accountId) && !isCurrent;
-                                return (
-                                    <label key={m.accountId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: takenByOther ? 'not-allowed' : 'pointer', opacity: takenByOther ? 0.5 : 1 }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={teamForm.memberUserIds.includes(m.accountId)}
-                                            disabled={takenByOther}
-                                            onChange={e => setTeamForm(p => ({
-                                                ...p,
-                                                memberUserIds: e.target.checked
-                                                    ? [...p.memberUserIds, m.accountId]
-                                                    : p.memberUserIds.filter(id => id !== m.accountId),
-                                            }))}
-                                        />
-                                        <span>{m.employeeName}</span>
-                                        {takenByOther && <span style={{ fontSize: 10, color: '#d97706' }}>(already in a team)</span>}
-                                    </label>
-                                );
-                            })}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                Assign Employees {teamForm.memberUserIds.length > 0 && `(${teamForm.memberUserIds.length} selected)`}
+                            </label>
+                            {teamForm.departmentId && deptEmployees.length > 0 && (
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                    Showing employees for {departmentsList.find(d => d.id === teamForm.departmentId)?.name || 'department'}
+                                </span>
+                            )}
                         </div>
+                        {!teamForm.departmentId ? (
+                            <div style={{ padding: '16px', border: '1px dashed var(--border)', borderRadius: 8, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+                                Please select a department above to view and assign employees.
+                            </div>
+                        ) : deptEmployeesLoading ? (
+                            <div style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                                <Loader2 size={14} className="fm-spin" /> Loading department employees…
+                            </div>
+                        ) : deptEmployees.length === 0 ? (
+                            <div style={{ padding: '16px', border: '1px solid var(--border)', borderRadius: 8, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+                                No active employees found in this department.
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    <input
+                                        type="text"
+                                        value={teamMemberSearch}
+                                        onChange={e => setTeamMemberSearch(e.target.value)}
+                                        placeholder="Search department employees…"
+                                        style={{ flex: 1, height: 30, borderRadius: 6, border: '1.5px solid var(--border)', padding: '0 8px', fontSize: 12, outline: 'none' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline btn-sm"
+                                        style={{ height: 30, fontSize: 11, padding: '0 8px' }}
+                                        onClick={() => {
+                                            const selectable = deptEmployees
+                                                .filter(m => !assignedUserIds.has(m.id) || editingTeam?.members.some(x => x.userId === m.id))
+                                                .map(m => m.id);
+                                            setTeamForm(p => ({
+                                                ...p,
+                                                memberUserIds: Array.from(new Set([...p.memberUserIds, ...selectable])),
+                                            }));
+                                        }}
+                                    >
+                                        Select All
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline btn-sm"
+                                        style={{ height: 30, fontSize: 11, padding: '0 8px' }}
+                                        onClick={() => {
+                                            setTeamForm(p => ({
+                                                ...p,
+                                                memberUserIds: p.teamLeaderId ? [p.teamLeaderId] : [],
+                                            }));
+                                        }}
+                                    >
+                                        Clear
+                                    </button>
+                                </div>
+
+                                <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {deptEmployees
+                                        .filter(m =>
+                                            !teamMemberSearch.trim() ||
+                                            m.fullName.toLowerCase().includes(teamMemberSearch.toLowerCase()) ||
+                                            (m.role && m.role.toLowerCase().includes(teamMemberSearch.toLowerCase()))
+                                        )
+                                        .map(m => {
+                                            const isCurrent = editingTeam?.members.some(x => x.userId === m.id);
+                                            const takenByOther = assignedUserIds.has(m.id) && !isCurrent;
+                                            const isLeader = teamForm.teamLeaderId === m.id;
+                                            const isChecked = teamForm.memberUserIds.includes(m.id);
+                                            return (
+                                                <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: takenByOther ? 'not-allowed' : 'pointer', opacity: takenByOther ? 0.5 : 1 }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        disabled={takenByOther}
+                                                        onChange={e => {
+                                                            if (e.target.checked) {
+                                                                setTeamForm(p => ({ ...p, memberUserIds: [...p.memberUserIds, m.id] }));
+                                                            } else {
+                                                                setTeamForm(p => ({
+                                                                    ...p,
+                                                                    memberUserIds: p.memberUserIds.filter(id => id !== m.id),
+                                                                    teamLeaderId: p.teamLeaderId === m.id ? '' : p.teamLeaderId,
+                                                                }));
+                                                            }
+                                                        }}
+                                                    />
+                                                    <span style={{ fontWeight: isLeader ? 600 : 400 }}>{m.fullName}</span>
+                                                    {m.role && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({m.role})</span>}
+                                                    {isLeader && (
+                                                        <span style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>
+                                                            Team Leader
+                                                        </span>
+                                                    )}
+                                                    {takenByOther && <span style={{ fontSize: 10, color: '#d97706' }}>(already in another team)</span>}
+                                                </label>
+                                            );
+                                        })}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </FormModal>
+
+            <ConfirmationModal
+                isOpen={showConfirmTeamModal}
+                variant="info"
+                title={editingTeam ? 'Confirm Team Update' : 'Confirm Team Creation'}
+                description={
+                    <div>
+                        <p style={{ margin: '0 0 8px 0' }}>Are you sure you want to {editingTeam ? 'update' : 'create'} this team?</p>
+                        <div style={{ padding: '10px 14px', background: 'var(--bg-secondary, #f8fafc)', borderRadius: 8, fontSize: 12, lineHeight: 1.8 }}>
+                            <div><strong>Team Name:</strong> {teamForm.name.trim()}</div>
+                            <div><strong>Department:</strong> {departmentsList.find(d => d.id === teamForm.departmentId)?.name || '—'}</div>
+                            <div><strong>Team Leader:</strong> {deptEmployees.find(e => e.id === teamForm.teamLeaderId)?.fullName || 'None (Optional)'}</div>
+                            <div><strong>Members:</strong> {teamForm.memberUserIds.length} employee(s) assigned</div>
+                        </div>
+                    </div>
+                }
+                confirmLabel={teamSaving ? 'Saving…' : (editingTeam ? 'Yes, Update Team' : 'Yes, Create Team')}
+                cancelLabel="Cancel"
+                onConfirm={async () => {
+                    setShowConfirmTeamModal(false);
+                    await handleSaveTeam();
+                }}
+                onCancel={() => setShowConfirmTeamModal(false)}
+            />
 
             <ConfirmationModal
                 isOpen={deleteTeamId !== null}
@@ -3677,6 +3982,22 @@ const TeamTab: React.FC<{
                 cancelLabel="Cancel"
                 onConfirm={handleDeleteTeam}
                 onCancel={() => setDeleteTeamId(null)}
+            />
+
+            <ConfirmationModal
+                isOpen={removeMemberConfirm !== null}
+                variant="warning"
+                title="Remove Team Member"
+                description={removeMemberConfirm ? `Are you sure you want to remove ${removeMemberConfirm.memberName} from ${removeMemberConfirm.teamName}?` : ''}
+                confirmLabel="Remove Member"
+                cancelLabel="Cancel"
+                onConfirm={async () => {
+                    if (removeMemberConfirm) {
+                        await handleRemoveMember(removeMemberConfirm.teamId, removeMemberConfirm.memberId);
+                        setRemoveMemberConfirm(null);
+                    }
+                }}
+                onCancel={() => setRemoveMemberConfirm(null)}
             />
 
             <FormModal
@@ -8746,6 +9067,8 @@ export default function OpsAdminDashboard() {
                 employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? '').trim(),
                 role: e.role ?? '',
                 presenceStatus: e.availabilityStatus ?? e.AvailabilityStatus ?? 'Active',
+                departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : undefined),
+                department: e.department ?? e.Department ?? e.departmentName ?? e.DepartmentName ?? '',
             })));
         } catch {
             setTeamMembers([]);

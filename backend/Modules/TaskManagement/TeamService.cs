@@ -22,7 +22,7 @@ public class TeamService : ITeamService
     private static string FullName(User u) =>
         $"{u.FirstName} {u.MiddleName} {u.LastName} {u.Suffix}".Replace("  ", " ").Trim();
 
-    private static TeamMemberDTO MapMember(TeamMember m) => new TeamMemberDTO
+    private static TeamMemberDTO MapMember(TeamMember m, Guid? leaderId = null) => new TeamMemberDTO
     {
         UserId = m.UserId,
         FullName = m.User is not null ? FullName(m.User) : "Unknown",
@@ -31,7 +31,23 @@ public class TeamService : ITeamService
         Department = m.User?.Department?.Name ?? "",
         AvailabilityStatus = m.User?.AvailabilityStatus.ToString(),
         IsAvailable = m.User?.AvailabilityStatus == AvailabilityStatus.Active,
+        IsLeader = leaderId.HasValue && m.UserId == leaderId.Value,
         JoinedAt = m.JoinedAt,
+    };
+
+    private static TeamResponseDTO MapTeamResponse(Team t) => new TeamResponseDTO
+    {
+        Id = t.Id,
+        Name = t.Name,
+        DepartmentId = t.DepartmentId,
+        DepartmentName = t.Department?.Name,
+        Description = t.Description,
+        TeamLeaderId = t.TeamLeaderId,
+        TeamLeaderName = t.TeamLeader != null ? FullName(t.TeamLeader) : null,
+        IsActive = t.IsActive,
+        CreatedAt = t.CreatedAt,
+        MemberCount = t.Members.Count,
+        Members = t.Members.Select(m => MapMember(m, t.TeamLeaderId)).ToList(),
     };
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<TeamResponseDTO>>> GetAllAsync(
@@ -42,6 +58,7 @@ public class TeamService : ITeamService
 
         var query = _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .AsQueryable();
 
@@ -68,18 +85,7 @@ public class TeamService : ITeamService
 
         var result = new PaginatedResponseDTO<TeamResponseDTO>
         {
-            Items = teams.Select(t => new TeamResponseDTO
-            {
-                Id = t.Id,
-                Name = t.Name,
-                DepartmentId = t.DepartmentId,
-                DepartmentName = t.Department?.Name,
-                Description = t.Description,
-                IsActive = t.IsActive,
-                CreatedAt = t.CreatedAt,
-                MemberCount = t.Members.Count,
-                Members = t.Members.Select(MapMember).ToList(),
-            }).ToList(),
+            Items = teams.Select(MapTeamResponse).ToList(),
             TotalCount = totalCount,
             PageNumber = pageNumber,
             PageSize = pageSize,
@@ -92,24 +98,14 @@ public class TeamService : ITeamService
     {
         var team = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (team is null)
             return ApiResponseDTO<TeamResponseDTO>.Failure("Team not found");
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = team.Id,
-            Name = team.Name,
-            DepartmentId = team.DepartmentId,
-            DepartmentName = team.Department?.Name,
-            Description = team.Description,
-            IsActive = team.IsActive,
-            CreatedAt = team.CreatedAt,
-            MemberCount = team.Members.Count,
-            Members = team.Members.Select(MapMember).ToList(),
-        });
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(team));
     }
 
     public async Task<ApiResponseDTO<TeamResponseDTO>> CreateAsync(CreateTeamDTO dto, Guid createdById)
@@ -157,6 +153,23 @@ public class TeamService : ITeamService
             }
         }
 
+        if (dto.TeamLeaderId.HasValue && dto.TeamLeaderId.Value != Guid.Empty)
+        {
+            var leader = await _db.Users.FirstOrDefaultAsync(u => u.Id == dto.TeamLeaderId.Value && u.IsActive && !u.IsDeactivated);
+            if (leader is null)
+                return ApiResponseDTO<TeamResponseDTO>.Failure("Selected team leader does not exist or is inactive");
+
+            if (resolvedDeptId.HasValue && resolvedDeptId.Value != Guid.Empty && leader.DepartmentId.HasValue && leader.DepartmentId.Value != resolvedDeptId.Value)
+            {
+                return ApiResponseDTO<TeamResponseDTO>.Failure("Team leader must belong to the selected department");
+            }
+
+            if (!memberIds.Contains(dto.TeamLeaderId.Value))
+            {
+                memberIds.Add(dto.TeamLeaderId.Value);
+            }
+        }
+
         if (memberIds.Count > 0)
         {
             var validCount = await _db.Users.CountAsync(u => memberIds.Contains(u.Id) && u.IsActive && !u.IsDeactivated);
@@ -190,6 +203,7 @@ public class TeamService : ITeamService
             Name = dto.Name.Trim(),
             DepartmentId = resolvedDeptId,
             Description = dto.Description?.Trim(),
+            TeamLeaderId = (dto.TeamLeaderId.HasValue && dto.TeamLeaderId.Value != Guid.Empty) ? dto.TeamLeaderId.Value : null,
             CreatedById = createdById,
         };
         _db.Teams.Add(team);
@@ -210,27 +224,18 @@ public class TeamService : ITeamService
 
         var created = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstAsync(t => t.Id == team.Id);
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = created.Id,
-            Name = created.Name,
-            DepartmentId = created.DepartmentId,
-            DepartmentName = created.Department?.Name,
-            Description = created.Description,
-            IsActive = created.IsActive,
-            CreatedAt = created.CreatedAt,
-            MemberCount = created.Members.Count,
-            Members = created.Members.Select(MapMember).ToList(),
-        }, "Team created successfully");
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(created), "Team created successfully");
     }
 
     public async Task<ApiResponseDTO<TeamResponseDTO>> UpdateAsync(Guid id, UpdateTeamDTO dto, Guid updatedById)
     {
         var team = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstOrDefaultAsync(t => t.Id == id);
 
@@ -265,6 +270,31 @@ public class TeamService : ITeamService
             }
         }
 
+        if (dto.TeamLeaderId.HasValue && dto.TeamLeaderId.Value != Guid.Empty)
+        {
+            var leader = await _db.Users.FirstOrDefaultAsync(u => u.Id == dto.TeamLeaderId.Value && u.IsActive && !u.IsDeactivated);
+            if (leader is null)
+                return ApiResponseDTO<TeamResponseDTO>.Failure("Selected team leader does not exist or is inactive");
+
+            if (leader.DepartmentId.HasValue && leader.DepartmentId.Value != dto.DepartmentId.Value)
+            {
+                return ApiResponseDTO<TeamResponseDTO>.Failure("Team leader must belong to the selected department");
+            }
+
+            team.TeamLeaderId = dto.TeamLeaderId.Value;
+            if (!team.Members.Any(m => m.UserId == dto.TeamLeaderId.Value))
+            {
+                var alreadyInOther = await _db.TeamMembers.AnyAsync(tm => tm.UserId == dto.TeamLeaderId.Value && tm.TeamId != team.Id);
+                if (alreadyInOther)
+                    return ApiResponseDTO<TeamResponseDTO>.Failure("Selected team leader already belongs to another team");
+                _db.TeamMembers.Add(new TeamMember { TeamId = team.Id, UserId = dto.TeamLeaderId.Value });
+            }
+        }
+        else
+        {
+            team.TeamLeaderId = null;
+        }
+
         team.Name = dto.Name.Trim();
         team.DepartmentId = dto.DepartmentId;
         team.Description = dto.Description?.Trim();
@@ -280,18 +310,13 @@ public class TeamService : ITeamService
         }
         catch { }
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = team.Id,
-            Name = team.Name,
-            DepartmentId = team.DepartmentId,
-            DepartmentName = team.Department?.Name,
-            Description = team.Description,
-            IsActive = team.IsActive,
-            CreatedAt = team.CreatedAt,
-            MemberCount = team.Members.Count,
-            Members = team.Members.Select(MapMember).ToList(),
-        }, "Team updated successfully");
+        var updatedTeam = await _db.Teams
+            .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
+            .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
+            .FirstAsync(t => t.Id == team.Id);
+
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(updatedTeam), "Team updated successfully");
     }
 
     public async Task<ApiResponseDTO<bool>> DeleteAsync(Guid id, Guid userId)
@@ -326,6 +351,7 @@ public class TeamService : ITeamService
     {
         var team = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstOrDefaultAsync(t => t.Id == teamId);
 
@@ -376,24 +402,14 @@ public class TeamService : ITeamService
         // Refresh members after the insert.
         await _db.Entry(team).Collection(t => t.Members).Query().Include(m => m.User).ThenInclude(u => u!.Department).LoadAsync();
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = team.Id,
-            Name = team.Name,
-            DepartmentId = team.DepartmentId,
-            DepartmentName = team.Department?.Name,
-            Description = team.Description,
-            IsActive = team.IsActive,
-            CreatedAt = team.CreatedAt,
-            MemberCount = team.Members.Count,
-            Members = team.Members.Select(MapMember).ToList(),
-        }, $"{newIds.Count} member(s) added");
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(team), $"{newIds.Count} member(s) added");
     }
 
     public async Task<ApiResponseDTO<TeamResponseDTO>> RemoveMemberAsync(Guid teamId, Guid memberUserId, Guid userId)
     {
         var team = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstOrDefaultAsync(t => t.Id == teamId);
 
@@ -403,6 +419,11 @@ public class TeamService : ITeamService
         var member = team.Members.FirstOrDefault(m => m.UserId == memberUserId);
         if (member is null)
             return ApiResponseDTO<TeamResponseDTO>.Failure("Employee is not a member of this team");
+
+        if (team.TeamLeaderId == memberUserId)
+        {
+            team.TeamLeaderId = null;
+        }
 
         _db.TeamMembers.Remove(member);
         await _db.SaveChangesAsync();
@@ -415,24 +436,14 @@ public class TeamService : ITeamService
         }
         catch { }
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = team.Id,
-            Name = team.Name,
-            DepartmentId = team.DepartmentId,
-            DepartmentName = team.Department?.Name,
-            Description = team.Description,
-            IsActive = team.IsActive,
-            CreatedAt = team.CreatedAt,
-            MemberCount = team.Members.Count,
-            Members = team.Members.Select(MapMember).ToList(),
-        }, "Member removed");
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(team), "Member removed");
     }
 
     public async Task<ApiResponseDTO<TeamResponseDTO>> TransferMemberAsync(Guid memberUserId, Guid newTeamId, Guid userId)
     {
         var newTeam = await _db.Teams
             .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
             .Include(t => t.Members).ThenInclude(m => m.User).ThenInclude(u => u!.Department)
             .FirstOrDefaultAsync(t => t.Id == newTeamId);
 
@@ -451,7 +462,14 @@ public class TeamService : ITeamService
             .FirstOrDefaultAsync(tm => tm.UserId == memberUserId);
 
         if (currentMembership is not null)
+        {
+            var oldTeam = await _db.Teams.FirstOrDefaultAsync(t => t.Id == currentMembership.TeamId);
+            if (oldTeam != null && oldTeam.TeamLeaderId == memberUserId)
+            {
+                oldTeam.TeamLeaderId = null;
+            }
             _db.TeamMembers.Remove(currentMembership);
+        }
 
         // A user is allowed to belong to only one team, so (re)creating the
         // membership is safe after the removal above.
@@ -469,18 +487,7 @@ public class TeamService : ITeamService
         // Refresh members after the change.
         await _db.Entry(newTeam).Collection(t => t.Members).Query().Include(m => m.User).ThenInclude(u => u!.Department).LoadAsync();
 
-        return ApiResponseDTO<TeamResponseDTO>.Success(new TeamResponseDTO
-        {
-            Id = newTeam.Id,
-            Name = newTeam.Name,
-            DepartmentId = newTeam.DepartmentId,
-            DepartmentName = newTeam.Department?.Name,
-            Description = newTeam.Description,
-            IsActive = newTeam.IsActive,
-            CreatedAt = newTeam.CreatedAt,
-            MemberCount = newTeam.Members.Count,
-            Members = newTeam.Members.Select(MapMember).ToList(),
-        }, "Employee transferred to team");
+        return ApiResponseDTO<TeamResponseDTO>.Success(MapTeamResponse(newTeam), "Employee transferred to team");
     }
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<TeamTaskDTO>>> GetTeamTasksAsync(

@@ -13,6 +13,8 @@ public class CreateTeamDTO
     [MaxLength(500)]
     public string? Description { get; set; }
 
+    public Guid? TeamLeaderId { get; set; }
+
     public List<Guid>? MemberUserIds { get; set; }
 }
 
@@ -26,6 +28,8 @@ public class UpdateTeamDTO
 
     [MaxLength(500)]
     public string? Description { get; set; }
+
+    public Guid? TeamLeaderId { get; set; }
 
     public bool IsActive { get; set; } = true;
 }

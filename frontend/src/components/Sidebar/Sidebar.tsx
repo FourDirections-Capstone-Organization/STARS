@@ -91,6 +91,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
     Shipments: true,
+    'Task Allocation and Review System': true,
+    'Delivery Management System': true,
+    'Financial Management System': true,
+    'Financial Management System (FOMS)': true,
+    General: true,
   });
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -167,6 +172,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (!favoritesGroup) return navGroups;
     return [favoritesGroup, ...navGroups];
   }, [favoritesGroup, navGroups]);
+
+  useEffect(() => {
+    displayNavGroups.forEach(group => {
+      group.items.forEach(item => {
+        if (item.subItems?.some(s => s.active)) {
+          setExpandedItems(prev => prev[item.label] ? prev : ({ ...prev, [item.label]: true }));
+        }
+      });
+    });
+  }, [displayNavGroups]);
 
   const toggleCollapse = () => {
     setCollapsed((prev) => {

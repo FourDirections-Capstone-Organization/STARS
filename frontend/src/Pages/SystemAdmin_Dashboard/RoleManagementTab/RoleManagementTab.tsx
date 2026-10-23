@@ -25,6 +25,7 @@ import {
     Calendar,
     Eye,
     Search,
+    Award,
 } from 'lucide-react';
 import { useToast } from '../../../components/Toast/Toast';
 import api from '../../../api';
@@ -125,6 +126,7 @@ export interface TeamMemberDTO {
     department?: string;
     availabilityStatus?: string;
     isAvailable?: boolean;
+    isLeader?: boolean;
     joinedAt?: string;
 }
 
@@ -134,6 +136,8 @@ export interface TeamResponseDTO {
     departmentId?: string;
     departmentName?: string;
     description?: string;
+    teamLeaderId?: string;
+    teamLeaderName?: string;
     isActive: boolean;
     memberCount: number;
     members: TeamMemberDTO[];
@@ -431,6 +435,7 @@ export default function RoleManagementTab() {
     const [teamForm, setTeamForm] = useState({
         name: '',
         departmentId: '',
+        teamLeaderId: '',
         description: '',
         isActive: true,
         memberUserIds: [] as string[],
@@ -635,6 +640,8 @@ export default function RoleManagementTab() {
                 departmentId: t.departmentId ?? t.DepartmentId,
                 departmentName: t.departmentName ?? t.DepartmentName ?? '',
                 description: t.description ?? t.Description ?? '',
+                teamLeaderId: t.teamLeaderId ?? t.TeamLeaderId,
+                teamLeaderName: t.teamLeaderName ?? t.TeamLeaderName,
                 isActive: t.isActive ?? t.IsActive ?? true,
                 memberCount: t.memberCount ?? t.MemberCount ?? (t.members?.length ?? 0),
                 members: (t.members ?? t.Members ?? []).map((m: any): TeamMemberDTO => ({
@@ -645,6 +652,7 @@ export default function RoleManagementTab() {
                     department: m.department ?? m.Department ?? '',
                     availabilityStatus: m.availabilityStatus ?? m.AvailabilityStatus,
                     isAvailable: m.isAvailable ?? m.IsAvailable ?? true,
+                    isLeader: m.isLeader ?? m.IsLeader ?? (t.teamLeaderId ? (m.userId ?? m.UserId ?? m.id) === t.teamLeaderId : false),
                     joinedAt: m.joinedAt ?? m.JoinedAt,
                 })),
                 createdAt: t.createdAt ?? t.CreatedAt,
@@ -1070,6 +1078,7 @@ export default function RoleManagementTab() {
         setTeamForm({
             name: '',
             departmentId: initialDept,
+            teamLeaderId: '',
             description: '',
             isActive: true,
             memberUserIds: [],
@@ -1090,6 +1099,7 @@ export default function RoleManagementTab() {
         setTeamForm({
             name: '',
             departmentId: dept.departmentId,
+            teamLeaderId: '',
             description: '',
             isActive: true,
             memberUserIds: [],
@@ -1108,6 +1118,7 @@ export default function RoleManagementTab() {
         setTeamForm({
             name: team.name,
             departmentId: deptId,
+            teamLeaderId: team.teamLeaderId || '',
             description: team.description || '',
             isActive: team.isActive,
             memberUserIds: (team.members || []).map(m => m.userId),
@@ -1125,10 +1136,11 @@ export default function RoleManagementTab() {
     const handleTeamDeptChange = (newDeptId: string) => {
         setTeamDirty(true);
         // Rule: Team is strictly under one department, and only people in that department can be selected.
-        // If department changes, clear previously selected members.
+        // If department changes, clear previously selected members and team leader.
         setTeamForm(prev => ({
             ...prev,
             departmentId: newDeptId,
+            teamLeaderId: '',
             memberUserIds: [],
         }));
         setTeamFormErrors(err => ({ ...err, departmentId: '' }));
@@ -1162,20 +1174,14 @@ export default function RoleManagementTab() {
         return errors;
     };
 
-    const handleSaveTeam = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const errors = validateTeamForm();
-        if (Object.keys(errors).length > 0) {
-            setTeamFormErrors(errors);
-            return;
-        }
-
+    const executeSaveTeam = async () => {
         setActionLoading(true);
         try {
             if (!editingTeam) {
                 await api.post('/api/Team', {
                     name: teamForm.name.trim(),
                     departmentId: teamForm.departmentId,
+                    teamLeaderId: teamForm.teamLeaderId || null,
                     description: teamForm.description.trim() || undefined,
                     memberUserIds: teamForm.memberUserIds,
                 });
@@ -1184,6 +1190,7 @@ export default function RoleManagementTab() {
                 await api.put(`/api/Team/${editingTeam.id}`, {
                     name: teamForm.name.trim(),
                     departmentId: teamForm.departmentId,
+                    teamLeaderId: teamForm.teamLeaderId || null,
                     description: teamForm.description.trim() || undefined,
                     isActive: teamForm.isActive,
                 });
@@ -1215,6 +1222,41 @@ export default function RoleManagementTab() {
         } finally {
             setActionLoading(false);
         }
+    };
+
+    const handleSaveTeam = (e: React.FormEvent) => {
+        e.preventDefault();
+        const errors = validateTeamForm();
+        if (Object.keys(errors).length > 0) {
+            setTeamFormErrors(errors);
+            return;
+        }
+
+        const deptName = departments.find(d => d.departmentId === teamForm.departmentId)?.name || '—';
+        const leaderName = deptEmployees.find(e => e.id === teamForm.teamLeaderId)?.fullName || 'None (Optional)';
+
+        setConfirmModal({
+            isOpen: true,
+            variant: 'info',
+            icon: 'ti-users',
+            title: editingTeam ? 'Confirm Team Update' : 'Confirm Team Creation',
+            description: (
+                <div>
+                    <p style={{ margin: '0 0 10px 0' }}>Are you sure you want to {editingTeam ? 'update' : 'create'} this team?</p>
+                    <div style={{ padding: '10px 14px', background: 'var(--bg-secondary, #f8fafc)', borderRadius: 8, fontSize: 12, lineHeight: 1.8 }}>
+                        <div><strong>Team Name:</strong> {teamForm.name.trim()}</div>
+                        <div><strong>Department:</strong> {deptName}</div>
+                        <div><strong>Team Leader:</strong> {leaderName}</div>
+                        <div><strong>Members:</strong> {teamForm.memberUserIds.length} employee(s) assigned</div>
+                    </div>
+                </div>
+            ),
+            confirmLabel: editingTeam ? 'Yes, Update Team' : 'Yes, Create Team',
+            onConfirm: async () => {
+                setConfirmModal(CONFIRM_CLOSED);
+                await executeSaveTeam();
+            },
+        });
     };
 
     const confirmToggleTeamStatus = (team: TeamResponseDTO) => {
@@ -1320,7 +1362,8 @@ export default function RoleManagementTab() {
                 const next = exists
                     ? prev.memberUserIds.filter(id => id !== userId)
                     : [...prev.memberUserIds, userId];
-                return { ...prev, memberUserIds: next };
+                const nextLeader = (exists && prev.teamLeaderId === userId) ? '' : prev.teamLeaderId;
+                return { ...prev, memberUserIds: next, teamLeaderId: nextLeader };
             });
         };
 
@@ -1337,7 +1380,7 @@ export default function RoleManagementTab() {
 
         const handleDeselectAll = () => {
             setTeamDirty(true);
-            setTeamForm(prev => ({ ...prev, memberUserIds: [] }));
+            setTeamForm(prev => ({ ...prev, memberUserIds: [], teamLeaderId: '' }));
         };
 
         return (
@@ -1391,6 +1434,44 @@ export default function RoleManagementTab() {
                     ) : (
                         <span className="rm2-field-hint">
                             <Info size={11} /> Teams belong strictly to one department. Changing the department updates available employees.
+                        </span>
+                    )}
+                </div>
+
+                {/* Team Leader Selection */}
+                <div className="rm2-field">
+                    <label className="rm2-form-label">
+                        Team Leader <span className="rm2-field-optional"> (optional)</span>
+                    </label>
+                    <select
+                        className="form-input"
+                        value={teamForm.teamLeaderId}
+                        disabled={!teamForm.departmentId}
+                        onChange={e => {
+                            const leaderId = e.target.value;
+                            setTeamDirty(true);
+                            setTeamForm(prev => {
+                                const nextMembers = leaderId && !prev.memberUserIds.includes(leaderId)
+                                    ? [...prev.memberUserIds, leaderId]
+                                    : prev.memberUserIds;
+                                return { ...prev, teamLeaderId: leaderId, memberUserIds: nextMembers };
+                            });
+                        }}
+                    >
+                        <option value="">— Select Team Leader (Optional) —</option>
+                        {deptEmployees.map(emp => (
+                            <option key={emp.id} value={emp.id}>
+                                {emp.fullName} {emp.jobPositionName || emp.role ? `(${emp.jobPositionName || emp.role})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    {!teamForm.departmentId ? (
+                        <span className="rm2-field-hint">
+                            <Info size={11} /> Please select a department first to assign a team leader.
+                        </span>
+                    ) : (
+                        <span className="rm2-field-hint">
+                            <Info size={11} /> Team Leader is automatically added to team members.
                         </span>
                     )}
                 </div>
@@ -1492,6 +1573,11 @@ export default function RoleManagementTab() {
                                                         <span>{emp.fullName}</span>
                                                         {emp.employeeNumber && (
                                                             <span className="rm2-member-empnum">#{emp.employeeNumber}</span>
+                                                        )}
+                                                        {emp.id === teamForm.teamLeaderId && (
+                                                            <span className="rm2-status-pill rm2-status-pill--active" style={{ fontSize: 10, padding: '2px 6px', marginLeft: 6 }}>
+                                                                Leader
+                                                            </span>
                                                         )}
                                                     </div>
                                                     <div className="rm2-member-sub">
@@ -2108,7 +2194,7 @@ export default function RoleManagementTab() {
                                 ))}
                             </select>
                         }
-                        headers={['Team Name', 'Department', 'Members', 'Status', 'Created Date', 'Actions']}
+                        headers={['Team Name', 'Department', 'Leader', 'Members', 'Status', 'Created Date', 'Actions']}
                         loading={teamsLoading}
                         emptyMessage="No teams found. Create a team to get started."
                         emptyIcon={<Users size={20} />}
@@ -2131,6 +2217,16 @@ export default function RoleManagementTab() {
                                 <td>
                                     {team.departmentName ? (
                                         <span className="rm2-dept-tag">{team.departmentName}</span>
+                                    ) : (
+                                        <span className="rm2-no-desc">—</span>
+                                    )}
+                                </td>
+                                <td>
+                                    {team.teamLeaderName ? (
+                                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                            <span style={{ fontSize: 10, background: 'rgba(0, 169, 157, 0.12)', color: 'var(--primary)', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>Lead</span>
+                                            {team.teamLeaderName}
+                                        </span>
                                     ) : (
                                         <span className="rm2-no-desc">—</span>
                                     )}
@@ -2448,6 +2544,17 @@ export default function RoleManagementTab() {
                                     <span className="rm2-role-view-stat-label">Department</span>
                                 </div>
                             </div>
+                            {viewingTeam.teamLeaderName && (
+                                <div className="rm2-role-view-stat">
+                                    <div className="rm2-role-view-stat-icon" style={{ background: 'rgba(0, 169, 157, 0.1)', color: 'var(--primary)' }}>
+                                        <Award size={16} />
+                                    </div>
+                                    <div className="rm2-role-view-stat-body">
+                                        <span className="rm2-role-view-stat-value">{viewingTeam.teamLeaderName}</span>
+                                        <span className="rm2-role-view-stat-label">Team Leader</span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="rm2-role-view-stat">
                                 <div className="rm2-role-view-stat-icon" style={{ background: 'rgba(67, 24, 255, 0.1)', color: '#4318FF' }}>
                                     <Users size={16} />
@@ -2480,6 +2587,7 @@ export default function RoleManagementTab() {
                                 <div className="rm2-team-members-list" style={{ maxHeight: 300 }}>
                                     {viewingTeam.members.map(member => {
                                         const initials = member.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                                        const isLeader = member.isLeader || (viewingTeam.teamLeaderId && member.userId === viewingTeam.teamLeaderId);
                                         return (
                                             <div key={member.userId} className="rm2-member-row" style={{ cursor: 'default' }}>
                                                 <div className="rm2-member-avatar">{initials}</div>
@@ -2487,6 +2595,11 @@ export default function RoleManagementTab() {
                                                     <div className="rm2-member-name">
                                                         <span>{member.fullName}</span>
                                                         {member.employeeNumber && <span className="rm2-member-empnum">#{member.employeeNumber}</span>}
+                                                        {isLeader && (
+                                                            <span className="rm2-status-pill rm2-status-pill--active" style={{ fontSize: 10, padding: '2px 6px', marginLeft: 6 }}>
+                                                                Leader
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="rm2-member-sub">
                                                         {member.role || member.department || 'Team Member'}

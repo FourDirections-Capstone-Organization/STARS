@@ -310,6 +310,7 @@ using (var scope = app.Services.CreateScope())
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DmsRole"" character varying(50) NULL;
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DmsAreas"" character varying(250) NULL;
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""FomsRole"" character varying(50) NULL;
+                ALTER TABLE ""Teams"" ADD COLUMN IF NOT EXISTS ""TeamLeaderId"" uuid NULL;
             ");
             Console.WriteLine("[STARTUP] FOMS Integration tables and multi-system user columns verified/created.");
         }

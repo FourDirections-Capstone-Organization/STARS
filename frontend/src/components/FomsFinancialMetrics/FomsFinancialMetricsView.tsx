@@ -304,7 +304,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
             )}
 
-            {/* ── Sub-Navigation Tab Bar: Balances vs Collection Graph Routing vs Physical Endorsement ── */}
+            {/* ── Sub-Navigation Tab Bar: Balances vs Collection Graph Routing vs Invoice Endorsement ── */}
             <div className="foms-hub-nav">
                 <button
                     type="button"
@@ -329,7 +329,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     onClick={() => setActiveHubTab('endorsement')}
                 >
                     <FileCheck size={14} />
-                    <span>Physical Invoice Endorsement</span>
+                    <span>Invoice Endorsement</span>
                     <span className="foms-tab-badge badge-endorsement">30-Day Term</span>
                 </button>
             </div>

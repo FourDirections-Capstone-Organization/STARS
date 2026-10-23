@@ -123,11 +123,11 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
     });
 
     describe('FomsFinancialMetricsView - Tab Navigation & Endorsement Panel', () => {
-        it('renders the 3rd tab for Physical Invoice Endorsement and switches to it', async () => {
+        it('renders the 3rd tab for Invoice Endorsement and switches to it', async () => {
             render(<FomsFinancialMetricsView />);
 
             // Tab button exists
-            const endorsementTab = screen.getByRole('button', { name: /physical invoice endorsement/i });
+            const endorsementTab = screen.getByRole('button', { name: /invoice endorsement/i });
             expect(endorsementTab).toBeInTheDocument();
             expect(screen.getByText('30-Day Term')).toBeInTheDocument();
 
