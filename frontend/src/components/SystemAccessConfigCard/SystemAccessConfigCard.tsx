@@ -93,19 +93,54 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
 }) => {
     const selectedCount = targetSystems.length;
 
-    const availablePositions = useMemo(() => {
-        if (!departmentId) return [];
-        return jobPositions.filter(p => (p.departmentId ?? p.id) === departmentId);
-    }, [departmentId, jobPositions]);
+    const matchedDept = useMemo(() => {
+        if (!departmentId) return undefined;
+        return departments.find(d => {
+            const dId = d.departmentId ?? d.id;
+            return dId && String(dId).toLowerCase() === String(departmentId).toLowerCase();
+        });
+    }, [departmentId, departments]);
 
-    const selectedPosition = useMemo(() => {
-        return jobPositions.find(p => (p.jobPositionId ?? p.id) === jobPositionId);
+    const selectedDeptId = matchedDept ? (matchedDept.departmentId ?? matchedDept.id ?? departmentId) : departmentId;
+
+    const matchedPos = useMemo(() => {
+        if (!jobPositionId) return undefined;
+        return jobPositions.find(p => {
+            const pId = p.jobPositionId ?? p.id;
+            return pId && String(pId).toLowerCase() === String(jobPositionId).toLowerCase();
+        });
     }, [jobPositionId, jobPositions]);
 
-    const allowedRoles = useMemo(() => {
-        if (!jobPositionId) return [];
-        return getRolesForPosition(selectedPosition?.name, availableRoles);
-    }, [jobPositionId, selectedPosition, availableRoles]);
+    const selectedPosId = matchedPos ? (matchedPos.jobPositionId ?? matchedPos.id ?? jobPositionId) : jobPositionId;
+
+    const availablePositions = useMemo(() => {
+        if (!departmentId) return jobPositions;
+        const filtered = jobPositions.filter(p => {
+            const pDeptId = p.departmentId;
+            return pDeptId && String(pDeptId).toLowerCase() === String(departmentId).toLowerCase();
+        });
+        if (matchedPos && !filtered.some(p => String(p.jobPositionId ?? p.id).toLowerCase() === String(selectedPosId).toLowerCase())) {
+            return [matchedPos, ...filtered];
+        }
+        return filtered;
+    }, [departmentId, jobPositions, matchedPos, selectedPosId]);
+
+    const allRolesList = useMemo(() => {
+        const DEFAULT_ROLES = ['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier', 'Accountant'];
+        const base = availableRoles && availableRoles.length > 0 ? availableRoles : DEFAULT_ROLES;
+        const set = new Set<string>();
+        base.forEach(r => {
+            if (r && typeof r === 'string' && r.trim()) {
+                const norm = r.trim() === 'Courier/Driver' ? 'Courier' : r.trim();
+                set.add(norm);
+            }
+        });
+        DEFAULT_ROLES.forEach(r => set.add(r));
+        if (role && typeof role === 'string' && role.trim()) {
+            set.add(role.trim());
+        }
+        return Array.from(set);
+    }, [availableRoles, role]);
 
     const handleToggleSystem = (systemName: 'STARS' | 'DMS' | 'FOMS') => {
         if (disabled) return;
@@ -301,18 +336,21 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                 </label>
                                                 <select
                                                     id="stars-dept-select"
-                                                    value={departmentId}
+                                                    value={selectedDeptId}
                                                     onChange={e => onChangeDepartmentId(e.target.value)}
                                                     className="fm-select"
                                                     style={inputStyle(errors.departmentId)}
                                                     disabled={disabled || loadingOrg}
                                                 >
                                                     <option value="">{loadingOrg ? 'Loading departments...' : 'Select a department'}</option>
-                                                    {departments.map(d => (
-                                                        <option key={d.departmentId ?? d.id} value={d.departmentId ?? d.id}>
-                                                            {d.name}
-                                                        </option>
-                                                    ))}
+                                                    {departments.map(d => {
+                                                        const dId = d.departmentId ?? d.id;
+                                                        return (
+                                                            <option key={dId} value={dId}>
+                                                                {d.name}
+                                                            </option>
+                                                        );
+                                                    })}
                                                 </select>
                                                 <FieldErr msg={errors.departmentId} />
                                             </div>
@@ -324,24 +362,27 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                 </label>
                                                 <select
                                                     id="stars-position-select"
-                                                    value={jobPositionId}
+                                                    value={selectedPosId}
                                                     onChange={e => onChangeJobPositionId(e.target.value)}
                                                     className="fm-select"
                                                     style={{
                                                         ...inputStyle(errors.jobPositionId),
-                                                        opacity: !departmentId ? 0.6 : 1,
-                                                        cursor: !departmentId ? 'not-allowed' : 'pointer',
+                                                        opacity: loadingOrg ? 0.6 : 1,
+                                                        cursor: 'pointer',
                                                     }}
-                                                    disabled={disabled || !departmentId || loadingOrg}
+                                                    disabled={disabled || loadingOrg}
                                                 >
                                                     <option value="">
-                                                        {departmentId ? 'Select a position' : 'Select department first'}
+                                                        {departmentId ? 'Select a position' : 'Select a position (optional)'}
                                                     </option>
-                                                    {availablePositions.map(p => (
-                                                        <option key={p.jobPositionId ?? p.id} value={p.jobPositionId ?? p.id}>
-                                                            {p.name}
-                                                        </option>
-                                                    ))}
+                                                    {availablePositions.map(p => {
+                                                        const pId = p.jobPositionId ?? p.id;
+                                                        return (
+                                                            <option key={pId} value={pId}>
+                                                                {p.name}
+                                                            </option>
+                                                        );
+                                                    })}
                                                 </select>
                                                 <FieldErr msg={errors.jobPositionId} />
                                             </div>
@@ -358,19 +399,12 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                     className="fm-select"
                                                     style={{
                                                         ...inputStyle(errors.role),
-                                                        opacity: !jobPositionId ? 0.6 : 1,
-                                                        cursor: !jobPositionId ? 'not-allowed' : 'pointer',
+                                                        cursor: 'pointer',
                                                     }}
-                                                    disabled={disabled || !jobPositionId || loadingOrg}
+                                                    disabled={disabled || loadingOrg}
                                                 >
-                                                    <option value="">
-                                                        {!departmentId
-                                                            ? 'Select department first'
-                                                            : !jobPositionId
-                                                                ? 'Select position first'
-                                                                : 'Select a role'}
-                                                    </option>
-                                                    {allowedRoles.map(r => (
+                                                    <option value="">Select a role</option>
+                                                    {allRolesList.map(r => (
                                                         <option key={r} value={r}>
                                                             {r}
                                                         </option>

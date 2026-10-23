@@ -149,6 +149,8 @@ const toBackendRole = (role: string) => {
     const roleMap: Record<string, number> = {
         Manager: 0, Coordinator: 1, Dispatcher: 2,
         Encoder: 3, Courier: 4, Accountant: 5,
+        'Courier/Driver': 4,
+        'System Admin': 0, 'Operations Admin': 0, 'Operations Employee': 1,
     };
     return roleMap[role] ?? 3;
 };
@@ -344,7 +346,13 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                     name: p.name ?? p.Name,
                     departmentId: p.departmentId ?? p.DepartmentId,
                 }));
-                const parsedRoles: string[] = rawRoles.map((r: any) => typeof r === 'string' ? r : (r.name ?? r.Name)).filter(Boolean);
+                const parsedRoles: string[] = rawRoles.map((r: any) => {
+                    if (typeof r === 'string') return r;
+                    const name = r.displayName ?? r.DisplayName ?? r.name ?? r.Name;
+                    if (name) return name === 'Courier/Driver' ? 'Courier' : name;
+                    if (typeof r.role === 'number') return toDisplayRole(r.role);
+                    return null;
+                }).filter(Boolean);
 
                 setDepartments(parsedDepts);
                 setJobPositions(parsedPos);
@@ -599,14 +607,36 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                     jobPositionId={form.jobPositionId}
                     role={form.role}
                     onChangeDepartmentId={deptId => {
-                        setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                        setForm(prev => {
+                            const currentPos = jobPositions.find(p => {
+                                const pId = p.jobPositionId ?? p.id;
+                                return pId && prev.jobPositionId && String(pId).toLowerCase() === String(prev.jobPositionId).toLowerCase();
+                            });
+                            const posMatchesDept = currentPos && deptId && String(currentPos.departmentId).toLowerCase() === String(deptId).toLowerCase();
+                            return {
+                                ...prev,
+                                departmentId: deptId,
+                                jobPositionId: posMatchesDept ? prev.jobPositionId : '',
+                            };
+                        });
                         if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
                     }}
                     onChangeJobPositionId={posId => {
-                        const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
-                        const roles = getRolesForPosition(pos?.name, availableRoles);
-                        const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
-                        setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                        const pos = jobPositions.find(p => {
+                            const pId = p.jobPositionId ?? p.id;
+                            return pId && posId && String(pId).toLowerCase() === String(posId).toLowerCase();
+                        });
+                        setForm(prev => {
+                            const roles = getRolesForPosition(pos?.name, availableRoles);
+                            const resolvedRole = prev.role && prev.role.trim() ? prev.role : (roles[0] || '');
+                            const resolvedDept = prev.departmentId || pos?.departmentId || '';
+                            return {
+                                ...prev,
+                                jobPositionId: posId,
+                                role: resolvedRole,
+                                departmentId: resolvedDept,
+                            };
+                        });
                         if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
                     }}
                     onChangeRole={r => {

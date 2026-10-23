@@ -112,4 +112,76 @@ describe('SystemAccessConfigCard', () => {
         fireEvent.click(dmsCheckbox);
         expect(handleChangeSystems).toHaveBeenCalledWith(['STARS', 'DMS']);
     });
+
+    it('allows selecting any STARS role even without job position and triggers onChangeRole', () => {
+        const handleChangeRole = vi.fn();
+        render(
+            <SystemAccessConfigCard
+                targetSystems={['STARS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId="dept-1"
+                jobPositionId=""
+                role="Courier"
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={vi.fn()}
+                onChangeRole={handleChangeRole}
+                departments={mockDepts}
+                jobPositions={mockPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={vi.fn()}
+                onChangeDmsAreas={vi.fn()}
+                onChangeFomsRole={vi.fn()}
+            />
+        );
+
+        const roleSelect = screen.getByLabelText(/STARS Operational Role/i) as HTMLSelectElement;
+        expect(roleSelect).not.toBeDisabled();
+        expect(roleSelect.value).toBe('Courier');
+
+        // All system roles should be available options
+        const optionValues = Array.from(roleSelect.options).map(o => o.value);
+        expect(optionValues).toContain('Manager');
+        expect(optionValues).toContain('Dispatcher');
+        expect(optionValues).toContain('Coordinator');
+        expect(optionValues).toContain('Encoder');
+        expect(optionValues).toContain('Courier');
+        expect(optionValues).toContain('Accountant');
+
+        // Changing the role should trigger onChangeRole
+        fireEvent.change(roleSelect, { target: { value: 'Dispatcher' } });
+        expect(handleChangeRole).toHaveBeenCalledWith('Dispatcher');
+    });
+
+    it('matches department and position IDs case-insensitively and renders selected names', () => {
+        render(
+            <SystemAccessConfigCard
+                targetSystems={['STARS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId="DEPT-1"
+                jobPositionId="POS-1"
+                role="Coordinator"
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={vi.fn()}
+                onChangeRole={vi.fn()}
+                departments={mockDepts}
+                jobPositions={mockPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={vi.fn()}
+                onChangeDmsAreas={vi.fn()}
+                onChangeFomsRole={vi.fn()}
+            />
+        );
+
+        const deptSelect = screen.getByLabelText(/Department/i) as HTMLSelectElement;
+        const posSelect = screen.getByLabelText(/Position/i) as HTMLSelectElement;
+        const roleSelect = screen.getByLabelText(/STARS Operational Role/i) as HTMLSelectElement;
+
+        expect(deptSelect.value.toLowerCase()).toBe('dept-1');
+        expect(posSelect.value.toLowerCase()).toBe('pos-1');
+        expect(roleSelect.value).toBe('Coordinator');
+    });
 });

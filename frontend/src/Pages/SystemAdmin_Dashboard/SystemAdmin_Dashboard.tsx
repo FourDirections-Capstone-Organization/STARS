@@ -974,15 +974,37 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                     jobPositionId={form.jobPositionId}
                     role={form.role}
                     onChangeDepartmentId={deptId => {
-                        setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                        setForm(prev => {
+                            const currentPos = jobPositions.find(p => {
+                                const pId = p.jobPositionId ?? p.id;
+                                return pId && prev.jobPositionId && String(pId).toLowerCase() === String(prev.jobPositionId).toLowerCase();
+                            });
+                            const posMatchesDept = currentPos && deptId && String(currentPos.departmentId).toLowerCase() === String(deptId).toLowerCase();
+                            return {
+                                ...prev,
+                                departmentId: deptId,
+                                jobPositionId: posMatchesDept ? prev.jobPositionId : '',
+                            };
+                        });
                         setDirty(true);
                         if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
                     }}
                     onChangeJobPositionId={posId => {
-                        const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
-                        const roles = getRolesForPosition(pos?.name, availableRoles);
-                        const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
-                        setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                        const pos = jobPositions.find(p => {
+                            const pId = p.jobPositionId ?? p.id;
+                            return pId && posId && String(pId).toLowerCase() === String(posId).toLowerCase();
+                        });
+                        setForm(prev => {
+                            const roles = getRolesForPosition(pos?.name, availableRoles);
+                            const resolvedRole = prev.role && prev.role.trim() ? prev.role : (roles[0] || '');
+                            const resolvedDept = prev.departmentId || pos?.departmentId || '';
+                            return {
+                                ...prev,
+                                jobPositionId: posId,
+                                role: resolvedRole,
+                                departmentId: resolvedDept,
+                            };
+                        });
                         setDirty(true);
                         if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
                     }}
@@ -1468,7 +1490,13 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
                     name: p.name ?? p.Name,
                     departmentId: p.departmentId ?? p.DepartmentId,
                 }));
-                const parsedRoles: string[] = rawRoles.map((r: any) => typeof r === 'string' ? r : (r.name ?? r.Name)).filter(Boolean);
+                const parsedRoles: string[] = rawRoles.map((r: any) => {
+                    if (typeof r === 'string') return r;
+                    const name = r.displayName ?? r.DisplayName ?? r.name ?? r.Name;
+                    if (name) return name === 'Courier/Driver' ? 'Courier' : name;
+                    if (typeof r.role === 'number') return toDisplayRole(r.role);
+                    return null;
+                }).filter(Boolean);
 
                 setDepartments(parsedDepts);
                 setJobPositions(parsedPos);
@@ -1815,14 +1843,36 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
                             jobPositionId={form.jobPositionId}
                             role={form.role}
                             onChangeDepartmentId={deptId => {
-                                setForm(prev => ({ ...prev, departmentId: deptId, jobPositionId: '', role: '' }));
+                                setForm(prev => {
+                                    const currentPos = jobPositions.find(p => {
+                                        const pId = p.jobPositionId ?? p.id;
+                                        return pId && prev.jobPositionId && String(pId).toLowerCase() === String(prev.jobPositionId).toLowerCase();
+                                    });
+                                    const posMatchesDept = currentPos && deptId && String(currentPos.departmentId).toLowerCase() === String(deptId).toLowerCase();
+                                    return {
+                                        ...prev,
+                                        departmentId: deptId,
+                                        jobPositionId: posMatchesDept ? prev.jobPositionId : '',
+                                    };
+                                });
                                 if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
                             }}
                             onChangeJobPositionId={posId => {
-                                const pos = jobPositions.find(p => (p.jobPositionId ?? p.id) === posId);
-                                const roles = getRolesForPosition(pos?.name, availableRoles);
-                                const autoRole = roles.length === 1 ? roles[0] : (roles.includes(form.role) ? form.role : (roles[0] || ''));
-                                setForm(prev => ({ ...prev, jobPositionId: posId, role: autoRole }));
+                                const pos = jobPositions.find(p => {
+                                    const pId = p.jobPositionId ?? p.id;
+                                    return pId && posId && String(pId).toLowerCase() === String(posId).toLowerCase();
+                                });
+                                setForm(prev => {
+                                    const roles = getRolesForPosition(pos?.name, availableRoles);
+                                    const resolvedRole = prev.role && prev.role.trim() ? prev.role : (roles[0] || '');
+                                    const resolvedDept = prev.departmentId || pos?.departmentId || '';
+                                    return {
+                                        ...prev,
+                                        jobPositionId: posId,
+                                        role: resolvedRole,
+                                        departmentId: resolvedDept,
+                                    };
+                                });
                                 if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
                             }}
                             onChangeRole={r => {
