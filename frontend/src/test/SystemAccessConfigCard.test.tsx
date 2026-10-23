@@ -184,4 +184,152 @@ describe('SystemAccessConfigCard', () => {
         expect(posSelect.value.toLowerCase()).toBe('pos-1');
         expect(roleSelect.value).toBe('Coordinator');
     });
+
+    it('filters positions by selected department and disables position select when no department is chosen', () => {
+        const { rerender } = render(
+            <SystemAccessConfigCard
+                targetSystems={['STARS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId=""
+                jobPositionId=""
+                role=""
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={vi.fn()}
+                onChangeRole={vi.fn()}
+                departments={mockDepts}
+                jobPositions={mockPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={vi.fn()}
+                onChangeDmsAreas={vi.fn()}
+                onChangeFomsRole={vi.fn()}
+            />
+        );
+
+        const posSelect = screen.getByLabelText(/Position/i) as HTMLSelectElement;
+        expect(posSelect).toBeDisabled();
+        expect(posSelect.options.length).toBe(1);
+        expect(posSelect.options[0].text).toContain('Select a department first');
+
+        // Now select dept-1 (Logistics)
+        rerender(
+            <SystemAccessConfigCard
+                targetSystems={['STARS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId="dept-1"
+                jobPositionId=""
+                role=""
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={vi.fn()}
+                onChangeRole={vi.fn()}
+                departments={mockDepts}
+                jobPositions={mockPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={vi.fn()}
+                onChangeDmsAreas={vi.fn()}
+                onChangeFomsRole={vi.fn()}
+            />
+        );
+
+        expect(posSelect).not.toBeDisabled();
+        const availableOptionValues = Array.from(posSelect.options).map(o => o.value);
+        expect(availableOptionValues).toContain('pos-1'); // Operations Coordinator (dept-1)
+        expect(availableOptionValues).not.toContain('pos-2'); // Accountant (dept-2)
+    });
+
+    it('filters STARS operational role and automatically connects to FOMS Head Accountant role upon position selection', () => {
+        const handleJobPositionChange = vi.fn();
+        const handleRoleChange = vi.fn();
+        const handleFomsRoleChange = vi.fn();
+        const handleDmsRoleChange = vi.fn();
+
+        const extendedPositions = [
+            ...mockPositions,
+            { jobPositionId: 'pos-3', name: 'Head Accountant', departmentId: 'dept-2' },
+        ];
+
+        render(
+            <SystemAccessConfigCard
+                targetSystems={['STARS', 'FOMS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId="dept-2"
+                jobPositionId="pos-3"
+                role="Accountant"
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={handleJobPositionChange}
+                onChangeRole={handleRoleChange}
+                departments={mockDepts}
+                jobPositions={extendedPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={handleDmsRoleChange}
+                onChangeDmsAreas={vi.fn()}
+                fomsRole="Head Accountant"
+                onChangeFomsRole={handleFomsRoleChange}
+            />
+        );
+
+        // Position options must only include Finance positions (dept-2)
+        const posSelect = screen.getByLabelText(/Position/i) as HTMLSelectElement;
+        const posValues = Array.from(posSelect.options).map(o => o.value);
+        expect(posValues).toContain('pos-2'); // Accountant
+        expect(posValues).toContain('pos-3'); // Head Accountant
+        expect(posValues).not.toContain('pos-1'); // Operations Coordinator (dept-1)
+
+        // STARS operational role must be restricted to Accountant and Manager
+        const roleSelect = screen.getByLabelText(/STARS Operational Role/i) as HTMLSelectElement;
+        const roleValues = Array.from(roleSelect.options).map(o => o.value);
+        expect(roleValues).toContain('Accountant');
+        expect(roleValues).toContain('Manager');
+        expect(roleValues).not.toContain('Courier');
+        expect(roleValues).not.toContain('Dispatcher');
+
+        // Selecting Head Accountant position triggers automatic synchronization
+        fireEvent.change(posSelect, { target: { value: 'pos-3' } });
+        expect(handleJobPositionChange).toHaveBeenCalledWith('pos-3');
+        expect(handleFomsRoleChange).toHaveBeenCalledWith('Head Accountant');
+    });
+
+    it('automatically connects to DMS Driver role upon selecting Courier / Driver position', () => {
+        const handleJobPositionChange = vi.fn();
+        const handleRoleChange = vi.fn();
+        const handleDmsRoleChange = vi.fn();
+
+        const extendedPositions = [
+            ...mockPositions,
+            { jobPositionId: 'pos-4', name: 'Courier / Driver', departmentId: 'dept-1' },
+        ];
+
+        render(
+            <SystemAccessConfigCard
+                targetSystems={['STARS', 'DMS']}
+                onChangeTargetSystems={vi.fn()}
+                departmentId="dept-1"
+                jobPositionId=""
+                role=""
+                onChangeDepartmentId={vi.fn()}
+                onChangeJobPositionId={handleJobPositionChange}
+                onChangeRole={handleRoleChange}
+                departments={mockDepts}
+                jobPositions={extendedPositions}
+                availableRoles={mockRoles}
+                isCollapsed={false}
+                onToggleCollapse={vi.fn()}
+                onChangeDmsRole={handleDmsRoleChange}
+                onChangeDmsAreas={vi.fn()}
+                onChangeFomsRole={vi.fn()}
+            />
+        );
+
+        const posSelect = screen.getByLabelText(/Position/i) as HTMLSelectElement;
+        fireEvent.change(posSelect, { target: { value: 'pos-4' } });
+
+        expect(handleJobPositionChange).toHaveBeenCalledWith('pos-4');
+        expect(handleRoleChange).toHaveBeenCalledWith('Courier');
+        expect(handleDmsRoleChange).toHaveBeenCalledWith('Driver');
+    });
 });

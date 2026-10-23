@@ -44,27 +44,86 @@ export interface SystemAccessConfigCardProps {
 }
 
 export const getRolesForPosition = (positionName?: string, allRoles: string[] = []): string[] => {
-    if (!positionName) return allRoles;
-    const pos = positionName.toLowerCase();
-    if (pos.includes('manager') || pos.includes('head') || pos.includes('director')) {
-        return ['Manager'];
+    if (!positionName || !positionName.trim()) {
+        return allRoles && allRoles.length > 0 ? allRoles : ['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier', 'Accountant'];
     }
-    if (pos.includes('coordinator') || pos.includes('supervisor') || pos.includes('lead')) {
-        return ['Coordinator', 'Manager'];
+    const pos = positionName.toLowerCase().trim();
+
+    // 1. Accounting / Finance / Billing / Audit
+    if (pos.includes('account') || pos.includes('finance') || pos.includes('billing') || pos.includes('audit') || pos.includes('bookkeep')) {
+        if (pos.includes('head') || pos.includes('manager') || pos.includes('lead') || pos.includes('chief') || pos.includes('director')) {
+            return ['Accountant', 'Manager'];
+        }
+        return ['Accountant'];
     }
-    if (pos.includes('dispatch') || pos.includes('logistics')) {
-        return ['Dispatcher', 'Coordinator'];
-    }
-    if (pos.includes('courier') || pos.includes('driver') || pos.includes('rider')) {
+
+    // 2. Courier / Driver / Rider / Fleet delivery
+    if (pos.includes('courier') || pos.includes('driver') || pos.includes('rider') || pos.includes('delivery')) {
         return ['Courier'];
     }
-    if (pos.includes('accountant') || pos.includes('finance') || pos.includes('billing')) {
-        return ['Accountant', 'Manager'];
+
+    // 3. Dispatch / Logistics
+    if (pos.includes('dispatch') || pos.includes('logistics')) {
+        if (pos.includes('manager') || pos.includes('head') || pos.includes('director')) {
+            return ['Dispatcher', 'Manager', 'Coordinator'];
+        }
+        return ['Dispatcher', 'Coordinator'];
     }
+
+    // 4. Encoder / Clerk / Assistant / Staff
     if (pos.includes('encoder') || pos.includes('clerk') || pos.includes('assistant') || pos.includes('staff')) {
         return ['Encoder', 'Coordinator'];
     }
-    return allRoles;
+
+    // 5. Coordinator / Supervisor / Lead / Specialist
+    if (pos.includes('coordinator') || pos.includes('supervisor') || pos.includes('lead') || pos.includes('specialist')) {
+        return ['Coordinator', 'Manager'];
+    }
+
+    // 6. Management / Director / Executive / Admin
+    if (pos.includes('manager') || pos.includes('director') || pos.includes('head') || pos.includes('admin') || pos.includes('executive')) {
+        return ['Manager', 'Coordinator'];
+    }
+
+    return allRoles && allRoles.length > 0 ? allRoles : ['Coordinator', 'Encoder'];
+};
+
+export const getFomsRoleForPosition = (positionName?: string): string => {
+    if (!positionName || !positionName.trim()) return 'Accountant';
+    const pos = positionName.toLowerCase().trim();
+
+    if (pos.includes('head accountant') || (pos.includes('head') && pos.includes('account'))) {
+        return 'Head Accountant';
+    }
+    if (pos.includes('assistant financial manager') || (pos.includes('assistant') && (pos.includes('finance') || pos.includes('financial') || pos.includes('manager')))) {
+        return 'Assistant Financial Manager';
+    }
+    if (pos.includes('financial manager') || (pos.includes('finance') && pos.includes('manager')) || (pos.includes('finance') && pos.includes('head'))) {
+        return 'Financial Manager';
+    }
+    if (pos.includes('manager') || pos.includes('director') || pos.includes('chief executive') || pos.includes('president')) {
+        return 'Financial Manager';
+    }
+    if (pos.includes('account') || pos.includes('billing') || pos.includes('audit') || pos.includes('payroll') || pos.includes('bookkeep')) {
+        return 'Accountant';
+    }
+    return 'Accountant';
+};
+
+export const getDmsRoleForPosition = (positionName?: string): string => {
+    if (!positionName || !positionName.trim()) return 'Encoder';
+    const pos = positionName.toLowerCase().trim();
+
+    if (pos.includes('courier') || pos.includes('driver') || pos.includes('rider') || pos.includes('delivery')) {
+        return 'Driver';
+    }
+    if (pos.includes('manager') || pos.includes('director') || pos.includes('admin') || pos.includes('fleet head') || pos.includes('head')) {
+        return 'Admin';
+    }
+    if (pos.includes('encoder') || pos.includes('clerk') || pos.includes('data')) {
+        return 'Encoder';
+    }
+    return 'Encoder';
 };
 
 export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
@@ -114,16 +173,12 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
     const selectedPosId = matchedPos ? (matchedPos.jobPositionId ?? matchedPos.id ?? jobPositionId) : jobPositionId;
 
     const availablePositions = useMemo(() => {
-        if (!departmentId) return jobPositions;
-        const filtered = jobPositions.filter(p => {
+        if (!selectedDeptId) return [];
+        return jobPositions.filter(p => {
             const pDeptId = p.departmentId;
-            return pDeptId && String(pDeptId).toLowerCase() === String(departmentId).toLowerCase();
+            return pDeptId && String(pDeptId).toLowerCase() === String(selectedDeptId).toLowerCase();
         });
-        if (matchedPos && !filtered.some(p => String(p.jobPositionId ?? p.id).toLowerCase() === String(selectedPosId).toLowerCase())) {
-            return [matchedPos, ...filtered];
-        }
-        return filtered;
-    }, [departmentId, jobPositions, matchedPos, selectedPosId]);
+    }, [selectedDeptId, jobPositions]);
 
     const allRolesList = useMemo(() => {
         const DEFAULT_ROLES = ['Manager', 'Coordinator', 'Dispatcher', 'Encoder', 'Courier', 'Accountant'];
@@ -141,6 +196,65 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
         }
         return Array.from(set);
     }, [availableRoles, role]);
+
+    const starsRoleOptions = useMemo(() => {
+        // 1. If position is selected, strictly filter based on that position
+        if (matchedPos && matchedPos.name) {
+            const posRoles = getRolesForPosition(matchedPos.name, availableRoles);
+            if (role && !posRoles.includes(role)) {
+                return [...posRoles, role];
+            }
+            return posRoles;
+        }
+        // 2. If no position is selected yet, all available system roles can be selected
+        return allRolesList;
+    }, [matchedPos, availableRoles, allRolesList, role]);
+
+    const handleDepartmentChange = (deptId: string) => {
+        onChangeDepartmentId(deptId);
+        // If current position does not belong to the newly selected department, clear position
+        const pos = jobPositions.find(p => {
+            const pId = p.jobPositionId ?? p.id;
+            return pId && selectedPosId && String(pId).toLowerCase() === String(selectedPosId).toLowerCase();
+        });
+        const posBelongsToDept = pos && deptId && String(pos.departmentId).toLowerCase() === String(deptId).toLowerCase();
+        if (!posBelongsToDept) {
+            onChangeJobPositionId('');
+            const deptPositions = jobPositions.filter(p => p.departmentId && String(p.departmentId).toLowerCase() === String(deptId).toLowerCase());
+            const deptRoles = Array.from(new Set(deptPositions.flatMap(p => getRolesForPosition(p.name, availableRoles))));
+            if (deptRoles.length > 0 && (!role || !deptRoles.includes(role))) {
+                onChangeRole(deptRoles[0]);
+            }
+        }
+    };
+
+    const handlePositionChange = (posId: string) => {
+        onChangeJobPositionId(posId);
+        if (!posId) return;
+
+        const pos = jobPositions.find(p => {
+            const pId = p.jobPositionId ?? p.id;
+            return pId && String(pId).toLowerCase() === String(posId).toLowerCase();
+        });
+        const posName = pos?.name;
+        if (posName) {
+            // 1. Automatically connect to STARS operational role
+            const allowed = getRolesForPosition(posName, availableRoles);
+            if (allowed.length > 0 && (!role || !allowed.includes(role))) {
+                onChangeRole(allowed[0]);
+            }
+            // 2. Automatically connect to FOMS role (e.g. Head Accountant -> Head Accountant)
+            const connectedFomsRole = getFomsRoleForPosition(posName);
+            if (connectedFomsRole && onChangeFomsRole) {
+                onChangeFomsRole(connectedFomsRole);
+            }
+            // 3. Automatically connect to DMS role (e.g. Courier / Driver -> Driver)
+            const connectedDmsRole = getDmsRoleForPosition(posName);
+            if (connectedDmsRole && onChangeDmsRole) {
+                onChangeDmsRole(connectedDmsRole);
+            }
+        }
+    };
 
     const handleToggleSystem = (systemName: 'STARS' | 'DMS' | 'FOMS') => {
         if (disabled) return;
@@ -337,7 +451,7 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                 <select
                                                     id="stars-dept-select"
                                                     value={selectedDeptId}
-                                                    onChange={e => onChangeDepartmentId(e.target.value)}
+                                                    onChange={e => handleDepartmentChange(e.target.value)}
                                                     className="fm-select"
                                                     style={inputStyle(errors.departmentId)}
                                                     disabled={disabled || loadingOrg}
@@ -363,17 +477,18 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                 <select
                                                     id="stars-position-select"
                                                     value={selectedPosId}
-                                                    onChange={e => onChangeJobPositionId(e.target.value)}
+                                                    onChange={e => handlePositionChange(e.target.value)}
                                                     className="fm-select"
                                                     style={{
                                                         ...inputStyle(errors.jobPositionId),
                                                         opacity: loadingOrg ? 0.6 : 1,
-                                                        cursor: 'pointer',
+                                                        cursor: !selectedDeptId ? 'not-allowed' : 'pointer',
                                                     }}
-                                                    disabled={disabled || loadingOrg}
+                                                    disabled={disabled || loadingOrg || !selectedDeptId}
+                                                    title={!selectedDeptId ? 'Please select a department first' : undefined}
                                                 >
                                                     <option value="">
-                                                        {departmentId ? 'Select a position' : 'Select a position (optional)'}
+                                                        {selectedDeptId ? 'Select a position' : 'Select a department first'}
                                                     </option>
                                                     {availablePositions.map(p => {
                                                         const pId = p.jobPositionId ?? p.id;
@@ -404,7 +519,7 @@ export const SystemAccessConfigCard: React.FC<SystemAccessConfigCardProps> = ({
                                                     disabled={disabled || loadingOrg}
                                                 >
                                                     <option value="">Select a role</option>
-                                                    {allRolesList.map(r => (
+                                                    {starsRoleOptions.map(r => (
                                                         <option key={r} value={r}>
                                                             {r}
                                                         </option>

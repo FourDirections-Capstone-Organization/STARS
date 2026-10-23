@@ -34,7 +34,7 @@ import './EmployeeDetailPanel.css';
 import { useToast } from '../../../components/Toast/Toast';
 import FormModal from '../../../components/FormModal/FormModal';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
-import { SystemAccessConfigCard, DepartmentOption, JobPositionOption } from '../../../components/SystemAccessConfigCard/SystemAccessConfigCard';
+import { SystemAccessConfigCard, DepartmentOption, JobPositionOption, getRolesForPosition, getFomsRoleForPosition, getDmsRoleForPosition } from '../../../components/SystemAccessConfigCard/SystemAccessConfigCard';
 import { ManagerPasswordGateModal } from '../../../components/ManagerPasswordGateModal/ManagerPasswordGateModal';
 import DataTable from '../../../components/ui/DataTable';
 import Pagination from '../../../components/ui/Pagination';
@@ -613,10 +613,20 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                                 return pId && prev.jobPositionId && String(pId).toLowerCase() === String(prev.jobPositionId).toLowerCase();
                             });
                             const posMatchesDept = currentPos && deptId && String(currentPos.departmentId).toLowerCase() === String(deptId).toLowerCase();
+                            const nextPosId = posMatchesDept ? prev.jobPositionId : '';
+                            let nextRole = prev.role;
+                            if (!posMatchesDept) {
+                                const deptPositions = jobPositions.filter(p => p.departmentId && String(p.departmentId).toLowerCase() === String(deptId).toLowerCase());
+                                const deptRoles = Array.from(new Set(deptPositions.flatMap(p => getRolesForPosition(p.name, availableRoles))));
+                                if (deptRoles.length > 0 && (!prev.role || !deptRoles.includes(prev.role))) {
+                                    nextRole = deptRoles[0];
+                                }
+                            }
                             return {
                                 ...prev,
                                 departmentId: deptId,
-                                jobPositionId: posMatchesDept ? prev.jobPositionId : '',
+                                jobPositionId: nextPosId,
+                                role: nextRole,
                             };
                         });
                         if (errors.departmentId) setErrors(prev => ({ ...prev, departmentId: undefined }));
@@ -626,18 +636,25 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                             const pId = p.jobPositionId ?? p.id;
                             return pId && posId && String(pId).toLowerCase() === String(posId).toLowerCase();
                         });
+                        const allowedRoles = getRolesForPosition(pos?.name, availableRoles);
+                        const autoFomsRole = getFomsRoleForPosition(pos?.name);
+                        const autoDmsRole = getDmsRoleForPosition(pos?.name);
                         setForm(prev => {
-                            const roles = getRolesForPosition(pos?.name, availableRoles);
-                            const resolvedRole = prev.role && prev.role.trim() ? prev.role : (roles[0] || '');
+                            const resolvedRole = allowedRoles.includes(prev.role) && prev.role ? prev.role : (allowedRoles[0] || '');
                             const resolvedDept = prev.departmentId || pos?.departmentId || '';
                             return {
                                 ...prev,
                                 jobPositionId: posId,
                                 role: resolvedRole,
                                 departmentId: resolvedDept,
+                                fomsRole: autoFomsRole || prev.fomsRole,
+                                dmsRole: autoDmsRole || prev.dmsRole,
                             };
                         });
                         if (errors.jobPositionId) setErrors(prev => ({ ...prev, jobPositionId: undefined }));
+                        if (errors.role) setErrors(prev => ({ ...prev, role: undefined }));
+                        if (errors.fomsRole) setErrors(prev => ({ ...prev, fomsRole: undefined }));
+                        if (errors.dmsRole) setErrors(prev => ({ ...prev, dmsRole: undefined }));
                     }}
                     onChangeRole={r => {
                         setForm(prev => ({ ...prev, role: r }));
