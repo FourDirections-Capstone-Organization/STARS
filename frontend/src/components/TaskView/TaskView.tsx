@@ -743,10 +743,9 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [reviewHistory, setReviewHistory] = useState<ReviewHistoryEntry[]>([]);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [localStatus, setLocalStatus] = useState<TaskStatus>(task.taskStatus);
-    // Controls: mobile full-screen tab (details | comments | recommendations)
-    // AND (on desktop) which panel shows on the right — 'details' has no
-    // meaning on the right panel, so it falls back to 'comments' there.
+    // Controls: active panel tab (comments | recommendations)
     const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'recommendations'>('details');
+    const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
 
     const currentUser = localStorage.getItem('employeeName') ?? 'Admin';
     const userRole = localStorage.getItem('userRole') ?? '';
@@ -758,15 +757,23 @@ const TaskView: React.FC<TaskViewProps> = ({
     const od = isEffectivelyOverdue({ ...task, taskStatus: localStatus });
     const effectiveStatus = od ? 'Overdue' : localStatus;
 
-    // What the right-hand panel should render on desktop.
+    // What the chat-like panel should render (comments or recommendations).
     const rightPanelTab: 'comments' | 'recommendations' =
         activeTab === 'recommendations' ? 'recommendations' : 'comments';
 
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (isChatPanelOpen) {
+                    setIsChatPanelOpen(false);
+                } else {
+                    onClose();
+                }
+            }
+        };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [onClose]);
+    }, [onClose, isChatPanelOpen]);
 
     // ── Review actions ──
     const handleRequestReview = async () => {
@@ -953,6 +960,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                         </div>
                     </div>
                     <div className="tv-header-actions">
+                        <button
+                            type="button"
+                            className={`tv-btn ${isChatPanelOpen ? 'tv-btn-primary' : 'tv-btn-outline'}`}
+                            onClick={() => setIsChatPanelOpen(p => !p)}
+                            title="Toggle Comments & Recommendations (Chat View)"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                            <MessageSquare size={13} />
+                            <span>Comments & Recommendations</span>
+                        </button>
                         <button className="tv-btn tv-btn-primary" onClick={onEdit}>
                             <Pencil size={13} /> Edit
                         </button>
@@ -983,14 +1000,14 @@ const TaskView: React.FC<TaskViewProps> = ({
 
                 {/* ── Mobile tabs ── */}
                 <div className="tv-tabs">
-                    <button className={`tv-tab${activeTab === 'details' ? ' active' : ''}`}
-                        onClick={() => setActiveTab('details')}>Details</button>
-                    <button className={`tv-tab${activeTab === 'comments' ? ' active' : ''}`}
-                        onClick={() => setActiveTab('comments')}>
+                    <button className={`tv-tab${!isChatPanelOpen ? ' active' : ''}`}
+                        onClick={() => setIsChatPanelOpen(false)}>Details</button>
+                    <button className={`tv-tab${isChatPanelOpen && rightPanelTab === 'comments' ? ' active' : ''}`}
+                        onClick={() => { setActiveTab('comments'); setIsChatPanelOpen(true); }}>
                         Comments
                     </button>
-                    <button className={`tv-tab${activeTab === 'recommendations' ? ' active' : ''}`}
-                        onClick={() => setActiveTab('recommendations')}>
+                    <button className={`tv-tab${isChatPanelOpen && rightPanelTab === 'recommendations' ? ' active' : ''}`}
+                        onClick={() => { setActiveTab('recommendations'); setIsChatPanelOpen(true); }}>
                         Recommendations
                     </button>
                 </div>
@@ -998,8 +1015,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                 {/* ── Body ── */}
                 <div className="tv-body">
 
-                    {/* ── Left: Details ── */}
-                    <div className={`tv-details${activeTab === 'details' ? ' tv-mobile-visible' : ''}`}>
+                    {/* ── Details (Full Width to accommodate DMS and FOMS) ── */}
+                    <div className="tv-details">
 
                         {/* Meta chips */}
                         <div className="tv-meta-grid">
@@ -1961,30 +1978,72 @@ const TaskView: React.FC<TaskViewProps> = ({
                         </div>
                     </div>
 
-                    {/* ── Right: Comments / Recommendations (single panel, toggled) ── */}
-                    <div className={`tv-comments${activeTab !== 'details' ? ' tv-mobile-visible' : ''}`}>
-                        <div className="tv-comments-toggle">
-                            <button
-                                type="button"
-                                className={rightPanelTab === 'comments' ? 'active' : ''}
-                                onClick={() => setActiveTab('comments')}
-                            >
-                                <MessageSquare size={13} /> Comments
-                            </button>
-                            <button
-                                type="button"
-                                className={rightPanelTab === 'recommendations' ? 'active' : ''}
-                                onClick={() => setActiveTab('recommendations')}
-                            >
-                                <Lightbulb size={13} /> Recommendations
-                            </button>
-                        </div>
-                        {rightPanelTab === 'recommendations'
-                            ? <TaskRecommendations taskId={task.taskId} />
-                            : <TaskComments taskId={task.taskId} currentEmployeeId={task.assignedTo} taskReferenceNumber={task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase()} />}
-                    </div>
                 </div>
             </div>
+
+            {/* Floating side launcher on the right margin when panel is closed */}
+            {!isChatPanelOpen && (
+                <button
+                    type="button"
+                    className="tv-floating-panel-toggle"
+                    onClick={() => setIsChatPanelOpen(true)}
+                    title="Open Discussion & AI Recommendations Panel"
+                >
+                    <MessageSquare size={15} />
+                    <span>Comments & AI</span>
+                </button>
+            )}
+
+            {/* Slide-out Panel View for Comments and Recommendations */}
+            {isChatPanelOpen && (
+                <>
+                    <div
+                        className="tv-side-panel-backdrop"
+                        onClick={() => setIsChatPanelOpen(false)}
+                        aria-hidden="true"
+                    />
+                    <aside className="tv-side-panel" aria-label="Task Discussion and AI Recommendations">
+                        <div className="tv-panel-header">
+                            <div className="tv-panel-header-top">
+                                <div className="tv-panel-header-title">
+                                    <MessageSquare size={16} color="var(--primary, #0284c7)" />
+                                    <span>Task Discussion & AI</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="tv-panel-close-btn"
+                                    onClick={() => setIsChatPanelOpen(false)}
+                                    title="Close Panel"
+                                    aria-label="Close panel"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="tv-panel-tabs">
+                                <button
+                                    type="button"
+                                    className={`tv-panel-tab-btn ${rightPanelTab === 'comments' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('comments')}
+                                >
+                                    <MessageSquare size={13} /> Comments
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`tv-panel-tab-btn ${rightPanelTab === 'recommendations' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('recommendations')}
+                                >
+                                    <Lightbulb size={13} /> Recommendations
+                                </button>
+                            </div>
+                        </div>
+                        <div className="tv-panel-content">
+                            {rightPanelTab === 'recommendations'
+                                ? <TaskRecommendations taskId={task.taskId} />
+                                : <TaskComments taskId={task.taskId} currentEmployeeId={task.assignedTo} taskReferenceNumber={task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase()} />}
+                        </div>
+                    </aside>
+                </>
+            )}
 
             {showRejectModal && (
                 <RejectModal

@@ -76,7 +76,13 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
             const res = await api.get('/api/dms-integration/pending-orders');
             const data = res?.data?.data ?? res?.data;
             if (Array.isArray(data)) {
-                setPendingOrders(data);
+                const sorted = [...data].sort((a, b) => {
+                    const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+                    const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+                    if (dateB !== dateA) return dateB - dateA;
+                    return (b.orderId || 0) - (a.orderId || 0);
+                });
+                setPendingOrders(sorted);
             } else {
                 setPendingOrders([]);
             }
@@ -100,9 +106,15 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         setTimeout(() => setCopiedWaybill(null), 2500);
     };
 
-    // Filter pending orders
+    // Filter pending orders (most recently created order on top)
     const filteredPending = useMemo(() => {
-        return pendingOrders.filter(o => {
+        const sorted = [...pendingOrders].sort((a, b) => {
+            const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+            const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+            if (dateB !== dateA) return dateB - dateA;
+            return (b.orderId || 0) - (a.orderId || 0);
+        });
+        return sorted.filter(o => {
             if (priorityFilter !== 'all' && (o.priority || '').toLowerCase() !== priorityFilter.toLowerCase()) {
                 return false;
             }
@@ -119,13 +131,19 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         });
     }, [pendingOrders, priorityFilter, searchQuery]);
 
-    // Active operational tasks in pre-delivery validation
+    // Active operational tasks in pre-delivery validation (most recently created task on top)
     const operationalValidationTasks = useMemo(() => {
-        return tasks.filter(t => {
+        const list = tasks.filter(t => {
             const isDelivery = t.taskCategory === 'Delivery Operations' ||
                 (t.taskTitle && t.taskTitle.toLowerCase().includes('delivery')) ||
                 t.deliveryDetails;
             return isDelivery;
+        });
+        return [...list].sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.taskId || a.id || 0);
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.taskId || b.id || 0);
+            if (typeof dateA === 'number' && typeof dateB === 'number') return dateB - dateA;
+            return String(dateB).localeCompare(String(dateA));
         });
     }, [tasks]);
 
