@@ -501,38 +501,55 @@ const TaskView: React.FC<TaskViewProps> = ({
         }
     };
 
-    const fetchDeliveryDetail = useCallback(async () => {
+    const fetchDeliveryDetail = useCallback(async (silent: boolean = false) => {
         if (!task.taskId) return;
-        setDeliveryLoading(true);
+        if (!silent) setDeliveryLoading(true);
         try {
             const res = await api.get<any>(`/api/dms-integration/tasks/${task.taskId}/delivery-details`);
             const json = res.data;
             const data = json?.data ?? json;
             if (data && (data.recipientName || data.dmsWaybillNo || data.syncStatus)) {
                 setDeliveryDetail(data);
-                setEditingDelivery({
-                    recipientName: data.recipientName || '',
-                    recipientContact: data.recipientContact || '',
-                    deliveryAddress: data.deliveryAddress || '',
-                    area: data.area || '',
-                    packageDescription: data.packageDescription || '',
-                    senderAddress: data.senderAddress || 'STARS Operations Office',
-                    specialInstructions: data.specialInstructions || '',
-                    courierEmployeeId: data.courierEmployeeId || '',
-                });
-            } else {
+                if (!silent) {
+                    setEditingDelivery({
+                        recipientName: data.recipientName || '',
+                        recipientContact: data.recipientContact || '',
+                        deliveryAddress: data.deliveryAddress || '',
+                        area: data.area || '',
+                        packageDescription: data.packageDescription || '',
+                        senderAddress: data.senderAddress || 'STARS Operations Office',
+                        specialInstructions: data.specialInstructions || '',
+                        courierEmployeeId: data.courierEmployeeId || '',
+                    });
+                }
+            } else if (!silent) {
                 setDeliveryDetail(null);
             }
         } catch {
-            setDeliveryDetail(null);
+            if (!silent) setDeliveryDetail(null);
         } finally {
-            setDeliveryLoading(false);
+            if (!silent) setDeliveryLoading(false);
         }
     }, [task.taskId]);
 
     useEffect(() => {
-        fetchDeliveryDetail();
+        fetchDeliveryDetail(false);
     }, [fetchDeliveryDetail]);
+
+    // Live Auto-Refresh polling while task modal is open and delivery is in progress
+    useEffect(() => {
+        if (!task?.taskId || !deliveryDetail?.dmsWaybillNo) return;
+        const currentSt = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
+        if (currentSt.includes('delivered') || currentSt.includes('completed') || currentSt.includes('cancel')) {
+            return;
+        }
+
+        const interval = setInterval(() => {
+            fetchDeliveryDetail(true);
+        }, 8000);
+
+        return () => clearInterval(interval);
+    }, [task?.taskId, deliveryDetail?.dmsWaybillNo, deliveryDetail?.dmsStatus, deliveryDetail?.dmsRawStatus, fetchDeliveryDetail]);
 
     const handleSaveDelivery = async () => {
         if (!editingDelivery.recipientName.trim() || !editingDelivery.recipientContact.trim() || !editingDelivery.deliveryAddress.trim()) {
@@ -564,18 +581,38 @@ const TaskView: React.FC<TaskViewProps> = ({
         }
         setResendingDms(true);
         try {
-            const res = await api.post(`/api/dms-integration/tasks/${task.taskId}/resend`, {});
+            // Use lightweight status sync endpoint if order already exists in DMS
+            const endpoint = deliveryDetail?.dmsWaybillNo
+                ? `/api/dms-integration/tasks/${task.taskId}/sync`
+                : `/api/dms-integration/tasks/${task.taskId}/resend`;
+
+            const res = await api.post(endpoint, {});
             const savedData = res?.data?.data ?? res?.data;
             setDeliveryDetail(savedData);
-            if (savedData?.dmsWaybillNo) {
-                toastSuccess(`DMS Delivery Order created! Waybill: ${savedData.dmsWaybillNo}`);
+
+            const normSt = (savedData?.dmsRawStatus || savedData?.dmsStatus || '').toLowerCase();
+            if (normSt.includes('delivered') || normSt.includes('completed')) {
+                toastSuccess('Delivery confirmed as Delivered in DMS! STARS task updated.');
+            } else if (savedData?.dmsWaybillNo) {
+                toastSuccess(`Delivery synced with DMS! Status: ${savedData.dmsStatus || 'Active'}`);
             } else {
                 toastSuccess('Dispatched to DMS successfully.');
             }
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err?.message || 'Failed to dispatch to DMS.';
-            toastError(msg);
-            await fetchDeliveryDetail();
+            // Re-fetch latest delivery state silently to check if order reached Delivered
+            await fetchDeliveryDetail(true);
+            const latestStatus = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
+            if (latestStatus.includes('delivered') || latestStatus.includes('completed')) {
+                toastSuccess('Delivery is already confirmed as Delivered in DMS.');
+            } else {
+                const rawMsg = err?.response?.data?.message || err?.message || 'Failed to dispatch to DMS.';
+                const friendlyMsg = rawMsg.includes('504') || rawMsg.includes('Gateway Timeout')
+                    ? 'DMS server response timed out. Status will update automatically via live sync.'
+                    : rawMsg.includes('500')
+                    ? 'DMS service temporarily busy. Status sync will retry automatically.'
+                    : rawMsg;
+                toastError(friendlyMsg);
+            }
         } finally {
             setResendingDms(false);
         }
@@ -1514,32 +1551,72 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* ── Multi-Step Delivery Stepper (Integration 2) ── */}
+                                    {/* ── 7-Stage Delivery Stepper (Integration 2 - Consistent with DMS) ── */}
                                     <div className="tv-dms-stepper-wrap">
                                         {(() => {
-                                            const s = (deliveryDetail.dmsStatus || '').toLowerCase();
-                                            const isDelivered = s.includes('delivered') || s.includes('completed');
-                                            const isTransit = s.includes('transit') || s.includes('out') || isDelivered;
-                                            const isPickedUp = s.includes('pickup') || isTransit;
+                                            const stages = [
+                                                { key: 'pending', label: 'PENDING' },
+                                                { key: 'processing', label: 'PROCESSING' },
+                                                { key: 'assigned', label: 'ASSIGNED' },
+                                                { key: 'picked_up', label: 'PICKED UP' },
+                                                { key: 'in_transit', label: 'IN TRANSIT' },
+                                                { key: 'out_for_delivery', label: 'OUT FOR DELIVERY' },
+                                                { key: 'delivered', label: 'DELIVERED' },
+                                            ];
+                                            const s = `${deliveryDetail.dmsRawStatus || ''} ${deliveryDetail.dmsStatus || ''}`.toLowerCase();
+                                            let activeIdx = 0;
+                                            if (s.includes('delivered') || s.includes('completed')) activeIdx = 6;
+                                            else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 5;
+                                            else if (s.includes('transit')) activeIdx = 4;
+                                            else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 3;
+                                            else if (s.includes('assigned') || s.includes('driver')) activeIdx = 2;
+                                            else if (s.includes('processing') || s.includes('preparing')) activeIdx = 1;
+                                            else activeIdx = 0;
+
+                                            const isAllDelivered = activeIdx === 6;
+                                            const progressPct = (Math.max(0, activeIdx) / (stages.length - 1)) * 100;
+                                            const formattedTime = deliveryDetail.dmsLastSyncedAt
+                                                ? new Date(deliveryDetail.dmsLastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                : 'Now';
+
                                             return (
-                                                <div className="tv-dms-mini-stepper">
-                                                    <div className="tv-dms-mini-step done">
-                                                        <div className="tv-dms-mini-dot"><Check size={10} /></div>
-                                                        <span className="tv-dms-mini-label">Dispatched</span>
+                                                <>
+                                                    <div className="tv-dms-stepper-track">
+                                                        <div
+                                                            className="tv-dms-stepper-progress"
+                                                            style={{ width: `${progressPct}%` }}
+                                                        />
                                                     </div>
-                                                    <div className={`tv-dms-mini-step ${isPickedUp ? 'done' : ''}`}>
-                                                        <div className="tv-dms-mini-dot">{isPickedUp ? <Check size={10} /> : '2'}</div>
-                                                        <span className="tv-dms-mini-label">Picked Up</span>
+                                                    <div className="tv-dms-stepper">
+                                                        {stages.map((step, idx) => {
+                                                            const isDone = isAllDelivered ? true : idx < activeIdx;
+                                                            const isCurrent = !isAllDelivered && idx === activeIdx;
+
+                                                            return (
+                                                                <div
+                                                                    key={step.key}
+                                                                    className={`tv-dms-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
+                                                                >
+                                                                    <div className="tv-dms-step-dot">
+                                                                        {isDone ? (
+                                                                            <Check size={13} strokeWidth={2.8} />
+                                                                        ) : isCurrent ? (
+                                                                            <Clock size={13} strokeWidth={2.5} />
+                                                                        ) : idx === 6 ? (
+                                                                            <MapPin size={12} />
+                                                                        ) : (
+                                                                            <span>{idx + 1}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="tv-dms-step-label">{step.label}</span>
+                                                                    {isCurrent && (
+                                                                        <span className="tv-dms-step-time">{formattedTime}</span>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                    <div className={`tv-dms-mini-step ${isTransit ? 'done' : ''}`}>
-                                                        <div className="tv-dms-mini-dot">{isTransit ? <Check size={10} /> : '3'}</div>
-                                                        <span className="tv-dms-mini-label">In Transit</span>
-                                                    </div>
-                                                    <div className={`tv-dms-mini-step ${isDelivered ? 'done' : ''}`}>
-                                                        <div className="tv-dms-mini-dot">{isDelivered ? <Check size={10} /> : '4'}</div>
-                                                        <span className="tv-dms-mini-label">Delivered</span>
-                                                    </div>
-                                                </div>
+                                                </>
                                             );
                                         })()}
                                     </div>

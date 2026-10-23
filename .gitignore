@@ -18,6 +18,7 @@ publish_out/
 backend/publish_out/
 *.zip
 backend/publish.zip
+.vscode/
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

@@ -153,16 +153,69 @@ public class DmsIntegrationTests : IDisposable
 
         Assert.True(result.IsSuccess);
         var updatedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
-        Assert.Equal("In Transit", updatedDetail.DmsStatus);
+        Assert.Equal("Out for Delivery", updatedDetail.DmsStatus);
         Assert.Equal("Out for Delivery", updatedDetail.DmsRawStatus);
         Assert.Equal(14.5995, updatedDetail.DmsLatitude);
 
         _mockNotification.Verify(n => n.SendBulkNotificationAsync(
             It.IsAny<List<Guid>>(),
             NotificationType.TaskUpdated,
-            It.Is<string>(s => s.Contains("In Transit")),
+            It.Is<string>(s => s.Contains("Out for Delivery")),
             It.Is<string>(s => s.Contains("WB-2026-000001")),
             taskId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessStatusUpdate_ShouldCompleteTaskAndAssignments_WhenDelivered()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Deliver Urgent Invoice",
+            Description = "FOMS Invoice Delivery",
+            Status = Backend.Models.Enums.TaskStatus.InProgress,
+            CreatedById = Guid.NewGuid(),
+            Assignments = new List<TaskAssignment>
+            {
+                new() { TaskId = taskId, CompletionPercentage = 40 }
+            }
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Finance Dept",
+            RecipientContact = "09123456789",
+            DeliveryAddress = "BGC, Taguig",
+            DmsWaybillNo = "WB-2026-000999",
+            DmsStatus = "In Transit",
+            SyncStatus = "Synced"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var updateDto = new DmsStatusWebhookDTO
+        {
+            WaybillNo = "WB-2026-000999",
+            StarsTaskId = taskId,
+            Status = "Delivered",
+            DmsStatus = "Delivered",
+            Timestamp = DateTime.UtcNow
+        };
+
+        var result = await service.ProcessStatusUpdateAsync(updateDto);
+
+        Assert.True(result.IsSuccess);
+        var updatedTask = await _db.Tasks.Include(t => t.Assignments).FirstAsync(t => t.Id == taskId);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, updatedTask.Status);
+        Assert.True(updatedTask.IsApproved);
+        Assert.Equal(100, updatedTask.Assignments.First().CompletionPercentage);
+
+        var updatedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("Delivered", updatedDetail.DmsStatus);
     }
 
     [Fact]
@@ -291,5 +344,68 @@ public class DmsIntegrationTests : IDisposable
         var saved = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
         Assert.Equal("WB-2026-000789", saved.DmsWaybillNo);
         Assert.Equal(42, saved.DmsOrderId);
+    }
+
+    [Fact]
+    public async Task SyncDeliveryStatus_ShouldQueryDmsAndCompleteTask_WhenDelivered()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Batch Delivery Verification",
+            Description = "Operations run",
+            Status = Backend.Models.Enums.TaskStatus.InProgress,
+            Assignments = new List<TaskAssignment>
+            {
+                new() { TaskId = taskId, CompletionPercentage = 50 }
+            }
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Logistics Hub",
+            RecipientContact = "09181112233",
+            DeliveryAddress = "Pasig City",
+            DmsWaybillNo = "WB-2026-000456",
+            DmsOrderId = 101,
+            DmsStatus = "In Transit",
+            SyncStatus = "Synced"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Get && r.RequestUri!.ToString().Contains(taskId.ToString())),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = JsonContent.Create(new
+                {
+                    waybillNo = "WB-2026-000456",
+                    orderId = 101,
+                    status = "Delivered",
+                    starsTaskId = taskId
+                })
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var syncResult = await service.SyncDeliveryStatusForTaskAsync(taskId);
+
+        Assert.True(syncResult.IsSuccess, syncResult.Message);
+        Assert.Equal("Delivered", syncResult.Data!.DmsStatus);
+
+        var updatedTask = await _db.Tasks.Include(t => t.Assignments).FirstAsync(t => t.Id == taskId);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, updatedTask.Status);
+        Assert.True(updatedTask.IsApproved);
+        Assert.Equal(100, updatedTask.Assignments.First().CompletionPercentage);
     }
 }

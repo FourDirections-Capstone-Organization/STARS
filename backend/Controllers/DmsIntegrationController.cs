@@ -111,6 +111,19 @@ public class DmsIntegrationController : ControllerBase
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
+    /// <summary>
+    /// Integration 2: Synchronize delivery status and milestone tracking directly from DMS.
+    /// Safe to call repeatedly without causing redundant order re-creation.
+    /// </summary>
+    [HttpPost("api/dms-integration/tasks/{taskId:guid}/sync")]
+    [Authorize]
+    public async Task<IActionResult> SyncFromDms(Guid taskId)
+    {
+        var userId = GetUserId();
+        var result = await _dmsService.SyncDeliveryStatusForTaskAsync(taskId, userId);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────
 
     /// <summary>

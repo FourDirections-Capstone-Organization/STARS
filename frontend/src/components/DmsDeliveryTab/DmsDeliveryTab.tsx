@@ -239,11 +239,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         }
         setSyncingId(taskId);
         try {
-            await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+            await api.post(`/api/dms-integration/tasks/${taskId}/sync`, {});
             toastSuccess('Re-synced with DMS successfully.');
             await fetchDeliveries();
         } catch (err: any) {
-            toastError(err?.response?.data?.message || err?.message || 'Re-sync failed.');
+            try {
+                await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+                toastSuccess('Dispatched and re-synced with DMS.');
+                await fetchDeliveries();
+            } catch (fallbackErr: any) {
+                const msg = fallbackErr?.response?.data?.message || err?.response?.data?.message || err?.message || 'Re-sync failed.';
+                toastError(msg);
+            }
         } finally {
             setSyncingId(null);
         }
@@ -313,11 +320,14 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
         return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Ready / Dispatched</span>;
     };
 
-    const getJourneyStepIndex = (status: string) => {
-        const s = (status || '').toLowerCase();
-        if (s.includes('delivered') || s.includes('completed')) return 3;
-        if (s.includes('out') || s.includes('transit')) return 2;
-        if (s.includes('pickup')) return 1;
+    const getJourneyStepIndex = (status?: string, rawStatus?: string) => {
+        const s = `${rawStatus || ''} ${status || ''}`.toLowerCase();
+        if (s.includes('delivered') || s.includes('completed')) return 6;
+        if (s.includes('out for delivery') || s.includes('doorstep')) return 5;
+        if (s.includes('transit')) return 4;
+        if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 3;
+        if (s.includes('assigned') || s.includes('for pickup')) return 2;
+        if (s.includes('processing') || s.includes('preparing')) return 1;
         return 0;
     };
 
@@ -704,18 +714,21 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                         <div
                                             className="dms-stepper-progress"
                                             style={{
-                                                width: `${(Math.min(getJourneyStepIndex(selectedDelivery.dmsStatus), 3) / 3) * 100}%`
+                                                width: `${(Math.min(getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus), 6) / 6) * 100}%`
                                             }}
                                         />
                                     </div>
                                     {[
-                                        { title: 'Order Dispatched', desc: 'STARS Task Completed' },
-                                        { title: 'Picked Up', desc: 'Driver Assigned' },
-                                        { title: 'In Transit', desc: 'Out for Delivery' },
+                                        { title: 'Pending', desc: 'Order Created' },
+                                        { title: 'Processing', desc: 'Preparing Dispatch' },
+                                        { title: 'Assigned', desc: 'Driver Assigned' },
+                                        { title: 'Picked Up', desc: 'Driver Collected' },
+                                        { title: 'In Transit', desc: 'En Route to Hub' },
+                                        { title: 'Out for Delivery', desc: 'Final Mile Delivery' },
                                         { title: 'Delivered (POD)', desc: 'Proof Confirmed' },
                                     ].map((step, idx) => {
-                                        const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus);
-                                        const isDelivered = (selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
+                                        const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
+                                        const isDelivered = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
                                         const isDone = isDelivered ? true : idx < activeIdx;
                                         const isCurrent = !isDelivered && idx === activeIdx;
                                         const isUpcoming = idx > activeIdx;

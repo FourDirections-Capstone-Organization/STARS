@@ -1599,51 +1599,129 @@
     min-height: 60px;
 }
 
-/* Mini Stepper (TaskView) */
+/* Multi-Stage Delivery Stepper (TaskView) - 7 Stages Matching DMS */
 .tv-dms-stepper-wrap {
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
+    background: #131b2e;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 18px 16px 14px 16px;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
 }
 
-.tv-dms-mini-stepper {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    text-align: center;
+.tv-dms-stepper {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+    z-index: 2;
 }
 
-.tv-dms-mini-step {
+.tv-dms-stepper-track {
+    position: absolute;
+    top: 14px;
+    left: 7%;
+    right: 7%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+    z-index: 1;
+}
+
+.tv-dms-stepper-progress {
+    height: 100%;
+    background: #00A99D;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+
+.tv-dms-step {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    flex: 1;
+    z-index: 2;
+    text-align: center;
+    min-width: 0;
 }
 
-.tv-dms-mini-dot {
-    width: 22px;
-    height: 22px;
+.tv-dms-step-dot {
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: #f1f5f9;
-    color: #64748b;
-    font-size: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all 0.25s ease;
 }
 
-.tv-dms-mini-step.done .tv-dms-mini-dot {
-    background: #059669;
+.tv-dms-step.done .tv-dms-step-dot {
+    background: #00A99D;
+    border-color: #00A99D;
     color: #ffffff;
 }
 
-.tv-dms-mini-label {
-    font-size: 10.5px;
+.tv-dms-step.current .tv-dms-step-dot {
+    background: #00A99D;
+    border-color: #00A99D;
+    color: #ffffff;
+    box-shadow: 0 0 0 6px rgba(0, 169, 157, 0.25);
+    animation: tv-dms-pulse 2s infinite ease-in-out;
+}
+
+@keyframes tv-dms-pulse {
+    0% { box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.35); }
+    50% { box-shadow: 0 0 0 7px rgba(0, 169, 157, 0.15); }
+    100% { box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.35); }
+}
+
+.tv-dms-step-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: rgba(255, 255, 255, 0.65);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.tv-dms-step.done .tv-dms-step-label,
+.tv-dms-step.current .tv-dms-step-label {
+    color: #ffffff;
+}
+
+.tv-dms-step-time {
+    font-size: 9px;
+    color: rgba(0, 169, 157, 0.9);
     font-weight: 600;
-    color: var(--text-primary);
+    margin-top: -2px;
+}
+
+@media (max-width: 640px) {
+    .tv-dms-stepper-wrap {
+        padding: 14px 8px 10px 8px;
+    }
+    .tv-dms-step-dot {
+        width: 22px;
+        height: 22px;
+        font-size: 9px;
+    }
+    .tv-dms-step-label {
+        font-size: 8px;
+        letter-spacing: 0;
+    }
+    .tv-dms-stepper-track {
+        top: 11px;
+    }
 }
 
 .tv-dms-gps-badge {

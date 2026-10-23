@@ -27,6 +27,14 @@ public interface IDmsIntegrationService
         Guid taskId, Guid? reviewerId = null);
 
     /// <summary>
+    /// Integration 2: Synchronize current delivery order status from DMS for a task.
+    /// Uses lightweight read query to avoid redundant order creation, updates tracking milestones,
+    /// and auto-completes STARS task if status is Delivered.
+    /// </summary>
+    Task<ApiResponseDTO<TaskDeliveryDetailResponseDTO>> SyncDeliveryStatusForTaskAsync(
+        Guid taskId, Guid? triggeredByUserId = null);
+
+    /// <summary>
     /// Integration 2: Handles incoming delivery status webhook from DMS.
     /// Updates the delivery tracking fields and notifies the task coordinator/manager.
     /// </summary>

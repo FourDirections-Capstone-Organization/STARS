@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -256,6 +257,29 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.SyncError = null;
             detail.UpdatedAt = DateTime.UtcNow;
 
+            var normStatus = (status ?? "").Trim().ToLowerInvariant();
+            if (normStatus == "delivered" || normStatus == "completed")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                task.IsApproved = true;
+                if (task.Assignments != null)
+                {
+                    foreach (var a in task.Assignments)
+                    {
+                        a.CompletionPercentage = 100;
+                    }
+                }
+            }
+            else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup" || normStatus == "assigned" || normStatus == "processing")
+            {
+                if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
+                {
+                    task.Status = Backend.Models.Enums.TaskStatus.InProgress;
+                    task.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             await _auditLogService.LogAsync(
@@ -279,6 +303,157 @@ public class DmsIntegrationService : IDmsIntegrationService
             await _db.SaveChangesAsync();
 
             _logger.LogError(ex, "Failed to call DMS for task {TaskId}", taskId);
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure(detail.SyncError);
+        }
+    }
+
+    public async Task<ApiResponseDTO<TaskDeliveryDetailResponseDTO>> SyncDeliveryStatusForTaskAsync(
+        Guid taskId, Guid? triggeredByUserId = null)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task == null)
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("Task not found");
+
+        var detail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == taskId);
+        if (detail == null)
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("No delivery details found for this task");
+
+        // If already delivered, ensure STARS task status is aligned and return success
+        var currentStatus = (detail.DmsRawStatus ?? detail.DmsStatus ?? "").Trim().ToLowerInvariant();
+        if (currentStatus == "delivered" || currentStatus == "completed")
+        {
+            if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                task.IsApproved = true;
+                if (task.Assignments != null)
+                {
+                    foreach (var a in task.Assignments)
+                    {
+                        a.CompletionPercentage = 100;
+                    }
+                }
+                detail.SyncStatus = "Synced";
+                detail.SyncError = null;
+                detail.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
+                MapToDTO(detail), "Delivery order is already marked as delivered");
+        }
+
+        if (!IsConfigured)
+        {
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("DMS integration is not configured");
+        }
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/delivery-orders/{taskId}");
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Order hasn't been created yet in DMS, dispatch/create it
+                return await CreateDeliveryOrderForTaskAsync(taskId, triggeredByUserId);
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                // If outbound check fails but local detail is already Delivered, do not fail
+                if (currentStatus == "delivered" || currentStatus == "completed")
+                {
+                    return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
+                        MapToDTO(detail), "Delivery order is already delivered");
+                }
+
+                detail.SyncStatus = "Failed";
+                detail.SyncError = $"DMS responded with {(int)response.StatusCode}: {Truncate(responseBody)}";
+                detail.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+
+                return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure(detail.SyncError);
+            }
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var waybillNo = root.TryGetProperty("waybillNo", out var wb) ? wb.GetString() : detail.DmsWaybillNo;
+            var orderId = root.TryGetProperty("orderId", out var oid) ? oid.GetInt32() : detail.DmsOrderId;
+            var status = root.TryGetProperty("status", out var st) ? st.GetString() : (detail.DmsRawStatus ?? detail.DmsStatus ?? "Pending");
+
+            detail.DmsWaybillNo = waybillNo;
+            detail.DmsOrderId = orderId;
+            detail.DmsStatus = status;
+            detail.DmsRawStatus = status;
+            detail.DmsLastSyncedAt = DateTime.UtcNow;
+            detail.SyncStatus = "Synced";
+            detail.SyncError = null;
+            detail.UpdatedAt = DateTime.UtcNow;
+
+            var normStatus = (status ?? "").Trim().ToLowerInvariant();
+            if (normStatus == "delivered" || normStatus == "completed")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                task.IsApproved = true;
+                if (task.Assignments != null)
+                {
+                    foreach (var a in task.Assignments)
+                    {
+                        a.CompletionPercentage = 100;
+                    }
+                }
+            }
+            else if (normStatus == "in transit" || normStatus == "out for delivery" || normStatus == "picked up" || normStatus == "assigned" || normStatus == "processing" || normStatus == "for pickup")
+            {
+                if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
+                {
+                    task.Status = Backend.Models.Enums.TaskStatus.InProgress;
+                    task.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+            else if (normStatus == "cancelled" || normStatus == "canceled")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Cancelled;
+                task.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync();
+
+            await _auditLogService.LogAsync(
+                triggeredByUserId ?? task.CreatedById,
+                AuditActionType.Update,
+                "DeliveryOrder",
+                taskId,
+                null,
+                $"DMS Delivery Order status synchronized: {status} (Waybill: {waybillNo})",
+                "DmsIntegration");
+
+            return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
+                MapToDTO(detail), "Delivery status synchronized successfully from DMS");
+        }
+        catch (Exception ex)
+        {
+            if (currentStatus == "delivered" || currentStatus == "completed")
+            {
+                return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
+                    MapToDTO(detail), "Delivery order is already delivered");
+            }
+
+            detail.SyncStatus = "Failed";
+            detail.SyncError = $"Error communicating with DMS: {ex.Message}";
+            detail.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            _logger.LogError(ex, "Failed to sync DMS status for task {TaskId}", taskId);
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure(detail.SyncError);
         }
     }
@@ -337,7 +512,7 @@ public class DmsIntegrationService : IDmsIntegrationService
                 Area = initArea,
                 PackageDescription = initPackageDesc,
                 DmsWaybillNo = dto.WaybillNo,
-                DmsStatus = dto.Status,
+                DmsStatus = dto.DmsStatus ?? dto.Status,
                 DmsRawStatus = dto.DmsStatus ?? dto.Status,
                 DmsLastSyncedAt = dto.Timestamp.Kind == DateTimeKind.Utc ? dto.Timestamp : dto.Timestamp.ToUniversalTime(),
                 DmsFailureReason = dto.FailureReason,
@@ -350,7 +525,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             await _db.SaveChangesAsync();
         }
 
-        detail.DmsStatus = dto.Status;
+        detail.DmsStatus = dto.DmsStatus ?? dto.Status;
         detail.DmsRawStatus = dto.DmsStatus ?? dto.Status;
         detail.DmsLastSyncedAt = dto.Timestamp.Kind == DateTimeKind.Utc ? dto.Timestamp : dto.Timestamp.ToUniversalTime();
         detail.DmsFailureReason = dto.FailureReason;
@@ -375,7 +550,7 @@ public class DmsIntegrationService : IDmsIntegrationService
         var task = detail.Task ?? await _db.Tasks.Include(t => t.Assignments).FirstOrDefaultAsync(t => t.Id == detail.TaskId);
         if (task != null)
         {
-            var normStatus = (dto.Status ?? "").Trim().ToLowerInvariant();
+            var normStatus = (dto.DmsStatus ?? dto.Status ?? "").Trim().ToLowerInvariant();
             if (normStatus == "delivered" || normStatus == "completed")
             {
                 task.Status = Backend.Models.Enums.TaskStatus.Completed;
@@ -390,7 +565,7 @@ public class DmsIntegrationService : IDmsIntegrationService
                     }
                 }
             }
-            else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup")
+            else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup" || normStatus == "assigned" || normStatus == "processing")
             {
                 if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
                 {
@@ -423,8 +598,9 @@ public class DmsIntegrationService : IDmsIntegrationService
                 ? NotificationType.TaskCompleted
                 : NotificationType.TaskUpdated;
 
-            var title = $"Delivery Status: {dto.Status}";
-            var message = $"Delivery for task '{task.Title}' (Waybill: {dto.WaybillNo}) updated to '{dto.Status}'"
+            var displayStatus = dto.DmsStatus ?? dto.Status;
+            var title = $"Delivery Status: {displayStatus}";
+            var message = $"Delivery for task '{task.Title}' (Waybill: {dto.WaybillNo}) updated to '{displayStatus}'"
                 + (string.IsNullOrWhiteSpace(dto.FailureReason) ? "." : $". Reason: {dto.FailureReason}");
 
             await _notificationService.SendBulkNotificationAsync(distinctRecipients, notifType, title, message, task.Id);
@@ -438,7 +614,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             "TaskDeliveryDetail",
             detail.Id,
             null,
-            $"DMS delivery status sync for waybill {dto.WaybillNo} updated to {dto.Status}",
+            $"DMS delivery status sync for waybill {dto.WaybillNo} updated to {dto.DmsStatus ?? dto.Status}",
             "DmsIntegration");
 
         return ApiResponseDTO<bool>.Success(true, "Status updated successfully");
