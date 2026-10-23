@@ -95,6 +95,39 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.UpdatedAt = DateTime.UtcNow;
         }
 
+        if (!string.IsNullOrWhiteSpace(dto.DmsStatus))
+        {
+            detail.DmsStatus = dto.DmsStatus.Trim();
+            detail.DmsRawStatus = dto.DmsStatus.Trim();
+            detail.DmsLastSyncedAt = DateTime.UtcNow;
+
+            var normStatus = dto.DmsStatus.Trim().ToLowerInvariant();
+            if (normStatus == "delivered" || normStatus == "completed")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                task.IsApproved = true;
+            }
+            else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup" || normStatus == "assigned" || normStatus == "processing")
+            {
+                if (task.Status != Backend.Models.Enums.TaskStatus.Completed)
+                {
+                    task.Status = Backend.Models.Enums.TaskStatus.InProgress;
+                    task.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+            else if (normStatus == "cancelled" || normStatus == "canceled")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Cancelled;
+                task.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (normStatus == "pending" || normStatus == "not started")
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.NotStarted;
+                task.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
         await _db.SaveChangesAsync();
 
         await _auditLogService.LogAsync(

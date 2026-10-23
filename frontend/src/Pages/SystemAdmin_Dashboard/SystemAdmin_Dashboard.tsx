@@ -3549,11 +3549,22 @@ export default function Dashboard() {
     }, [showNewTask]);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
+        let dmsDeadline = '';
+        if (order.expectedDelivery) {
+            try {
+                const ed = new Date(order.expectedDelivery);
+                if (!isNaN(ed.getTime())) {
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                }
+            } catch { }
+        }
         setNewTaskForm(prev => ({
             ...prev,
             title: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
             description: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
             priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
+            deadline: dmsDeadline,
         }));
         setNewDeliveryForm({
             recipientName: order.recipientName,
@@ -3566,7 +3577,8 @@ export default function Dashboard() {
             specialInstructions: order.specialInstructions || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
-        });
+            dmsStatus: order.status,
+        } as any);
         setNewEnableDelivery(true);
         setShowNewTask(true);
     };
@@ -3599,7 +3611,7 @@ export default function Dashboard() {
         if (newTaskForm.priority !== 'Urgent') {
             if (!newTaskForm.deadline) {
                 errs.deadline = 'Deadline is required.';
-            } else {
+            } else if (!newEnableDelivery) {
                 const selected = new Date(newTaskForm.deadline);
                 const now = new Date();
                 const todayStart = new Date(now);
@@ -3675,6 +3687,7 @@ export default function Dashboard() {
                         courierEmployeeId: newDeliveryForm.courierEmployeeId?.trim() || null,
                         dmsOrderId: (newDeliveryForm as any).dmsOrderId,
                         dmsWaybillNo: (newDeliveryForm as any).dmsWaybillNo || null,
+                        dmsStatus: (newDeliveryForm as any).dmsStatus || null,
                     });
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
@@ -4880,8 +4893,13 @@ export default function Dashboard() {
                                                             <Lock size={10} /> SLA LOCKED
                                                         </span>
                                                     )}
+                                                    {newEnableDelivery && (
+                                                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+                                                            <Lock size={10} /> DMS PRE-SET DEADLINE
+                                                        </span>
+                                                    )}
                                                 </label>
-                                                {range.maxLabel && (
+                                                {!newEnableDelivery && range.maxLabel && (
                                                     <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary, #0284c7)', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4 }}>
                                                         Max: {range.maxLabel}
                                                     </span>
@@ -4892,12 +4910,12 @@ export default function Dashboard() {
                                                 className="fm-input"
                                                 value={newTaskForm.deadline}
                                                 onChange={e => setNewTaskForm(p => ({ ...p, deadline: e.target.value }))}
-                                                disabled={newTaskForm.priority === 'Urgent'}
-                                                min={range.min}
-                                                max={range.max}
-                                                style={newTaskForm.priority === 'Urgent' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, marginTop: 4 } : { marginTop: 4 }}
+                                                disabled={newTaskForm.priority === 'Urgent' || newEnableDelivery}
+                                                min={newEnableDelivery ? undefined : range.min}
+                                                max={newEnableDelivery ? undefined : range.max}
+                                                style={(newTaskForm.priority === 'Urgent' || newEnableDelivery) ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8, marginTop: 4 } : { marginTop: 4 }}
                                             />
-                                            {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && (
+                                            {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && !newEnableDelivery && (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: 10, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>Quick Pick:</span>
                                                     {quickPicks.map(qp => (

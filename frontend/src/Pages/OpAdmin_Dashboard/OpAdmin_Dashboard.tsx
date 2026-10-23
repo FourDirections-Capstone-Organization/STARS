@@ -908,6 +908,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
         courierEmployeeId: (initial as any)?.deliveryDetails?.courierEmployeeId ?? '',
         dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
         dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
+        dmsStatus: (initial as any)?.deliveryDetails?.dmsStatus ?? '',
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1105,14 +1106,16 @@ const TaskModal: React.FC<TaskModalProps> = ({
             if (!val) return 'Due date is required.';
             const d = new Date(val);
             if (isNaN(d.getTime())) return 'Invalid due date.';
-            const now = new Date();
-            if (d < now) return 'Due date cannot be in the past.';
-            if (form.priority === 'High') {
-                const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-                if (d > maxHigh) return 'High priority deadline must be within 1 to 2 days only from current date.';
-            } else if (form.priority === 'Medium') {
-                const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                if (d > maxMed) return 'Medium priority deadline must be within 1 week (7 days) from current date.';
+            if (!isPreDelivery) {
+                const now = new Date();
+                if (d < now) return 'Due date cannot be in the past.';
+                if (form.priority === 'High') {
+                    const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+                    if (d > maxHigh) return 'High priority deadline must be within 1 to 2 days only from current date.';
+                } else if (form.priority === 'Medium') {
+                    const maxMed = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    if (d > maxMed) return 'Medium priority deadline must be within 1 week (7 days) from current date.';
+                }
             }
         }
         if (name === 'priority') {
@@ -1193,6 +1196,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || '',
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
+                dmsStatus: (deliveryForm as any).dmsStatus || undefined,
             };
         }
 
@@ -1322,7 +1326,12 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                     <div className="field">
                                         <label>
                                             Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                            {deadlineRange.maxDate && (
+                                            {isPreDelivery && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    🔒 DMS PRE-SET DEADLINE
+                                                </span>
+                                            )}
+                                            {!isPreDelivery && deadlineRange.maxDate && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
@@ -1331,20 +1340,25 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                         <input
                                             type="datetime-local"
                                             value={form.dueAt}
-                                            onChange={slaLocked ? undefined : set('dueAt')}
-                                            min={deadlineRange.min}
-                                            max={deadlineRange.max}
-                                            readOnly={slaLocked}
-                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${slaLocked ? ' input-sla-locked' : ''}`}
-                                            style={slaLocked ? { background: '#fef2f2', cursor: 'not-allowed', opacity: 0.85 } : {}}
+                                            onChange={(slaLocked || isPreDelivery) ? undefined : set('dueAt')}
+                                            min={isPreDelivery ? undefined : deadlineRange.min}
+                                            max={isPreDelivery ? undefined : deadlineRange.max}
+                                            readOnly={slaLocked || isPreDelivery}
+                                            disabled={isPreDelivery}
+                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${(slaLocked || isPreDelivery) ? ' input-sla-locked' : ''}`}
+                                            style={(slaLocked || isPreDelivery) ? { background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 } : {}}
                                         />
                                         <FieldErr name="dueAt" />
-                                        {deadlineRange.helperText && (
+                                        {isPreDelivery ? (
+                                            <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                Deadline is synchronized and pre-set from DMS.
+                                            </span>
+                                        ) : deadlineRange.helperText && (
                                             <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
                                                 {deadlineRange.helperText}
                                             </span>
                                         )}
-                                        {quickPicks.length > 0 && !slaLocked && (
+                                        {quickPicks.length > 0 && !slaLocked && !isPreDelivery && (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                                 <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
                                                 {quickPicks.map(qp => (
@@ -8042,11 +8056,22 @@ export default function OpsAdminDashboard() {
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
+        let dmsDeadline = '';
+        if (order.expectedDelivery) {
+            try {
+                const ed = new Date(order.expectedDelivery);
+                if (!isNaN(ed.getTime())) {
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                }
+            } catch { }
+        }
         setInitialTaskData({
             taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
             taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
             taskCategory: 'Delivery Operations',
             priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
+            dueAt: dmsDeadline,
             deliveryDetails: {
                 recipientName: order.recipientName,
                 recipientContact: order.recipientContact,
@@ -8058,6 +8083,7 @@ export default function OpsAdminDashboard() {
                 courierEmployeeId: order.driverEmployeeId || '',
                 dmsOrderId: order.orderId,
                 dmsWaybillNo: order.waybillNo,
+                dmsStatus: order.status,
             }
         });
         setShowNew(true);

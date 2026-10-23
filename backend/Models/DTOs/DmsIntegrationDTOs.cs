@@ -35,6 +35,9 @@ public class UpsertTaskDeliveryDetailDTO
 
     [MaxLength(50)]
     public string? DmsWaybillNo { get; set; }
+
+    [MaxLength(50)]
+    public string? DmsStatus { get; set; }
 }
 
 public class DmsPendingOrderDTO
