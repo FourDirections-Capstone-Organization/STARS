@@ -1293,7 +1293,166 @@ public class ReportService : IReportService
                 .FirstOrDefaultAsync();
         }
 
-        var invoices = GenerateMockFinancialInvoices(dateStart, dateEnd, filterDeptName, fiscalPeriod);
+        // Query REAL FOMS integrated data:
+        // 1. TaskFomsInvoiceDetails (linked to tasks & departments)
+        // 2. FomsClientFinancialStatuses (pushed real-time from FOMS)
+        // 3. TaskFomsCollectionDetails (overdue receivable alerts from FOMS)
+        var fomsStatuses = await _db.FomsClientFinancialStatuses.ToListAsync();
+        var fomsStatusDict = fomsStatuses
+            .GroupBy(f => f.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.LastUpdatedFromFoms).First(), StringComparer.OrdinalIgnoreCase);
+
+        var taskInvoicesQuery = _db.TaskFomsInvoiceDetails
+            .Include(d => d.Task)
+                .ThenInclude(t => t!.AssignedDepartment)
+            .Include(d => d.Task)
+                .ThenInclude(t => t!.Assignments)
+            .AsQueryable();
+
+        if (departmentId.HasValue)
+        {
+            taskInvoicesQuery = taskInvoicesQuery.Where(d => d.Task != null && d.Task.AssignedDepartmentId == departmentId.Value);
+        }
+
+        if (employeeId.HasValue)
+        {
+            taskInvoicesQuery = taskInvoicesQuery.Where(d => d.Task != null && d.Task.Assignments.Any(a => a.AssignedUserId == employeeId.Value));
+        }
+
+        var taskInvoices = await taskInvoicesQuery.ToListAsync();
+
+        var invoiceItems = new List<FinancialInvoiceItemDTO>();
+        var seenInvoiceNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var taskInv in taskInvoices)
+        {
+            var invNum = taskInv.InvoiceNumber;
+            if (string.IsNullOrWhiteSpace(invNum)) continue;
+            seenInvoiceNumbers.Add(invNum);
+
+            fomsStatusDict.TryGetValue(invNum, out var finStatus);
+
+            var billingDate = taskInv.BillingDate ?? taskInv.CreatedAt;
+            var dueDate = taskInv.DueDate ?? (finStatus?.NextDueDate ?? billingDate.AddDays(30));
+            var amountBilled = finStatus != null && finStatus.TotalAmount > 0 ? finStatus.TotalAmount : taskInv.InvoiceAmount;
+            var amountPaid = finStatus != null ? finStatus.AmountPaid : (taskInv.EndorsementStatus == "Completed" || taskInv.EndorsementStatus == "Endorsed" ? amountBilled : 0m);
+            var balance = finStatus != null ? finStatus.OutstandingBalance : Math.Max(0m, amountBilled - amountPaid);
+
+            string status;
+            if (finStatus != null && !string.IsNullOrWhiteSpace(finStatus.CurrentStatus))
+            {
+                status = finStatus.CurrentStatus;
+            }
+            else if (balance <= 0 && amountBilled > 0)
+            {
+                status = "Paid";
+            }
+            else if (dueDate < DateTime.UtcNow && balance > 0)
+            {
+                status = "Overdue";
+            }
+            else if (amountPaid > 0 && balance > 0)
+            {
+                status = "Partially Paid";
+            }
+            else
+            {
+                status = "Pending";
+            }
+
+            var deptName = taskInv.Task?.AssignedDepartment?.Name ?? (!string.IsNullOrWhiteSpace(filterDeptName) ? filterDeptName : "Operations");
+
+            invoiceItems.Add(new FinancialInvoiceItemDTO
+            {
+                InvoiceNumber = invNum,
+                FomsReference = $"FOMS-{invNum}",
+                ClientAccount = !string.IsNullOrWhiteSpace(finStatus?.ClientName) ? finStatus.ClientName : (!string.IsNullOrWhiteSpace(taskInv.ClientName) ? taskInv.ClientName : (taskInv.Task?.TaskNumber ?? $"CLI-{invNum}")),
+                Department = deptName,
+                BillingDate = billingDate,
+                DueDate = dueDate,
+                PaymentDate = finStatus?.LastPaymentDate ?? taskInv.ActualReceivedDate,
+                Currency = "PHP",
+                AmountBilled = amountBilled,
+                AmountPaid = amountPaid,
+                OutstandingBalance = balance,
+                PaymentStatus = status,
+                PaymentMethod = "Bank Transfer",
+                FiscalPeriod = string.IsNullOrWhiteSpace(fiscalPeriod) ? $"FY{billingDate.Year}" : fiscalPeriod
+            });
+        }
+
+        foreach (var finStatus in fomsStatuses)
+        {
+            if (seenInvoiceNumbers.Contains(finStatus.InvoiceNumber)) continue;
+            seenInvoiceNumbers.Add(finStatus.InvoiceNumber);
+
+            var billingDate = finStatus.LastUpdatedFromFoms.AddDays(-30);
+            var dueDate = finStatus.NextDueDate ?? finStatus.LastUpdatedFromFoms;
+            var amountBilled = finStatus.TotalAmount;
+            var amountPaid = finStatus.AmountPaid;
+            var balance = finStatus.OutstandingBalance;
+
+            string status = !string.IsNullOrWhiteSpace(finStatus.CurrentStatus) ? finStatus.CurrentStatus : (balance <= 0 ? "Paid" : (dueDate < DateTime.UtcNow ? "Overdue" : "Pending"));
+
+            invoiceItems.Add(new FinancialInvoiceItemDTO
+            {
+                InvoiceNumber = finStatus.InvoiceNumber,
+                FomsReference = $"FOMS-{finStatus.InvoiceNumber}",
+                ClientAccount = !string.IsNullOrWhiteSpace(finStatus.ClientName) ? finStatus.ClientName : finStatus.ClientAccountId,
+                Department = filterDeptName ?? "Operations",
+                BillingDate = billingDate,
+                DueDate = dueDate,
+                PaymentDate = finStatus.LastPaymentDate,
+                Currency = "PHP",
+                AmountBilled = amountBilled,
+                AmountPaid = amountPaid,
+                OutstandingBalance = balance,
+                PaymentStatus = status,
+                PaymentMethod = "Electronic Funds Transfer (EFT)",
+                FiscalPeriod = string.IsNullOrWhiteSpace(fiscalPeriod) ? $"FY{billingDate.Year}" : fiscalPeriod
+            });
+        }
+
+        var overdueCollections = await _db.TaskFomsCollectionDetails
+            .Include(c => c.Task)
+                .ThenInclude(t => t!.AssignedDepartment)
+            .ToListAsync();
+
+        foreach (var col in overdueCollections)
+        {
+            if (seenInvoiceNumbers.Contains(col.InvoiceNumber)) continue;
+            seenInvoiceNumbers.Add(col.InvoiceNumber);
+
+            var dueDate = col.DueDate ?? col.RoutedAt;
+            var billingDate = dueDate.AddDays(-30);
+            var amountBilled = col.AmountDue;
+
+            invoiceItems.Add(new FinancialInvoiceItemDTO
+            {
+                InvoiceNumber = col.InvoiceNumber,
+                FomsReference = $"FOMS-COL-{col.InvoiceNumber}",
+                ClientAccount = !string.IsNullOrWhiteSpace(col.ClientName) ? col.ClientName : col.ClientAccountId,
+                Department = col.Task?.AssignedDepartment?.Name ?? (filterDeptName ?? "Operations"),
+                BillingDate = billingDate,
+                DueDate = dueDate,
+                PaymentDate = null,
+                Currency = "PHP",
+                AmountBilled = amountBilled,
+                AmountPaid = 0m,
+                OutstandingBalance = amountBilled,
+                PaymentStatus = "Overdue",
+                PaymentMethod = "Bank Transfer",
+                FiscalPeriod = string.IsNullOrWhiteSpace(fiscalPeriod) ? $"FY{billingDate.Year}" : fiscalPeriod
+            });
+        }
+
+        var filteredInvoices = invoiceItems
+            .Where(i => (i.BillingDate >= dateStart && i.BillingDate <= dateEnd) ||
+                        (i.DueDate >= dateStart && i.DueDate <= dateEnd))
+            .OrderByDescending(i => i.BillingDate)
+            .ToList();
+
+        var invoices = filteredInvoices.Count > 0 ? filteredInvoices : invoiceItems.OrderByDescending(i => i.BillingDate).ToList();
 
         var totalBilled = invoices.Sum(i => i.AmountBilled);
         var totalCollected = invoices.Sum(i => i.AmountPaid);
@@ -1969,127 +2128,7 @@ public class ReportService : IReportService
         return System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
     }
 
-    // --- Financial Report (FOMS) Generators & Deterministic Mock Data ---
-
-    private static readonly (string Client, string Dept, decimal BaseAmount)[] FomsClientTemplates = new[]
-    {
-        ("Shopee Express Hub", "Cross-Dock Operations", 45000m),
-        ("Lazada Fulfillment PH", "Warehouse & Distribution", 72500m),
-        ("SM Retail Distribution", "Fleet Logistics", 112000m),
-        ("Nestle Supply Chain PH", "Cross-Dock Operations", 88000m),
-        ("Unilever Distribution Hub", "Warehouse & Distribution", 64000m),
-        ("San Miguel Pure Foods Logistics", "Fleet Logistics", 135000m),
-        ("Jollibee Food Corp Dispatch", "Customer Dispatch & Support", 28500m),
-        ("Robinsons Retail Central", "Cross-Dock Operations", 51200m),
-        ("Zalora Hub Transport", "Fleet Logistics", 39800m),
-        ("Universal Courier Partners", "Route Operations", 67400m),
-        ("Luzon Cold Chain Solutions", "Warehouse & Distribution", 94000m),
-        ("Bayanihan E-Commerce Express", "Customer Dispatch & Support", 31500m),
-        ("Apex Cargo Forwarders", "Fleet Logistics", 125000m),
-        ("Pacific Freight Systems", "Route Operations", 82300m),
-        ("Highland Agribusiness Cargo", "Fleet Logistics", 48900m)
-    };
-
-    private static readonly string[] PaymentMethods = new[]
-    {
-        "Bank Transfer", "Corporate Check", "Electronic Funds Transfer (EFT)", "GCash Enterprise"
-    };
-
-    private static List<FinancialInvoiceItemDTO> GenerateMockFinancialInvoices(
-        DateTime dateStart,
-        DateTime dateEnd,
-        string? filterDept,
-        string? fiscalPeriod)
-    {
-        var invoices = new List<FinancialInvoiceItemDTO>();
-        var totalDays = Math.Max(1, (int)(dateEnd - dateStart).TotalDays);
-        var invoiceCount = Math.Clamp(totalDays / 2 + 8, 12, 35);
-        var now = DateTime.UtcNow;
-
-        for (int i = 0; i < invoiceCount; i++)
-        {
-            var templateIndex = (i + dateStart.DayOfYear) % FomsClientTemplates.Length;
-            var template = FomsClientTemplates[templateIndex];
-            var department = !string.IsNullOrWhiteSpace(filterDept) ? filterDept : template.Dept;
-
-            var dayOffset = (i * totalDays) / invoiceCount;
-            var billingDate = dateStart.AddDays(dayOffset).AddHours(9 + (i % 8));
-            if (billingDate > dateEnd) billingDate = dateEnd.AddHours(-(i % 12));
-
-            var dueDate = billingDate.AddDays(30);
-            var seed = (dateStart.Year * 1000) + (dateStart.DayOfYear * 10) + i;
-            var amountVariation = ((seed % 15) - 7) * 2500m;
-            var amountBilled = Math.Max(15000m, template.BaseAmount + amountVariation);
-
-            string status;
-            decimal amountPaid;
-            DateTime? paymentDate = null;
-
-            if (dueDate < now)
-            {
-                if (seed % 10 < 7)
-                {
-                    status = "Paid";
-                    amountPaid = amountBilled;
-                    paymentDate = dueDate.AddDays(-((seed % 10) + 1));
-                }
-                else if (seed % 10 < 9)
-                {
-                    status = "Partially Paid";
-                    amountPaid = Math.Round(amountBilled * 0.5m, 2);
-                    paymentDate = dueDate.AddDays(-2);
-                }
-                else
-                {
-                    status = "Overdue";
-                    amountPaid = 0m;
-                }
-            }
-            else
-            {
-                if (seed % 4 == 0)
-                {
-                    status = "Paid";
-                    amountPaid = amountBilled;
-                    paymentDate = billingDate.AddDays(5);
-                }
-                else if (seed % 4 == 1)
-                {
-                    status = "Partially Paid";
-                    amountPaid = Math.Round(amountBilled * 0.4m, 2);
-                    paymentDate = billingDate.AddDays(10);
-                }
-                else
-                {
-                    status = "Pending";
-                    amountPaid = 0m;
-                }
-            }
-
-            var outstanding = amountBilled - amountPaid;
-            var method = PaymentMethods[seed % PaymentMethods.Length];
-
-            invoices.Add(new FinancialInvoiceItemDTO
-            {
-                InvoiceNumber = $"INV-{billingDate.Year}-{(seed % 9000 + 1000):D4}",
-                FomsReference = $"FOMS-WB-{((seed * 37) % 90000 + 10000)}",
-                ClientAccount = template.Client,
-                Department = department,
-                BillingDate = billingDate,
-                DueDate = dueDate,
-                PaymentDate = paymentDate,
-                Currency = "PHP",
-                AmountBilled = amountBilled,
-                AmountPaid = amountPaid,
-                OutstandingBalance = outstanding,
-                PaymentStatus = status,
-                PaymentMethod = method,
-                FiscalPeriod = string.IsNullOrWhiteSpace(fiscalPeriod) ? $"FY{billingDate.Year}" : fiscalPeriod
-            });
-        }
-
-        return invoices.OrderByDescending(i => i.BillingDate).ToList();
-    }
+    // --- Financial Report (FOMS) Exporters ---
 
     private byte[] GenerateFinancialExcel(FinancialReportDTO report)
     {

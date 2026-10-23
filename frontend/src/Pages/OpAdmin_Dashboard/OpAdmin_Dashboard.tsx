@@ -3104,9 +3104,21 @@ const TeamTab: React.FC<{
     // Create / edit modal state
     const [showTeamModal, setShowTeamModal] = useState(false);
     const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
-    const [teamForm, setTeamForm] = useState({ name: '', description: '', memberUserIds: [] as string[] });
+    const [departmentsList, setDepartmentsList] = useState<Array<{ id: string; name: string }>>([]);
+    const [teamForm, setTeamForm] = useState({ name: '', description: '', departmentId: '', memberUserIds: [] as string[] });
     const [teamSaving, setTeamSaving] = useState(false);
     const [teamError, setTeamError] = useState('');
+
+    useEffect(() => {
+        api.get('/api/Department').then(res => {
+            const body = res?.data;
+            const list: any[] = Array.isArray(body?.data?.items) ? body.data.items : (Array.isArray(body?.data) ? body.data : (Array.isArray(body) ? body : []));
+            setDepartmentsList(list.map((d: any) => ({
+                id: String(d.id ?? d.departmentId),
+                name: d.name ?? d.departmentName ?? 'Department',
+            })));
+        }).catch(() => {});
+    }, []);
 
     // Delete confirmation
     const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
@@ -3199,7 +3211,12 @@ const TeamTab: React.FC<{
 
     const openCreate = () => {
         setEditingTeam(null);
-        setTeamForm({ name: '', description: '', memberUserIds: [] });
+        setTeamForm({
+            name: '',
+            description: '',
+            departmentId: departmentsList[0]?.id || '',
+            memberUserIds: [],
+        });
         setTeamError('');
         setShowTeamModal(true);
     };
@@ -3209,6 +3226,7 @@ const TeamTab: React.FC<{
         setTeamForm({
             name: t.name,
             description: t.description ?? '',
+            departmentId: t.departmentId || '',
             memberUserIds: t.members.map(m => m.userId),
         });
         setTeamError('');
@@ -3224,6 +3242,7 @@ const TeamTab: React.FC<{
                 await api.put(`/api/Team/${editingTeam.id}`, {
                     name: teamForm.name.trim(),
                     description: teamForm.description.trim() || null,
+                    departmentId: teamForm.departmentId || null,
                     isActive: true,
                 });
                 // Replace members: remove all then re-add the selected ones.
@@ -3242,6 +3261,7 @@ const TeamTab: React.FC<{
                     name: teamForm.name.trim(),
                     description: teamForm.description.trim() || null,
                 };
+                if (teamForm.departmentId) body.departmentId = teamForm.departmentId;
                 if (teamForm.memberUserIds.length > 0) body.memberUserIds = teamForm.memberUserIds;
                 await api.post('/api/Team', body);
                 success('Team created successfully.');
@@ -3601,6 +3621,19 @@ const TeamTab: React.FC<{
                             maxLength={100}
                             style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none' }}
                         />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Department</label>
+                        <select
+                            value={teamForm.departmentId}
+                            onChange={e => setTeamForm(p => ({ ...p, departmentId: e.target.value }))}
+                            style={{ height: 36, borderRadius: 8, border: '1.5px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                        >
+                            <option value="">Select Department (Optional)</option>
+                            {departmentsList.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Description</label>

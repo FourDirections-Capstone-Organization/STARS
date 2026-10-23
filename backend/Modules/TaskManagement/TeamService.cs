@@ -121,28 +121,59 @@ public class TeamService : ITeamService
         if (nameExists)
             return ApiResponseDTO<TeamResponseDTO>.Failure("A team with this name already exists");
 
-        if (!dto.DepartmentId.HasValue || dto.DepartmentId.Value == Guid.Empty)
-            return ApiResponseDTO<TeamResponseDTO>.Failure("A team must be assigned to a specific department");
-
-        var deptExists = await _db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value);
-        if (!deptExists)
-            return ApiResponseDTO<TeamResponseDTO>.Failure("Selected department does not exist");
-
+        Guid? resolvedDeptId = dto.DepartmentId;
         var memberIds = (dto.MemberUserIds ?? new List<Guid>()).Distinct().ToList();
+
+        if (!resolvedDeptId.HasValue || resolvedDeptId.Value == Guid.Empty)
+        {
+            if (memberIds.Count > 0)
+            {
+                resolvedDeptId = await _db.Users
+                    .Where(u => memberIds.Contains(u.Id) && u.DepartmentId.HasValue)
+                    .Select(u => u.DepartmentId)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (!resolvedDeptId.HasValue || resolvedDeptId.Value == Guid.Empty)
+            {
+                resolvedDeptId = await _db.Users
+                    .Where(u => u.Id == createdById && u.DepartmentId.HasValue)
+                    .Select(u => u.DepartmentId)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (!resolvedDeptId.HasValue || resolvedDeptId.Value == Guid.Empty)
+            {
+                resolvedDeptId = await _db.Departments.Select(d => (Guid?)d.Id).FirstOrDefaultAsync();
+            }
+        }
+
+        if (resolvedDeptId.HasValue && resolvedDeptId.Value != Guid.Empty)
+        {
+            var deptExists = await _db.Departments.AnyAsync(d => d.Id == resolvedDeptId.Value);
+            if (!deptExists)
+            {
+                resolvedDeptId = await _db.Departments.Select(d => (Guid?)d.Id).FirstOrDefaultAsync();
+            }
+        }
+
         if (memberIds.Count > 0)
         {
             var validCount = await _db.Users.CountAsync(u => memberIds.Contains(u.Id) && u.IsActive && !u.IsDeactivated);
             if (validCount != memberIds.Count)
                 return ApiResponseDTO<TeamResponseDTO>.Failure("One or more selected employees do not exist or are inactive");
 
-            var invalidDeptUsers = await _db.Users
-                .Where(u => memberIds.Contains(u.Id) && u.DepartmentId != dto.DepartmentId.Value)
-                .Select(u => (u.FirstName + " " + u.LastName).Trim())
-                .ToListAsync();
-            if (invalidDeptUsers.Count > 0)
+            if (resolvedDeptId.HasValue && resolvedDeptId.Value != Guid.Empty)
             {
-                return ApiResponseDTO<TeamResponseDTO>.Failure(
-                    $"Only employees belonging to the selected department can be added to this team. Invalid employee(s): {string.Join(", ", invalidDeptUsers)}");
+                var invalidDeptUsers = await _db.Users
+                    .Where(u => memberIds.Contains(u.Id) && u.DepartmentId.HasValue && u.DepartmentId.Value != resolvedDeptId.Value)
+                    .Select(u => (u.FirstName + " " + u.LastName).Trim())
+                    .ToListAsync();
+                if (invalidDeptUsers.Count > 0)
+                {
+                    return ApiResponseDTO<TeamResponseDTO>.Failure(
+                        $"Only employees belonging to the selected department can be added to this team. Invalid employee(s): {string.Join(", ", invalidDeptUsers)}");
+                }
             }
 
             var alreadyAssigned = await _db.TeamMembers
@@ -157,7 +188,7 @@ public class TeamService : ITeamService
         var team = new Team
         {
             Name = dto.Name.Trim(),
-            DepartmentId = dto.DepartmentId,
+            DepartmentId = resolvedDeptId,
             Description = dto.Description?.Trim(),
             CreatedById = createdById,
         };
@@ -314,10 +345,10 @@ public class TeamService : ITeamService
             if (validCount != newIds.Count)
                 return ApiResponseDTO<TeamResponseDTO>.Failure("One or more selected employees do not exist or are inactive");
 
-            if (team.DepartmentId.HasValue)
+            if (team.DepartmentId.HasValue && team.DepartmentId.Value != Guid.Empty)
             {
                 var invalidDeptUsers = await _db.Users
-                    .Where(u => newIds.Contains(u.Id) && u.DepartmentId != team.DepartmentId.Value)
+                    .Where(u => newIds.Contains(u.Id) && u.DepartmentId.HasValue && u.DepartmentId.Value != team.DepartmentId.Value)
                     .Select(u => (u.FirstName + " " + u.LastName).Trim())
                     .ToListAsync();
                 if (invalidDeptUsers.Count > 0)

@@ -144,11 +144,10 @@ public class FomsIntegrationController : ControllerBase
 
         if (!hasApiKey)
         {
-            var isUserAuth = User.Identity?.IsAuthenticated == true &&
-                (User.IsInRole("Manager") || User.IsInRole("Coordinator"));
+            var isUserAuth = User.Identity?.IsAuthenticated == true;
 
             if (!isUserAuth)
-                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required (valid API key or Coordinator/Manager session)."));
+                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required (valid API key or authenticated user session)."));
         }
 
         var result = await _fomsService.GetDashboardFinancialSummaryAsync();
