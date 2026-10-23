@@ -600,7 +600,7 @@ const getAuditBadgeStyle = (raw: string): { background: string; color: string } 
 };
 
 const getActivityDescription = (log: any, teamMembers?: TeamMember[]): string => {
-    let desc = log.description && log.description.trim() ? log.description : '';
+    let desc = (log.description || log.Description || log.activityDescription || log.details || log.message || '').trim();
     if (desc) {
         const actor = log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : '');
         desc = desc.replace(/Notification sent to user ([0-9a-fA-F-]{36}):/gi, (_match: string, guid: string) => {
@@ -621,16 +621,18 @@ const getActivityDescription = (log: any, teamMembers?: TeamMember[]): string =>
         return desc;
     }
     const actor = log.actorName || log.userName || (log.firstName ? [log.firstName, log.lastName].filter(Boolean).join(' ') : 'User');
-    const action = formatActionType(log.actionType);
+    const actionKey = String(log.actionType || log.activityType || '');
+    const action = formatActionType(actionKey);
     const entity = log.targetEntity || 'record';
+    const idSnippet = log.targetEntityId ? ` (#${String(log.targetEntityId).slice(0, 8)})` : '';
     
-    switch (log.actionType) {
+    switch (actionKey) {
         case 'Create':
-            return `${actor} created new ${entity.toLowerCase()}${log.targetEntityId ? ` (#${String(log.targetEntityId).slice(0, 8)})` : ''}`;
+            return `${actor} created new ${entity.toLowerCase()}${idSnippet}`;
         case 'Update':
-            return `${actor} updated ${entity.toLowerCase()}`;
+            return `${actor} updated ${entity.toLowerCase()}${idSnippet}`;
         case 'Delete':
-            return `${actor} deleted ${entity.toLowerCase()}`;
+            return `${actor} deleted ${entity.toLowerCase()}${idSnippet}`;
         case 'StatusChange':
             return `${actor} changed ${entity.toLowerCase()} status${log.newValue ? ` to "${log.newValue}"` : ''}`;
         case 'Login':
@@ -638,7 +640,7 @@ const getActivityDescription = (log: any, teamMembers?: TeamMember[]): string =>
         case 'Logout':
             return `${actor} logged out`;
         case 'Upload':
-            return `${actor} uploaded attachment for ${entity.toLowerCase()}`;
+            return `${actor} uploaded attachment for ${entity.toLowerCase()}${idSnippet}`;
         case 'Export':
             return `${actor} exported ${entity.toLowerCase()} report data`;
         case 'AccessDenied':
@@ -648,7 +650,7 @@ const getActivityDescription = (log: any, teamMembers?: TeamMember[]): string =>
         case 'DuplicateOverride':
             return `${actor} confirmed duplicate task override`;
         default:
-            return `${actor} performed ${action} on ${entity}`;
+            return `${actor} performed ${action} on ${entity}${idSnippet}`;
     }
 };
 
@@ -8486,15 +8488,20 @@ export default function OpsAdminDashboard() {
     const fetchActivityLogs = useCallback(async (page: number, silent = false) => {
         if (!silent) setActivityLogLoading(true);
         try {
-            const endpoint = rawRole === 'Manager' ? '/api/audit-logs' : '/api/audit-logs/my';
+            const endpoint = (rawRole === 'Manager' || rawRole === 'Coordinator') ? '/api/audit-logs' : '/api/audit-logs/my';
             const params: any = { pageNumber: page, pageSize: ACTIVITY_LOG_PAGE_SIZE };
             if (activityLogType) params.actionType = activityLogType;
             if (activityLogDate) {
                 params.dateRangeStart = activityLogDate;
                 params.dateRangeEnd = activityLogDate;
             }
-            const res = await api.get(endpoint, params);
-            const json = res.data;
+            let res: any;
+            try {
+                res = await api.get(endpoint, params);
+            } catch {
+                res = await api.get('/api/audit-logs/my', params);
+            }
+            const json = res?.data;
             const d = json?.data;
             if (json?.isSuccess && d?.items) {
                 setActivityLogs(d.items);

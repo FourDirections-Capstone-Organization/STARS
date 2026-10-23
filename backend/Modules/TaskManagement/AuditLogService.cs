@@ -265,6 +265,32 @@ public class AuditLogService : IAuditLogService
                 }
             }
         }
+        else
+        {
+            var actor = entry.User is not null
+                ? $"{entry.User.FirstName} {entry.User.LastName}".Trim()
+                : "System";
+            var entity = !string.IsNullOrWhiteSpace(entry.TargetEntity) ? entry.TargetEntity : "record";
+            var idSnippet = entry.TargetEntityId.HasValue ? $" (#{entry.TargetEntityId.Value.ToString().Substring(0, Math.Min(8, entry.TargetEntityId.Value.ToString().Length))})" : "";
+
+            description = entry.ActionType switch
+            {
+                AuditActionType.Create => $"{actor} created new {entity.ToLowerInvariant()}{idSnippet}",
+                AuditActionType.Update => $"{actor} updated {entity.ToLowerInvariant()}{idSnippet}",
+                AuditActionType.Delete => $"{actor} deleted {entity.ToLowerInvariant()}{idSnippet}",
+                AuditActionType.StatusChange => !string.IsNullOrWhiteSpace(entry.NewValue)
+                    ? $"{actor} changed {entity.ToLowerInvariant()} status to \"{entry.NewValue}\""
+                    : $"{actor} changed {entity.ToLowerInvariant()} status",
+                AuditActionType.Login => $"{actor} logged into the system",
+                AuditActionType.Logout => $"{actor} logged out",
+                AuditActionType.Upload => $"{actor} uploaded attachment for {entity.ToLowerInvariant()}{idSnippet}",
+                AuditActionType.Export => $"{actor} exported {entity.ToLowerInvariant()} report data",
+                AuditActionType.AccessDenied => $"Unauthorized access attempt to {entity}",
+                AuditActionType.BlockedAction => $"Blocked action attempt on {entity}",
+                AuditActionType.DuplicateOverride => $"{actor} confirmed duplicate task override",
+                _ => $"{actor} performed {entry.ActionType} on {entity.ToLowerInvariant()}{idSnippet}"
+            };
+        }
 
         return new AuditLogResponseDTO
         {

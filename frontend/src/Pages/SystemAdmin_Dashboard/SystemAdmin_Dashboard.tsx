@@ -424,6 +424,45 @@ const getAuditBadgeStyle = (raw: string, isBiomarker: boolean): { background: st
     }
 };
 
+const getActivityDescription = (log: any): string => {
+    const desc = (log.description || log.Description || log.activityDescription || log.details || log.message || '').trim();
+    if (desc) return desc;
+
+    const empName = [log.firstName, log.middleName, log.lastName, log.suffix].filter(Boolean).join(' ');
+    const actor = empName || log.actorName || log.userName || (log.userId ? `User ${String(log.userId).slice(0, 8)}` : 'System');
+    const action = formatActionType(log.activityType || log.actionType);
+    const entity = log.targetEntity || 'record';
+    const idSnippet = log.targetEntityId ? ` (#${String(log.targetEntityId).slice(0, 8)})` : '';
+
+    const actionKey = String(log.activityType || log.actionType || '');
+    switch (actionKey) {
+        case 'Create':
+            return `${actor} created new ${entity.toLowerCase()}${idSnippet}`;
+        case 'Update':
+            return `${actor} updated ${entity.toLowerCase()}${idSnippet}`;
+        case 'Delete':
+            return `${actor} deleted ${entity.toLowerCase()}${idSnippet}`;
+        case 'StatusChange':
+            return `${actor} changed ${entity.toLowerCase()} status${log.newValue ? ` to "${log.newValue}"` : ''}`;
+        case 'Login':
+            return `${actor} logged into the system`;
+        case 'Logout':
+            return `${actor} logged out`;
+        case 'Upload':
+            return `${actor} uploaded attachment for ${entity.toLowerCase()}${idSnippet}`;
+        case 'Export':
+            return `${actor} exported ${entity.toLowerCase()} report data`;
+        case 'AccessDenied':
+            return `Unauthorized access attempt to ${entity}`;
+        case 'BlockedAction':
+            return `Blocked action attempt on ${entity}`;
+        case 'DuplicateOverride':
+            return `${actor} confirmed duplicate task override`;
+        default:
+            return `${actor} performed ${action} on ${entity}${idSnippet}`;
+    }
+};
+
 const fmtChangeValue = (v?: string | null): string => {
     if (!v) return '';
     const s = String(v);
@@ -4581,7 +4620,7 @@ export default function Dashboard() {
                     <div className="dashboard-content" style={{ padding: 0 }}>
                         <DataTable
                             title=""
-                            headers={['User ID', 'Action', 'Timestamp', 'Affected Record', 'IP Address']}
+                            headers={['User ID', 'Action', 'Timestamp', 'Activity Description', 'Affected Record', 'IP Address']}
                             searchQuery={activityLogSearch}
                             onSearchChange={val => setActivityLogSearch(val)}
                             searchPlaceholder="Search by user, action, or record…"
@@ -4721,6 +4760,29 @@ export default function Dashboard() {
                                                     </div>
                                                 </>
                                             ) : '—'}
+                                        </td>
+
+                                        {/* ── Activity Description ── */}
+                                        <td style={{
+                                            padding: '14px 16px',
+                                            fontSize: 13,
+                                            color: 'var(--text-primary)',
+                                            maxWidth: 340,
+                                            minWidth: 180,
+                                            verticalAlign: 'middle',
+                                            wordBreak: 'break-word',
+                                            overflowWrap: 'anywhere',
+                                            whiteSpace: 'normal',
+                                        }}>
+                                            <div style={{
+                                                fontWeight: 500,
+                                                lineHeight: 1.45,
+                                                wordBreak: 'break-word',
+                                                overflowWrap: 'anywhere',
+                                                whiteSpace: 'normal',
+                                            }}>
+                                                {getActivityDescription(log)}
+                                            </div>
                                         </td>
 
                                         {/* ── Affected Record ── */}

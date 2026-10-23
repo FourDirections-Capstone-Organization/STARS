@@ -50,11 +50,11 @@ public class AuditLogController : ControllerBase
         var ipAddress = GetIpAddress();
         var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
-        if (userRole != UserRole.Manager.ToString())
+        if (userRole != UserRole.Manager.ToString() && userRole != UserRole.Coordinator.ToString())
         {
             if (requestUserId.HasValue)
                 await _auditLogService.LogAccessDeniedAsync(requestUserId.Value, ipAddress, "AuditLog");
-            return StatusCode(403, ApiResponseDTO<object>.Failure("Access denied. Only Managers can view audit logs."));
+            return StatusCode(403, ApiResponseDTO<object>.Failure("Access denied. Only Managers and Coordinators can view audit logs."));
         }
 
         if (requestUserId.HasValue)
@@ -81,11 +81,11 @@ public class AuditLogController : ControllerBase
         var ipAddress = GetIpAddress();
         var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
-        if (userRole != UserRole.Manager.ToString())
+        if (userRole != UserRole.Manager.ToString() && userRole != UserRole.Coordinator.ToString())
         {
             if (requestUserId.HasValue)
                 await _auditLogService.LogAccessDeniedAsync(requestUserId.Value, ipAddress, "AuditLog");
-            return StatusCode(403, ApiResponseDTO<object>.Failure("Access denied. Only Managers can view audit logs."));
+            return StatusCode(403, ApiResponseDTO<object>.Failure("Access denied. Only Managers and Coordinators can view audit logs."));
         }
 
         if (requestUserId.HasValue)
