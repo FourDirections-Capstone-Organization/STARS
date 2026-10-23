@@ -408,4 +408,44 @@ public class DmsIntegrationTests : IDisposable
         Assert.True(updatedTask.IsApproved);
         Assert.Equal(100, updatedTask.Assignments.First().CompletionPercentage);
     }
+
+    [Fact]
+    public async Task GetPerformanceSummary_IncludesDeliveredTaskDeliveryDetails()
+    {
+        var service = CreateService();
+        var taskId = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = taskId,
+            Title = "Parcel Delivery Task",
+            Description = "Medical supplies",
+            Deadline = DateTime.UtcNow.AddHours(2),
+            Status = Backend.Models.Enums.TaskStatus.Completed,
+            CreatedAt = DateTime.UtcNow.AddHours(-1)
+        };
+        var delivery = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            Task = task,
+            RecipientName = "Maria Santos",
+            RecipientContact = "09171234567",
+            DeliveryAddress = "Makati City",
+            DmsWaybillNo = "WB-2026-999888",
+            DmsStatus = "Delivered",
+            CourierEmployeeId = "DRV-HERO-01",
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            DmsLastSyncedAt = DateTime.UtcNow.AddMinutes(-30)
+        };
+        _db.Tasks.Add(task);
+        _db.TaskDeliveryDetails.Add(delivery);
+        await _db.SaveChangesAsync();
+
+        var summary = await service.GetPerformanceSummaryAsync();
+        Assert.True(summary.IsSuccess);
+        Assert.Contains(summary.Data!.Records, r => r.WaybillNo == "WB-2026-999888");
+        var record = summary.Data.Records.First(r => r.WaybillNo == "WB-2026-999888");
+        Assert.Equal("DRV-HERO-01", record.DriverId);
+        Assert.True(record.IsOnTime);
+    }
 }

@@ -270,6 +270,40 @@ public class DmsIntegrationService : IDmsIntegrationService
                         a.CompletionPercentage = 100;
                     }
                 }
+
+                if (!string.IsNullOrWhiteSpace(detail.DmsWaybillNo))
+                {
+                    var existingPerf = await _db.DmsDeliveryPerformances
+                        .FirstOrDefaultAsync(p => p.WaybillNo == detail.DmsWaybillNo);
+
+                    var completedAt = detail.DmsLastSyncedAt ?? DateTime.UtcNow;
+                    var slaTarget = task.RevisedDeadline ?? task.Deadline;
+                    var isOnTime = completedAt <= slaTarget;
+                    var driverId = !string.IsNullOrWhiteSpace(detail.CourierEmployeeId)
+                        ? detail.CourierEmployeeId
+                        : "Field Courier";
+
+                    if (existingPerf == null)
+                    {
+                        _db.DmsDeliveryPerformances.Add(new DmsDeliveryPerformance
+                        {
+                            WaybillNo = detail.DmsWaybillNo,
+                            StarsTaskId = detail.TaskId,
+                            DriverId = driverId,
+                            CompletedAt = completedAt.Kind == DateTimeKind.Utc ? completedAt : completedAt.ToUniversalTime(),
+                            SlaTargetAt = slaTarget.Kind == DateTimeKind.Utc ? slaTarget : slaTarget.ToUniversalTime(),
+                            IsOnTime = isOnTime,
+                            ReceivedAt = DateTime.UtcNow
+                        });
+                    }
+                    else
+                    {
+                        existingPerf.DriverId = driverId;
+                        existingPerf.CompletedAt = completedAt.Kind == DateTimeKind.Utc ? completedAt : completedAt.ToUniversalTime();
+                        existingPerf.SlaTargetAt = slaTarget.Kind == DateTimeKind.Utc ? slaTarget : slaTarget.ToUniversalTime();
+                        existingPerf.IsOnTime = isOnTime;
+                    }
+                }
             }
             else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup" || normStatus == "assigned" || normStatus == "processing")
             {
@@ -564,6 +598,41 @@ public class DmsIntegrationService : IDmsIntegrationService
                         a.CompletionPercentage = 100;
                     }
                 }
+
+                // Automatically synchronize into DmsDeliveryPerformances for live SLA analytics
+                if (!string.IsNullOrWhiteSpace(detail.DmsWaybillNo))
+                {
+                    var existingPerf = await _db.DmsDeliveryPerformances
+                        .FirstOrDefaultAsync(p => p.WaybillNo == detail.DmsWaybillNo);
+
+                    var completedAt = detail.DmsLastSyncedAt ?? DateTime.UtcNow;
+                    var slaTarget = task.RevisedDeadline ?? task.Deadline;
+                    var isOnTime = completedAt <= slaTarget;
+                    var driverId = !string.IsNullOrWhiteSpace(detail.CourierEmployeeId)
+                        ? detail.CourierEmployeeId
+                        : (!string.IsNullOrWhiteSpace(dto.DriverId) ? dto.DriverId : "Field Courier");
+
+                    if (existingPerf == null)
+                    {
+                        _db.DmsDeliveryPerformances.Add(new DmsDeliveryPerformance
+                        {
+                            WaybillNo = detail.DmsWaybillNo,
+                            StarsTaskId = detail.TaskId,
+                            DriverId = driverId,
+                            CompletedAt = completedAt.Kind == DateTimeKind.Utc ? completedAt : completedAt.ToUniversalTime(),
+                            SlaTargetAt = slaTarget.Kind == DateTimeKind.Utc ? slaTarget : slaTarget.ToUniversalTime(),
+                            IsOnTime = isOnTime,
+                            ReceivedAt = DateTime.UtcNow
+                        });
+                    }
+                    else
+                    {
+                        existingPerf.DriverId = driverId;
+                        existingPerf.CompletedAt = completedAt.Kind == DateTimeKind.Utc ? completedAt : completedAt.ToUniversalTime();
+                        existingPerf.SlaTargetAt = slaTarget.Kind == DateTimeKind.Utc ? slaTarget : slaTarget.ToUniversalTime();
+                        existingPerf.IsOnTime = isOnTime;
+                    }
+                }
             }
             else if (normStatus == "in transit" || normStatus == "dispatched" || normStatus == "picked up" || normStatus == "out for delivery" || normStatus == "for pickup" || normStatus == "assigned" || normStatus == "processing")
             {
@@ -683,6 +752,46 @@ public class DmsIntegrationService : IDmsIntegrationService
             .OrderByDescending(p => p.CompletedAt)
             .Take(500)
             .ToListAsync();
+
+        // Also merge delivered / completed items from TaskDeliveryDetails that have a waybill
+        // so all existing and live delivered waybills immediately appear in delivery analytics
+        var deliveredDetails = await _db.TaskDeliveryDetails
+            .Include(d => d.Task)
+            .AsNoTracking()
+            .Where(d => !string.IsNullOrEmpty(d.DmsWaybillNo))
+            .Where(d => d.DmsStatus == "Delivered" || d.DmsStatus == "Completed" ||
+                        (d.Task != null && d.Task.Status == Backend.Models.Enums.TaskStatus.Completed))
+            .ToListAsync();
+
+        var existingWaybills = new HashSet<string>(list.Select(p => p.WaybillNo), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var d in deliveredDetails)
+        {
+            if (string.IsNullOrWhiteSpace(d.DmsWaybillNo)) continue;
+            if (existingWaybills.Contains(d.DmsWaybillNo)) continue;
+
+            var dDriver = !string.IsNullOrWhiteSpace(d.CourierEmployeeId) ? d.CourierEmployeeId : "Field Courier";
+            if (!string.IsNullOrWhiteSpace(driverId) && !string.Equals(dDriver, driverId.Trim(), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var completedAt = d.DmsLastSyncedAt ?? d.UpdatedAt ?? d.CreatedAt;
+            var slaTarget = d.Task?.RevisedDeadline ?? d.Task?.Deadline ?? d.CreatedAt.AddHours(24);
+            var isOnTime = completedAt <= slaTarget;
+
+            list.Add(new DmsDeliveryPerformance
+            {
+                WaybillNo = d.DmsWaybillNo,
+                StarsTaskId = d.TaskId,
+                DriverId = dDriver,
+                CompletedAt = completedAt,
+                SlaTargetAt = slaTarget,
+                IsOnTime = isOnTime,
+                ReceivedAt = d.CreatedAt
+            });
+            existingWaybills.Add(d.DmsWaybillNo);
+        }
+
+        list = list.OrderByDescending(p => p.CompletedAt).ToList();
 
         var total = list.Count;
         var onTime = list.Count(p => p.IsOnTime);

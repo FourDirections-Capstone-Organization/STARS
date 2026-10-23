@@ -4188,12 +4188,20 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
         if (!dmsPerfData?.records) return [];
         let list = dmsPerfData.records;
         if (dmsPerfSearch.trim()) {
-            const q = dmsPerfSearch.toLowerCase();
-            list = list.filter(r =>
-                r.waybillNo?.toLowerCase().includes(q) ||
-                r.driverId?.toLowerCase().includes(q) ||
-                r.starsTaskId?.toLowerCase().includes(q)
-            );
+            const q = dmsPerfSearch.toLowerCase().trim();
+            const qClean = q.replace(/[\s-_]/g, '');
+            list = list.filter(r => {
+                const wb = (r.waybillNo || '').toLowerCase();
+                const wbClean = wb.replace(/[\s-_]/g, '');
+                const driver = (r.driverId || '').toLowerCase();
+                const task = (r.starsTaskId || '').toLowerCase();
+                return (
+                    wb.includes(q) ||
+                    (qClean.length > 2 && wbClean.includes(qClean)) ||
+                    driver.includes(q) ||
+                    task.includes(q)
+                );
+            });
         }
         return list;
     }, [dmsPerfData?.records, dmsPerfSearch]);

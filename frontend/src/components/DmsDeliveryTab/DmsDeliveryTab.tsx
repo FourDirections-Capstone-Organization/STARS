@@ -313,8 +313,11 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
             // Search query
             if (!searchQuery.trim()) return true;
             const q = searchQuery.toLowerCase().trim();
+            const qClean = q.replace(/[\s-_]/g, '');
+            const wbClean = (d.dmsWaybillNo || '').toLowerCase().replace(/[\s-_]/g, '');
             return (
                 (d.dmsWaybillNo && d.dmsWaybillNo.toLowerCase().includes(q)) ||
+                (qClean.length > 2 && wbClean.includes(qClean)) ||
                 (d.taskTitle && d.taskTitle.toLowerCase().includes(q)) ||
                 (d.recipientName && d.recipientName.toLowerCase().includes(q)) ||
                 (d.deliveryAddress && d.deliveryAddress.toLowerCase().includes(q)) ||
