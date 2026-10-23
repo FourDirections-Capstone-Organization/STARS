@@ -5,9 +5,9 @@ public class FomsIntegrationSettings
     public const string SectionName = "FomsIntegration";
 
     /// <summary>
-    /// Base URL of the FOMS API in Azure (e.g. https://foms-backend-app.azurewebsites.net)
+    /// Base URL of the FOMS API in Azure (e.g. https://fomsintegration-amfve2fdccbdgbgy.eastasia-01.azurewebsites.net)
     /// </summary>
-    public string BaseUrl { get; set; } = string.Empty;
+    public string BaseUrl { get; set; } = "https://fomsintegration-amfve2fdccbdgbgy.eastasia-01.azurewebsites.net";
 
     /// <summary>
     /// Outbound API key presented in X-Api-Key when STARS calls FOMS.
