@@ -9,7 +9,6 @@ import {
     Check,
     Send,
     ExternalLink,
-    Play,
     Truck,
     Building,
     Phone,
@@ -61,22 +60,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         deliveryRemarks: 'Official invoice document received and endorsed with wet signature.',
     });
     const [submittingSign, setSubmittingSign] = useState(false);
-
-    // Modal state for Simulating Incoming Endorsement Request from FOMS
-    const [showSimModal, setShowSimModal] = useState(false);
-    const [simSubmitting, setSimSubmitting] = useState(false);
-    const [simSuccessResult, setSimSuccessResult] = useState<any | null>(null);
-    const [simForm, setSimForm] = useState({
-        invoiceNumber: `INV-2026-${Math.floor(2000 + Math.random() * 8000)}`,
-        clientName: 'Apex Wholesale Distribution',
-        clientAddress: 'Warehouse 9, North Harbor Industrial Zone, Tondo, Manila',
-        clientContactPerson: 'Mr. Roberto Tan',
-        clientContactNumber: '09195556677',
-        clientEmail: 'rtan@apexwholesale.com',
-        invoiceAmount: 118400.0,
-        invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-APEX-SAMPLE.pdf',
-        remarks: 'Finalized commercial invoice requiring physical delivery and wet-ink sign-off.',
-    });
 
     // Architecture details modal
     const [showArchModal, setShowArchModal] = useState(false);
@@ -197,127 +180,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     const endorsedCount = endorsements.filter(e => e.endorsementStatus === 'Endorsed' || e.endorsementStatus === 'Completed').length;
     const totalExposure = endorsements.reduce((acc, e) => acc + (e.invoiceAmount || 0), 0);
 
-    // Apply Presets in Simulation Modal
-    const applySimulationPreset = (preset: 'standard' | 'highvalue' | 'express') => {
-        const randId = Math.floor(2000 + Math.random() * 8000);
-        if (preset === 'standard') {
-            setSimForm({
-                invoiceNumber: `INV-2026-${randId}`,
-                clientName: 'Horizon Retail Holdings Inc.',
-                clientAddress: '7th Floor, Commerce Tower, Ortigas Center, Pasig City',
-                clientContactPerson: 'Atty. Fernando Gomez',
-                clientContactNumber: '09181234567',
-                clientEmail: 'fernando.gomez@horizonretail.ph',
-                invoiceAmount: 89500.0,
-                invoiceDocumentUrl: `https://stars.blob.core.windows.net/invoices/INV-2026-${randId}.pdf`,
-                remarks: 'Commercial billing finalized in FOMS. Dispatch physical invoice for client receiving endorsement.',
-            });
-        } else if (preset === 'highvalue') {
-            setSimForm({
-                invoiceNumber: `INV-2026-${randId}`,
-                clientName: 'Bayan Logistics & Supply Corp.',
-                clientAddress: 'Block 4, South Expressway Industrial Estate, Biñan, Laguna',
-                clientContactPerson: 'Mr. Eduardo Garcia',
-                clientContactNumber: '09171122334',
-                clientEmail: 'egarcia@bayanlogistics.ph',
-                invoiceAmount: 320000.0,
-                invoiceDocumentUrl: `https://stars.blob.core.windows.net/invoices/INV-2026-${randId}.pdf`,
-                remarks: 'High-value enterprise billing. Ensure wet signature and corporate receiving stamp on duplicate copy.',
-            });
-        } else {
-            setSimForm({
-                invoiceNumber: `INV-2026-${randId}`,
-                clientName: 'Universal Freight Express',
-                clientAddress: 'Building 7, Harbor Center Port Area, Manila',
-                clientContactPerson: 'Capt. Antonio Solis',
-                clientContactNumber: '09187654321',
-                clientEmail: 'asolis@ufreight.com',
-                invoiceAmount: 215800.0,
-                invoiceDocumentUrl: `https://stars.blob.core.windows.net/invoices/INV-2026-${randId}.pdf`,
-                remarks: 'Priority physical invoice delivery requested. 30-day payment clock begins upon client sign-off.',
-            });
-        }
-    };
-
-    // Submit Simulation: Dispatch Webhook to Backend
-    const handleSimulateEndorsementRequest = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSimSubmitting(true);
-
-        const payload = {
-            invoiceNumber: simForm.invoiceNumber.trim(),
-            clientName: simForm.clientName.trim(),
-            clientAddress: simForm.clientAddress.trim(),
-            clientContactPerson: simForm.clientContactPerson.trim(),
-            clientContactNumber: simForm.clientContactNumber.trim(),
-            clientEmail: simForm.clientEmail.trim(),
-            invoiceAmount: Number(simForm.invoiceAmount),
-            billingDate: new Date().toISOString(),
-            dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-            invoiceDocumentUrl: simForm.invoiceDocumentUrl.trim(),
-            remarks: simForm.remarks.trim(),
-        };
-
-        const randomTaskNo = `TK${Math.floor(10 + Math.random() * 89)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-        const newTaskId = `task-endorse-${Date.now()}`;
-
-        try {
-            let backendRes: any = null;
-            try {
-                const res = await api.post('/api/integration/foms/endorsement-request', payload, {
-                    headers: { 'X-Api-Key': 'foms-stars-secret-key-2026' },
-                });
-                backendRes = res.data;
-            } catch {
-                // If API key is strictly server-to-server, simulate seamlessly
-            }
-
-            const generatedTaskNumber = backendRes?.data?.starsTaskNumber || randomTaskNo;
-            const generatedTaskId = backendRes?.data?.starsTaskId || newTaskId;
-            const assignedCoord = backendRes?.data?.assignedTo || 'Jane Coordinator';
-
-            const newItem: FomsEndorsementItem = {
-                id: `end-sim-${Date.now()}`,
-                taskId: generatedTaskId,
-                taskNumber: generatedTaskNumber,
-                invoiceNumber: simForm.invoiceNumber.trim(),
-                clientName: simForm.clientName.trim(),
-                clientAddress: simForm.clientAddress.trim(),
-                clientContactPerson: simForm.clientContactPerson.trim(),
-                clientContactNumber: simForm.clientContactNumber.trim(),
-                clientEmail: simForm.clientEmail.trim(),
-                invoiceAmount: Number(simForm.invoiceAmount),
-                billingDate: payload.billingDate,
-                dueDate: payload.dueDate,
-                invoiceDocumentUrl: simForm.invoiceDocumentUrl.trim(),
-                signedReceivingCopyUrl: null,
-                actualReceivedDate: null,
-                deliveryRemarks: null,
-                endorsementStatus: 'PendingEndorsement',
-                fomsSyncStatus: 'Pending',
-                fomsSyncAttempts: 0,
-                lastSyncedAt: null,
-                calculatedPaymentDueDate: null,
-                assignedCoordinatorName: assignedCoord,
-                taskStatus: 'In Progress',
-            };
-
-            setEndorsements(prev => [newItem, ...prev]);
-
-            setSimSuccessResult({
-                taskNumber: generatedTaskNumber,
-                taskId: generatedTaskId,
-                assignedTo: assignedCoord,
-                invoiceNumber: simForm.invoiceNumber,
-                amount: simForm.invoiceAmount,
-            });
-
-            toastSuccess(`Created delivery task #${generatedTaskNumber} for invoice ${simForm.invoiceNumber}`);
-        } finally {
-            setSimSubmitting(false);
-        }
-    };
-
     // Submit Signed Endorsement Copy
     const handleSubmitSignedCopy = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -405,17 +267,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         <button
                             type="button"
                             className="foms-btn-primary"
-                            onClick={() => {
-                                setSimSuccessResult(null);
-                                setShowSimModal(true);
-                            }}
-                        >
-                            <Play size={14} fill="currentColor" />
-                            <span>Simulate Endorsement Request</span>
-                        </button>
-                        <button
-                            type="button"
-                            className="foms-btn-outline"
                             onClick={() => setShowArchModal(true)}
                         >
                             <Sparkles size={14} />
@@ -599,7 +450,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                     <div className="table-card-empty-state">
                         <AlertCircle size={32} style={{ opacity: 0.5, color: 'var(--tt, #6B7280)' }} />
                         <h4 style={{ margin: '8px 0 4px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>No invoice endorsement tasks found</h4>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>Try adjusting your search criteria or trigger a simulated FOMS endorsement request.</p>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--tt, #6B7280)' }}>Try adjusting your search criteria or wait for new finalized invoice endorsement tasks to be pushed from FOMS.</p>
                         <button
                             type="button"
                             className="foms-btn-primary"
@@ -934,220 +785,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                 </FormModal>
             )}
 
-            {/* ── Modal: Simulate Incoming FOMS Endorsement Request ── */}
-            {showSimModal && (
-                <FormModal
-                    isOpen={showSimModal}
-                    onClose={() => !simSubmitting && setShowSimModal(false)}
-                    title="Simulate FOMS Finalized Invoice Endorsement Request"
-                    subtitle="Simulate incoming M2M webhook from FOMS when an invoice is finalized and requires physical delivery in STARS."
-                    size="lg"
-                    footer={
-                        simSuccessResult ? (
-                            <>
-                                <button
-                                    type="button"
-                                    className="fm-btn fm-btn-cancel"
-                                    onClick={() => {
-                                        setSimSuccessResult(null);
-                                    }}
-                                >
-                                    Simulate Another Request
-                                </button>
-                                {onOpenTask && simSuccessResult.taskId && (
-                                    <button
-                                        type="button"
-                                        className="fm-btn fm-btn-primary"
-                                        onClick={() => {
-                                            setShowSimModal(false);
-                                            onOpenTask(simSuccessResult.taskId);
-                                        }}
-                                    >
-                                        <ExternalLink size={14} />
-                                        <span>Open Delivery Task View</span>
-                                    </button>
-                                )}
-                            </>
-                        ) : undefined
-                    }
-                >
 
-                        {simSuccessResult ? (
-                            <div className="foms-sim-success-card">
-                                <div className="foms-sim-success-top">
-                                    <div className="foms-success-check-circle">
-                                        <CheckCircle2 size={28} />
-                                    </div>
-                                    <div>
-                                        <h4 className="foms-success-title">Delivery Task Created Successfully!</h4>
-                                        <p className="foms-success-desc">
-                                            STARS generated a physical delivery task for invoice <strong>{simSuccessResult.invoiceNumber}</strong>,
-                                            assigned it to <strong>{simSuccessResult.assignedTo}</strong>, and initialized the endorsement tracker.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="foms-success-meta-grid">
-                                    <div className="foms-success-meta-item">
-                                        <span className="foms-meta-label">STARS TASK NUMBER</span>
-                                        <span className="foms-meta-val">#{simSuccessResult.taskNumber}</span>
-                                    </div>
-                                    <div className="foms-success-meta-item">
-                                        <span className="foms-meta-label">ASSIGNED COURIER/COORDINATOR</span>
-                                        <span className="foms-meta-val" style={{ color: '#00A99D', fontWeight: 700 }}>
-                                            {simSuccessResult.assignedTo}
-                                        </span>
-                                    </div>
-                                    <div className="foms-success-meta-item">
-                                        <span className="foms-meta-label">INVOICE AMOUNT</span>
-                                        <span className="foms-meta-val">{formatCurrency(simSuccessResult.amount)}</span>
-                                    </div>
-                                    <div className="foms-success-meta-item">
-                                        <span className="foms-meta-label">STATUS</span>
-                                        <span className="foms-status-pill pending">Pending Client Endorsement</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSimulateEndorsementRequest}>
-                                {/* Scenario Presets */}
-                                <div className="foms-preset-row">
-                                    <span className="foms-preset-label">Quick Scenario Presets:</span>
-                                    <div className="foms-preset-buttons">
-                                        <button
-                                            type="button"
-                                            className="foms-btn-preset"
-                                            onClick={() => applySimulationPreset('standard')}
-                                        >
-                                            Commercial Invoice (₱89,500)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="foms-btn-preset"
-                                            onClick={() => applySimulationPreset('highvalue')}
-                                        >
-                                            Enterprise Logistics (₱320,000)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="foms-btn-preset"
-                                            onClick={() => applySimulationPreset('express')}
-                                        >
-                                            Priority Express (₱215,800)
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="foms-sim-form-grid">
-                                    <div className="foms-form-group">
-                                        <label className="foms-label">Invoice Number *</label>
-                                        <input
-                                            type="text"
-                                            className="foms-input"
-                                            required
-                                            value={simForm.invoiceNumber}
-                                            onChange={e => setSimForm({ ...simForm, invoiceNumber: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group">
-                                        <label className="foms-label">Invoice Amount (₱) *</label>
-                                        <input
-                                            type="number"
-                                            className="foms-input"
-                                            required
-                                            min="0"
-                                            step="0.01"
-                                            value={simForm.invoiceAmount}
-                                            onChange={e => setSimForm({ ...simForm, invoiceAmount: parseFloat(e.target.value) || 0 })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                        <label className="foms-label">Client Name *</label>
-                                        <input
-                                            type="text"
-                                            className="foms-input"
-                                            required
-                                            value={simForm.clientName}
-                                            onChange={e => setSimForm({ ...simForm, clientName: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                        <label className="foms-label">Client Physical Delivery Address *</label>
-                                        <input
-                                            type="text"
-                                            className="foms-input"
-                                            required
-                                            value={simForm.clientAddress}
-                                            onChange={e => setSimForm({ ...simForm, clientAddress: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group">
-                                        <label className="foms-label">Contact Person</label>
-                                        <input
-                                            type="text"
-                                            className="foms-input"
-                                            value={simForm.clientContactPerson}
-                                            onChange={e => setSimForm({ ...simForm, clientContactPerson: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group">
-                                        <label className="foms-label">Contact Phone</label>
-                                        <input
-                                            type="text"
-                                            className="foms-input"
-                                            value={simForm.clientContactNumber}
-                                            onChange={e => setSimForm({ ...simForm, clientContactNumber: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                        <label className="foms-label">Invoice Document URL (PDF)</label>
-                                        <input
-                                            type="url"
-                                            className="foms-input"
-                                            value={simForm.invoiceDocumentUrl}
-                                            onChange={e => setSimForm({ ...simForm, invoiceDocumentUrl: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="foms-form-group" style={{ gridColumn: 'span 2' }}>
-                                        <label className="foms-label">Remarks</label>
-                                        <textarea
-                                            className="foms-textarea"
-                                            rows={2}
-                                            value={simForm.remarks}
-                                            onChange={e => setSimForm({ ...simForm, remarks: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="foms-modal-actions">
-                                    <button
-                                        type="button"
-                                        className="fm-btn fm-btn-cancel"
-                                        onClick={() => setShowSimModal(false)}
-                                        disabled={simSubmitting}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="fm-btn fm-btn-primary"
-                                        disabled={simSubmitting}
-                                    >
-                                        <Play size={14} fill="currentColor" />
-                                        <span>{simSubmitting ? 'Dispatching Request...' : 'Simulate Incoming Endorsement Request'}</span>
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-                </FormModal>
-            )}
 
             {/* ── Architecture Diagram Modal ── */}
             {showArchModal && (

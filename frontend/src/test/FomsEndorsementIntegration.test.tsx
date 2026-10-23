@@ -178,22 +178,6 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.queryByText('INV-2026-8810')).not.toBeInTheDocument();
         });
 
-        it('opens the Simulation modal and applies high-value enterprise preset', async () => {
-            render(<FomsEndorsementPanel />);
-
-            const simBtn = screen.getByRole('button', { name: /simulate endorsement request/i });
-            fireEvent.click(simBtn);
-
-            expect(screen.getByText(/Simulate FOMS Finalized Invoice Endorsement Request/i)).toBeInTheDocument();
-
-            // Apply high-value preset
-            const highValuePreset = screen.getByRole('button', { name: /enterprise logistics/i });
-            fireEvent.click(highValuePreset);
-
-            expect(screen.getByDisplayValue('Bayan Logistics & Supply Corp.')).toBeInTheDocument();
-            expect(screen.getByDisplayValue('320000')).toBeInTheDocument();
-        });
-
         it('opens the 30-Day Term Architecture explanation modal', () => {
             render(<FomsEndorsementPanel />);
 

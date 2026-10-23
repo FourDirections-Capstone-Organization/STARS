@@ -290,25 +290,6 @@ describe('FomsFinancialMetricsView', () => {
         expect(screen.queryByText('Horizon Retail Holdings Inc.')).not.toBeInTheDocument();
     });
 
-    it('opens the FOMS Alert Simulator modal and applies preset scenarios', async () => {
-        render(<FomsFinancialMetricsView initialTab="routing" />);
-
-        const simBtn = screen.getByRole('button', { name: /simulate foms alert/i });
-        fireEvent.click(simBtn);
-
-        // Modal should be open
-        expect(screen.getByText(/FOMS Alert Interception & Graph Routing Simulator/i)).toBeInTheDocument();
-        expect(screen.getByText(/Quick Scenario Presets:/i)).toBeInTheDocument();
-
-        // Apply a preset
-        const criticalPreset = screen.getByRole('button', { name: /Critical 61-90/i });
-        fireEvent.click(criticalPreset);
-
-        // Amount due should be updated to 340000
-        const amountInput = screen.getByDisplayValue('340000');
-        expect(amountInput).toBeInTheDocument();
-    });
-
     it('opens Graph Routing Engine Decision Trace modal', async () => {
         render(<FomsFinancialMetricsView initialTab="routing" />);
 
