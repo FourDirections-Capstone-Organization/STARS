@@ -64,6 +64,16 @@ public class User
     [MaxLength(100)]
     public string AllowedSystems { get; set; } = "STARS";
 
+    // Multi-System Assigned Roles & Hubs
+    [MaxLength(50)]
+    public string? DmsRole { get; set; }
+
+    [MaxLength(250)]
+    public string? DmsAreas { get; set; }
+
+    [MaxLength(50)]
+    public string? FomsRole { get; set; }
+
     // Terms & Conditions
     public bool HasAcceptedTerms { get; set; } = false;
     [MaxLength(20)]

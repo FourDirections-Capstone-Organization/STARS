@@ -29,5 +29,8 @@ public class UserResponseDTO
     /// <summary>Online/Offline derived from the user's active session activity.</summary>
     public string PresenceStatus { get; set; } = "Offline";
     public string AllowedSystems { get; set; } = "STARS";
+    public string? DmsRole { get; set; }
+    public List<string>? DmsAreas { get; set; }
+    public string? FomsRole { get; set; }
 }
 

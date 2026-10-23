@@ -58,8 +58,9 @@ public interface IFomsIntegrationService
         string? password,
         string? role,
         string? phone,
-        decimal? salaryRate,
-        DateTime? dateHired);
+        decimal? salaryRate = null,
+        DateTime? dateHired = null,
+        string? status = "Active");
 
     /// <summary>
     /// Integration Check: Queries FOMS to check if an email or employee ID already exists in FOMS.
