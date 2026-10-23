@@ -1604,11 +1604,20 @@
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 18px 12px 14px 12px;
+    padding: 14px 10px 12px 10px;
     position: relative;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 169, 157, 0.25) transparent;
     margin-bottom: 6px;
+}
+
+.tv-dms-stepper-inner {
+    position: relative;
+    width: 100%;
+    min-width: 360px;
 }
 
 .tv-dms-stepper {
@@ -1617,11 +1626,12 @@
     justify-content: space-between;
     position: relative;
     z-index: 2;
+    width: 100%;
 }
 
 .tv-dms-stepper-track {
     position: absolute;
-    top: 31px;
+    top: 11px;
     left: calc(100% / 14);
     right: calc(100% / 14);
     height: 3px;
@@ -1632,7 +1642,7 @@
 
 .tv-dms-stepper-progress {
     height: 100%;
-    background: linear-gradient(90deg, #059669 0%, #00A99D 100%);
+    background: linear-gradient(90deg, #059669 0%, var(--primary, #00A99D) 100%);
     border-radius: 999px;
     transition: width 0.4s ease;
 }
@@ -1641,26 +1651,28 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    flex: 1;
+    gap: 4px;
+    flex: 1 1 0;
+    min-width: 0;
     z-index: 2;
     text-align: center;
-    min-width: 0;
+    padding: 0 1px;
 }
 
 .tv-dms-step-dot {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: #ffffff;
     border: 2px solid #cbd5e1;
     color: #64748b;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.25s ease;
+    flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
@@ -1686,22 +1698,21 @@
 }
 
 .tv-dms-step-label {
-    font-size: 9.5px;
+    display: block;
+    font-size: 8px;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: -0.02em;
     color: #64748b;
     text-transform: uppercase;
     white-space: normal;
     text-align: center;
-    line-height: 1.25;
+    line-height: 1.15;
     word-break: normal;
-    overflow: visible;
-    text-overflow: clip;
-    max-width: 82px;
-    min-height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow-wrap: break-word;
+    width: 100%;
+    max-width: 100%;
+    min-height: 20px;
+    margin: 0 auto;
 }
 
 .tv-dms-step.done .tv-dms-step-label {
@@ -1715,11 +1726,11 @@
 }
 
 .tv-dms-step-time {
-    font-size: 9px;
+    font-size: 8px;
     color: #00A99D;
     font-weight: 700;
     background: rgba(0, 169, 157, 0.1);
-    padding: 1px 6px;
+    padding: 1px 4px;
     border-radius: 999px;
     margin-top: 1px;
     white-space: nowrap;
@@ -1727,21 +1738,21 @@
 
 @media (max-width: 640px) {
     .tv-dms-stepper-wrap {
-        padding: 14px 6px 10px 6px;
+        padding: 12px 6px 10px 6px;
+    }
+    .tv-dms-stepper-inner {
+        min-width: 330px;
     }
     .tv-dms-step-dot {
         width: 22px;
         height: 22px;
         font-size: 9px;
     }
-    .tv-dms-step-label {
-        font-size: 8px;
-        letter-spacing: 0;
-        max-width: 48px;
-        min-height: 20px;
-    }
     .tv-dms-stepper-track {
-        top: 25px;
+        top: 10px;
+    }
+    .tv-dms-step-label {
+        font-size: 7.5px;
     }
 }
 

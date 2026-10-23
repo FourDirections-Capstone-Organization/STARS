@@ -746,16 +746,25 @@
     color: var(--primary, #00A99D);
 }
 
+.dms-detail-stepper-inner {
+    position: relative;
+    width: 100%;
+    min-width: 680px;
+}
+
 .dms-detail-stepper-track-wrap {
     position: relative;
     width: 100%;
     padding: 4px 0 8px 0;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 169, 157, 0.25) transparent;
 }
 
 .dms-detail-stepper-track {
     position: absolute;
-    top: 22px;
+    top: 17px;
     left: calc(100% / 14);
     right: calc(100% / 14);
     height: 4px;
@@ -777,6 +786,7 @@
     justify-content: space-between;
     position: relative;
     width: 100%;
+    min-width: 680px;
     z-index: 2;
 }
 

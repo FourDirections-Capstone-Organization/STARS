@@ -512,6 +512,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                     </div>
 
                     <div className="dms-detail-stepper-track-wrap">
+                        <div className="dms-detail-stepper-inner">
                         <div className="dms-detail-stepper-track">
                             <div
                                 className="dms-detail-stepper-progress"
@@ -552,6 +553,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                     </div>
                                 );
                             })}
+                        </div>
                         </div>
                     </div>
                 </div>

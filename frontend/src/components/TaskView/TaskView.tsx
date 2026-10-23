@@ -1580,7 +1580,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 : 'Now';
 
                                             return (
-                                                <>
+                                                <div className="tv-dms-stepper-inner">
                                                     <div className="tv-dms-stepper-track">
                                                         <div
                                                             className="tv-dms-stepper-progress"
@@ -1608,7 +1608,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                                             <span>{idx + 1}</span>
                                                                         )}
                                                                     </div>
-                                                                    <span className="tv-dms-step-label">{step.label}</span>
+                                                                    <span className="tv-dms-step-label" title={step.label}>{step.label}</span>
                                                                     {isCurrent && (
                                                                         <span className="tv-dms-step-time">{formattedTime}</span>
                                                                     )}
@@ -1616,7 +1616,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                             );
                                                         })}
                                                     </div>
-                                                </>
+                                                </div>
                                             );
                                         })()}
                                     </div>
