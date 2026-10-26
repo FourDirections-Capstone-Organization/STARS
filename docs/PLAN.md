@@ -38,7 +38,7 @@ Redesigning the Biomarker UI layout, modifying notification channels, and changi
     - Test gaps: BiomarkerScanTests & StreamAnalyticsTests test private in-file helpers rather than actual services; frontend has zero tests for useBiomarker/BiomarkerDashboard.
 - [x] Step 2: Remove dead streaming analytics services, controllers, and unused DI registrations
   - Verify: Solution builds cleanly with StreamAnalytics and unused analytics controllers removed
-- [ ] Step 3: Fix BiomarkerScanService SLA and on-time calculations using effective deadlines
+- [x] Step 3: Fix BiomarkerScanService SLA and on-time calculations using effective deadlines
   - Verify: Unit tests confirm OnTimeRate, EmployeeLateRate, and OverallSla use real deadline comparison
 - [ ] Step 4: Add comprehensive backend service tests for BiomarkerScanService and controller
   - Verify: Backend test suite confirms alert creation, severity rules, threshold triggers, and pagination

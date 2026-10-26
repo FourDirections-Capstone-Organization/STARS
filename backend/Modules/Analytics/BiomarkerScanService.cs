@@ -70,9 +70,9 @@ public class BiomarkerScanService : BackgroundService
                     continue;
 
                 var completedTasks = deptTasks.Where(t => t.Status == Models.Enums.TaskStatus.Completed).ToList();
-                var completedLast24h = completedTasks.Where(t => t.UpdatedAt >= scanDate.AddDays(-1)).ToList();
-                var onTimeCount = completedLast24h.Count(t => t.IsApproved == true);
-                var lateCount = completedLast24h.Count(t => t.IsApproved == false);
+                var completedLast24h = completedTasks.Where(t => (t.UpdatedAt ?? t.CreatedAt) >= scanDate.AddDays(-1)).ToList();
+                var onTimeCount = completedLast24h.Count(IsTaskOnTime);
+                var lateCount = completedLast24h.Count(IsTaskLate);
                 var totalCompleted24h = completedLast24h.Count;
 
                 // On-time rate check
@@ -121,8 +121,7 @@ public class BiomarkerScanService : BackgroundService
                 // Stuck tasks check
                 var stuckTasks = deptTasks.Count(t =>
                     t.Status == Models.Enums.TaskStatus.InProgress
-                    && t.UpdatedAt.HasValue
-                    && (now - t.UpdatedAt.Value).TotalHours > th.StuckTaskHours);
+                    && (now - (t.UpdatedAt ?? t.CreatedAt)).TotalHours > th.StuckTaskHours);
 
                 if (stuckTasks > 0)
                 {
@@ -156,12 +155,12 @@ public class BiomarkerScanService : BackgroundService
                     .ToListAsync();
 
                 var empCompletedTasks = empAssignments
-                    .Where(a => a.Task.Status == Models.Enums.TaskStatus.Completed)
-                    .Select(a => a.Task)
+                    .Where(a => a.Task != null && a.Task.Status == Models.Enums.TaskStatus.Completed)
+                    .Select(a => a.Task!)
                     .ToList();
 
                 var empCompletedLast7d = empCompletedTasks
-                    .Where(t => t.UpdatedAt >= now.AddDays(-7))
+                    .Where(t => (t.UpdatedAt ?? t.CreatedAt) >= now.AddDays(-7))
                     .ToList();
 
                 // Inactive employee check
@@ -186,7 +185,7 @@ public class BiomarkerScanService : BackgroundService
                 // Late rate check
                 if (empCompletedTasks.Count >= 3)
                 {
-                    var lateCount = empCompletedTasks.Count(t => t.IsApproved == false);
+                    var lateCount = empCompletedTasks.Count(IsTaskLate);
                     var lateRate = (double)lateCount / empCompletedTasks.Count;
                     if (lateRate > th.MaxLateRatePerEmployee)
                     {
@@ -209,7 +208,8 @@ public class BiomarkerScanService : BackgroundService
 
                 // Workload check
                 var activeAssignments = empAssignments.Count(a =>
-                    a.Task.Status != Models.Enums.TaskStatus.Completed
+                    a.Task != null
+                    && a.Task.Status != Models.Enums.TaskStatus.Completed
                     && a.Task.Status != Models.Enums.TaskStatus.Cancelled);
 
                 if (activeAssignments > th.MaxWorkloadPerEmployee)
@@ -237,8 +237,8 @@ public class BiomarkerScanService : BackgroundService
                 && t.Status != Models.Enums.TaskStatus.Cancelled);
 
             var totalCompletedEver = await db.Tasks.CountAsync(t => t.Status == Models.Enums.TaskStatus.Completed);
-            var totalApproved = await db.Tasks.CountAsync(t => t.Status == Models.Enums.TaskStatus.Completed && t.IsApproved == true);
-            var overallSlaCompliance = totalCompletedEver > 0 ? (double)totalApproved / totalCompletedEver * 100 : 100;
+            var totalOnTimeEver = await db.Tasks.CountAsync(t => t.Status == Models.Enums.TaskStatus.Completed && (t.UpdatedAt ?? t.CreatedAt) <= (t.RevisedDeadline ?? t.Deadline));
+            var overallSlaCompliance = CalculateOverallSlaCompliance(totalOnTimeEver, totalCompletedEver);
 
             if (overallSlaCompliance < th.MinOnTimeRate * 100)
             {
@@ -340,4 +340,59 @@ public class BiomarkerScanService : BackgroundService
             _logger.LogWarning(ex, "Failed to generate daily biomarker PDF");
         }
     }
+
+    /// <summary>
+    /// Evaluates if a completed task was finished on or before its effective deadline (RevisedDeadline ?? Deadline).
+    /// </summary>
+    public static bool IsTaskOnTime(Models.Task task)
+    {
+        var completedAt = task.UpdatedAt ?? task.CreatedAt;
+        var effectiveDeadline = task.RevisedDeadline ?? task.Deadline;
+        return completedAt <= effectiveDeadline;
+    }
+
+    /// <summary>
+    /// Evaluates if a completed task was finished after its effective deadline (RevisedDeadline ?? Deadline).
+    /// </summary>
+    public static bool IsTaskLate(Models.Task task)
+    {
+        var completedAt = task.UpdatedAt ?? task.CreatedAt;
+        var effectiveDeadline = task.RevisedDeadline ?? task.Deadline;
+        return completedAt > effectiveDeadline;
+    }
+
+    /// <summary>
+    /// Calculates the on-time rate [0.0 - 1.0] for a collection of completed tasks based on effective deadlines.
+    /// Returns 1.0 if the collection is empty.
+    /// </summary>
+    public static double CalculateOnTimeRate(IEnumerable<Models.Task> completedTasks)
+    {
+        var list = completedTasks.ToList();
+        if (list.Count == 0) return 1.0;
+        var onTimeCount = list.Count(IsTaskOnTime);
+        return (double)onTimeCount / list.Count;
+    }
+
+    /// <summary>
+    /// Calculates the late rate [0.0 - 1.0] for an employee's completed tasks based on effective deadlines.
+    /// Returns 0.0 if the collection is empty.
+    /// </summary>
+    public static double CalculateEmployeeLateRate(IEnumerable<Models.Task> completedTasks)
+    {
+        var list = completedTasks.ToList();
+        if (list.Count == 0) return 0.0;
+        var lateCount = list.Count(IsTaskLate);
+        return (double)lateCount / list.Count;
+    }
+
+    /// <summary>
+    /// Calculates overall SLA compliance percentage [0 - 100].
+    /// Returns 100.0 if totalCompletedCount is 0.
+    /// </summary>
+    public static double CalculateOverallSlaCompliance(int onTimeCount, int totalCompletedCount)
+    {
+        if (totalCompletedCount <= 0) return 100.0;
+        return (double)onTimeCount / totalCompletedCount * 100.0;
+    }
 }
+
