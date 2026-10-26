@@ -21,6 +21,7 @@ using Backend.Models.Enums;
 using System.Text.Json.Serialization;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.FomsIntegration;
+using Backend.Modules.TaskManagement.Groq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -195,6 +196,14 @@ builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
     c.Timeout = TimeSpan.FromSeconds(25);
 });
 builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
+
+builder.Services.AddMemoryCache();
+builder.Services.Configure<GroqSettings>(builder.Configuration.GetSection(GroqSettings.SectionName));
+builder.Services.AddHttpClient(GroqSuitabilityService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IGroqSuitabilityService, GroqSuitabilityService>();
 
 // Analytics Services
 builder.Services.AddScoped<IStreamAnalyticsService, StreamAnalyticsService>();
