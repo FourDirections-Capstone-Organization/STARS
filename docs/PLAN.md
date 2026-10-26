@@ -34,7 +34,7 @@ Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and d
 - [x] Step 1: Map starting indicators from Neo4j, CDC, and Graph Routing, with call sites and test suites
   - Verify: Workload, routine/special XP, 3 rating scores, 5 endpoints, and 5 test suites confirmed without guesswork
 
-- [ ] Step 2: Implement backend Groq service with config key binding, JSON schema validation, and cache
+- [x] Step 2: Implement backend Groq service with config key binding, JSON schema validation, and cache
   - Verify: Unit tests confirm prompt construction, API key isolation, JSON parsing, and cache hits without remote calls
 
 - [ ] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
