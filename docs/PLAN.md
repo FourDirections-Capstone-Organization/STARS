@@ -43,7 +43,7 @@ Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and d
 - [x] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
   - Verify: Button triggers evaluation on demand; repeat clicks reuse cached recommendations without refetching
 
-- [ ] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
+- [x] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
   - Verify: Recommended employees render with AI rationale matching only system metrics in frontend components
 
 - [ ] Step 6: Remove ML.NET FastTree SLA risk model files, training service, and obsolete ML test suites

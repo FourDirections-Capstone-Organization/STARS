@@ -889,7 +889,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     mode,
     initial = {},
     teamMembers,
-    tasks,
+    tasks = [],
     onSave,
     onClose,
     onDelete,
@@ -898,7 +898,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     hideOverlay = false,
     isSaving = false,
 }) => {
-    const existingTitles = useMemo(() => tasks.map(t => t.taskTitle).filter(Boolean), [tasks]);
+    const existingTitles = useMemo(() => (tasks ?? []).map(t => t.taskTitle).filter(Boolean), [tasks]);
     const [submitting, setSubmitting] = useState(false);
     const isBusy = submitting || isSaving;
     const [formError, setFormError] = useState('');
@@ -971,7 +971,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
     const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string } | null>(null);
+    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string; rank?: number } | null>(null);
+    const [suitabilityRanks, setSuitabilityRanks] = useState<Record<string, { rank?: number; rationale?: string; score: number }>>({});
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [singleSearch, setSingleSearch] = useState('');
     const [filterDeptId, setFilterDeptId] = useState('');
@@ -995,11 +996,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         const cached = suitabilityCache.get(cacheKey);
         if (cached && cached.items.length > 0) {
             const top = cached.items[0];
+            const ranks: Record<string, { rank?: number; rationale?: string; score: number }> = {};
+            cached.items.forEach(item => {
+                ranks[item.employeeId] = { rank: item.rank, rationale: item.rationale, score: item.suitabilityScore };
+            });
+            setSuitabilityRanks(ranks);
             setRecommendation({
                 accountId: top.employeeId,
                 employeeName: top.fullName,
                 reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)} (Cached)`,
                 employeeNumber: top.employeeNumber || '',
+                rank: top.rank ?? 1,
             });
             return;
         }
@@ -1021,12 +1028,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
             if (items.length > 0) {
                 suitabilityCache.set(cacheKey, items);
+                const ranks: Record<string, { rank?: number; rationale?: string; score: number }> = {};
+                items.forEach(item => {
+                    ranks[item.employeeId] = { rank: item.rank, rationale: item.rationale, score: item.suitabilityScore };
+                });
+                setSuitabilityRanks(ranks);
                 const top = items[0];
                 setRecommendation({
                     accountId: top.employeeId,
                     employeeName: top.fullName,
                     reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)}`,
                     employeeNumber: top.employeeNumber || '',
+                    rank: top.rank ?? 1,
                 });
             }
         } catch (err) {
@@ -1893,7 +1906,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                             <div className="emp-picker-rec-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <Lightbulb size={13} />
-                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> {recommendation.rank ? `(Rank #${recommendation.rank})` : ''} — {recommendation.reason}</span>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1965,7 +1978,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                             <div className="emp-picker-list">
                                                 {filteredEmployees.map(e => {
                                                     const isSelected = form.assignedTo === e.accountId;
-                                                    const isRecommended = recommendation?.accountId === e.accountId;
+                                                    const recInfo = suitabilityRanks[e.accountId];
+                                                    const isRecommended = recommendation?.accountId === e.accountId || recInfo?.rank === 1;
                                                     const disabled = !e.isAvailable;
                                                     return (
                                                         <div key={e.accountId}
@@ -1992,7 +2006,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                                     {e.department && <span style={{ color: '#64748b' }}>• {e.department}</span>}
                                                                     {e.teamName && <span style={{ color: '#0284c7' }}>• {e.teamName}</span>}
                                                                 </div>
+                                                                {recInfo?.rationale && (
+                                                                    <div className="emp-picker-rationale" style={{ fontSize: 10, color: 'var(--teal-dark, #007A72)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                        <Lightbulb size={10} />
+                                                                        <span>{recInfo.rationale}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
+                                                            {recInfo?.rank && <span className="emp-picker-tag" style={{ background: 'rgba(0, 169, 157, 0.12)', color: 'var(--teal, #00A99D)', fontWeight: 700 }}>#{recInfo.rank}</span>}
                                                             {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
                                                             {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
                                                         </div>
