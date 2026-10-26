@@ -41,5 +41,5 @@ Redesigning the assignment UI layout, altering underlying metric collection quer
   - Verify: Company-wide evaluation assigns single #1 rank and unique positions across all departments
 - [x] Step 6: Update frontend suitability display to render plain-language rationales and single best-pick badge
   - Verify: UI component tests confirm only top candidate receives BEST badge and rationales render clearly
-- [ ] Step 7: Run full backend and frontend test suites
+- [x] Step 7: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
