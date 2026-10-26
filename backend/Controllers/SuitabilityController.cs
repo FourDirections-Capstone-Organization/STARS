@@ -75,7 +75,7 @@ public class SuitabilityController : ControllerBase
     [HttpGet("suitability/preview")]
     [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
     public async Task<IActionResult> GetSuitabilityPreview(
-        [FromQuery] Guid departmentId,
+        [FromQuery] Guid? departmentId = null,
         [FromQuery] int classification = 0,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 5)

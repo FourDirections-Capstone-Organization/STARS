@@ -37,7 +37,7 @@ Redesigning the assignment UI layout, altering underlying metric collection quer
   - Verify: Groq service tests validate structured JSON schema, metric grounding, and response parsing
 - [x] Step 4: Implement fallback rationale generator using actual candidate metrics and enforce unique sequential ranks
   - Verify: Unit tests confirm descriptive fallback text and strictly sequential 1..N ranking without duplicates
-- [ ] Step 5: Add company-wide preview support and global re-ranking in backend and frontend assignment views
+- [x] Step 5: Add company-wide preview support and global re-ranking in backend and frontend assignment views
   - Verify: Company-wide evaluation assigns single #1 rank and unique positions across all departments
 - [ ] Step 6: Update frontend suitability display to render plain-language rationales and single best-pick badge
   - Verify: UI component tests confirm only top candidate receives BEST badge and rationales render clearly

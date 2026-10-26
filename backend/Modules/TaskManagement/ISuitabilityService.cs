@@ -17,6 +17,6 @@ public interface ISuitabilityService
         Guid taskId, Guid employeeId, UserRole callerRole, Guid callerDepartmentId);
 
     Task<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>> GetSuitabilityPreviewAsync(
-        Guid departmentId, int classification, UserRole callerRole,
+        Guid? departmentId, int classification, UserRole callerRole,
         int pageNumber = 1, int pageSize = 5);
 }

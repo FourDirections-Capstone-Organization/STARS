@@ -269,6 +269,70 @@ describe('Step 5: Suitability Display UI with Groq Recommendations, Ranks, and B
             expect(empNames[0]).toBe('Alice Rivera');
             expect(empNames[1]).toBe('Bob Santos');
         });
+
+        it('assigns single #1 rank and unique sequential positions across all candidates in company-wide evaluation', async () => {
+            // Simulate preview returning multiple candidates with conflicting raw rank 1
+            const conflictingCandidates: SuitabilityResponseDTO[] = [
+                {
+                    employeeId: 'emp-002',
+                    employeeNumber: 'E002',
+                    fullName: 'Bob Santos',
+                    role: 'Courier',
+                    workload: 4,
+                    suitabilityScore: 0.70,
+                    rank: 1, // Raw departmental rank #1
+                    rationale: 'Courier rationale',
+                },
+                {
+                    employeeId: 'emp-001',
+                    employeeNumber: 'E001',
+                    fullName: 'Alice Rivera',
+                    role: 'Encoder',
+                    workload: 1,
+                    suitabilityScore: 0.95,
+                    rank: 1, // Raw departmental rank #1
+                    rationale: 'Encoder rationale',
+                },
+            ];
+
+            vi.spyOn(aiService, 'getSuitabilityPreview').mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    message: 'Success',
+                    data: {
+                        items: conflictingCandidates,
+                        totalCount: 2,
+                        pageNumber: 1,
+                        pageSize: 50,
+                        totalPages: 1,
+                        hasPreviousPage: false,
+                        hasNextPage: false,
+                    },
+                },
+            } as any);
+
+            render(<AIAssignmentView />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Evaluate Suitability')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByText('Evaluate Suitability'));
+
+            await waitFor(() => {
+                expect(screen.getByText('#1')).toBeInTheDocument();
+                expect(screen.getByText('#2')).toBeInTheDocument();
+            });
+
+            // Ensure exactly one #1 badge exists (no duplicate #1)
+            const rank1Badges = screen.getAllByText('#1');
+            expect(rank1Badges).toHaveLength(1);
+
+            // Alice Rivera (higher score 0.95) should be ranked before Bob Santos
+            const empNames = screen.getAllByText(/Alice Rivera|Bob Santos/).map(el => el.textContent);
+            expect(empNames[0]).toBe('Alice Rivera');
+            expect(empNames[1]).toBe('Bob Santos');
+        });
     });
 
     describe('TaskModal Component in OpAdmin_Dashboard', () => {

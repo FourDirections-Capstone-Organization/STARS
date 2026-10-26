@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { suitabilityCache } from '../services/suitabilityCache';
+import { suitabilityCache, reRankSuitabilityItems } from '../services/suitabilityCache';
 import { aiService, SuitabilityResponseDTO } from '../services/aiService';
 import { TaskModal, TeamMember } from '../Pages/OpAdmin_Dashboard/OpAdmin_Dashboard';
 import AIAssignmentView from '../Pages/EmergingTechAI/AIAssignmentView';
@@ -200,6 +200,107 @@ describe('Step 4: Employee Suitability Trigger Button & Anti-Spam Caching', () =
             expect(fetcher).toHaveBeenCalledTimes(1);
             expect(res1.items).toHaveLength(2);
             expect(res2.items).toHaveLength(2);
+        });
+
+        it('reRankSuitabilityItems resolves multi-#1 duplicate ranks into strictly sequential 1..N ranks with tie-breaking', () => {
+            const rawMergedItems: SuitabilityResponseDTO[] = [
+                {
+                    employeeId: 'emp-b',
+                    employeeNumber: 'B002',
+                    fullName: 'Bob Santos',
+                    role: 'Courier',
+                    workload: 2,
+                    suitabilityScore: 0.90,
+                    rank: 1, // Duplicate #1 from Dept B
+                    rationale: 'Good courier fit',
+                },
+                {
+                    employeeId: 'emp-a',
+                    employeeNumber: 'A001',
+                    fullName: 'Alice Rivera',
+                    role: 'Encoder',
+                    workload: 1,
+                    suitabilityScore: 0.95,
+                    rank: 1, // Duplicate #1 from Dept A
+                    rationale: 'Best encoder fit',
+                },
+                {
+                    employeeId: 'emp-c',
+                    employeeNumber: 'C003',
+                    fullName: 'Charlie Diaz',
+                    role: 'Dispatcher',
+                    workload: 3,
+                    suitabilityScore: 0.90, // Tie with Bob on score, but higher workload (3 vs 2)
+                    rank: 2,
+                    rationale: 'Acceptable fit',
+                },
+            ];
+
+            const ranked = reRankSuitabilityItems(rawMergedItems);
+            expect(ranked).toHaveLength(3);
+
+            // Alice: score 0.95 -> Rank 1
+            expect(ranked[0].employeeId).toBe('emp-a');
+            expect(ranked[0].rank).toBe(1);
+
+            // Bob: score 0.90, workload 2 -> Rank 2 (tie broken over Charlie with workload 3)
+            expect(ranked[1].employeeId).toBe('emp-b');
+            expect(ranked[1].rank).toBe(2);
+
+            // Charlie: score 0.90, workload 3 -> Rank 3
+            expect(ranked[2].employeeId).toBe('emp-c');
+            expect(ranked[2].rank).toBe(3);
+
+            // Exactly one candidate has rank 1
+            expect(ranked.filter(r => r.rank === 1)).toHaveLength(1);
+        });
+
+        it('reRankSuitabilityItems handles tie-breaking by fullName and deduplicates by employeeId', () => {
+            const itemsWithSameScoreAndWorkload: SuitabilityResponseDTO[] = [
+                {
+                    employeeId: 'emp-z',
+                    employeeNumber: 'Z001',
+                    fullName: 'Zara Young',
+                    role: 'Courier',
+                    workload: 1,
+                    suitabilityScore: 0.85,
+                    rank: 1,
+                },
+                {
+                    employeeId: 'emp-a',
+                    employeeNumber: 'A002',
+                    fullName: 'Aaron Paul',
+                    role: 'Courier',
+                    workload: 1,
+                    suitabilityScore: 0.85,
+                    rank: 1,
+                },
+                {
+                    employeeId: 'emp-z', // Duplicate ID with higher score
+                    employeeNumber: 'Z001',
+                    fullName: 'Zara Young',
+                    role: 'Courier',
+                    workload: 1,
+                    suitabilityScore: 0.88,
+                    rank: 1,
+                },
+            ];
+
+            const ranked = reRankSuitabilityItems(itemsWithSameScoreAndWorkload);
+            expect(ranked).toHaveLength(2); // Deduplicated emp-z
+
+            // Zara has updated score 0.88 -> Rank 1
+            expect(ranked[0].employeeId).toBe('emp-z');
+            expect(ranked[0].rank).toBe(1);
+            expect(ranked[0].suitabilityScore).toBe(0.88);
+
+            // Aaron has score 0.85 -> Rank 2
+            expect(ranked[1].employeeId).toBe('emp-a');
+            expect(ranked[1].rank).toBe(2);
+        });
+
+        it('reRankSuitabilityItems returns empty array for empty input', () => {
+            expect(reRankSuitabilityItems([])).toEqual([]);
         });
     });
 

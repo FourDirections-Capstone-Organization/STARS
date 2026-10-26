@@ -10,7 +10,7 @@ import api from '../../api';
 import { useToast } from '../../components/Toast/Toast';
 import FormModal from '../../components/FormModal/FormModal';
 import { aiService, SlaRiskResponseDTO, SuitabilityResponseDTO } from '../../services/aiService';
-import { suitabilityCache } from '../../services/suitabilityCache';
+import { suitabilityCache, reRankSuitabilityItems } from '../../services/suitabilityCache';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                 const res = await aiService.getSuitabilityPreview(deptId, classification, 1, 50);
                 const json = res.data;
                 if (json.isSuccess && json.data?.items) {
-                    const items = json.data.items;
+                    const items = reRankSuitabilityItems(json.data.items);
                     suitabilityCache.set(cacheKey, items);
                     const scores: Record<string, AiSuitabilityScoreInfo> = {};
                     items.forEach(item => {
@@ -429,38 +429,54 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     setAiError('AI recommendation temporarily unavailable.');
                 }
             } else {
-                const deptIds = [...new Set(employees.filter(e => e.isAvailable).map(e => e.departmentId).filter(Boolean))];
-                if (deptIds.length === 0) {
-                    setAiLoading(false);
-                    return;
-                }
-
-                const allItems: SuitabilityResponseDTO[] = [];
-                const scores: Record<string, AiSuitabilityScoreInfo> = {};
+                let allItems: SuitabilityResponseDTO[] = [];
                 let anyFailed = false;
 
-                const results = await Promise.allSettled(
-                    deptIds.map(dId => aiService.getSuitabilityPreview(dId, classification, 1, 50))
-                );
-
-                results.forEach(r => {
-                    if (r.status === 'fulfilled' && r.value.data?.isSuccess && r.value.data.data?.items) {
-                        r.value.data.data.items.forEach(item => {
-                            allItems.push(item);
-                            scores[item.employeeId] = {
-                                score: item.suitabilityScore,
-                                workload: item.workload,
-                                rank: item.rank,
-                                rationale: item.rationale,
-                            };
-                        });
-                    } else {
-                        anyFailed = true;
+                // Try company-wide unified preview first
+                try {
+                    const companyRes = await aiService.getSuitabilityPreview(undefined, classification, 1, 100);
+                    if (companyRes.data?.isSuccess && companyRes.data?.data?.items && companyRes.data.data.items.length > 0) {
+                        allItems = companyRes.data.data.items;
                     }
-                });
+                } catch {
+                    // Fall back to per-department querying if unified preview is unavailable
+                }
+
+                if (allItems.length === 0) {
+                    const deptIds = [...new Set(employees.filter(e => e.isAvailable).map(e => e.departmentId).filter(Boolean))];
+                    if (deptIds.length === 0) {
+                        setAiLoading(false);
+                        return;
+                    }
+
+                    const results = await Promise.allSettled(
+                        deptIds.map(dId => aiService.getSuitabilityPreview(dId, classification, 1, 50))
+                    );
+
+                    results.forEach(r => {
+                        if (r.status === 'fulfilled' && r.value.data?.isSuccess && r.value.data.data?.items) {
+                            allItems.push(...r.value.data.data.items);
+                        } else {
+                            anyFailed = true;
+                        }
+                    });
+                }
 
                 if (allItems.length > 0) {
-                    suitabilityCache.set(cacheKey, allItems);
+                    // Apply global re-ranking across all candidates to guarantee unique 1..N ranks with single #1
+                    const rankedItems = reRankSuitabilityItems(allItems);
+                    suitabilityCache.set(cacheKey, rankedItems);
+
+                    const scores: Record<string, AiSuitabilityScoreInfo> = {};
+                    rankedItems.forEach(item => {
+                        scores[item.employeeId] = {
+                            score: item.suitabilityScore,
+                            workload: item.workload,
+                            rank: item.rank,
+                            rationale: item.rationale,
+                        };
+                    });
+
                     setAiScores(scores);
                     setAiEnabled(true);
                     setAiError(anyFailed ? 'Some AI recommendations unavailable. Results may be incomplete.' : '');
