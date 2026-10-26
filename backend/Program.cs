@@ -215,9 +215,6 @@ builder.Services.AddHttpClient(GroqSuitabilityService.HttpClientName, c =>
 });
 builder.Services.AddScoped<IGroqSuitabilityService, GroqSuitabilityService>();
 
-// Analytics Services
-builder.Services.AddScoped<IStreamAnalyticsService, StreamAnalyticsService>();
-builder.Services.AddScoped<ChartDataService>();
 
 // Hosted Services
 builder.Services.AddHostedService<OverdueCheckService>();
