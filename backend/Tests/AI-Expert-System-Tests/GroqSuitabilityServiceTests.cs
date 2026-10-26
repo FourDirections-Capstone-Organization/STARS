@@ -43,7 +43,7 @@ public class GroqSuitabilityServiceTests
         settings ??= new GroqSettings
         {
             ApiKey = "gsk_mock_api_key_test_12345",
-            Model = "llama-3.3-70b-versatile",
+            Model = "openai/gpt-oss-120b",
             Endpoint = "https://api.groq.com/openai/v1/chat/completions",
             CacheDurationMinutes = 60
         };
@@ -208,12 +208,14 @@ public class GroqSuitabilityServiceTests
     [Fact]
     public void GetEffectiveApiKey_WhenApiKeyEmpty_FallsBackToEnvironmentVariable()
     {
-        var settings = new GroqSettings { ApiKey = "" };
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
         var envVarName = "GROQ_API_KEY";
         var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
 
         try
         {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "");
             Environment.SetEnvironmentVariable(envVarName, "gsk_from_env_variable_test");
             var (service, _, _) = CreateService(settings);
 
@@ -225,19 +227,20 @@ public class GroqSuitabilityServiceTests
         finally
         {
             Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
         }
     }
 
     [Fact]
     public void GetEffectiveApiKey_WhenBothEmpty_ReturnsEmptyString()
     {
-        var settings = new GroqSettings { ApiKey = "" };
-        var envVarName = "GROQ_API_KEY";
-        var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var envVars = new[] { "GROQ_API_KEY", "Groq__ApiKey", "GroqSettings__ApiKey", "GROQ_KEY" };
+        var originalEnvs = envVars.ToDictionary(k => k, Environment.GetEnvironmentVariable);
 
         try
         {
-            Environment.SetEnvironmentVariable(envVarName, "");
+            foreach (var k in envVars) Environment.SetEnvironmentVariable(k, "");
             var (service, _, _) = CreateService(settings);
 
             var key = service.GetEffectiveApiKey();
@@ -247,20 +250,210 @@ public class GroqSuitabilityServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            foreach (var kvp in originalEnvs) Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
         }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenAzureGroqApiKeySet_ReturnsAzureKey()
+    {
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+        var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "gsk_azure_app_service_key_test");
+            var (service, _, _) = CreateService(settings);
+
+            var key = service.GetEffectiveApiKey();
+
+            key.Should().Be("gsk_azure_app_service_key_test");
+            service.IsConfigured.Should().BeTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenGroqSettingsApiKeySet_ReturnsGroqSettingsKey()
+    {
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var originalGroqSettings = Environment.GetEnvironmentVariable("GroqSettings__ApiKey");
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+        var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+            Environment.SetEnvironmentVariable("GroqSettings__ApiKey", "gsk_groqsettings_env_test");
+            var (service, _, _) = CreateService(settings);
+
+            var key = service.GetEffectiveApiKey();
+
+            key.Should().Be("gsk_groqsettings_env_test");
+            service.IsConfigured.Should().BeTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GroqSettings__ApiKey", originalGroqSettings);
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenDotEnvFileExists_ResolvesKeyFromDotEnv()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "GROQ_API_KEY=\"gsk_custom_dotenv_isolated_test\"\n");
+            var settings = new GroqSettings { ApiKey = "", DotEnvFilePath = tempFile };
+            var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+            var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+
+                var (service, _, _) = CreateService(settings);
+                var key = service.GetEffectiveApiKey();
+
+                key.Should().Be("gsk_custom_dotenv_isolated_test");
+                service.IsConfigured.Should().BeTrue();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_Precedence_SettingsOverAzureOverStandardOverDotEnv()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "GROQ_API_KEY=gsk_from_dotenv\n");
+            var settings = new GroqSettings
+            {
+                ApiKey = "gsk_from_settings",
+                DotEnvFilePath = tempFile
+            };
+
+            var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+            var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "gsk_from_azure");
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "gsk_from_standard");
+
+                // 1. Settings ApiKey wins over all
+                var (service1, _, _) = CreateService(settings);
+                service1.GetEffectiveApiKey().Should().Be("gsk_from_settings");
+
+                // 2. Azure env wins when settings ApiKey is empty
+                settings.ApiKey = "";
+                var (service2, _, _) = CreateService(settings);
+                service2.GetEffectiveApiKey().Should().Be("gsk_from_azure");
+
+                // 3. Standard env wins when Azure env is empty
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+                var (service3, _, _) = CreateService(settings);
+                service3.GetEffectiveApiKey().Should().Be("gsk_from_standard");
+
+                // 4. DotEnv wins when all env vars are empty
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+                var (service4, _, _) = CreateService(settings);
+                service4.GetEffectiveApiKey().Should().Be("gsk_from_dotenv");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task LiveGroq_WhenApiKeyAvailable_SuccessfullyConnectsAndValidatesModel()
+    {
+        var settings = new GroqSettings();
+        var apiKey = settings.GetEffectiveApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return;
+        }
+
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.groq.com/openai/v1/models");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        var response = await client.SendAsync(request);
+        response.IsSuccessStatusCode.Should().BeTrue();
+
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("\"data\"");
+        body.Should().Contain(settings.Model);
+    }
+
+    [Fact]
+    public async Task LiveGroqSuitabilityService_WhenApiKeyAvailable_SuccessfullyEvaluatesTask()
+    {
+        var settings = new GroqSettings();
+        var apiKey = settings.GetEffectiveApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return;
+        }
+
+        using var realHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var mockFactory = new Mock<IHttpClientFactory>();
+        mockFactory.Setup(f => f.CreateClient(GroqSuitabilityService.HttpClientName)).Returns(realHttpClient);
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var mockLogger = new Mock<ILogger<GroqSuitabilityService>>();
+        var options = Options.Create(settings);
+
+        var service = new GroqSuitabilityService(mockFactory.Object, options, cache, mockLogger.Object);
+        var (task, candidates) = CreateSampleData();
+
+        var result = await service.EvaluateSuitabilityAsync(task, candidates);
+
+        result.Should().NotBeNull();
+        result.Recommendations.Should().HaveCount(2);
+        result.Recommendations.Should().OnlyHaveUniqueItems(r => r.Rank);
+        result.Recommendations.All(r => !string.IsNullOrWhiteSpace(r.Rationale)).Should().BeTrue();
     }
 
     [Fact]
     public async Task EvaluateSuitabilityAsync_WhenApiKeyMissing_ThrowsInvalidOperationException_WithoutCallingHttp()
     {
-        var settings = new GroqSettings { ApiKey = "" };
-        var envVarName = "GROQ_API_KEY";
-        var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var envVars = new[] { "GROQ_API_KEY", "Groq__ApiKey", "GroqSettings__ApiKey", "GROQ_KEY" };
+        var originalEnvs = envVars.ToDictionary(k => k, Environment.GetEnvironmentVariable);
 
         try
         {
-            Environment.SetEnvironmentVariable(envVarName, "");
+            foreach (var k in envVars) Environment.SetEnvironmentVariable(k, "");
             var (service, handler, _) = CreateService(settings);
             var (task, candidates) = CreateSampleData();
 
@@ -272,7 +465,7 @@ public class GroqSuitabilityServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            foreach (var kvp in originalEnvs) Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
         }
     }
 

@@ -198,6 +198,17 @@ builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.Configure<GroqSettings>(builder.Configuration.GetSection(GroqSettings.SectionName));
+builder.Services.PostConfigure<GroqSettings>(settings =>
+{
+    if (string.IsNullOrWhiteSpace(settings.ApiKey))
+    {
+        var resolved = settings.GetEffectiveApiKey();
+        if (!string.IsNullOrWhiteSpace(resolved))
+        {
+            settings.ApiKey = resolved;
+        }
+    }
+});
 builder.Services.AddHttpClient(GroqSuitabilityService.HttpClientName, c =>
 {
     c.Timeout = TimeSpan.FromSeconds(30);
