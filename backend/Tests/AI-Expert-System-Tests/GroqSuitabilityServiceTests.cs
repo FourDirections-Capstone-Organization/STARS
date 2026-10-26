@@ -114,13 +114,23 @@ public class GroqSuitabilityServiceTests
               "employeeId": "{{emp1}}",
               "rank": {{rank1}},
               "score": {{score1}},
-              "rationale": "Strong special task experience (8 completed) with light workload (2 active tasks) and high timeliness (4.8/5.0)."
+              "factors": {
+                "workload": "Light workload (2 active tasks)",
+                "experience": "Strong special task experience (8 completed)",
+                "ratings": "High timeliness (4.80) and quality (4.90)"
+              },
+              "rationale": "High availability with light workload and extensive special task experience."
             },
             {
               "employeeId": "{{emp2}}",
               "rank": {{rank2}},
               "score": {{score2}},
-              "rationale": "High active workload (6 tasks) and lower special task experience."
+              "factors": {
+                "workload": "Higher workload (6 active tasks)",
+                "experience": "Limited special task experience (2 completed)",
+                "ratings": "Moderate timeliness (3.90) and quality (4.00)"
+              },
+              "rationale": "Higher active workload and less relevant special task experience."
             }
           ]
         }
@@ -163,6 +173,24 @@ public class GroqSuitabilityServiceTests
         prompt.Should().Contain("\"rank\"");
         prompt.Should().Contain("\"score\"");
         prompt.Should().Contain("\"rationale\"");
+        prompt.Should().Contain("\"factors\"");
+        prompt.Should().Contain("\"workload\"");
+        prompt.Should().Contain("\"experience\"");
+        prompt.Should().Contain("\"ratings\"");
+        prompt.Should().Contain("Plain-Language Rationale");
+        prompt.Should().Contain("Omit Numeric Score");
+    }
+
+    [Fact]
+    public void BuildSystemPrompt_InstructsScoreOmission_AndMetricGrounding()
+    {
+        var (service, _, _) = CreateService();
+
+        var prompt = service.BuildSystemPrompt();
+
+        prompt.Should().Contain("Do NOT include the numeric suitability score in the rationale text");
+        prompt.Should().Contain("Strictly reference only the candidate's real numbers");
+        prompt.Should().Contain("1 to 2 concise sentences");
     }
 
     [Fact]
@@ -181,6 +209,8 @@ public class GroqSuitabilityServiceTests
         prompt.Should().Contain("Active Workload (active tasks): 2");
         prompt.Should().Contain("Special Task Experience (completed): 8");
         prompt.Should().Contain("Timeliness Rating: 4.80 / 5.00");
+        prompt.Should().Contain("structured factors");
+        prompt.Should().Contain("plain-language fit rationale");
 
         // Asserts no sensitive PII fields are leaked in the prompt
         prompt.Should().NotContain("email");
@@ -440,8 +470,9 @@ public class GroqSuitabilityServiceTests
 
         result.Should().NotBeNull();
         result.Recommendations.Should().HaveCount(2);
-        result.Recommendations.Should().OnlyHaveUniqueItems(r => r.Rank);
         result.Recommendations.All(r => !string.IsNullOrWhiteSpace(r.Rationale)).Should().BeTrue();
+        result.Recommendations.All(r => r.Factors != null).Should().BeTrue();
+        result.Recommendations.Select(r => r.Rank).Should().Equal(1, 2);
     }
 
     [Fact]
@@ -649,6 +680,100 @@ public class GroqSuitabilityServiceTests
         var result = service.ParseAndValidateResponse(json, new[] { empId });
 
         result[0].Score.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WithStructuredFactors_PopulatesFactorsCorrectly()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        var jsonWithFactors = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.95,
+              "factors": {
+                "workload": "Low active workload with only 2 current tasks",
+                "experience": "Substantial completed special tasks (8 completed)",
+                "ratings": "Outstanding quality (4.90) and timeliness (4.80)"
+              },
+              "rationale": "Strong availability combined with exceptional special task background."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(jsonWithFactors, new[] { candidates[0].EmployeeId });
+
+        result.Should().HaveCount(1);
+        result[0].Factors.Should().NotBeNull();
+        result[0].Factors!.Workload.Should().Be("Low active workload with only 2 current tasks");
+        result[0].Factors.Experience.Should().Be("Substantial completed special tasks (8 completed)");
+        result[0].Factors.Ratings.Should().Be("Outstanding quality (4.90) and timeliness (4.80)");
+        result[0].Rationale.Should().Be("Strong availability combined with exceptional special task background.");
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WhenFactorsOmitted_InitializesFactorsSafely()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        var jsonWithoutFactors = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.90,
+              "rationale": "Sufficient availability and experience."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(jsonWithoutFactors, new[] { candidates[0].EmployeeId });
+
+        result.Should().HaveCount(1);
+        result[0].Factors.Should().NotBeNull();
+        result[0].Factors!.Workload.Should().BeEmpty();
+        result[0].Factors.Experience.Should().BeEmpty();
+        result[0].Factors.Ratings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WhenRanksHaveTiesOrGaps_NormalizesToStrictSequentialOneToN()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        // Model returns tied rank 1 for both or non-sequential ranks
+        var tiedJson = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.92,
+              "rationale": "High candidate."
+            },
+            {
+              "employeeId": "{{candidates[1].EmployeeId}}",
+              "rank": 1,
+              "score": 0.85,
+              "rationale": "Second candidate with tied rank in raw output."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(tiedJson, candidates.Select(c => c.EmployeeId));
+
+        result.Should().HaveCount(2);
+        result[0].EmployeeId.Should().Be(candidates[0].EmployeeId);
+        result[0].Rank.Should().Be(1);
+        result[1].EmployeeId.Should().Be(candidates[1].EmployeeId);
+        result[1].Rank.Should().Be(2); // Strict 1..N normalization applied
     }
 
     #endregion

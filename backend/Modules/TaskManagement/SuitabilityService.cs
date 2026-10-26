@@ -193,7 +193,8 @@ public class SuitabilityService : ISuitabilityService
                         Workload = ci.Metrics.Workload,
                         SuitabilityScore = hasGroq ? groqRec!.Score : ci.HeuristicScore,
                         Rank = hasGroq ? groqRec!.Rank : null,
-                        Rationale = hasGroq ? groqRec!.Rationale : null
+                        Rationale = hasGroq ? groqRec!.Rationale : null,
+                        Factors = hasGroq ? groqRec!.Factors : null
                     };
                 })
                 .OrderBy(r => r.Rank ?? int.MaxValue)
