@@ -1,41 +1,56 @@
-# Pre-Delivery Task Creation Plan
+# Groq Refactoring Plan: Employee Suitability
 
-**Target Feature Branch**: `fix/pre-delivery-task-creation`  
+**Target Feature Branch**: `feature/groq-employee-suitability`  
 **Production Deployment Branch**: `refactoring/bug-fix` (Only merge after all steps are completed and approved)
 
-## Findings so far
-- frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx: TaskModal, handleNewTask, DuplicateWarningModal
-- frontend/src/components/PreDeliveryTab/PreDeliveryTab.tsx: PreDeliveryTab table and task creation trigger
-- backend/Modules/TaskManagement/TaskService.cs: Task creation, assignment, and deadline validation
-- backend/Modules/Utilities/DuplicateDetectionService.cs: Duplicate check logic triggering duplicate warnings
+## Findings (Step 1)
+- **Workload**: Count of active tasks (`Status` in Pending, Assigned, InProgress, OnHold; not Completed/Cancelled) in `TaskAssignments` + `Tasks`.
+- **Routine/Special XP**: Count of Completed tasks in `TaskAssignments` + `Tasks` partitioned by `Classification` (0=RoutineDailyTask, 1=SpecialTask).
+- **3 Rating Scores**: Average scores from `Recommendations` table (`Category`: 0=Timeliness, 1=WorkQuality, 2=Communication) divided by total recommendations.
+- **5 Endpoints**: `GET /api/tasks/{id}/suitability`, `GET /api/tasks/{id}/suitability/{empId}/explain`, `GET /api/suitability/preview`, `GET /api/admin/expert-system/config`, `PUT /api/admin/expert-system/config`.
+- **FOMS Graph Routing**: In `FomsIntegrationService.cs:444`, routes overdue collection tasks using direct PostgreSQL EF Core query by lowest active coordinator workload.
+- **5 Test Suites**: `ExpertSystemConfigAdminTests` (10 tests), `ExpertSystemWeightTests` (7 tests), `SuitabilityExplanationTests` (4 tests), `SlaRiskPredictionTests` (8 tests), `MlRetrainTests` (6 tests).
 
-## Root causes (from Step 2)
-Full report: [docs/pre-delivery-root-cause-analysis.md](pre-delivery-root-cause-analysis.md)
-- **Modal Stacking (Symptom 1)**: `TaskModal` stays mounted alongside `DuplicateWarningModal`, stacking overlays; `setShowNew(false)` closes prematurely before async save.
-- **Validation Lockout (Symptom 2)**: Missing `expectedDelivery` locks `dueAt` as empty, failing client validation with 0 requests; unmapped courier leaves `assignedTo` empty.
-- **Past Deadlines (Symptom 4)**: `isPreDelivery` skips frontend past-date check, sending past dates rejected by backend with 400 (`Deadline must be a future date/time`).
+## Goal
+Replace ML suitability evaluation with Groq Cloud API, then remove legacy CDC, Kafka, and Neo4j infrastructure.
 
-## Decisions to confirm before Steps 4 and 5
-- **Missing delivery date**: Unlock `dueAt` for manual / quick-pick selection, or auto-default to +24h/+48h based on priority?
-- **Past delivery date**: Prompt coordinator to select a future date, auto-shift deadline to future SLA, or allow override?
-- **Unmapped courier**: Require coordinator manual selection from dropdown, or auto-assign to default dispatcher/pool?
+## Out of scope
+Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and document export services.
+
+## Design notes
+- Groq calls run in backend GroqSuitabilityService; API key stored in appsettings.json / GROQ_API_KEY env var.
+- Candidate metrics query PostgreSQL via EF Core directly, replacing Neo4j and CDC data pipelines.
+- Structured JSON schema response (employeeId, rank, score, rationale) validated via System.Text.Json.
+- Server-side SHA-256 cache (task attributes + candidate IDs) prevents redundant Groq calls on repeat clicks.
+- System prompt strictly restricts inputs to verified system metrics and enforces refusal of off-topic queries.
+
+## Decisions to confirm
+- Legacy engine: completely remove ML.NET & Neo4j code or keep behind a temporary feature switch?
+- Failure handling: fallback to PostgreSQL heuristic score vs. user-facing graceful alert on Groq rate limits?
+- Privacy & payload: confirm sending anonymized candidate IDs, roles, workload, and ratings without PII.
 
 ## Implementation Steps
 
-- [x] Step 1: Reproduce the bug across different pre-delivery orders and record failing vs. succeeding cases
-  - Verify: Document reproduction results with specific order IDs, symptoms observed, and failure categories
+- [x] Step 1: Map starting indicators from Neo4j, CDC, and Graph Routing, with call sites and test suites
+  - Verify: Workload, routine/special XP, 3 rating scores, 5 endpoints, and 5 test suites confirmed without guesswork
 
-- [x] Step 2: Identify root causes by comparing data shapes, save handler execution, network traffic, and backdrop stacking
-  - Verify: Confirm whether handler runs, network requests fire, and multiple backdrops mount without guessing
+- [ ] Step 2: Implement backend Groq service with config key binding, JSON schema validation, and cache
+  - Verify: Unit tests confirm prompt construction, API key isolation, JSON parsing, and cache hits without remote calls
 
-- [x] Step 3: Hide TaskModal overlay while DuplicateWarningModal is active and keep modal open until async save completes
-  - Verify: Single backdrop mounts when duplicate warnings trigger, and modal displays loading state until save resolves
+- [ ] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
+  - Verify: Controller integration tests confirm suitability evaluation from PostgreSQL data without Neo4j calls
 
-- [x] Step 4: Unlock due date for orders missing expectedDelivery and allow coordinator courier selection when unmapped
-  - Verify: Missing dates allow manual/quick-pick entry without validation lock, and unmapped couriers can be selected and saved
+- [ ] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
+  - Verify: Button triggers evaluation on demand; repeat clicks reuse cached recommendations without refetching
 
-- [x] Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission
-  - Verify: Orders with historical expectedDelivery dates produce valid future deadlines and succeed without backend 400 rejection
+- [ ] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
+  - Verify: Recommended employees render with AI rationale matching only system metrics in frontend components
 
-- [x] Step 6: Run backend and frontend test suites to ensure zero regressions
-  - Verify: All dotnet test and npm test suites pass cleanly
+- [ ] Step 6: Remove ML.NET FastTree SLA risk model files, training service, and obsolete ML test suites
+  - Verify: Backend compiles cleanly without Microsoft.ML dependencies while retaining updated test assertions
+
+- [ ] Step 7: Delete CDC Processor project, Debezium, Kafka, and Neo4j configurations from docker-compose
+  - Verify: Solution builds without cdc-processor and Neo4j references; docker-compose config validates cleanly
+
+- [ ] Step 8: Run full backend and frontend test suites to ensure zero regressions
+  - Verify: All dotnet test (Release) and npm test suites pass with zero failures
