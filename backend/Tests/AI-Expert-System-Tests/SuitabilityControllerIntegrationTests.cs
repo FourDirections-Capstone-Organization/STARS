@@ -572,4 +572,182 @@ public class SuitabilityControllerIntegrationTests
         var page2Ids = pagedData2.Items.Select(x => x.EmployeeId);
         page1Ids.Intersect(page2Ids).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task GetSuitableEmployees_Fallback_AssignsStrictlySequentialRanksAndDescriptiveRationales()
+    {
+        using var db = CreateInMemoryDb();
+        var dept = new Department { Id = Guid.NewGuid(), Name = "Operations" };
+        db.Departments.Add(dept);
+
+        var users = new List<User>();
+        for (int i = 1; i <= 4; i++)
+        {
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                EmployeeNumber = $"EMP-10{i}",
+                FirstName = $"Candidate",
+                LastName = $"Number{i}",
+                Email = $"cand{i}@example.com",
+                PasswordHash = "hash",
+                Role = UserRole.Encoder,
+                DepartmentId = dept.Id,
+                AvailabilityStatus = AvailabilityStatus.Active,
+                IsActive = true
+            };
+            db.Users.Add(user);
+            users.Add(user);
+        }
+
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Batch Data Processing",
+            Description = "Process monthly incoming records",
+            AssignedDepartmentId = dept.Id,
+            Classification = TaskClassification.RoutineDailyTask,
+            PriorityLevel = PriorityLevel.Medium
+        };
+        db.Tasks.Add(task);
+
+        // Assign varying active workloads:
+        // user[0]: 0 active tasks, 5 routine completions
+        // user[1]: 1 active task, 3 routine completions
+        // user[2]: 2 active tasks, 1 routine completion
+        // user[3]: 4 active tasks, 0 routine completions
+        for (int i = 0; i < 5; i++)
+        {
+            var compTask = new Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = $"Completed Routine {i}",
+                Status = Models.Enums.TaskStatus.Completed,
+                Classification = TaskClassification.RoutineDailyTask
+            };
+            db.Tasks.Add(compTask);
+            db.TaskAssignments.Add(new TaskAssignment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = compTask.Id,
+                Task = compTask,
+                AssignedUserId = users[0].Id,
+                AssignedUser = users[0]
+            });
+        }
+
+        // Active task for user 1
+        var act1 = new Models.Task { Id = Guid.NewGuid(), Title = "Active 1", Status = Models.Enums.TaskStatus.InProgress };
+        db.Tasks.Add(act1);
+        db.TaskAssignments.Add(new TaskAssignment { Id = Guid.NewGuid(), TaskId = act1.Id, Task = act1, AssignedUserId = users[1].Id, AssignedUser = users[1] });
+
+        // Active tasks for user 2
+        for (int i = 0; i < 2; i++)
+        {
+            var act = new Models.Task { Id = Guid.NewGuid(), Title = $"Active 2-{i}", Status = Models.Enums.TaskStatus.InProgress };
+            db.Tasks.Add(act);
+            db.TaskAssignments.Add(new TaskAssignment { Id = Guid.NewGuid(), TaskId = act.Id, Task = act, AssignedUserId = users[2].Id, AssignedUser = users[2] });
+        }
+
+        // Active tasks for user 3
+        for (int i = 0; i < 4; i++)
+        {
+            var act = new Models.Task { Id = Guid.NewGuid(), Title = $"Active 3-{i}", Status = Models.Enums.TaskStatus.NotStarted };
+            db.Tasks.Add(act);
+            db.TaskAssignments.Add(new TaskAssignment { Id = Guid.NewGuid(), TaskId = act.Id, Task = act, AssignedUserId = users[3].Id, AssignedUser = users[3] });
+        }
+
+        db.SaveChanges();
+
+        var mockGroq = new Mock<IGroqSuitabilityService>();
+        mockGroq.Setup(g => g.IsConfigured).Returns(false); // Fallback mode
+
+        var configStore = CreateConfigStore();
+        var service = new SuitabilityService(db, mockGroq.Object, configStore, NullLogger<SuitabilityService>.Instance);
+        var controller = CreateController(service, UserRole.Coordinator, dept.Id);
+
+        var actionResult = await controller.GetSuitableEmployees(task.Id, pageNumber: 1, pageSize: 10);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        var apiResponse = okResult.Value.As<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>>();
+        apiResponse.Data.Should().NotBeNull();
+        var items = apiResponse.Data!.Items;
+
+        items.Should().HaveCount(4);
+
+        // Verify strictly sequential ranks 1, 2, 3, 4 without duplicates
+        var ranks = items.Select(x => x.Rank).ToList();
+        ranks.Should().Equal(1, 2, 3, 4);
+
+        // Check each candidate's fallback rationale & factors
+        foreach (var item in items)
+        {
+            item.Rationale.Should().NotBeNullOrWhiteSpace();
+            item.Rationale.Should().NotContain("Heuristic evaluation based on");
+            item.Rationale.Should().NotMatchRegex(@"\b0\.\d{2,}\b", "rationale text should omit raw decimal scores");
+
+            item.Factors.Should().NotBeNull();
+            item.Factors!.Workload.Should().NotBeNullOrWhiteSpace();
+            item.Factors.Experience.Should().NotBeNullOrWhiteSpace();
+            item.Factors.Ratings.Should().NotBeNullOrWhiteSpace();
+        }
+
+        // Top candidate is user[0] with 0 workload and 5 completed tasks
+        items[0].EmployeeId.Should().Be(users[0].Id);
+        items[0].Rank.Should().Be(1);
+        items[0].Workload.Should().Be(0);
+        items[0].Rationale.Should().Contain("Has full capacity with no active tasks");
+        items[0].Rationale.Should().Contain("extensive experience across 5 completed routine tasks");
+
+        // Last candidate is user[3] with 4 active tasks
+        items[3].EmployeeId.Should().Be(users[3].Id);
+        items[3].Rank.Should().Be(4);
+        items[3].Workload.Should().Be(4);
+        items[3].Rationale.Should().Contain("Currently managing 4 active tasks");
+    }
+
+    [Fact]
+    public async Task GetSuitableEmployees_GroqReturnsDuplicateRanks_NormalizesToStrictlySequentialRanks()
+    {
+        using var db = CreateInMemoryDb();
+        var (dept, alice, bob, task) = SeedBasicTestData(db);
+
+        var mockGroq = new Mock<IGroqSuitabilityService>();
+        mockGroq.Setup(g => g.IsConfigured).Returns(true);
+        // Groq erroneously returns both candidates with rank 1
+        mockGroq.Setup(g => g.EvaluateSuitabilityAsync(
+                It.IsAny<GroqTaskContext>(),
+                It.IsAny<List<GroqCandidateMetrics>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GroqSuitabilityResult
+            {
+                FromCache = false,
+                Recommendations = new List<GroqCandidateRecommendation>
+                {
+                    new() { EmployeeId = alice.Id, Rank = 1, Score = 0.90, Rationale = "Alice fit" },
+                    new() { EmployeeId = bob.Id, Rank = 1, Score = 0.85, Rationale = "Bob fit" }
+                }
+            });
+
+        var configStore = CreateConfigStore();
+        var service = new SuitabilityService(db, mockGroq.Object, configStore, NullLogger<SuitabilityService>.Instance);
+        var controller = CreateController(service, UserRole.Coordinator, dept.Id);
+
+        var actionResult = await controller.GetSuitableEmployees(task.Id);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>>();
+        var items = response.Data!.Items;
+
+        items.Should().HaveCount(2);
+        // Sequential 1..N normalization ensures exactly one rank 1 and one rank 2
+        items[0].Rank.Should().Be(1);
+        items[0].EmployeeId.Should().Be(alice.Id);
+
+        items[1].Rank.Should().Be(2);
+        items[1].EmployeeId.Should().Be(bob.Id);
+
+        items.Select(x => x.Rank).Distinct().Should().HaveCount(2);
+    }
 }
+

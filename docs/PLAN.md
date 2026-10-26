@@ -35,7 +35,7 @@ Redesigning the assignment UI layout, altering underlying metric collection quer
   - Verify: Tests confirm key resolution from Azure env, Groq__ApiKey, and local .env with verified connectivity
 - [x] Step 3: Update Groq prompt and schema to output structured factors and plain-language fit justifications
   - Verify: Groq service tests validate structured JSON schema, metric grounding, and response parsing
-- [ ] Step 4: Implement fallback rationale generator using actual candidate metrics and enforce unique sequential ranks
+- [x] Step 4: Implement fallback rationale generator using actual candidate metrics and enforce unique sequential ranks
   - Verify: Unit tests confirm descriptive fallback text and strictly sequential 1..N ranking without duplicates
 - [ ] Step 5: Add company-wide preview support and global re-ranking in backend and frontend assignment views
   - Verify: Company-wide evaluation assigns single #1 rank and unique positions across all departments
