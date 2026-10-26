@@ -765,6 +765,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
 interface TaskModalWorkloadInfo {
     accountId: string;
     employeeName: string;
+    employeeNumber?: string;
     workload: number;
     department?: string;
     departmentId?: string;
@@ -774,7 +775,7 @@ interface TaskModalWorkloadInfo {
     isAvailable: boolean;
 }
 
-interface TaskModalProps {
+export interface TaskModalProps {
     mode: 'new' | 'edit';
     initial?: Partial<Task>;
     teamMembers: TeamMember[];
@@ -784,11 +785,29 @@ interface TaskModalProps {
     onDelete?: () => void;
     showSuccess?: (msg: string) => void;
     onFileChange?: (files: File[]) => void;
+    hideOverlay?: boolean;
+    isSaving?: boolean;
 }
 
 const formatDateForInput = (d: Date): string => {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+export const getAdjustedSlaDeadline = (priority: Priority | string, baseDate = new Date()): Date => {
+    const now = baseDate.getTime();
+    switch (priority) {
+        case 'Urgent':
+            return new Date(now + 24 * 60 * 60 * 1000); // 24h SLA
+        case 'High':
+            return new Date(now + 48 * 60 * 60 * 1000); // 48h SLA (1-2 days)
+        case 'Medium':
+            return new Date(now + 72 * 60 * 60 * 1000); // 72h SLA (within 1 week)
+        case 'Low':
+            return new Date(now + 7 * 24 * 60 * 60 * 1000); // 7 days (any future)
+        default:
+            return new Date(now + 48 * 60 * 60 * 1000);
+    }
 };
 
 const getPriorityDeadlineRange = (priority: Priority | ''): { min: string; max?: string; maxDate?: Date; helperText: string } => {
@@ -863,7 +882,7 @@ const getQuickPickOptions = (priority: Priority | '') => {
     return [];
 };
 
-const TaskModal: React.FC<TaskModalProps> = ({
+export const TaskModal: React.FC<TaskModalProps> = ({
     mode,
     initial = {},
     teamMembers,
@@ -873,9 +892,12 @@ const TaskModal: React.FC<TaskModalProps> = ({
     onDelete,
     showSuccess,
     onFileChange,
+    hideOverlay = false,
+    isSaving = false,
 }) => {
     const existingTitles = useMemo(() => tasks.map(t => t.taskTitle).filter(Boolean), [tasks]);
     const [submitting, setSubmitting] = useState(false);
+    const isBusy = submitting || isSaving;
     const [formError, setFormError] = useState('');
     const [supportingEvidenceFiles, setSupportingEvidenceFiles] = useState<File[]>([]);
     const [isSinglePage, setIsSinglePage] = useState(false);
@@ -887,12 +909,39 @@ const TaskModal: React.FC<TaskModalProps> = ({
         (initial.taskTitle && initial.taskTitle.toLowerCase().includes('pre-delivery'))
     ), [initial]);
 
+    const isHistoricalDeadline = useMemo(() => {
+        if ((initial as any)?.isHistoricalDeadline) return true;
+        if ((initial as any)?.deliveryDetails?.isHistoricalDeadline) return true;
+        if (isPreDelivery && initial.dueAt) {
+            const d = new Date(initial.dueAt);
+            return !isNaN(d.getTime()) && d.getTime() <= Date.now();
+        }
+        return false;
+    }, [initial, isPreDelivery]);
+
+    const originalExpectedDelivery = (initial as any)?.originalExpectedDelivery || (initial as any)?.deliveryDetails?.originalExpectedDelivery || '';
+
+    // DMS pre-set deadline is only locked if the DMS order provided a valid FUTURE due date
+    const hasDmsDeadline = Boolean(initial.dueAt && initial.dueAt.trim());
+    const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline && !isHistoricalDeadline;
+
+    const initialDueAt = useMemo(() => {
+        if (!initial.dueAt) return '';
+        const d = new Date(initial.dueAt);
+        if (isNaN(d.getTime())) return '';
+        if (isPreDelivery && d.getTime() <= Date.now()) {
+            const adjusted = getAdjustedSlaDeadline((initial.priority ?? 'Medium') as Priority);
+            return formatDateForInput(adjusted);
+        }
+        return initial.dueAt.slice(0, 16);
+    }, [initial.dueAt, initial.priority, isPreDelivery]);
+
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
         taskCategory: initial.taskCategory ?? '',
         priority: (initial.priority ?? 'Medium') as Priority,
-        dueAt: initial.dueAt ? initial.dueAt.slice(0, 16) : '',
+        dueAt: initialDueAt,
         isConfidential: initial.isConfidential ?? false,
         assignmentScope: (initial.assignees && initial.assignees.length > 1 ? 'Team' : 'SingleEmployee') as 'SingleEmployee' | 'Team' | 'Department',
         assignedTo: initial.assignedTo ?? '',
@@ -919,11 +968,20 @@ const TaskModal: React.FC<TaskModalProps> = ({
     const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
     const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string } | null>(null);
+    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string } | null>(null);
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [singleSearch, setSingleSearch] = useState('');
     const [filterDeptId, setFilterDeptId] = useState('');
     const [filterTeamId, setFilterTeamId] = useState('');
+
+    const isCourierUnmapped = useMemo(() => {
+        if (!isPreDelivery || !deliveryForm.courierEmployeeId) return false;
+        const courierId = deliveryForm.courierEmployeeId.trim().toLowerCase();
+        return eligibleEmployees.length > 0 && !eligibleEmployees.some(e =>
+            e.accountId.toLowerCase() === courierId ||
+            (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
+        );
+    }, [isPreDelivery, deliveryForm.courierEmployeeId, eligibleEmployees]);
 
     const slaLocked = form.priority === 'Urgent';
     const deadlineRange = getPriorityDeadlineRange(form.priority);
@@ -959,6 +1017,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                         rawList = teamMembers.map(tm => ({
                             id: tm.accountId,
                             fullName: tm.employeeName,
+                            employeeNumber: (tm as any).employeeNumber ?? '',
                             role: tm.role,
                             availabilityStatus: tm.presenceStatus,
                             isAvailable: tm.presenceStatus !== 'Offline' && tm.presenceStatus !== 'On Leave',
@@ -969,6 +1028,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                     const mapped: TaskModalWorkloadInfo[] = rawList.map((e: any) => ({
                         accountId: e.id ?? e.accountId ?? e.userId ?? e.UserId ?? '',
                         employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? e.name ?? 'Unknown').trim(),
+                        employeeNumber: (e.employeeNumber ?? e.EmployeeNumber ?? (e as any).driverEmployeeId ?? '').trim(),
                         workload: typeof e.workload === 'number' ? e.workload : (e.activeTaskCount ?? 0),
                         department: e.departmentName ?? e.department ?? e.Department ?? '',
                         departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : ''),
@@ -991,13 +1051,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
                             accountId: best.accountId,
                             employeeName: best.employeeName,
                             reason: `Lowest active workload (${best.workload} tasks)`,
+                            employeeNumber: best.employeeNumber || '',
                         });
 
                         // If pre-delivery has a driver/courier ID and assignee is not yet selected, match it
                         if (!form.assignedTo && deliveryForm.courierEmployeeId) {
                             const matched = mapped.find(e =>
                                 e.accountId.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase() ||
-                                (e as any).employeeNumber?.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase()
+                                (e.employeeNumber && e.employeeNumber.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase())
                             );
                             if (matched) {
                                 setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
@@ -1008,6 +1069,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                     const mapped: TaskModalWorkloadInfo[] = teamMembers.map(tm => ({
                         accountId: tm.accountId,
                         employeeName: tm.employeeName,
+                        employeeNumber: (tm as any).employeeNumber ?? '',
                         workload: 0,
                         department: '',
                         departmentId: '',
@@ -1110,9 +1172,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
             if (!val) return 'Due date is required.';
             const d = new Date(val);
             if (isNaN(d.getTime())) return 'Invalid due date.';
-            if (!isPreDelivery) {
-                const now = new Date();
-                if (d < now) return 'Due date cannot be in the past.';
+            const now = new Date();
+            if (d.getTime() <= now.getTime()) return 'Due date cannot be in the past.';
+            if (!isDmsDeadlineLocked) {
                 if (form.priority === 'High') {
                     const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
                     if (d > maxHigh) return 'High priority deadline must be within 1 to 2 days only from current date.';
@@ -1161,6 +1223,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
             setFormError('Please resolve the highlighted validation errors before saving.');
             return;
         }
+        if (isBusy) return;
         setSubmitting(true);
         setFormError('');
 
@@ -1175,13 +1238,26 @@ const TaskModal: React.FC<TaskModalProps> = ({
         const scopeMap = { SingleEmployee: 0, Team: 1, Department: 2 };
         const prioMap = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
 
+        // Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission
+        let finalDeadline: string | null = null;
+        if (form.dueAt) {
+            const dueDate = new Date(form.dueAt);
+            const now = new Date();
+            if (isPreDelivery && dueDate.getTime() <= now.getTime()) {
+                const adjusted = getAdjustedSlaDeadline(form.priority, now);
+                finalDeadline = adjusted.toISOString();
+            } else {
+                finalDeadline = dueDate.toISOString();
+            }
+        }
+
         const payload: any = {
             title: form.taskTitle.trim(),
             description: form.taskDescription.trim(),
             priorityLevel: prioMap[form.priority] ?? 1,
             classification: 0,
             assignmentScope: scopeMap[form.assignmentScope] ?? 0,
-            deadline: form.dueAt ? new Date(form.dueAt).toISOString() : null,
+            deadline: finalDeadline,
             isConfidential: form.isConfidential,
             assignedUserIds: form.assignmentScope === 'SingleEmployee' && form.assignedTo ? [form.assignedTo] : [],
             teamId: form.assignmentScope === 'Team' ? selectedTeamId || undefined : undefined,
@@ -1201,6 +1277,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
+                isHistoricalDeadline,
+                originalExpectedDelivery: originalExpectedDelivery || (deliveryForm as any).originalExpectedDelivery || undefined,
             };
         }
 
@@ -1209,8 +1287,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
         }
         try {
             await onSave(payload);
-        } catch {
-            onClose();
+        } catch (err) {
+            console.error('TaskModal save error:', err);
         } finally {
             setSubmitting(false);
         }
@@ -1234,10 +1312,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </span>
     );
 
+    if (hideOverlay) {
+        return null;
+    }
+
     const isWideModal = isPreDelivery || enableDelivery || isSinglePage;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={isBusy ? undefined : onClose}>
             <div className={`modal-card${isWideModal ? ' modal-card-wide' : ''}${isSinglePage ? ' modal-card-single-page' : ''}`} onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
@@ -1267,7 +1349,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                         >
                             {isSinglePage ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
-                        <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+                        <button className="icon-btn" onClick={isBusy ? undefined : onClose} disabled={isBusy} aria-label="Close modal"><X size={16} /></button>
                     </div>
                 </div>
 
@@ -1330,12 +1412,22 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                     <div className="field">
                                         <label>
                                             Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                            {isPreDelivery && (
+                                            {isDmsDeadlineLocked && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     🔒 DMS PRE-SET DEADLINE
                                                 </span>
                                             )}
-                                            {!isPreDelivery && deadlineRange.maxDate && (
+                                            {isPreDelivery && isHistoricalDeadline && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    ⚡ PAST DMS DATE ADJUSTED TO SLA
+                                                </span>
+                                            )}
+                                            {isPreDelivery && !hasDmsDeadline && !isHistoricalDeadline && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    ⚠️ DMS DEADLINE MISSING — PLEASE SET
+                                                </span>
+                                            )}
+                                            {!isDmsDeadlineLocked && deadlineRange.maxDate && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
@@ -1344,25 +1436,33 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                         <input
                                             type="datetime-local"
                                             value={form.dueAt}
-                                            onChange={(slaLocked || isPreDelivery) ? undefined : set('dueAt')}
-                                            min={isPreDelivery ? undefined : deadlineRange.min}
-                                            max={isPreDelivery ? undefined : deadlineRange.max}
-                                            readOnly={slaLocked || isPreDelivery}
-                                            disabled={isPreDelivery}
-                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${(slaLocked || isPreDelivery) ? ' input-sla-locked' : ''}`}
-                                            style={(slaLocked || isPreDelivery) ? { background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 } : {}}
+                                            onChange={(slaLocked || isDmsDeadlineLocked) ? undefined : set('dueAt')}
+                                            min={isDmsDeadlineLocked ? undefined : deadlineRange.min}
+                                            max={isDmsDeadlineLocked ? undefined : deadlineRange.max}
+                                            readOnly={slaLocked || isDmsDeadlineLocked}
+                                            disabled={isDmsDeadlineLocked}
+                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${(slaLocked || isDmsDeadlineLocked) ? ' input-sla-locked' : ''}`}
+                                            style={(slaLocked || isDmsDeadlineLocked) ? { background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 } : {}}
                                         />
                                         <FieldErr name="dueAt" />
-                                        {isPreDelivery ? (
+                                        {isDmsDeadlineLocked ? (
                                             <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
                                                 Deadline is synchronized and pre-set from DMS.
+                                            </span>
+                                        ) : isPreDelivery && isHistoricalDeadline ? (
+                                            <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
+                                                Original DMS expected delivery has passed. Automatically adjusted to a valid future SLA deadline.
+                                            </span>
+                                        ) : isPreDelivery && !hasDmsDeadline ? (
+                                            <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
+                                                DMS order has no expected delivery date. Please select a deadline manually or use a quick-pick option.
                                             </span>
                                         ) : deadlineRange.helperText && (
                                             <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
                                                 {deadlineRange.helperText}
                                             </span>
                                         )}
-                                        {quickPicks.length > 0 && !slaLocked && !isPreDelivery && (
+                                        {quickPicks.length > 0 && !slaLocked && !isDmsDeadlineLocked && (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                                 <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
                                                 {quickPicks.map(qp => (
@@ -1634,10 +1734,94 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                 {/* -- SingleEmployee: pick one user -- */}
                                 {form.assignmentScope === 'SingleEmployee' && (
                                     <div className="emp-picker-section">
+                                        {isCourierUnmapped && (
+                                            <div
+                                                className="unmapped-courier-banner"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '10px 14px',
+                                                    background: 'rgba(217, 119, 6, 0.08)',
+                                                    border: '1px solid rgba(217, 119, 6, 0.3)',
+                                                    borderRadius: 8,
+                                                    marginBottom: 10,
+                                                    fontSize: 12,
+                                                    color: '#92400e',
+                                                    gap: 10,
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                                                    <div>
+                                                        <strong style={{ display: 'block', color: '#b45309' }}>Unmapped DMS Courier</strong>
+                                                        <span>
+                                                            DMS driver ID <strong>"{deliveryForm.courierEmployeeId}"</strong> is not recognized in STARS. Please select an active courier or employee below.
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {recommendation && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const recEmp = eligibleEmployees.find(e => e.accountId === recommendation.accountId);
+                                                            setForm(prev => ({ ...prev, assignedTo: recommendation.accountId }));
+                                                            setDeliveryForm(prev => ({
+                                                                ...prev,
+                                                                courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                            }));
+                                                            setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                        }}
+                                                        style={{
+                                                            background: '#d97706',
+                                                            color: '#ffffff',
+                                                            border: 'none',
+                                                            borderRadius: 6,
+                                                            padding: '6px 12px',
+                                                            fontSize: 11,
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Assign Recommended
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                         {recommendation && (
-                                            <div className="emp-picker-rec-banner">
-                                                <Lightbulb size={13} />
-                                                <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                            <div className="emp-picker-rec-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <Lightbulb size={13} />
+                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const recEmp = eligibleEmployees.find(e => e.accountId === recommendation.accountId);
+                                                        setForm(prev => ({ ...prev, assignedTo: recommendation.accountId }));
+                                                        if (isPreDelivery) {
+                                                            setDeliveryForm(prev => ({
+                                                                ...prev,
+                                                                courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                            }));
+                                                        }
+                                                        setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                    }}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: '1px solid currentColor',
+                                                        borderRadius: 4,
+                                                        padding: '2px 8px',
+                                                        fontSize: 11,
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        color: 'inherit',
+                                                    }}
+                                                >
+                                                    Assign
+                                                </button>
                                             </div>
                                         )}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
@@ -1687,7 +1871,17 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                                     return (
                                                         <div key={e.accountId}
                                                             className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
-                                                            onClick={() => { if (disabled) return; setForm(prev => ({ ...prev, assignedTo: e.accountId })); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
+                                                            onClick={() => {
+                                                                if (disabled) return;
+                                                                setForm(prev => ({ ...prev, assignedTo: e.accountId }));
+                                                                if (isPreDelivery) {
+                                                                    setDeliveryForm(prev => ({
+                                                                        ...prev,
+                                                                        courierEmployeeId: e.employeeNumber || e.employeeName || e.accountId,
+                                                                    }));
+                                                                }
+                                                                setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                            }}
                                                         >
                                                             <input type="radio" name="singleEmp" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => { }} />
                                                             <div className="emp-picker-info">
@@ -1870,10 +2064,26 @@ const TaskModal: React.FC<TaskModalProps> = ({
                                                 />
                                             </div>
                                             <div className="field" style={{ margin: 0 }}>
-                                                <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                                    {isPreDelivery && isCourierUnmapped && (
+                                                        <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>Unmapped in STARS</span>
+                                                    )}
+                                                </div>
                                                 <input
                                                     value={deliveryForm.courierEmployeeId}
-                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setDeliveryForm(prev => ({ ...prev, courierEmployeeId: val }));
+                                                        const matched = eligibleEmployees.find(emp =>
+                                                            emp.accountId.toLowerCase() === val.trim().toLowerCase() ||
+                                                            (emp as any).employeeNumber?.toLowerCase() === val.trim().toLowerCase()
+                                                        );
+                                                        if (matched) {
+                                                            setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                                            setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                        }
+                                                    }}
                                                     placeholder="e.g. DRV-001"
                                                     style={{ fontSize: 12 }}
                                                 />
@@ -1904,15 +2114,15 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 <div className="modal-actions">
                     <div style={{ display: 'flex', gap: 8, flex: 1 }}>
                         {mode === 'edit' && onDelete && (
-                            <button className="btn btn-danger" onClick={() => onDelete()} disabled={submitting}>
+                            <button className="btn btn-danger" onClick={() => onDelete()} disabled={isBusy}>
                                 <Trash2 size={13} /> Delete Task
                             </button>
                         )}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={submitting}>
-                            {submitting
+                        <button className="btn" onClick={onClose} disabled={isBusy}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={isBusy}>
+                            {isBusy
                                 ? <><Loader2 size={13} className="spin" /> Saving…</>
                                 : <><Save size={13} /> Save Changes</>}
                         </button>
@@ -8574,7 +8784,7 @@ const ReopenTab: React.FC<{
 
 // --- Duplicate Warning Modal --------------------------------------------------
 
-interface DuplicateWarningModalProps {
+export interface DuplicateWarningModalProps {
     duplicates: DuplicateWarningDTO[];
     details: DuplicateDetailDTO[];
     newTaskTitle?: string;
@@ -8599,7 +8809,7 @@ const snippet = (s?: string): string => {
     return s.length > 120 ? s.slice(0, 120) + '…' : s;
 };
 
-const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
+export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
     duplicates, details, newTaskTitle, newTaskDescription, onViewTask, onContinue, onCancel,
 }) => (
     <FormModal isOpen onClose={onCancel}
@@ -8670,6 +8880,56 @@ const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
         </div>
     </FormModal>
 );
+
+// --- Pre-Delivery Helper ------------------------------------------------------
+
+export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
+    let dmsDeadline = '';
+    let isHistoricalDeadline = false;
+    let originalExpectedDelivery = '';
+
+    if (order.expectedDelivery) {
+        try {
+            const ed = new Date(order.expectedDelivery);
+            if (!isNaN(ed.getTime())) {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                originalExpectedDelivery = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                const now = new Date();
+                if (ed.getTime() <= now.getTime()) {
+                    isHistoricalDeadline = true;
+                    const adjusted = getAdjustedSlaDeadline(order.priority || 'Medium', now);
+                    dmsDeadline = formatDateForInput(adjusted);
+                } else {
+                    dmsDeadline = originalExpectedDelivery;
+                }
+            }
+        } catch { }
+    }
+    return {
+        taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
+        taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}${isHistoricalDeadline ? `\n\n[Note: Original DMS expected delivery (${originalExpectedDelivery}) was in the past and has been automatically adjusted to a valid future SLA deadline.]` : ''}`,
+        taskCategory: 'Delivery Operations',
+        priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium') as Priority,
+        dueAt: dmsDeadline,
+        isHistoricalDeadline,
+        originalExpectedDelivery,
+        deliveryDetails: {
+            recipientName: order.recipientName,
+            recipientContact: order.recipientContact,
+            deliveryAddress: order.recipientAddress,
+            area: order.area,
+            packageDescription: order.packageDescription,
+            senderAddress: order.senderAddress || 'STARS Operations Office',
+            specialInstructions: order.specialInstructions || '',
+            courierEmployeeId: order.driverEmployeeId || '',
+            dmsOrderId: order.orderId,
+            dmsWaybillNo: order.waybillNo,
+            dmsStatus: order.status,
+            isHistoricalDeadline,
+            originalExpectedDelivery,
+        }
+    };
+};
 
 // --- Root Component -----------------------------------------------------------
 
@@ -8884,40 +9144,12 @@ export default function OpsAdminDashboard() {
     }, [activeTab, fetchAllNotifications]);
 
     const [showNew, setShowNew] = useState(false);
+    const [isSavingTask, setIsSavingTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
-        let dmsDeadline = '';
-        if (order.expectedDelivery) {
-            try {
-                const ed = new Date(order.expectedDelivery);
-                if (!isNaN(ed.getTime())) {
-                    const pad = (n: number) => String(n).padStart(2, '0');
-                    dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
-                }
-            } catch { }
-        }
-        setInitialTaskData({
-            taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
-            taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
-            taskCategory: 'Delivery Operations',
-            priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
-            dueAt: dmsDeadline,
-            deliveryDetails: {
-                recipientName: order.recipientName,
-                recipientContact: order.recipientContact,
-                deliveryAddress: order.recipientAddress,
-                area: order.area,
-                packageDescription: order.packageDescription,
-                senderAddress: order.senderAddress || 'STARS Operations Office',
-                specialInstructions: order.specialInstructions || '',
-                courierEmployeeId: order.driverEmployeeId || '',
-                dmsOrderId: order.orderId,
-                dmsWaybillNo: order.waybillNo,
-                dmsStatus: order.status,
-            }
-        });
+        setInitialTaskData(buildPreDeliveryTaskInitialData(order));
         setShowNew(true);
     };
 
@@ -9610,7 +9842,20 @@ export default function OpsAdminDashboard() {
 
     // -- Create Task --
     const handleNewTask = async (data: CreateTaskDTO, skipDuplicateCheck = false) => {
+        setIsSavingTask(true);
         try {
+            // Step 5: Safety check on deadline for pre-delivery tasks before POST /api/Task
+            const isDelivery = !!(data as any).deliveryDetails;
+            if (isDelivery && data.deadline) {
+                const dDate = new Date(data.deadline);
+                const now = new Date();
+                if (dDate.getTime() <= now.getTime()) {
+                    const prioStr = ['Low', 'Medium', 'High', 'Urgent'][data.priorityLevel] || 'Medium';
+                    const adjusted = getAdjustedSlaDeadline(prioStr, now);
+                    data.deadline = adjusted.toISOString();
+                }
+            }
+
             // Check for duplicates before saving (requirement 1, 7)
             if (!skipDuplicateCheck) {
                 try {
@@ -9620,6 +9865,7 @@ export default function OpsAdminDashboard() {
                         setDuplicateWarnings(checkJson.data.matches);
                         setPendingTaskData(data);
                         fetchDuplicateDetails(checkJson.data.matches);
+                        setIsSavingTask(false);
                         return;
                     }
                 } catch {
@@ -9691,6 +9937,7 @@ export default function OpsAdminDashboard() {
 
             setShowNew(false);
             setInitialTaskData(null);
+            setPendingTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
         } catch (err: any) {
@@ -9702,7 +9949,8 @@ export default function OpsAdminDashboard() {
             console.error('[handleNewTask] status:', status, 'response:', rawText);
             const fallback = status === 500 ? 'Server error - check console for details.' : 'Failed to create task.';
             error(serverMsg || detail || fallback);
-            setShowNew(false);
+        } finally {
+            setIsSavingTask(false);
         }
     };
 
@@ -10552,6 +10800,8 @@ export default function OpsAdminDashboard() {
                     onClose={() => { setShowNew(false); setInitialTaskData(null); setDuplicateWarnings([]); setDuplicateDetails([]); setViewingDuplicateTask(null); setPendingTaskData(null); setPendingFiles([]); }}
                     showSuccess={success}
                     onFileChange={f => setPendingFiles(f)}
+                    hideOverlay={duplicateWarnings.length > 0 && !!pendingTaskData && !viewingDuplicateTask}
+                    isSaving={isSavingTask}
                 />
             )}
             {editingTask && (
@@ -10612,11 +10862,11 @@ export default function OpsAdminDashboard() {
                     onContinue={async () => {
                         const task = pendingTaskData;
                         await recordDuplicateDecision('continue');
-                        setShowNew(false);
                         setDuplicateWarnings([]);
                         setDuplicateDetails([]);
-                        setPendingTaskData(null);
-                        handleNewTask(task, true);
+                        if (task) {
+                            await handleNewTask(task, true);
+                        }
                     }}
                     onCancel={async () => {
                         await recordDuplicateDecision('cancel');

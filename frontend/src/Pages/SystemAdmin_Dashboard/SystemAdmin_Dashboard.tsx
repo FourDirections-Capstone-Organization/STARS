@@ -4247,7 +4247,15 @@ export default function Dashboard() {
                 const ed = new Date(order.expectedDelivery);
                 if (!isNaN(ed.getTime())) {
                     const pad = (n: number) => String(n).padStart(2, '0');
-                    dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                    const now = new Date();
+                    if (ed.getTime() <= now.getTime()) {
+                        const prio = (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium');
+                        const hours = prio === 'Urgent' ? 24 : prio === 'High' ? 48 : prio === 'Medium' ? 72 : 168;
+                        const adjusted = new Date(now.getTime() + hours * 60 * 60 * 1000);
+                        dmsDeadline = `${adjusted.getFullYear()}-${pad(adjusted.getMonth() + 1)}-${pad(adjusted.getDate())}T${pad(adjusted.getHours())}:${pad(adjusted.getMinutes())}`;
+                    } else {
+                        dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                    }
                 }
             } catch { }
         }
