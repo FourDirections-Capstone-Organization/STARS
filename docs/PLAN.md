@@ -37,7 +37,7 @@ Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and d
 - [x] Step 2: Implement backend Groq service with config key binding, JSON schema validation, and cache
   - Verify: Unit tests confirm prompt construction, API key isolation, JSON parsing, and cache hits without remote calls
 
-- [ ] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
+- [x] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
   - Verify: Controller integration tests confirm suitability evaluation from PostgreSQL data without Neo4j calls
 
 - [ ] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
