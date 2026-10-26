@@ -784,6 +784,8 @@ export interface TaskModalProps {
     onDelete?: () => void;
     showSuccess?: (msg: string) => void;
     onFileChange?: (files: File[]) => void;
+    hideOverlay?: boolean;
+    isSaving?: boolean;
 }
 
 const formatDateForInput = (d: Date): string => {
@@ -873,9 +875,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     onDelete,
     showSuccess,
     onFileChange,
+    hideOverlay = false,
+    isSaving = false,
 }) => {
     const existingTitles = useMemo(() => tasks.map(t => t.taskTitle).filter(Boolean), [tasks]);
     const [submitting, setSubmitting] = useState(false);
+    const isBusy = submitting || isSaving;
     const [formError, setFormError] = useState('');
     const [supportingEvidenceFiles, setSupportingEvidenceFiles] = useState<File[]>([]);
     const [isSinglePage, setIsSinglePage] = useState(false);
@@ -1161,6 +1166,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             setFormError('Please resolve the highlighted validation errors before saving.');
             return;
         }
+        if (isBusy) return;
         setSubmitting(true);
         setFormError('');
 
@@ -1209,8 +1215,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         }
         try {
             await onSave(payload);
-        } catch {
-            onClose();
+        } catch (err) {
+            console.error('TaskModal save error:', err);
         } finally {
             setSubmitting(false);
         }
@@ -1234,10 +1240,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </span>
     );
 
+    if (hideOverlay) {
+        return null;
+    }
+
     const isWideModal = isPreDelivery || enableDelivery || isSinglePage;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={isBusy ? undefined : onClose}>
             <div className={`modal-card${isWideModal ? ' modal-card-wide' : ''}${isSinglePage ? ' modal-card-single-page' : ''}`} onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
@@ -1267,7 +1277,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         >
                             {isSinglePage ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
-                        <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+                        <button className="icon-btn" onClick={isBusy ? undefined : onClose} disabled={isBusy} aria-label="Close modal"><X size={16} /></button>
                     </div>
                 </div>
 
@@ -1904,15 +1914,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <div className="modal-actions">
                     <div style={{ display: 'flex', gap: 8, flex: 1 }}>
                         {mode === 'edit' && onDelete && (
-                            <button className="btn btn-danger" onClick={() => onDelete()} disabled={submitting}>
+                            <button className="btn btn-danger" onClick={() => onDelete()} disabled={isBusy}>
                                 <Trash2 size={13} /> Delete Task
                             </button>
                         )}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={submitting}>
-                            {submitting
+                        <button className="btn" onClick={onClose} disabled={isBusy}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={isBusy}>
+                            {isBusy
                                 ? <><Loader2 size={13} className="spin" /> Saving…</>
                                 : <><Save size={13} /> Save Changes</>}
                         </button>
@@ -8919,6 +8929,7 @@ export default function OpsAdminDashboard() {
     }, [activeTab, fetchAllNotifications]);
 
     const [showNew, setShowNew] = useState(false);
+    const [isSavingTask, setIsSavingTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
@@ -9616,6 +9627,7 @@ export default function OpsAdminDashboard() {
 
     // -- Create Task --
     const handleNewTask = async (data: CreateTaskDTO, skipDuplicateCheck = false) => {
+        setIsSavingTask(true);
         try {
             // Check for duplicates before saving (requirement 1, 7)
             if (!skipDuplicateCheck) {
@@ -9626,6 +9638,7 @@ export default function OpsAdminDashboard() {
                         setDuplicateWarnings(checkJson.data.matches);
                         setPendingTaskData(data);
                         fetchDuplicateDetails(checkJson.data.matches);
+                        setIsSavingTask(false);
                         return;
                     }
                 } catch {
@@ -9697,6 +9710,7 @@ export default function OpsAdminDashboard() {
 
             setShowNew(false);
             setInitialTaskData(null);
+            setPendingTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
         } catch (err: any) {
@@ -9708,7 +9722,8 @@ export default function OpsAdminDashboard() {
             console.error('[handleNewTask] status:', status, 'response:', rawText);
             const fallback = status === 500 ? 'Server error - check console for details.' : 'Failed to create task.';
             error(serverMsg || detail || fallback);
-            setShowNew(false);
+        } finally {
+            setIsSavingTask(false);
         }
     };
 
@@ -10558,6 +10573,8 @@ export default function OpsAdminDashboard() {
                     onClose={() => { setShowNew(false); setInitialTaskData(null); setDuplicateWarnings([]); setDuplicateDetails([]); setViewingDuplicateTask(null); setPendingTaskData(null); setPendingFiles([]); }}
                     showSuccess={success}
                     onFileChange={f => setPendingFiles(f)}
+                    hideOverlay={duplicateWarnings.length > 0 && !!pendingTaskData && !viewingDuplicateTask}
+                    isSaving={isSavingTask}
                 />
             )}
             {editingTask && (
@@ -10618,11 +10635,11 @@ export default function OpsAdminDashboard() {
                     onContinue={async () => {
                         const task = pendingTaskData;
                         await recordDuplicateDecision('continue');
-                        setShowNew(false);
                         setDuplicateWarnings([]);
                         setDuplicateDetails([]);
-                        setPendingTaskData(null);
-                        handleNewTask(task, true);
+                        if (task) {
+                            await handleNewTask(task, true);
+                        }
                     }}
                     onCancel={async () => {
                         await recordDuplicateDecision('cancel');
