@@ -15,4 +15,6 @@ public class SuitabilityExplanationDTO
     public double RecScoreWeight { get; set; }
 
     public string Explanation { get; set; } = string.Empty;
+    public int? Rank { get; set; }
+    public string? Rationale { get; set; }
 }

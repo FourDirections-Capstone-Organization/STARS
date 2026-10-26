@@ -21,6 +21,7 @@ using Backend.Models.Enums;
 using System.Text.Json.Serialization;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.FomsIntegration;
+using Backend.Modules.TaskManagement.Groq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -179,7 +180,6 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISuitabilityService, SuitabilityService>();
 builder.Services.AddScoped<ISlaRiskPredictionService, SlaRiskPredictionService>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();
-builder.Services.Configure<Neo4jSettings>(builder.Configuration.GetSection("Neo4jSettings"));
 builder.Services.Configure<ExpertSystemConfig>(builder.Configuration.GetSection("ExpertSystemConfig"));
 builder.Services.Configure<BiomarkerThresholds>(builder.Configuration.GetSection("BiomarkerThresholds"));
 builder.Services.Configure<DmsIntegrationSettings>(builder.Configuration.GetSection(DmsIntegrationSettings.SectionName));
@@ -196,6 +196,14 @@ builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
 });
 builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
 
+builder.Services.AddMemoryCache();
+builder.Services.Configure<GroqSettings>(builder.Configuration.GetSection(GroqSettings.SectionName));
+builder.Services.AddHttpClient(GroqSuitabilityService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IGroqSuitabilityService, GroqSuitabilityService>();
+
 // Analytics Services
 builder.Services.AddScoped<IStreamAnalyticsService, StreamAnalyticsService>();
 builder.Services.AddScoped<ChartDataService>();
@@ -205,10 +213,6 @@ builder.Services.AddHostedService<OverdueCheckService>();
 builder.Services.AddHostedService<RecurringTaskGenerator>();
 builder.Services.AddSingleton<BiomarkerScanService>();
 builder.Services.AddHostedService<BiomarkerScanService>(sp => sp.GetRequiredService<BiomarkerScanService>());
-builder.Services.AddHostedService<SlaRiskTrainingService>();
-builder.Services.AddSingleton<IRetrainTrigger>(sp =>
-    (SlaRiskTrainingService)sp.GetServices<IHostedService>()
-        .First(s => s.GetType() == typeof(SlaRiskTrainingService)));
 
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;

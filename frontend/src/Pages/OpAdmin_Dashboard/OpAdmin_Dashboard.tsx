@@ -55,6 +55,7 @@ import {
     RefreshCw,
     Maximize2,
     Minimize2,
+    Zap,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -89,6 +90,8 @@ import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
+import { aiService, SuitabilityResponseDTO } from '../../services/aiService';
+import { suitabilityCache } from '../../services/suitabilityCache';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -886,7 +889,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     mode,
     initial = {},
     teamMembers,
-    tasks,
+    tasks = [],
     onSave,
     onClose,
     onDelete,
@@ -895,7 +898,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     hideOverlay = false,
     isSaving = false,
 }) => {
-    const existingTitles = useMemo(() => tasks.map(t => t.taskTitle).filter(Boolean), [tasks]);
+    const existingTitles = useMemo(() => (tasks ?? []).map(t => t.taskTitle).filter(Boolean), [tasks]);
     const [submitting, setSubmitting] = useState(false);
     const isBusy = submitting || isSaving;
     const [formError, setFormError] = useState('');
@@ -968,11 +971,83 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
     const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string } | null>(null);
+    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string; rank?: number } | null>(null);
+    const [suitabilityRanks, setSuitabilityRanks] = useState<Record<string, { rank?: number; rationale?: string; score: number }>>({});
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [singleSearch, setSingleSearch] = useState('');
     const [filterDeptId, setFilterDeptId] = useState('');
     const [filterTeamId, setFilterTeamId] = useState('');
+    const [isEvaluatingSuitability, setIsEvaluatingSuitability] = useState(false);
+
+    const handleEvaluateSuitability = useCallback(async () => {
+        if (isEvaluatingSuitability) return;
+
+        const taskId = (initial as any)?.taskId || (initial as any)?.id;
+        const deptId = filterDeptId || form.assignedDepartmentId || departments[0]?.id || eligibleEmployees[0]?.departmentId;
+        const classification = form.classification ?? (initial as any)?.classification ?? 0;
+
+        const cacheKey = suitabilityCache.generateKey({
+            taskId: taskId || undefined,
+            departmentId: deptId || undefined,
+            classification,
+        });
+
+        // Anti-spam cache check: reuse cached results without refetching
+        const cached = suitabilityCache.get(cacheKey);
+        if (cached && cached.items.length > 0) {
+            const top = cached.items[0];
+            const ranks: Record<string, { rank?: number; rationale?: string; score: number }> = {};
+            cached.items.forEach(item => {
+                ranks[item.employeeId] = { rank: item.rank, rationale: item.rationale, score: item.suitabilityScore };
+            });
+            setSuitabilityRanks(ranks);
+            setRecommendation({
+                accountId: top.employeeId,
+                employeeName: top.fullName,
+                reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)} (Cached)`,
+                employeeNumber: top.employeeNumber || '',
+                rank: top.rank ?? 1,
+            });
+            return;
+        }
+
+        setIsEvaluatingSuitability(true);
+        try {
+            let items: SuitabilityResponseDTO[] = [];
+            if (taskId) {
+                const res = await aiService.getSuitability(taskId, 1, 10);
+                if (res.data?.isSuccess && res.data?.data?.items) {
+                    items = res.data.data.items;
+                }
+            } else if (deptId) {
+                const res = await aiService.getSuitabilityPreview(deptId, classification, 1, 10);
+                if (res.data?.isSuccess && res.data?.data?.items) {
+                    items = res.data.data.items;
+                }
+            }
+
+            if (items.length > 0) {
+                suitabilityCache.set(cacheKey, items);
+                const ranks: Record<string, { rank?: number; rationale?: string; score: number }> = {};
+                items.forEach(item => {
+                    ranks[item.employeeId] = { rank: item.rank, rationale: item.rationale, score: item.suitabilityScore };
+                });
+                setSuitabilityRanks(ranks);
+                const top = items[0];
+                setRecommendation({
+                    accountId: top.employeeId,
+                    employeeName: top.fullName,
+                    reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)}`,
+                    employeeNumber: top.employeeNumber || '',
+                    rank: top.rank ?? 1,
+                });
+            }
+        } catch (err) {
+            console.error('Failed to evaluate suitability in TaskModal:', err);
+        } finally {
+            setIsEvaluatingSuitability(false);
+        }
+    }, [isEvaluatingSuitability, initial, filterDeptId, form.assignedDepartmentId, departments, eligibleEmployees, form.classification]);
 
     const isCourierUnmapped = useMemo(() => {
         if (!isPreDelivery || !deliveryForm.courierEmployeeId) return false;
@@ -1734,6 +1809,43 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 {/* -- SingleEmployee: pick one user -- */}
                                 {form.assignmentScope === 'SingleEmployee' && (
                                     <div className="emp-picker-section">
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                Employee Selection
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="evaluate-suitability-btn"
+                                                onClick={handleEvaluateSuitability}
+                                                disabled={isEvaluatingSuitability}
+                                                title="Evaluate employee suitability with AI"
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 5,
+                                                    padding: '3px 9px',
+                                                    fontSize: 11,
+                                                    fontWeight: 600,
+                                                    color: '#ffffff',
+                                                    background: 'var(--primary, #0284c7)',
+                                                    border: 'none',
+                                                    borderRadius: 5,
+                                                    cursor: isEvaluatingSuitability ? 'not-allowed' : 'pointer',
+                                                }}
+                                            >
+                                                {isEvaluatingSuitability ? (
+                                                    <>
+                                                        <Loader2 size={12} className="spin" />
+                                                        <span>Evaluating...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Zap size={12} />
+                                                        <span>Evaluate Suitability</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                         {isCourierUnmapped && (
                                             <div
                                                 className="unmapped-courier-banner"
@@ -1794,7 +1906,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                             <div className="emp-picker-rec-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <Lightbulb size={13} />
-                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> {recommendation.rank ? `(Rank #${recommendation.rank})` : ''} — {recommendation.reason}</span>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1866,7 +1978,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                             <div className="emp-picker-list">
                                                 {filteredEmployees.map(e => {
                                                     const isSelected = form.assignedTo === e.accountId;
-                                                    const isRecommended = recommendation?.accountId === e.accountId;
+                                                    const recInfo = suitabilityRanks[e.accountId];
+                                                    const isRecommended = recommendation?.accountId === e.accountId || recInfo?.rank === 1;
                                                     const disabled = !e.isAvailable;
                                                     return (
                                                         <div key={e.accountId}
@@ -1893,7 +2006,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                                     {e.department && <span style={{ color: '#64748b' }}>• {e.department}</span>}
                                                                     {e.teamName && <span style={{ color: '#0284c7' }}>• {e.teamName}</span>}
                                                                 </div>
+                                                                {recInfo?.rationale && (
+                                                                    <div className="emp-picker-rationale" style={{ fontSize: 10, color: 'var(--teal-dark, #007A72)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                        <Lightbulb size={10} />
+                                                                        <span>{recInfo.rationale}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
+                                                            {recInfo?.rank && <span className="emp-picker-tag" style={{ background: 'rgba(0, 169, 157, 0.12)', color: 'var(--teal, #00A99D)', fontWeight: 700 }}>#{recInfo.rank}</span>}
                                                             {isRecommended && <span className="emp-picker-tag best">Best pick</span>}
                                                             {isSelected && <span className="emp-picker-tag selected-tag"><CheckCircle2 size={11} /> Selected</span>}
                                                         </div>

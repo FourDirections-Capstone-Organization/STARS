@@ -99,7 +99,7 @@ const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({ taskId })
             <div className="ai-header">
                 <Brain size={14} className="ai-header-icon" />
                 <span className="ai-title">AI Insights</span>
-                <span className="ai-subtitle">Neo4j + ML</span>
+                <span className="ai-subtitle">Groq AI</span>
             </div>
 
             <div className="ai-body">
@@ -147,8 +147,14 @@ const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({ taskId })
                                             <span className="ai-rec-card-name">{emp.fullName}</span>
                                             <span className="ai-rec-card-number">{emp.employeeNumber}</span>
                                             <span className="ai-rec-card-role">{getRoleLabel(emp.role)}</span>
+                                            <span className="ai-rank-badge">#{emp.rank ?? ((pageNumber - 1) * PAGE_SIZE + idx + 1)}</span>
                                             {idx === 0 && pageNumber === 1 && <span className="ai-best-badge"><Zap size={10} /> Best Pick</span>}
                                         </div>
+                                        {emp.rationale && (
+                                            <div className="ai-rec-card-rationale">
+                                                <span className="ai-rationale-tag">AI Rationale:</span> {emp.rationale}
+                                            </div>
+                                        )}
                                         <div className="ai-rec-card-meta">
                                             <span className="ai-rec-meta-item"><Briefcase size={10} /> {emp.workload} active</span>
                                             <button className="ai-explain-btn" onClick={() => handleToggleExplain(emp.employeeId)}>
@@ -163,16 +169,21 @@ const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({ taskId })
                                     </div>
                                 </div>
 
-                                {expandedEmp === emp.employeeId && explanations[emp.employeeId] && (
+                                {expandedEmp === emp.employeeId && (
                                     <div className="ai-explain-box">
+                                        {emp.rationale && (
+                                            <div className="ai-explain-rationale">
+                                                <strong>AI Evaluation:</strong> {emp.rationale}
+                                            </div>
+                                        )}
                                         {explanations[emp.employeeId]?.length > 0 ? (
                                             explanations[emp.employeeId].map((exp, i) => (
                                                 <div key={i}>{exp.explanation}</div>
                                             ))
                                         ) : (
                                             <div>
-                                                Score = {emp.suitabilityScore.toFixed(4)} based on workload ({emp.workload} active
-                                                tasks), experience match, and recommendation scores.
+                                                Score = {emp.suitabilityScore.toFixed(4)} evaluated against verified system metrics: workload ({emp.workload} active
+                                                tasks), completed task experience, and performance recommendation ratings.
                                             </div>
                                         )}
                                     </div>

@@ -25,6 +25,8 @@ export interface SuitabilityResponseDTO {
     role: string;
     workload: number;
     suitabilityScore: number;
+    rank?: number;
+    rationale?: string;
 }
 
 export interface SuitabilityExplanationDTO {
@@ -39,6 +41,8 @@ export interface SuitabilityExplanationDTO {
     recScore: number;
     recScoreWeight: number;
     explanation: string;
+    rank?: number;
+    rationale?: string;
 }
 
 export interface SlaRiskResponseDTO {
@@ -65,13 +69,22 @@ export interface SlaRiskExplanationDTO {
 // ─── AI Service ───
 
 export const aiService = {
-    /** Get paginated suitable employees for a task (from Neo4j graph) */
+    /** Get paginated suitable employees for a task */
     getSuitability: (taskId: string, pageNumber?: number, pageSize?: number) => {
         const params: Record<string, number> = {};
         if (pageNumber !== undefined) params.pageNumber = pageNumber;
         if (pageSize !== undefined) params.pageSize = pageSize;
         return api.get<ApiResponse<PagedResponseDTO<SuitabilityResponseDTO>>>(
             `/api/tasks/${taskId}/suitability`, Object.keys(params).length > 0 ? params : undefined);
+    },
+
+    /** Get paginated suitability preview for department & classification */
+    getSuitabilityPreview: (departmentId: string, classification: number = 0, pageNumber?: number, pageSize?: number) => {
+        const params: Record<string, any> = { departmentId, classification };
+        if (pageNumber !== undefined) params.pageNumber = pageNumber;
+        if (pageSize !== undefined) params.pageSize = pageSize;
+        return api.get<ApiResponse<PagedResponseDTO<SuitabilityResponseDTO>>>(
+            '/api/suitability/preview', params);
     },
 
     /** Get detailed suitability explanation for a specific employee */

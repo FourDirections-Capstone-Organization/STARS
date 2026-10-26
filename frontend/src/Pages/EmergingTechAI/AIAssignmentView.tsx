@@ -9,7 +9,8 @@ import './AIAssignmentView.css';
 import api from '../../api';
 import { useToast } from '../../components/Toast/Toast';
 import FormModal from '../../components/FormModal/FormModal';
-import { aiService, SlaRiskResponseDTO } from '../../services/aiService';
+import { aiService, SlaRiskResponseDTO, SuitabilityResponseDTO } from '../../services/aiService';
+import { suitabilityCache } from '../../services/suitabilityCache';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -251,7 +252,13 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
     const slaLocked = isUrgent;
 
     // ── AI State ──
-    const [aiScores, setAiScores] = useState<Record<string, { score: number; workload: number }>>({});
+    interface AiSuitabilityScoreInfo {
+        score: number;
+        workload: number;
+        rank?: number;
+        rationale?: string;
+    }
+    const [aiScores, setAiScores] = useState<Record<string, AiSuitabilityScoreInfo>>({});
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState('');
     const [aiSlaRisk, setAiSlaRisk] = useState<SlaRiskResponseDTO | null>(null);
@@ -366,74 +373,113 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
         fetchTeams();
     }, []);
 
-    // ── Fetch AI suitability when enabled ──
-    useEffect(() => {
-        if (!aiEnabled) { setAiScores({}); setAiSlaRisk(null); setAiError(''); return; }
-        let cancelled = false;
+    // ── On-demand AI suitability evaluation with anti-spam caching ──
+    const handleEvaluateSuitability = useCallback(async () => {
+        if (aiLoading) return;
+
+        const classification = form.classification >= 0 ? form.classification : 0;
+        const deptId = selectedDepartmentId || '';
+
+        const cacheKey = suitabilityCache.generateKey({
+            departmentId: deptId || undefined,
+            classification,
+        });
+
+        // Anti-spam cache check: reuse cached results without refetching
+        const cached = suitabilityCache.get(cacheKey);
+        if (cached && cached.items.length > 0) {
+            const scores: Record<string, AiSuitabilityScoreInfo> = {};
+            cached.items.forEach(item => {
+                scores[item.employeeId] = {
+                    score: item.suitabilityScore,
+                    workload: item.workload,
+                    rank: item.rank,
+                    rationale: item.rationale,
+                };
+            });
+            setAiScores(scores);
+            setAiEnabled(true);
+            setAiError('');
+            return;
+        }
+
         setAiLoading(true);
         setAiError('');
 
-        const classification = form.classification >= 0 ? form.classification : 0;
-
-        if (selectedDepartmentId) {
-            // Fetch for selected department
-            const url = `/api/suitability/preview?departmentId=${selectedDepartmentId}&classification=${classification}&pageNumber=1&pageSize=50`;
-            api.get(url).then((res: any) => {
-                if (cancelled) return;
+        try {
+            if (deptId) {
+                const res = await aiService.getSuitabilityPreview(deptId, classification, 1, 50);
                 const json = res.data;
                 if (json.isSuccess && json.data?.items) {
-                    const scores: Record<string, { score: number; workload: number }> = {};
-                    json.data.items.forEach((item: any) => {
-                        scores[item.employeeId] = { score: item.suitabilityScore, workload: item.workload };
+                    const items = json.data.items;
+                    suitabilityCache.set(cacheKey, items);
+                    const scores: Record<string, AiSuitabilityScoreInfo> = {};
+                    items.forEach(item => {
+                        scores[item.employeeId] = {
+                            score: item.suitabilityScore,
+                            workload: item.workload,
+                            rank: item.rank,
+                            rationale: item.rationale,
+                        };
                     });
                     setAiScores(scores);
+                    setAiEnabled(true);
                     setAiError('');
                 } else {
                     setAiError('AI recommendation temporarily unavailable.');
                 }
-            }).catch(() => { if (!cancelled) setAiError('AI recommendation temporarily unavailable.'); })
-              .finally(() => { if (!cancelled) setAiLoading(false); });
-        } else {
-            // No department selected — fetch for ALL departments and merge
-            const deptIds = [...new Set(employees.filter(e => e.isAvailable).map(e => e.departmentId).filter(Boolean))];
-            if (deptIds.length === 0) { setAiLoading(false); return; }
+            } else {
+                const deptIds = [...new Set(employees.filter(e => e.isAvailable).map(e => e.departmentId).filter(Boolean))];
+                if (deptIds.length === 0) {
+                    setAiLoading(false);
+                    return;
+                }
 
-            const results: Record<string, { score: number; workload: number }> = {};
-            let completed = 0;
-            let anyFailed = false;
+                const allItems: SuitabilityResponseDTO[] = [];
+                const scores: Record<string, AiSuitabilityScoreInfo> = {};
+                let anyFailed = false;
 
-            deptIds.forEach((deptId: string) => {
-                const url = `/api/suitability/preview?departmentId=${deptId}&classification=${classification}&pageNumber=1&pageSize=50`;
-                api.get(url).then((res: any) => {
-                    if (cancelled) return;
-                    const json = res.data;
-                    if (json.isSuccess && json.data?.items) {
-                        json.data.items.forEach((item: any) => {
-                            results[item.employeeId] = { score: item.suitabilityScore, workload: item.workload };
+                const results = await Promise.allSettled(
+                    deptIds.map(dId => aiService.getSuitabilityPreview(dId, classification, 1, 50))
+                );
+
+                results.forEach(r => {
+                    if (r.status === 'fulfilled' && r.value.data?.isSuccess && r.value.data.data?.items) {
+                        r.value.data.data.items.forEach(item => {
+                            allItems.push(item);
+                            scores[item.employeeId] = {
+                                score: item.suitabilityScore,
+                                workload: item.workload,
+                                rank: item.rank,
+                                rationale: item.rationale,
+                            };
                         });
                     } else {
                         anyFailed = true;
                     }
-                }).catch(() => { anyFailed = true; }).finally(() => {
-                    completed++;
-                    if (!cancelled && completed >= deptIds.length) {
-                        setAiScores(results);
-                        setAiError(anyFailed ? 'Some AI recommendations unavailable. Results may be incomplete.' : '');
-                        setAiLoading(false);
-                    }
                 });
-            });
-        }
 
-        // SLA risk based on priority
-        if (isUrgent) {
-            setAiSlaRisk({ taskId: '', riskLevel: 'Medium', confidenceScore: 0.6, keyFactors: ['Urgent priority task'] });
-        } else {
-            setAiSlaRisk({ taskId: '', riskLevel: 'Low', confidenceScore: 0.8, keyFactors: ['Non-urgent priority'] });
-        }
+                if (allItems.length > 0) {
+                    suitabilityCache.set(cacheKey, allItems);
+                    setAiScores(scores);
+                    setAiEnabled(true);
+                    setAiError(anyFailed ? 'Some AI recommendations unavailable. Results may be incomplete.' : '');
+                } else {
+                    setAiError('AI recommendation temporarily unavailable.');
+                }
+            }
 
-        return () => { cancelled = true; };
-    }, [selectedDepartmentId, form.classification, isUrgent, employees, aiEnabled]);
+            if (isUrgent) {
+                setAiSlaRisk({ taskId: '', riskLevel: 'Medium', confidenceScore: 0.6, keyFactors: ['Urgent priority task'] });
+            } else {
+                setAiSlaRisk({ taskId: '', riskLevel: 'Low', confidenceScore: 0.8, keyFactors: ['Non-urgent priority'] });
+            }
+        } catch {
+            setAiError('AI recommendation temporarily unavailable.');
+        } finally {
+            setAiLoading(false);
+        }
+    }, [aiLoading, form.classification, selectedDepartmentId, employees, isUrgent]);
 
     // ── Derived Data ──
     const availableTeamsForDept = useMemo(() => {
@@ -462,8 +508,21 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                 e.role.toLowerCase().includes(employeeSearch.toLowerCase())
             );
         }
+        if (aiEnabled && Object.keys(aiScores).length > 0) {
+            list = [...list].sort((a, b) => {
+                const aiA = aiScores[a.employeeId];
+                const aiB = aiScores[b.employeeId];
+                if (!aiA && !aiB) return 0;
+                if (!aiA) return 1;
+                if (!aiB) return -1;
+                if (aiA.rank !== undefined && aiB.rank !== undefined && aiA.rank !== aiB.rank) {
+                    return aiA.rank - aiB.rank;
+                }
+                return aiB.score - aiA.score;
+            });
+        }
         return list;
-    }, [employees, selectedDepartmentId, selectedTeamId, employeeSearch, departments, teams]);
+    }, [employees, selectedDepartmentId, selectedTeamId, employeeSearch, departments, teams, aiEnabled, aiScores]);
 
     const selectedEmployee = useMemo(() =>
         employees.find(e => e.employeeId === selectedEmployeeId),
@@ -1922,15 +1981,49 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                     <span className="ai-cascade-title">
                                         <UserCircle2 size={14} color="var(--teal, #00A99D)" /> 3. Assign to Single Employee <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-secondary)', fontSize: 11 }}>(Optional)</span>
                                     </span>
-                                    {selectedEmployeeId && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedEmployeeId('')}
-                                            style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                            className="ai-suitability-trigger-btn"
+                                            onClick={handleEvaluateSuitability}
+                                            disabled={aiLoading}
+                                            title="Evaluate employee suitability with AI"
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 5,
+                                                padding: '4px 10px',
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                color: '#ffffff',
+                                                background: 'var(--teal, #00A99D)',
+                                                border: 'none',
+                                                borderRadius: 6,
+                                                cursor: aiLoading ? 'not-allowed' : 'pointer',
+                                            }}
                                         >
-                                            Clear Employee (Assign to Team/Dept)
+                                            {aiLoading ? (
+                                                <>
+                                                    <Loader2 size={12} className="ai-spin" />
+                                                    <span>Evaluating...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Zap size={12} />
+                                                    <span>Evaluate Suitability</span>
+                                                </>
+                                            )}
                                         </button>
-                                    )}
+                                        {selectedEmployeeId && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedEmployeeId('')}
+                                                style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                            >
+                                                Clear Employee (Assign to Team/Dept)
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
@@ -1949,6 +2042,13 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                         {filteredEmployees.length} Available
                                     </span>
                                 </div>
+
+                                {aiError && (
+                                    <div className="ai-error-banner" style={{ margin: '6px 0', padding: '6px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <AlertCircle size={13} />
+                                        <span>{aiError}</span>
+                                    </div>
+                                )}
 
                                 {/* Employee list */}
                                 {loadingEmployees ? (
@@ -1979,7 +2079,7 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
 
                                         {filteredEmployees.map((emp, idx) => {
                                             const ai = aiScores[emp.employeeId];
-                                            const isBestPick = ai && idx === 0 && !employeeSearch;
+                                            const isBestPick = ai && (ai.rank === 1 || (idx === 0 && !employeeSearch));
                                             return (
                                                 <div key={emp.employeeId}>
                                                     <div
@@ -2001,6 +2101,12 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                                                 <span className="ai-emp-dept">{emp.department}</span>
                                                                 {emp.role && <span className="ai-emp-role" style={{ fontSize: 11, color: '#64748b' }}>• {emp.role}</span>}
                                                             </div>
+                                                            {aiEnabled && ai?.rationale && (
+                                                                <div className="ai-emp-rationale">
+                                                                    <span className="ai-emp-rationale-badge">AI Rationale</span>
+                                                                    <span className="ai-emp-rationale-text">{ai.rationale}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="ai-emp-workload">
                                                             {ai && aiEnabled ? (
@@ -2020,6 +2126,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                                             )}
                                                         </div>
                                                         <div className="ai-emp-badges">
+                                                            {aiEnabled && ai?.rank && (
+                                                                <span className="ai-rank-badge">#{ai.rank}</span>
+                                                            )}
                                                             {aiEnabled && isBestPick && (
                                                                 <span className="ai-best-badge"><Zap size={10} /> Best</span>
                                                             )}
