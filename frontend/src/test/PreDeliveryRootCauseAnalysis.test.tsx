@@ -198,9 +198,9 @@ describe('Pre-Delivery Root Cause Analysis Test Suite (Step 2)', () => {
             const dateInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
             expect(dateInput).toBeInTheDocument();
             expect(dateInput.value).toBe('');
-            // Root cause verification: field is locked because isPreDelivery is true!
-            expect(dateInput.disabled).toBe(true);
-            expect(dateInput.readOnly).toBe(true);
+            // Verified Step 4 Fix: field is unlocked when expectedDelivery is absent so coordinator can set it
+            expect(dateInput.disabled).toBe(false);
+            expect(dateInput.readOnly).toBe(false);
 
             // Attempt save
             const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
