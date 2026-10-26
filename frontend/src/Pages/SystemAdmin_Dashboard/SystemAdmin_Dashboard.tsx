@@ -3692,7 +3692,6 @@ export default function Dashboard() {
     const [editTaskFilterDeptId, setEditTaskFilterDeptId] = useState('');
     const [editTaskFilterTeamId, setEditTaskFilterTeamId] = useState('');
     const [newTaskEligibleEmployees, setNewTaskEligibleEmployees] = useState<WorkloadInfo[]>([]);
-    const [rawApiKeys, setRawApiKeys] = useState<string>('');
     const [editEligibleEmployees, setEditEligibleEmployees] = useState<WorkloadInfo[]>([]);
     const [newTaskRecommendation, setNewTaskRecommendation] = useState<{ employeeName: string; accountId: string; availabilityStatus: string; workload: number; reason: string } | null>(null);
     const [editTaskRecommendation, setEditTaskRecommendation] = useState<{ employeeName: string; accountId: string; availabilityStatus: string; workload: number; reason: string } | null>(null);
@@ -4032,8 +4031,6 @@ export default function Dashboard() {
             }
 
             if (list.length > 0) {
-                const sample = list[0];
-                setRawApiKeys(Object.keys(sample).join(', ') + '\n\n' + JSON.stringify(sample, null, 2).slice(0, 800));
                 const mapped: WorkloadInfo[] = list.map((emp: any) => ({
                     employeeName: (emp.fullName ?? emp.FullName ?? emp.employeeName ?? emp.name ?? '').trim(),
                     accountId: emp.userId ?? emp.UserId ?? emp.id ?? emp.accountId ?? '',
@@ -5805,12 +5802,6 @@ export default function Dashboard() {
                                         <Lightbulb size={12} />
                                         <span>Recommended: <strong style={{ color: 'var(--primary)' }}>{newTaskRecommendation.employeeName}</strong> — {newTaskRecommendation.reason}</span>
                                     </div>
-                                )}
-                                {rawApiKeys && (
-                                    <details style={{ fontSize: 10, color: '#666', marginBottom: 4, background: '#f5f5f5', padding: '4px 8px', borderRadius: 4, maxHeight: 120, overflow: 'auto' }}>
-                                        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>API Debug: keys of first item</summary>
-                                        <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{rawApiKeys}</pre>
-                                    </details>
                                 )}
 
                                 {/* Cascading Filters for New Task Single Employee */}
