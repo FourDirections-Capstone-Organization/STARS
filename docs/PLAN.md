@@ -14,7 +14,7 @@
 - [x] Step 1: Reproduce the bug across different pre-delivery orders and record failing vs. succeeding cases
   - Verify: Document reproduction results with specific order IDs, symptoms observed, and failure categories
 
-- [ ] Step 2: Identify root causes by comparing data shapes, save handler execution, network traffic, and backdrop stacking
+- [x] Step 2: Identify root causes by comparing data shapes, save handler execution, network traffic, and backdrop stacking
   - Verify: Confirm whether handler runs, network requests fire, and multiple backdrops mount without guessing
 
 - [ ] Step 3: Resolve modal stacking and backdrop darkening caused by duplicate warning triggers (Symptom 1)
