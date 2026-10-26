@@ -40,7 +40,7 @@ Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and d
 - [x] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
   - Verify: Controller integration tests confirm suitability evaluation from PostgreSQL data without Neo4j calls
 
-- [ ] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
+- [x] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
   - Verify: Button triggers evaluation on demand; repeat clicks reuse cached recommendations without refetching
 
 - [ ] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
