@@ -1,56 +1,45 @@
-# Groq Refactoring Plan: Employee Suitability
+# Employee Suitability Evaluation Improvement Plan
 
 **Target Feature Branch**: `feature/groq-employee-suitability`  
 **Production Deployment Branch**: `refactoring/bug-fix` (Only merge after all steps are completed and approved)
 
-## Findings (Step 1)
-- **Workload**: Count of active tasks (`Status` in Pending, Assigned, InProgress, OnHold; not Completed/Cancelled) in `TaskAssignments` + `Tasks`.
-- **Routine/Special XP**: Count of Completed tasks in `TaskAssignments` + `Tasks` partitioned by `Classification` (0=RoutineDailyTask, 1=SpecialTask).
-- **3 Rating Scores**: Average scores from `Recommendations` table (`Category`: 0=Timeliness, 1=WorkQuality, 2=Communication) divided by total recommendations.
-- **5 Endpoints**: `GET /api/tasks/{id}/suitability`, `GET /api/tasks/{id}/suitability/{empId}/explain`, `GET /api/suitability/preview`, `GET /api/admin/expert-system/config`, `PUT /api/admin/expert-system/config`.
-- **FOMS Graph Routing**: In `FomsIntegrationService.cs:444`, routes overdue collection tasks using direct PostgreSQL EF Core query by lowest active coordinator workload.
-- **5 Test Suites**: `ExpertSystemConfigAdminTests` (10 tests), `ExpertSystemWeightTests` (7 tests), `SuitabilityExplanationTests` (4 tests), `SlaRiskPredictionTests` (8 tests), `MlRetrainTests` (6 tests).
-
 ## Goal
-Replace ML suitability evaluation with Groq Cloud API, then remove legacy CDC, Kafka, and Neo4j infrastructure.
+Provide user-friendly AI rationales from Groq and unique global rankings (1..N) without duplicate ranks or vague templates.
 
 ## Out of scope
-Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and document export services.
+Redesigning the assignment UI layout, altering underlying metric collection queries, and changing task CRUD workflows.
+
+## Findings so far
+- "Heuristic evaluation..." originates in `SuitabilityService.cs:224` when `_groqService.IsConfigured` is false or `EvaluateSuitabilityAsync` throws.
+- `GroqSettings.cs:40-54` only checks `ApiKey` and `GROQ_API_KEY` env var; it misses Azure's `Groq__ApiKey` and local `.env`.
+- Multi-#1 badges occur in `AIAssignmentView.tsx:442-460` where company-wide evaluation merges separate per-department preview calls.
+- `AIAssignmentView.tsx:2082` marks any employee with `ai.rank === 1` as `isBestPick`, displaying multiple `#1` and `Best` badges.
+- `OpAdmin_Dashboard.tsx:1982` similarly flags `recInfo?.rank === 1` as recommended without global de-duplication.
 
 ## Design notes
-- Groq calls run in backend GroqSuitabilityService; API key stored in appsettings.json / GROQ_API_KEY env var.
-- Candidate metrics query PostgreSQL via EF Core directly, replacing Neo4j and CDC data pipelines.
-- Structured JSON schema response (employeeId, rank, score, rationale) validated via System.Text.Json.
-- Server-side SHA-256 cache (task attributes + candidate IDs) prevents redundant Groq calls on repeat clicks.
-- System prompt strictly restricts inputs to verified system metrics and enforces refusal of off-topic queries.
+- Groq returns employeeId, rank, score, factors (workload, experience, ratings), and a plain-language rationale.
+- Groq response is validated against candidate IDs, clamped [0, 1], and normalized to strict sequential ranks 1..N.
+- Fallback rationales use transparent, metric-grounded explanations; global ranking is recalculated across all shown candidates.
+- Company-wide evaluation supports unified candidate querying or client-side global re-ranking by score with tie-breaking.
+- API key resolves from Azure app settings (Groq__ApiKey / GroqSettings), process env, and local .env fallback.
 
 ## Decisions to confirm
-- Legacy engine: completely remove ML.NET & Neo4j code or keep behind a temporary feature switch?
-- Failure handling: fallback to PostgreSQL heuristic score vs. user-facing graceful alert on Groq rate limits?
-- Privacy & payload: confirm sending anonymized candidate IDs, roles, workload, and ratings without PII.
+- Tie-breaking order: higher score, then lower active workload, then higher experience, then average ratings.
+- Rationale length: maximum 1-2 concise lines displayed under employee meta.
+- Numeric score inclusion: omit numeric score from rationale text since score badge is already displayed.
 
 ## Implementation Steps
-
-- [x] Step 1: Map starting indicators from Neo4j, CDC, and Graph Routing, with call sites and test suites
-  - Verify: Workload, routine/special XP, 3 rating scores, 5 endpoints, and 5 test suites confirmed without guesswork
-
-- [x] Step 2: Implement backend Groq service with config key binding, JSON schema validation, and cache
-  - Verify: Unit tests confirm prompt construction, API key isolation, JSON parsing, and cache hits without remote calls
-
-- [x] Step 3: Implement direct PostgreSQL metric queries and replace Neo4j suitability service with Groq
-  - Verify: Controller integration tests confirm suitability evaluation from PostgreSQL data without Neo4j calls
-
-- [x] Step 4: Add Employee Suitability trigger button with anti-spam caching in TaskModal and AIAssignmentView
-  - Verify: Button triggers evaluation on demand; repeat clicks reuse cached recommendations without refetching
-
-- [x] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
-  - Verify: Recommended employees render with AI rationale matching only system metrics in frontend components
-
-- [x] Step 6: Remove ML.NET FastTree SLA risk model files, training service, and obsolete ML test suites
-  - Verify: Backend compiles cleanly without Microsoft.ML dependencies while retaining updated test assertions
-
-- [x] Step 7: Delete CDC Processor project, Debezium, Kafka, and Neo4j configurations from docker-compose
-  - Verify: Solution builds without cdc-processor and Neo4j references; docker-compose config validates cleanly
-
-- [x] Step 8: Run full backend and frontend test suites to ensure zero regressions
-  - Verify: All dotnet test (Release) and npm test suites pass with zero failures
+- [x] Step 1: Map current behavior tracing fallback rationale origin and multi-#1 cause across backend and frontend
+  - Verify: Step trace proves SuitabilityService fallback string and AIAssignmentView per-dept rank merging
+- [x] Step 2: Support Azure (Groq__ApiKey) and local (.env) key resolution with live Groq test
+  - Verify: Tests confirm key resolution from Azure env, Groq__ApiKey, and local .env with verified connectivity
+- [x] Step 3: Update Groq prompt and schema to output structured factors and plain-language fit justifications
+  - Verify: Groq service tests validate structured JSON schema, metric grounding, and response parsing
+- [x] Step 4: Implement fallback rationale generator using actual candidate metrics and enforce unique sequential ranks
+  - Verify: Unit tests confirm descriptive fallback text and strictly sequential 1..N ranking without duplicates
+- [x] Step 5: Add company-wide preview support and global re-ranking in backend and frontend assignment views
+  - Verify: Company-wide evaluation assigns single #1 rank and unique positions across all departments
+- [x] Step 6: Update frontend suitability display to render plain-language rationales and single best-pick badge
+  - Verify: UI component tests confirm only top candidate receives BEST badge and rationales render clearly
+- [x] Step 7: Run full backend and frontend test suites
+  - Verify: All dotnet test and npm test suites pass with zero failures

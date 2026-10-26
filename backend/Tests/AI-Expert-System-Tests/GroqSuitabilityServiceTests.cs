@@ -43,7 +43,7 @@ public class GroqSuitabilityServiceTests
         settings ??= new GroqSettings
         {
             ApiKey = "gsk_mock_api_key_test_12345",
-            Model = "llama-3.3-70b-versatile",
+            Model = "openai/gpt-oss-120b",
             Endpoint = "https://api.groq.com/openai/v1/chat/completions",
             CacheDurationMinutes = 60
         };
@@ -114,13 +114,23 @@ public class GroqSuitabilityServiceTests
               "employeeId": "{{emp1}}",
               "rank": {{rank1}},
               "score": {{score1}},
-              "rationale": "Strong special task experience (8 completed) with light workload (2 active tasks) and high timeliness (4.8/5.0)."
+              "factors": {
+                "workload": "Light workload (2 active tasks)",
+                "experience": "Strong special task experience (8 completed)",
+                "ratings": "High timeliness (4.80) and quality (4.90)"
+              },
+              "rationale": "High availability with light workload and extensive special task experience."
             },
             {
               "employeeId": "{{emp2}}",
               "rank": {{rank2}},
               "score": {{score2}},
-              "rationale": "High active workload (6 tasks) and lower special task experience."
+              "factors": {
+                "workload": "Higher workload (6 active tasks)",
+                "experience": "Limited special task experience (2 completed)",
+                "ratings": "Moderate timeliness (3.90) and quality (4.00)"
+              },
+              "rationale": "Higher active workload and less relevant special task experience."
             }
           ]
         }
@@ -163,6 +173,24 @@ public class GroqSuitabilityServiceTests
         prompt.Should().Contain("\"rank\"");
         prompt.Should().Contain("\"score\"");
         prompt.Should().Contain("\"rationale\"");
+        prompt.Should().Contain("\"factors\"");
+        prompt.Should().Contain("\"workload\"");
+        prompt.Should().Contain("\"experience\"");
+        prompt.Should().Contain("\"ratings\"");
+        prompt.Should().Contain("Plain-Language Rationale");
+        prompt.Should().Contain("Omit Numeric Score");
+    }
+
+    [Fact]
+    public void BuildSystemPrompt_InstructsScoreOmission_AndMetricGrounding()
+    {
+        var (service, _, _) = CreateService();
+
+        var prompt = service.BuildSystemPrompt();
+
+        prompt.Should().Contain("Do NOT include the numeric suitability score in the rationale text");
+        prompt.Should().Contain("Strictly reference only the candidate's real numbers");
+        prompt.Should().Contain("1 to 2 concise sentences");
     }
 
     [Fact]
@@ -181,6 +209,8 @@ public class GroqSuitabilityServiceTests
         prompt.Should().Contain("Active Workload (active tasks): 2");
         prompt.Should().Contain("Special Task Experience (completed): 8");
         prompt.Should().Contain("Timeliness Rating: 4.80 / 5.00");
+        prompt.Should().Contain("structured factors");
+        prompt.Should().Contain("plain-language fit rationale");
 
         // Asserts no sensitive PII fields are leaked in the prompt
         prompt.Should().NotContain("email");
@@ -208,12 +238,14 @@ public class GroqSuitabilityServiceTests
     [Fact]
     public void GetEffectiveApiKey_WhenApiKeyEmpty_FallsBackToEnvironmentVariable()
     {
-        var settings = new GroqSettings { ApiKey = "" };
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
         var envVarName = "GROQ_API_KEY";
         var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
 
         try
         {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "");
             Environment.SetEnvironmentVariable(envVarName, "gsk_from_env_variable_test");
             var (service, _, _) = CreateService(settings);
 
@@ -225,19 +257,20 @@ public class GroqSuitabilityServiceTests
         finally
         {
             Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
         }
     }
 
     [Fact]
     public void GetEffectiveApiKey_WhenBothEmpty_ReturnsEmptyString()
     {
-        var settings = new GroqSettings { ApiKey = "" };
-        var envVarName = "GROQ_API_KEY";
-        var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var envVars = new[] { "GROQ_API_KEY", "Groq__ApiKey", "GroqSettings__ApiKey", "GROQ_KEY" };
+        var originalEnvs = envVars.ToDictionary(k => k, Environment.GetEnvironmentVariable);
 
         try
         {
-            Environment.SetEnvironmentVariable(envVarName, "");
+            foreach (var k in envVars) Environment.SetEnvironmentVariable(k, "");
             var (service, _, _) = CreateService(settings);
 
             var key = service.GetEffectiveApiKey();
@@ -247,20 +280,211 @@ public class GroqSuitabilityServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            foreach (var kvp in originalEnvs) Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
         }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenAzureGroqApiKeySet_ReturnsAzureKey()
+    {
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+        var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "gsk_azure_app_service_key_test");
+            var (service, _, _) = CreateService(settings);
+
+            var key = service.GetEffectiveApiKey();
+
+            key.Should().Be("gsk_azure_app_service_key_test");
+            service.IsConfigured.Should().BeTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenGroqSettingsApiKeySet_ReturnsGroqSettingsKey()
+    {
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var originalGroqSettings = Environment.GetEnvironmentVariable("GroqSettings__ApiKey");
+        var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+        var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+            Environment.SetEnvironmentVariable("GroqSettings__ApiKey", "gsk_groqsettings_env_test");
+            var (service, _, _) = CreateService(settings);
+
+            var key = service.GetEffectiveApiKey();
+
+            key.Should().Be("gsk_groqsettings_env_test");
+            service.IsConfigured.Should().BeTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GroqSettings__ApiKey", originalGroqSettings);
+            Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_WhenDotEnvFileExists_ResolvesKeyFromDotEnv()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "GROQ_API_KEY=\"gsk_custom_dotenv_isolated_test\"\n");
+            var settings = new GroqSettings { ApiKey = "", DotEnvFilePath = tempFile };
+            var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+            var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+
+                var (service, _, _) = CreateService(settings);
+                var key = service.GetEffectiveApiKey();
+
+                key.Should().Be("gsk_custom_dotenv_isolated_test");
+                service.IsConfigured.Should().BeTrue();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void GetEffectiveApiKey_Precedence_SettingsOverAzureOverStandardOverDotEnv()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "GROQ_API_KEY=gsk_from_dotenv\n");
+            var settings = new GroqSettings
+            {
+                ApiKey = "gsk_from_settings",
+                DotEnvFilePath = tempFile
+            };
+
+            var originalAzure = Environment.GetEnvironmentVariable("Groq__ApiKey");
+            var originalStandard = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "gsk_from_azure");
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "gsk_from_standard");
+
+                // 1. Settings ApiKey wins over all
+                var (service1, _, _) = CreateService(settings);
+                service1.GetEffectiveApiKey().Should().Be("gsk_from_settings");
+
+                // 2. Azure env wins when settings ApiKey is empty
+                settings.ApiKey = "";
+                var (service2, _, _) = CreateService(settings);
+                service2.GetEffectiveApiKey().Should().Be("gsk_from_azure");
+
+                // 3. Standard env wins when Azure env is empty
+                Environment.SetEnvironmentVariable("Groq__ApiKey", "");
+                var (service3, _, _) = CreateService(settings);
+                service3.GetEffectiveApiKey().Should().Be("gsk_from_standard");
+
+                // 4. DotEnv wins when all env vars are empty
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", "");
+                var (service4, _, _) = CreateService(settings);
+                service4.GetEffectiveApiKey().Should().Be("gsk_from_dotenv");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Groq__ApiKey", originalAzure);
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", originalStandard);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task LiveGroq_WhenApiKeyAvailable_SuccessfullyConnectsAndValidatesModel()
+    {
+        var settings = new GroqSettings();
+        var apiKey = settings.GetEffectiveApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return;
+        }
+
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.groq.com/openai/v1/models");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        var response = await client.SendAsync(request);
+        response.IsSuccessStatusCode.Should().BeTrue();
+
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("\"data\"");
+        body.Should().Contain(settings.Model);
+    }
+
+    [Fact]
+    public async Task LiveGroqSuitabilityService_WhenApiKeyAvailable_SuccessfullyEvaluatesTask()
+    {
+        var settings = new GroqSettings();
+        var apiKey = settings.GetEffectiveApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return;
+        }
+
+        using var realHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var mockFactory = new Mock<IHttpClientFactory>();
+        mockFactory.Setup(f => f.CreateClient(GroqSuitabilityService.HttpClientName)).Returns(realHttpClient);
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var mockLogger = new Mock<ILogger<GroqSuitabilityService>>();
+        var options = Options.Create(settings);
+
+        var service = new GroqSuitabilityService(mockFactory.Object, options, cache, mockLogger.Object);
+        var (task, candidates) = CreateSampleData();
+
+        var result = await service.EvaluateSuitabilityAsync(task, candidates);
+
+        result.Should().NotBeNull();
+        result.Recommendations.Should().HaveCount(2);
+        result.Recommendations.All(r => !string.IsNullOrWhiteSpace(r.Rationale)).Should().BeTrue();
+        result.Recommendations.All(r => r.Factors != null).Should().BeTrue();
+        result.Recommendations.Select(r => r.Rank).Should().Equal(1, 2);
     }
 
     [Fact]
     public async Task EvaluateSuitabilityAsync_WhenApiKeyMissing_ThrowsInvalidOperationException_WithoutCallingHttp()
     {
-        var settings = new GroqSettings { ApiKey = "" };
-        var envVarName = "GROQ_API_KEY";
-        var originalEnv = Environment.GetEnvironmentVariable(envVarName);
+        var settings = new GroqSettings { ApiKey = "", DisableDotEnvResolution = true };
+        var envVars = new[] { "GROQ_API_KEY", "Groq__ApiKey", "GroqSettings__ApiKey", "GROQ_KEY" };
+        var originalEnvs = envVars.ToDictionary(k => k, Environment.GetEnvironmentVariable);
 
         try
         {
-            Environment.SetEnvironmentVariable(envVarName, "");
+            foreach (var k in envVars) Environment.SetEnvironmentVariable(k, "");
             var (service, handler, _) = CreateService(settings);
             var (task, candidates) = CreateSampleData();
 
@@ -272,7 +496,7 @@ public class GroqSuitabilityServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envVarName, originalEnv);
+            foreach (var kvp in originalEnvs) Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
         }
     }
 
@@ -456,6 +680,100 @@ public class GroqSuitabilityServiceTests
         var result = service.ParseAndValidateResponse(json, new[] { empId });
 
         result[0].Score.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WithStructuredFactors_PopulatesFactorsCorrectly()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        var jsonWithFactors = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.95,
+              "factors": {
+                "workload": "Low active workload with only 2 current tasks",
+                "experience": "Substantial completed special tasks (8 completed)",
+                "ratings": "Outstanding quality (4.90) and timeliness (4.80)"
+              },
+              "rationale": "Strong availability combined with exceptional special task background."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(jsonWithFactors, new[] { candidates[0].EmployeeId });
+
+        result.Should().HaveCount(1);
+        result[0].Factors.Should().NotBeNull();
+        result[0].Factors!.Workload.Should().Be("Low active workload with only 2 current tasks");
+        result[0].Factors.Experience.Should().Be("Substantial completed special tasks (8 completed)");
+        result[0].Factors.Ratings.Should().Be("Outstanding quality (4.90) and timeliness (4.80)");
+        result[0].Rationale.Should().Be("Strong availability combined with exceptional special task background.");
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WhenFactorsOmitted_InitializesFactorsSafely()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        var jsonWithoutFactors = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.90,
+              "rationale": "Sufficient availability and experience."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(jsonWithoutFactors, new[] { candidates[0].EmployeeId });
+
+        result.Should().HaveCount(1);
+        result[0].Factors.Should().NotBeNull();
+        result[0].Factors!.Workload.Should().BeEmpty();
+        result[0].Factors.Experience.Should().BeEmpty();
+        result[0].Factors.Ratings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseAndValidateResponse_WhenRanksHaveTiesOrGaps_NormalizesToStrictSequentialOneToN()
+    {
+        var (service, _, _) = CreateService();
+        var (task, candidates) = CreateSampleData();
+        // Model returns tied rank 1 for both or non-sequential ranks
+        var tiedJson = $$"""
+        {
+          "recommendations": [
+            {
+              "employeeId": "{{candidates[0].EmployeeId}}",
+              "rank": 1,
+              "score": 0.92,
+              "rationale": "High candidate."
+            },
+            {
+              "employeeId": "{{candidates[1].EmployeeId}}",
+              "rank": 1,
+              "score": 0.85,
+              "rationale": "Second candidate with tied rank in raw output."
+            }
+          ]
+        }
+        """;
+
+        var result = service.ParseAndValidateResponse(tiedJson, candidates.Select(c => c.EmployeeId));
+
+        result.Should().HaveCount(2);
+        result[0].EmployeeId.Should().Be(candidates[0].EmployeeId);
+        result[0].Rank.Should().Be(1);
+        result[1].EmployeeId.Should().Be(candidates[1].EmployeeId);
+        result[1].Rank.Should().Be(2); // Strict 1..N normalization applied
     }
 
     #endregion

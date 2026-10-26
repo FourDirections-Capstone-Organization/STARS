@@ -91,7 +91,7 @@ import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 import { aiService, SuitabilityResponseDTO } from '../../services/aiService';
-import { suitabilityCache } from '../../services/suitabilityCache';
+import { suitabilityCache, reRankSuitabilityItems } from '../../services/suitabilityCache';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -983,7 +983,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         if (isEvaluatingSuitability) return;
 
         const taskId = (initial as any)?.taskId || (initial as any)?.id;
-        const deptId = filterDeptId || form.assignedDepartmentId || departments[0]?.id || eligibleEmployees[0]?.departmentId;
+        const deptId = filterDeptId || form.assignedDepartmentId;
         const classification = form.classification ?? (initial as any)?.classification ?? 0;
 
         const cacheKey = suitabilityCache.generateKey({
@@ -1024,16 +1024,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 if (res.data?.isSuccess && res.data?.data?.items) {
                     items = res.data.data.items;
                 }
+            } else {
+                // Company-wide preview across all departments
+                const res = await aiService.getSuitabilityPreview(undefined, classification, 1, 20);
+                if (res.data?.isSuccess && res.data?.data?.items) {
+                    items = res.data.data.items;
+                }
             }
 
             if (items.length > 0) {
-                suitabilityCache.set(cacheKey, items);
+                const rankedItems = reRankSuitabilityItems(items);
+                suitabilityCache.set(cacheKey, rankedItems);
                 const ranks: Record<string, { rank?: number; rationale?: string; score: number }> = {};
-                items.forEach(item => {
+                rankedItems.forEach(item => {
                     ranks[item.employeeId] = { rank: item.rank, rationale: item.rationale, score: item.suitabilityScore };
                 });
                 setSuitabilityRanks(ranks);
-                const top = items[0];
+                const top = rankedItems[0];
                 setRecommendation({
                     accountId: top.employeeId,
                     employeeName: top.fullName,
@@ -1221,8 +1228,45 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 (e.teamName && e.teamName.toLowerCase().includes(q))
             );
         }
+        if (Object.keys(suitabilityRanks).length > 0) {
+            list = [...list].sort((a, b) => {
+                const aiA = suitabilityRanks[a.accountId];
+                const aiB = suitabilityRanks[b.accountId];
+                if (!aiA && !aiB) return 0;
+                if (!aiA) return 1;
+                if (!aiB) return -1;
+                if (aiA.rank !== undefined && aiB.rank !== undefined && aiA.rank !== aiB.rank) {
+                    return aiA.rank - aiB.rank;
+                }
+                return (aiB.score ?? 0) - (aiA.score ?? 0);
+            });
+        }
         return list;
-    }, [eligibleEmployees, filterDeptId, filterTeamId, singleSearch, teamsForTask]);
+    }, [eligibleEmployees, filterDeptId, filterTeamId, singleSearch, teamsForTask, suitabilityRanks]);
+
+    const topRecommendedId = useMemo(() => {
+        const hasAiRanks = Object.keys(suitabilityRanks).length > 0;
+        if (hasAiRanks) {
+            let topId: string | null = null;
+            let lowestRank = Infinity;
+            let highestScore = -Infinity;
+            for (const emp of filteredEmployees) {
+                const info = suitabilityRanks[emp.accountId];
+                if (!info) continue;
+                const r = info.rank ?? Infinity;
+                if (r < lowestRank) {
+                    lowestRank = r;
+                    highestScore = info.score ?? -Infinity;
+                    topId = emp.accountId;
+                } else if (r === lowestRank && (info.score ?? -Infinity) > highestScore) {
+                    highestScore = info.score ?? -Infinity;
+                    topId = emp.accountId;
+                }
+            }
+            return topId;
+        }
+        return recommendation?.accountId ?? null;
+    }, [suitabilityRanks, filteredEmployees, recommendation?.accountId]);
 
     const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const val = e.target.value;
@@ -1979,7 +2023,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                 {filteredEmployees.map(e => {
                                                     const isSelected = form.assignedTo === e.accountId;
                                                     const recInfo = suitabilityRanks[e.accountId];
-                                                    const isRecommended = recommendation?.accountId === e.accountId || recInfo?.rank === 1;
+                                                    const isRecommended = Boolean(topRecommendedId && topRecommendedId === e.accountId);
                                                     const disabled = !e.isAvailable;
                                                     return (
                                                         <div key={e.accountId}

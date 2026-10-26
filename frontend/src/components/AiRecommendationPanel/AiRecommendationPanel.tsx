@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Brain, Loader2, AlertCircle, TrendingUp, Briefcase, ChevronDown, ChevronUp, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { aiService, SuitabilityResponseDTO, SuitabilityExplanationDTO, SlaRiskResponseDTO } from '../../services/aiService';
 import './AiRecommendationPanel.css';
@@ -94,6 +94,12 @@ const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({ taskId })
 
     const getRoleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
+    const topCandidateId = useMemo(() => {
+        if (pageNumber !== 1 || suitability.length === 0) return null;
+        const rank1 = suitability.find(s => s.rank === 1);
+        return rank1 ? rank1.employeeId : suitability[0].employeeId;
+    }, [pageNumber, suitability]);
+
     return (
         <div className="ai-panel">
             <div className="ai-header">
@@ -148,7 +154,7 @@ const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({ taskId })
                                             <span className="ai-rec-card-number">{emp.employeeNumber}</span>
                                             <span className="ai-rec-card-role">{getRoleLabel(emp.role)}</span>
                                             <span className="ai-rank-badge">#{emp.rank ?? ((pageNumber - 1) * PAGE_SIZE + idx + 1)}</span>
-                                            {idx === 0 && pageNumber === 1 && <span className="ai-best-badge"><Zap size={10} /> Best Pick</span>}
+                                            {emp.employeeId === topCandidateId && <span className="ai-best-badge"><Zap size={10} /> Best Pick</span>}
                                         </div>
                                         {emp.rationale && (
                                             <div className="ai-rec-card-rationale">

@@ -73,6 +73,24 @@ public class GroqCandidateRecommendation
 
     [JsonPropertyName("rationale")]
     public string Rationale { get; set; } = string.Empty;
+
+    [JsonPropertyName("factors")]
+    public GroqCandidateFactors? Factors { get; set; }
+}
+
+/// <summary>
+/// Structured factor breakdowns explaining the key drivers of suitability evaluation.
+/// </summary>
+public class GroqCandidateFactors
+{
+    [JsonPropertyName("workload")]
+    public string Workload { get; set; } = string.Empty;
+
+    [JsonPropertyName("experience")]
+    public string Experience { get; set; } = string.Empty;
+
+    [JsonPropertyName("ratings")]
+    public string Ratings { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -97,7 +115,7 @@ public class GroqSuitabilityEnvelope
 public class GroqChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = "llama-3.3-70b-versatile";
+    public string Model { get; set; } = "openai/gpt-oss-120b";
 
     [JsonPropertyName("messages")]
     public List<GroqChatMessage> Messages { get; set; } = new();

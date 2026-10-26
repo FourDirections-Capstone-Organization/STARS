@@ -44,17 +44,21 @@ public class SuitabilityService : ISuitabilityService
     }
 
     private async Task<List<CandidateEvaluationItem>> QueryCandidateMetricsAsync(
-        Guid departmentId,
+        Guid? departmentId,
         UserRole[] eligibleRoles,
         TaskClassification classification,
         Guid? specificEmployeeId = null,
         CancellationToken cancellationToken = default)
     {
         var usersQuery = _db.Users.AsNoTracking()
-            .Where(u => u.DepartmentId == departmentId
-                     && u.AvailabilityStatus == AvailabilityStatus.Active
+            .Where(u => u.AvailabilityStatus == AvailabilityStatus.Active
                      && u.IsActive
                      && eligibleRoles.Contains(u.Role));
+
+        if (departmentId.HasValue && departmentId.Value != Guid.Empty)
+        {
+            usersQuery = usersQuery.Where(u => u.DepartmentId == departmentId.Value);
+        }
 
         if (specificEmployeeId.HasValue)
         {
@@ -177,11 +181,12 @@ public class SuitabilityService : ISuitabilityService
         {
             try
             {
+                var isRoutine = taskContext.Classification == 0;
                 var candidates = candidateItems.Select(ci => ci.Metrics).ToList();
                 var groqResult = await _groqService.EvaluateSuitabilityAsync(taskContext, candidates, cancellationToken);
                 var recDict = groqResult.Recommendations.ToDictionary(r => r.EmployeeId);
 
-                return candidateItems.Select(ci =>
+                var dtoList = candidateItems.Select(ci =>
                 {
                     var hasGroq = recDict.TryGetValue(ci.Metrics.EmployeeId, out var groqRec);
                     return new SuitabilityResponseDTO
@@ -192,13 +197,37 @@ public class SuitabilityService : ISuitabilityService
                         Role = ci.Metrics.Role,
                         Workload = ci.Metrics.Workload,
                         SuitabilityScore = hasGroq ? groqRec!.Score : ci.HeuristicScore,
-                        Rank = hasGroq ? groqRec!.Rank : null,
-                        Rationale = hasGroq ? groqRec!.Rationale : null
+                        Rank = hasGroq ? groqRec!.Rank : (int?)null,
+                        Rationale = hasGroq && !string.IsNullOrWhiteSpace(groqRec!.Rationale)
+                            ? groqRec.Rationale
+                            : SuitabilityFallbackGenerator.GenerateRationale(ci.Metrics, taskContext.Classification),
+                        Factors = hasGroq && groqRec!.Factors != null
+                            ? groqRec.Factors
+                            : SuitabilityFallbackGenerator.GenerateFactors(ci.Metrics, taskContext.Classification)
                     };
-                })
-                .OrderBy(r => r.Rank ?? int.MaxValue)
-                .ThenByDescending(r => r.SuitabilityScore)
-                .ToList();
+                }).ToList();
+
+                var itemMap = candidateItems.ToDictionary(ci => ci.Metrics.EmployeeId);
+                var ordered = dtoList
+                    .OrderBy(r => r.Rank ?? int.MaxValue)
+                    .ThenByDescending(r => r.SuitabilityScore)
+                    .ThenBy(r => r.Workload)
+                    .ThenByDescending(r => itemMap.TryGetValue(r.EmployeeId, out var item)
+                        ? (isRoutine ? item.Metrics.RoutineExperience : item.Metrics.SpecialExperience)
+                        : 0)
+                    .ThenByDescending(r => itemMap.TryGetValue(r.EmployeeId, out var item)
+                        ? (item.Metrics.TimelinessRating + item.Metrics.WorkQualityRating + item.Metrics.CommunicationRating) / 3.0
+                        : 0.0)
+                    .ThenBy(r => r.FullName)
+                    .ToList();
+
+                // Enforce strictly sequential 1..N ranks without gaps or duplicates
+                for (int i = 0; i < ordered.Count; i++)
+                {
+                    ordered[i].Rank = i + 1;
+                }
+
+                return ordered;
             }
             catch (Exception ex)
             {
@@ -206,23 +235,36 @@ public class SuitabilityService : ISuitabilityService
             }
         }
 
-        // Fallback: Ranked purely by verified PostgreSQL heuristic score
+        // Fallback: Ranked by verified PostgreSQL heuristic score with tie-breaking:
+        // higher score, lower active workload, higher relevant experience, higher average ratings, fullname
+        var isRoutineFallback = taskContext.Classification == 0;
         var rankedHeuristic = candidateItems
             .OrderByDescending(ci => ci.HeuristicScore)
             .ThenBy(ci => ci.Metrics.Workload)
+            .ThenByDescending(ci => isRoutineFallback ? ci.Metrics.RoutineExperience : ci.Metrics.SpecialExperience)
+            .ThenByDescending(ci => (ci.Metrics.TimelinessRating + ci.Metrics.WorkQualityRating + ci.Metrics.CommunicationRating) / 3.0)
+            .ThenBy(ci => ci.Metrics.FullName)
             .ToList();
 
-        return rankedHeuristic.Select((ci, idx) => new SuitabilityResponseDTO
+        var fallbackResult = new List<SuitabilityResponseDTO>(rankedHeuristic.Count);
+        for (int i = 0; i < rankedHeuristic.Count; i++)
         {
-            EmployeeId = ci.Metrics.EmployeeId,
-            EmployeeNumber = ci.Metrics.EmployeeNumber,
-            FullName = ci.Metrics.FullName,
-            Role = ci.Metrics.Role,
-            Workload = ci.Metrics.Workload,
-            SuitabilityScore = ci.HeuristicScore,
-            Rank = idx + 1,
-            Rationale = $"Heuristic evaluation based on {ci.Metrics.Workload} active tasks and verified performance indicators."
-        }).ToList();
+            var ci = rankedHeuristic[i];
+            fallbackResult.Add(new SuitabilityResponseDTO
+            {
+                EmployeeId = ci.Metrics.EmployeeId,
+                EmployeeNumber = ci.Metrics.EmployeeNumber,
+                FullName = ci.Metrics.FullName,
+                Role = ci.Metrics.Role,
+                Workload = ci.Metrics.Workload,
+                SuitabilityScore = ci.HeuristicScore,
+                Rank = i + 1,
+                Rationale = SuitabilityFallbackGenerator.GenerateRationale(ci.Metrics, taskContext.Classification),
+                Factors = SuitabilityFallbackGenerator.GenerateFactors(ci.Metrics, taskContext.Classification)
+            });
+        }
+
+        return fallbackResult;
     }
 
     public async Task<ApiResponseDTO<List<SuitabilityResponseDTO>>> GetSuitableEmployeesAsync(
@@ -290,7 +332,7 @@ public class SuitabilityService : ISuitabilityService
     }
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>> GetSuitabilityPreviewAsync(
-        Guid departmentId, int classification, UserRole callerRole,
+        Guid? departmentId, int classification, UserRole callerRole,
         int pageNumber = 1, int pageSize = 5)
     {
         pageNumber = Math.Max(1, pageNumber);
@@ -307,10 +349,13 @@ public class SuitabilityService : ISuitabilityService
             eligibleRoles,
             taskClassification);
 
+        var isCompanyWide = !departmentId.HasValue || departmentId.Value == Guid.Empty;
         var taskContext = new GroqTaskContext
         {
             TaskId = Guid.Empty,
-            Title = classification == 0 ? "Routine Daily Task Preview" : "Special Task Preview",
+            Title = classification == 0
+                ? (isCompanyWide ? "Company-Wide Routine Daily Task Preview" : "Routine Daily Task Preview")
+                : (isCompanyWide ? "Company-Wide Special Task Preview" : "Special Task Preview"),
             Classification = classification,
             Priority = 1
         };

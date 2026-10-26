@@ -225,6 +225,39 @@ describe('Step 5: Suitability Display UI with Groq Recommendations, Ranks, and B
                 expect(screen.getByText(/Alice Rivera scored 0.945/)).toBeInTheDocument();
             });
         });
+
+        it('renders exactly one Best Pick badge for the top candidate and displays plain-language rationales', async () => {
+            vi.spyOn(aiService, 'getSuitability').mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    message: 'Success',
+                    data: {
+                        items: mockCandidates,
+                        totalCount: 2,
+                        pageNumber: 1,
+                        pageSize: 5,
+                        totalPages: 1,
+                        hasPreviousPage: false,
+                        hasNextPage: false,
+                    },
+                },
+            } as any);
+
+            const { container } = render(<AiRecommendationPanel taskId="task-100" />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Alice Rivera')).toBeInTheDocument();
+            });
+
+            const bestBadges = container.querySelectorAll('.ai-best-badge');
+            expect(bestBadges).toHaveLength(1);
+            expect(bestBadges[0].textContent).toContain('Best Pick');
+
+            // Verify plain-language rationales render clearly
+            const rationales = container.querySelectorAll('.ai-rec-card-rationale');
+            expect(rationales).toHaveLength(2);
+            expect(rationales[0].textContent).toContain('Top suitability: optimal workload');
+        });
     });
 
     describe('AIAssignmentView Component', () => {
@@ -268,6 +301,113 @@ describe('Step 5: Suitability Display UI with Groq Recommendations, Ranks, and B
             const empNames = screen.getAllByText(/Alice Rivera|Bob Santos/).map(el => el.textContent);
             expect(empNames[0]).toBe('Alice Rivera');
             expect(empNames[1]).toBe('Bob Santos');
+        });
+
+        it('assigns single #1 rank and unique sequential positions across all candidates in company-wide evaluation', async () => {
+            // Simulate preview returning multiple candidates with conflicting raw rank 1
+            const conflictingCandidates: SuitabilityResponseDTO[] = [
+                {
+                    employeeId: 'emp-002',
+                    employeeNumber: 'E002',
+                    fullName: 'Bob Santos',
+                    role: 'Courier',
+                    workload: 4,
+                    suitabilityScore: 0.70,
+                    rank: 1, // Raw departmental rank #1
+                    rationale: 'Courier rationale',
+                },
+                {
+                    employeeId: 'emp-001',
+                    employeeNumber: 'E001',
+                    fullName: 'Alice Rivera',
+                    role: 'Encoder',
+                    workload: 1,
+                    suitabilityScore: 0.95,
+                    rank: 1, // Raw departmental rank #1
+                    rationale: 'Encoder rationale',
+                },
+            ];
+
+            vi.spyOn(aiService, 'getSuitabilityPreview').mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    message: 'Success',
+                    data: {
+                        items: conflictingCandidates,
+                        totalCount: 2,
+                        pageNumber: 1,
+                        pageSize: 50,
+                        totalPages: 1,
+                        hasPreviousPage: false,
+                        hasNextPage: false,
+                    },
+                },
+            } as any);
+
+            render(<AIAssignmentView />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Evaluate Suitability')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByText('Evaluate Suitability'));
+
+            await waitFor(() => {
+                expect(screen.getByText('#1')).toBeInTheDocument();
+                expect(screen.getByText('#2')).toBeInTheDocument();
+            });
+
+            // Ensure exactly one #1 badge exists (no duplicate #1)
+            const rank1Badges = screen.getAllByText('#1');
+            expect(rank1Badges).toHaveLength(1);
+
+            // Alice Rivera (higher score 0.95) should be ranked before Bob Santos
+            const empNames = screen.getAllByText(/Alice Rivera|Bob Santos/).map(el => el.textContent);
+            expect(empNames[0]).toBe('Alice Rivera');
+            expect(empNames[1]).toBe('Bob Santos');
+        });
+
+        it('renders exactly one Best badge strictly for the top-ranked candidate and displays clear rationales', async () => {
+            vi.spyOn(aiService, 'getSuitabilityPreview').mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    message: 'Success',
+                    data: {
+                        items: mockCandidates,
+                        totalCount: 2,
+                        pageNumber: 1,
+                        pageSize: 50,
+                        totalPages: 1,
+                        hasPreviousPage: false,
+                        hasNextPage: false,
+                    },
+                },
+            } as any);
+
+            const { container } = render(<AIAssignmentView />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Evaluate Suitability')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByText('Evaluate Suitability'));
+
+            await waitFor(() => {
+                expect(screen.getByText('#1')).toBeInTheDocument();
+            });
+
+            // Exactly one Best badge across all employees
+            const bestBadges = container.querySelectorAll('.ai-best-badge');
+            expect(bestBadges).toHaveLength(1);
+            expect(bestBadges[0].textContent).toContain('Best');
+
+            // Rationale badge and text render clearly
+            const rationaleBadges = container.querySelectorAll('.ai-emp-rationale-badge');
+            expect(rationaleBadges.length).toBeGreaterThanOrEqual(1);
+            expect(rationaleBadges[0].textContent).toBe('AI Rationale');
+
+            const rationaleTexts = container.querySelectorAll('.ai-emp-rationale-text');
+            expect(rationaleTexts[0].textContent).toContain('Top suitability: optimal workload');
         });
     });
 
@@ -323,6 +463,61 @@ describe('Step 5: Suitability Display UI with Groq Recommendations, Ranks, and B
             // Verify picker list shows rank badge and rationale
             expect(screen.getByText('#1')).toBeInTheDocument();
             expect(screen.getByText('#2')).toBeInTheDocument();
+        });
+
+        it('renders exactly one Best pick badge for the top suitability candidate without duplicating across multiple candidates', async () => {
+            vi.spyOn(aiService, 'getSuitabilityPreview').mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    message: 'Success',
+                    data: {
+                        items: mockCandidates,
+                        totalCount: 2,
+                        pageNumber: 1,
+                        pageSize: 10,
+                        totalPages: 1,
+                        hasPreviousPage: false,
+                        hasNextPage: false,
+                    },
+                },
+            } as any);
+
+            const { container } = render(
+                <TaskModal
+                    mode="edit"
+                    tasks={[]}
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    onSuccess={vi.fn()}
+                    teamMembers={mockTeamMembers}
+                    initial={{
+                        id: '',
+                        title: 'Test Delivery Task',
+                        classification: 0,
+                        assignedDepartmentId: 'dept-001',
+                    }}
+                />
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('Evaluate Suitability')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByText('Evaluate Suitability'));
+
+            await waitFor(() => {
+                expect(screen.getByText('#1')).toBeInTheDocument();
+            });
+
+            // Exactly one Best pick badge rendered in the picker list
+            const bestPickTags = container.querySelectorAll('.emp-picker-tag.best');
+            expect(bestPickTags).toHaveLength(1);
+            expect(bestPickTags[0].textContent).toBe('Best pick');
+
+            // Plain-language rationale renders in picker list
+            const rationaleItems = container.querySelectorAll('.emp-picker-rationale');
+            expect(rationaleItems.length).toBeGreaterThanOrEqual(1);
+            expect(rationaleItems[0].textContent).toContain('Top suitability: optimal workload');
         });
     });
 });
