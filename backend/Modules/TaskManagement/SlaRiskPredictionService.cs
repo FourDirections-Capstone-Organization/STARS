@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Microsoft.ML;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -8,86 +6,19 @@ using Backend.Models.Enums;
 
 namespace Backend.Modules.TaskManagement;
 
-internal class SlaRiskInput
-{
-    public float PriorityLevel { get; set; }
-    public float Classification { get; set; }
-    public float DepartmentWorkload { get; set; }
-    public float AssignedEmployeeCount { get; set; }
-    public float HasMultipleAssignments { get; set; }
-}
-
-internal class SlaRiskOutput
-{
-    public bool PredictedLabel { get; set; }
-    public float Score { get; set; }
-}
-
-internal class SlaRiskTrainingData
-{
-    public float PriorityLevel { get; set; }
-    public float Classification { get; set; }
-    public float DepartmentWorkload { get; set; }
-    public float AssignedEmployeeCount { get; set; }
-    public float HasMultipleAssignments { get; set; }
-    public bool Label { get; set; }
-}
-
 public class SlaRiskPredictionService : ISlaRiskPredictionService
 {
     private readonly AppDbContext _db;
-    private readonly IWebHostEnvironment _env;
     private readonly ILogger<SlaRiskPredictionService> _logger;
-    private readonly MLContext _mlContext;
-    private ITransformer? _model;
-    private PredictionEngine<SlaRiskInput, SlaRiskOutput>? _predictionEngine;
-    private readonly object _modelLock = new();
-    private string? _modelPath;
-    private DateTime _lastModelLoadTime = DateTime.MinValue;
 
     private static readonly int HighDepartmentWorkloadThreshold = 10;
 
     public SlaRiskPredictionService(
         AppDbContext db,
-        IWebHostEnvironment env,
         ILogger<SlaRiskPredictionService> logger)
     {
         _db = db;
-        _env = env;
         _logger = logger;
-        _mlContext = new MLContext(seed: 42);
-        _modelPath = Path.Combine(_env.ContentRootPath, "Models", "sla-risk-model.zip");
-        LoadModel();
-    }
-
-    private void LoadModel()
-    {
-        if (string.IsNullOrEmpty(_modelPath) || !File.Exists(_modelPath))
-        {
-            _logger.LogInformation("No SLA risk model found at {Path}, using rule-based fallback", _modelPath);
-            return;
-        }
-
-        try
-        {
-            lock (_modelLock)
-            {
-                var lastWrite = File.GetLastWriteTimeUtc(_modelPath);
-                if (_model != null && lastWrite <= _lastModelLoadTime)
-                    return;
-
-                _model = _mlContext.Model.Load(_modelPath, out _);
-                _predictionEngine = _mlContext.Model.CreatePredictionEngine<SlaRiskInput, SlaRiskOutput>(_model);
-                _lastModelLoadTime = lastWrite;
-                _logger.LogInformation("SLA risk model loaded from {Path}", _modelPath);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to load SLA risk model from {Path}, falling back to rule-based", _modelPath);
-            _model = null;
-            _predictionEngine = null;
-        }
     }
 
     public async Task<SlaRiskResponseDTO> PredictRiskAsync(Guid taskId)
@@ -106,15 +37,8 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
                 KeyFactors = new List<string> { "Task not found" }
             };
 
-        EnsureModelLoaded();
-        var (input, isUrgent, employeeWorkload, hoursUntilDeadline) = await BuildFeatureVectorAsync(task);
-
-        if (_model != null && _predictionEngine != null)
-        {
-            return PredictWithModel(task, input);
-        }
-
-        return RuleBasedPrediction(task, input, isUrgent, employeeWorkload, hoursUntilDeadline);
+        var (deptWorkload, isUrgent, employeeWorkload, hoursUntilDeadline) = await BuildFeatureFactorsAsync(task);
+        return RuleBasedPrediction(task, deptWorkload, isUrgent, employeeWorkload, hoursUntilDeadline);
     }
 
     public async Task<SlaRiskExplanationDTO> ExplainRiskAsync(Guid taskId)
@@ -136,24 +60,11 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
                 }
             };
 
-        EnsureModelLoaded();
-        var (input, isUrgent, employeeWorkload, hoursUntilDeadline) = await BuildFeatureVectorAsync(task);
-
-        if (_model != null)
-        {
-            return ExplainWithModel(task, input);
-        }
-
-        return RuleBasedExplanation(task, input, isUrgent, employeeWorkload, hoursUntilDeadline);
+        var (deptWorkload, isUrgent, employeeWorkload, hoursUntilDeadline) = await BuildFeatureFactorsAsync(task);
+        return RuleBasedExplanation(task, deptWorkload, isUrgent, employeeWorkload, hoursUntilDeadline);
     }
 
-    internal void EnsureModelLoaded()
-    {
-        if (_model == null || File.Exists(_modelPath) && File.GetLastWriteTimeUtc(_modelPath) > _lastModelLoadTime)
-            LoadModel();
-    }
-
-    private async Task<(SlaRiskInput Input, bool IsUrgent, int EmployeeWorkload, double HoursUntilDeadline)> BuildFeatureVectorAsync(Models.Task task)
+    private async Task<(int DeptWorkload, bool IsUrgent, int EmployeeWorkload, double HoursUntilDeadline)> BuildFeatureFactorsAsync(Models.Task task)
     {
         var deptWorkload = task.AssignedDepartmentId.HasValue
             ? await _db.Tasks.CountAsync(t =>
@@ -164,8 +75,6 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
 
         var isUrgent = task.PriorityLevel == PriorityLevel.Urgent;
         var hoursUntilDeadline = (task.Deadline - DateTime.UtcNow).TotalHours;
-        var assignedEmployeeCount = task.Assignments.Count;
-        var hasMultipleAssignments = assignedEmployeeCount > 1;
 
         var employeeWorkload = 0;
         if (task.Assignments.Any())
@@ -179,50 +88,14 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
         }
 
         return (
-            new SlaRiskInput
-            {
-                PriorityLevel = (float)task.PriorityLevel,
-                Classification = (float)task.Classification,
-                DepartmentWorkload = deptWorkload,
-                AssignedEmployeeCount = assignedEmployeeCount,
-                HasMultipleAssignments = hasMultipleAssignments ? 1f : 0f
-            },
+            deptWorkload,
             isUrgent,
             employeeWorkload,
             hoursUntilDeadline
         );
     }
 
-    private SlaRiskResponseDTO PredictWithModel(Models.Task task, SlaRiskInput input)
-    {
-        SlaRiskOutput prediction;
-        lock (_modelLock)
-        {
-            prediction = _predictionEngine!.Predict(input);
-        }
-
-        var riskLevel = DetermineRiskLevel(prediction.Score);
-        var confidence = Math.Clamp(prediction.PredictedLabel ? prediction.Score : 1.0f - prediction.Score, 0.0, 1.0);
-
-        var response = new SlaRiskResponseDTO
-        {
-            TaskId = task.Id,
-            RiskLevel = riskLevel,
-            ConfidenceScore = Math.Round(confidence, 4),
-            KeyFactors = new List<string>
-            {
-                $"Priority: {task.PriorityLevel}",
-                $"Department workload: {input.DepartmentWorkload} active tasks",
-                $"Assigned employees: {input.AssignedEmployeeCount}"
-            }
-        };
-
-        UpdateTaskRiskLevel(task, riskLevel);
-
-        return response;
-    }
-
-    private SlaRiskResponseDTO RuleBasedPrediction(Models.Task task, SlaRiskInput input, bool isUrgent, int employeeWorkload, double hoursUntilDeadline)
+    private SlaRiskResponseDTO RuleBasedPrediction(Models.Task task, int deptWorkload, bool isUrgent, int employeeWorkload, double hoursUntilDeadline)
     {
         var factors = new List<string>();
         string riskLevel;
@@ -230,11 +103,11 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
 
         if (isUrgent)
         {
-            if (input.DepartmentWorkload >= HighDepartmentWorkloadThreshold)
+            if (deptWorkload >= HighDepartmentWorkloadThreshold)
             {
                 riskLevel = "Medium";
                 confidence = 0.60;
-                factors.Add($"Urgent priority with {input.DepartmentWorkload} active tasks in department");
+                factors.Add($"Urgent priority with {deptWorkload} active tasks in department");
             }
             else
             {
@@ -266,46 +139,20 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
         return response;
     }
 
-    private SlaRiskExplanationDTO ExplainWithModel(Models.Task task, SlaRiskInput input)
+    private SlaRiskExplanationDTO RuleBasedExplanation(Models.Task task, int deptWorkload, bool isUrgent, int employeeWorkload, double hoursUntilDeadline)
     {
-        SlaRiskOutput prediction;
-        lock (_modelLock)
-        {
-            prediction = _predictionEngine!.Predict(input);
-        }
+        var riskResponse = RuleBasedPrediction(task, deptWorkload, isUrgent, employeeWorkload, hoursUntilDeadline);
+
+        var assignedEmployeeCount = task.Assignments.Count;
+        var hasMultipleAssignments = assignedEmployeeCount > 1;
 
         var contributions = new List<FactorContributionDTO>
         {
-            new() { FeatureName = "PriorityLevel", Value = input.PriorityLevel, Contribution = input.PriorityLevel / 3.0, Description = $"Priority level: {task.PriorityLevel}" },
-            new() { FeatureName = "Classification", Value = input.Classification, Contribution = input.Classification, Description = $"Classification: {task.Classification}" },
-            new() { FeatureName = "DepartmentWorkload", Value = input.DepartmentWorkload, Contribution = Math.Min(input.DepartmentWorkload / 20.0, 1.0), Description = $"{input.DepartmentWorkload} active tasks in department" },
-            new() { FeatureName = "AssignedEmployeeCount", Value = input.AssignedEmployeeCount, Contribution = Math.Min(input.AssignedEmployeeCount / 5.0, 1.0), Description = $"{input.AssignedEmployeeCount} assigned employees" },
-            new() { FeatureName = "HasMultipleAssignments", Value = input.HasMultipleAssignments, Contribution = input.HasMultipleAssignments > 0 ? 0.3 : 0.0, Description = input.HasMultipleAssignments > 0 ? "Multiple employees assigned" : "Single employee assigned" }
-        };
-
-        var riskLevel = DetermineRiskLevel(prediction.Score);
-        var confidence = Math.Clamp(prediction.PredictedLabel ? prediction.Score : 1.0f - prediction.Score, 0.0, 1.0);
-
-        return new SlaRiskExplanationDTO
-        {
-            TaskId = task.Id,
-            RiskLevel = riskLevel,
-            ConfidenceScore = Math.Round(confidence, 4),
-            FeatureContributions = contributions
-        };
-    }
-
-    private SlaRiskExplanationDTO RuleBasedExplanation(Models.Task task, SlaRiskInput input, bool isUrgent, int employeeWorkload, double hoursUntilDeadline)
-    {
-        var riskResponse = RuleBasedPrediction(task, input, isUrgent, employeeWorkload, hoursUntilDeadline);
-
-        var contributions = new List<FactorContributionDTO>
-        {
-            new() { FeatureName = "PriorityLevel", Value = input.PriorityLevel, Contribution = isUrgent ? 0.6 : 0.2, Description = $"Priority level: {task.PriorityLevel}" },
-            new() { FeatureName = "Classification", Value = input.Classification, Contribution = input.Classification * 0.1, Description = $"Classification: {task.Classification}" },
-            new() { FeatureName = "DepartmentWorkload", Value = input.DepartmentWorkload, Contribution = Math.Min(input.DepartmentWorkload / 20.0, 1.0), Description = $"{input.DepartmentWorkload} active tasks in department" },
-            new() { FeatureName = "AssignedEmployeeCount", Value = input.AssignedEmployeeCount, Contribution = Math.Min(input.AssignedEmployeeCount / 5.0, 1.0), Description = $"{input.AssignedEmployeeCount} assigned employees" },
-            new() { FeatureName = "HasMultipleAssignments", Value = input.HasMultipleAssignments, Contribution = input.HasMultipleAssignments > 0 ? 0.3 : 0.0, Description = input.HasMultipleAssignments > 0 ? "Multiple employees assigned" : "Single employee assigned" },
+            new() { FeatureName = "PriorityLevel", Value = (float)task.PriorityLevel, Contribution = isUrgent ? 0.6 : 0.2, Description = $"Priority level: {task.PriorityLevel}" },
+            new() { FeatureName = "Classification", Value = (float)task.Classification, Contribution = (float)task.Classification * 0.1, Description = $"Classification: {task.Classification}" },
+            new() { FeatureName = "DepartmentWorkload", Value = deptWorkload, Contribution = Math.Min(deptWorkload / 20.0, 1.0), Description = $"{deptWorkload} active tasks in department" },
+            new() { FeatureName = "AssignedEmployeeCount", Value = assignedEmployeeCount, Contribution = Math.Min(assignedEmployeeCount / 5.0, 1.0), Description = $"{assignedEmployeeCount} assigned employees" },
+            new() { FeatureName = "HasMultipleAssignments", Value = hasMultipleAssignments ? 1 : 0, Contribution = hasMultipleAssignments ? 0.3 : 0.0, Description = hasMultipleAssignments ? "Multiple employees assigned" : "Single employee assigned" },
             new() { FeatureName = "IsUrgent", Value = isUrgent ? 1 : 0, Contribution = isUrgent ? 0.8 : 0.0, Description = isUrgent ? "Urgent priority task" : "Non-urgent priority" },
             new() { FeatureName = "HourUntilDeadline", Value = (float)Math.Round(hoursUntilDeadline, 1), Contribution = Math.Min(1.0 - hoursUntilDeadline / 168.0, 1.0), Description = $"{Math.Round(hoursUntilDeadline, 1)} hours until deadline" }
         };
@@ -333,15 +180,5 @@ public class SlaRiskPredictionService : ISlaRiskPredictionService
             task.SlaRiskLevel = level;
             _db.SaveChanges();
         }
-    }
-
-    private static string DetermineRiskLevel(float score)
-    {
-        return score switch
-        {
-            >= 0.7f => "High",
-            >= 0.4f => "Medium",
-            _ => "Low"
-        };
     }
 }

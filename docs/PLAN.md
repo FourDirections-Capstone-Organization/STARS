@@ -46,7 +46,7 @@ Core task CRUD, RBAC, authentication, DMS/FOMS operational business logic, and d
 - [x] Step 5: Update suitability display UI to show Groq recommendations, ranks, and bias-free explanations
   - Verify: Recommended employees render with AI rationale matching only system metrics in frontend components
 
-- [ ] Step 6: Remove ML.NET FastTree SLA risk model files, training service, and obsolete ML test suites
+- [x] Step 6: Remove ML.NET FastTree SLA risk model files, training service, and obsolete ML test suites
   - Verify: Backend compiles cleanly without Microsoft.ML dependencies while retaining updated test assertions
 
 - [ ] Step 7: Delete CDC Processor project, Debezium, Kafka, and Neo4j configurations from docker-compose
