@@ -42,7 +42,7 @@ Redesigning the Biomarker UI layout, modifying notification channels, and changi
   - Verify: Unit tests confirm OnTimeRate, EmployeeLateRate, and OverallSla use real deadline comparison
 - [x] Step 4: Add comprehensive backend service tests for BiomarkerScanService and controller
   - Verify: Backend test suite confirms alert creation, severity rules, threshold triggers, and pagination
-- [ ] Step 5: Add frontend test suite for useBiomarker hook and BiomarkerDashboard integration
+- [x] Step 5: Add frontend test suite for useBiomarker hook and BiomarkerDashboard integration
   - Verify: Vitest tests confirm status cards, filtering, alert mapping, and scan trigger handling
 - [ ] Step 6: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
