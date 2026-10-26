@@ -540,6 +540,28 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
         return list;
     }, [employees, selectedDepartmentId, selectedTeamId, employeeSearch, departments, teams, aiEnabled, aiScores]);
 
+    const topRankedEmployeeId = useMemo(() => {
+        if (!aiEnabled || Object.keys(aiScores).length === 0) return null;
+        let topEmpId: string | null = null;
+        let bestRank = Infinity;
+        let bestScore = -Infinity;
+
+        for (const emp of filteredEmployees) {
+            const ai = aiScores[emp.employeeId];
+            if (!ai) continue;
+            const rank = ai.rank ?? Infinity;
+            if (rank < bestRank) {
+                bestRank = rank;
+                bestScore = ai.score;
+                topEmpId = emp.employeeId;
+            } else if (rank === bestRank && ai.score > bestScore) {
+                bestScore = ai.score;
+                topEmpId = emp.employeeId;
+            }
+        }
+        return topEmpId;
+    }, [aiEnabled, aiScores, filteredEmployees]);
+
     const selectedEmployee = useMemo(() =>
         employees.find(e => e.employeeId === selectedEmployeeId),
         [employees, selectedEmployeeId]
@@ -2093,9 +2115,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                                             </div>
                                         </div>
 
-                                        {filteredEmployees.map((emp, idx) => {
+                                        {filteredEmployees.map((emp) => {
                                             const ai = aiScores[emp.employeeId];
-                                            const isBestPick = ai && (ai.rank === 1 || (idx === 0 && !employeeSearch));
+                                            const isBestPick = Boolean(aiEnabled && emp.employeeId === topRankedEmployeeId);
                                             return (
                                                 <div key={emp.employeeId}>
                                                     <div
