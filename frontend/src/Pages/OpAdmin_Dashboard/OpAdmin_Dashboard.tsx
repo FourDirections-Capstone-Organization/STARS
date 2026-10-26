@@ -55,6 +55,7 @@ import {
     RefreshCw,
     Maximize2,
     Minimize2,
+    Zap,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -89,6 +90,8 @@ import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
+import { aiService, SuitabilityResponseDTO } from '../../services/aiService';
+import { suitabilityCache } from '../../services/suitabilityCache';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -973,6 +976,65 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const [singleSearch, setSingleSearch] = useState('');
     const [filterDeptId, setFilterDeptId] = useState('');
     const [filterTeamId, setFilterTeamId] = useState('');
+    const [isEvaluatingSuitability, setIsEvaluatingSuitability] = useState(false);
+
+    const handleEvaluateSuitability = useCallback(async () => {
+        if (isEvaluatingSuitability) return;
+
+        const taskId = (initial as any)?.taskId || (initial as any)?.id;
+        const deptId = filterDeptId || form.assignedDepartmentId || departments[0]?.id || eligibleEmployees[0]?.departmentId;
+        const classification = form.classification ?? (initial as any)?.classification ?? 0;
+
+        const cacheKey = suitabilityCache.generateKey({
+            taskId: taskId || undefined,
+            departmentId: deptId || undefined,
+            classification,
+        });
+
+        // Anti-spam cache check: reuse cached results without refetching
+        const cached = suitabilityCache.get(cacheKey);
+        if (cached && cached.items.length > 0) {
+            const top = cached.items[0];
+            setRecommendation({
+                accountId: top.employeeId,
+                employeeName: top.fullName,
+                reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)} (Cached)`,
+                employeeNumber: top.employeeNumber || '',
+            });
+            return;
+        }
+
+        setIsEvaluatingSuitability(true);
+        try {
+            let items: SuitabilityResponseDTO[] = [];
+            if (taskId) {
+                const res = await aiService.getSuitability(taskId, 1, 10);
+                if (res.data?.isSuccess && res.data?.data?.items) {
+                    items = res.data.data.items;
+                }
+            } else if (deptId) {
+                const res = await aiService.getSuitabilityPreview(deptId, classification, 1, 10);
+                if (res.data?.isSuccess && res.data?.data?.items) {
+                    items = res.data.data.items;
+                }
+            }
+
+            if (items.length > 0) {
+                suitabilityCache.set(cacheKey, items);
+                const top = items[0];
+                setRecommendation({
+                    accountId: top.employeeId,
+                    employeeName: top.fullName,
+                    reason: top.rationale || `Suitability Score: ${top.suitabilityScore.toFixed(2)}`,
+                    employeeNumber: top.employeeNumber || '',
+                });
+            }
+        } catch (err) {
+            console.error('Failed to evaluate suitability in TaskModal:', err);
+        } finally {
+            setIsEvaluatingSuitability(false);
+        }
+    }, [isEvaluatingSuitability, initial, filterDeptId, form.assignedDepartmentId, departments, eligibleEmployees, form.classification]);
 
     const isCourierUnmapped = useMemo(() => {
         if (!isPreDelivery || !deliveryForm.courierEmployeeId) return false;
@@ -1734,6 +1796,43 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 {/* -- SingleEmployee: pick one user -- */}
                                 {form.assignmentScope === 'SingleEmployee' && (
                                     <div className="emp-picker-section">
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                Employee Selection
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="evaluate-suitability-btn"
+                                                onClick={handleEvaluateSuitability}
+                                                disabled={isEvaluatingSuitability}
+                                                title="Evaluate employee suitability with AI"
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 5,
+                                                    padding: '3px 9px',
+                                                    fontSize: 11,
+                                                    fontWeight: 600,
+                                                    color: '#ffffff',
+                                                    background: 'var(--primary, #0284c7)',
+                                                    border: 'none',
+                                                    borderRadius: 5,
+                                                    cursor: isEvaluatingSuitability ? 'not-allowed' : 'pointer',
+                                                }}
+                                            >
+                                                {isEvaluatingSuitability ? (
+                                                    <>
+                                                        <Loader2 size={12} className="spin" />
+                                                        <span>Evaluating...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Zap size={12} />
+                                                        <span>Evaluate Suitability</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                         {isCourierUnmapped && (
                                             <div
                                                 className="unmapped-courier-banner"
