@@ -774,7 +774,7 @@ interface TaskModalWorkloadInfo {
     isAvailable: boolean;
 }
 
-interface TaskModalProps {
+export interface TaskModalProps {
     mode: 'new' | 'edit';
     initial?: Partial<Task>;
     teamMembers: TeamMember[];
@@ -863,7 +863,7 @@ const getQuickPickOptions = (priority: Priority | '') => {
     return [];
 };
 
-const TaskModal: React.FC<TaskModalProps> = ({
+export const TaskModal: React.FC<TaskModalProps> = ({
     mode,
     initial = {},
     teamMembers,
@@ -8574,7 +8574,7 @@ const ReopenTab: React.FC<{
 
 // --- Duplicate Warning Modal --------------------------------------------------
 
-interface DuplicateWarningModalProps {
+export interface DuplicateWarningModalProps {
     duplicates: DuplicateWarningDTO[];
     details: DuplicateDetailDTO[];
     newTaskTitle?: string;
@@ -8599,7 +8599,7 @@ const snippet = (s?: string): string => {
     return s.length > 120 ? s.slice(0, 120) + '…' : s;
 };
 
-const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
+export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
     duplicates, details, newTaskTitle, newTaskDescription, onViewTask, onContinue, onCancel,
 }) => (
     <FormModal isOpen onClose={onCancel}
@@ -8670,6 +8670,41 @@ const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
         </div>
     </FormModal>
 );
+
+// --- Pre-Delivery Helper ------------------------------------------------------
+
+export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
+    let dmsDeadline = '';
+    if (order.expectedDelivery) {
+        try {
+            const ed = new Date(order.expectedDelivery);
+            if (!isNaN(ed.getTime())) {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+            }
+        } catch { }
+    }
+    return {
+        taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
+        taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
+        taskCategory: 'Delivery Operations',
+        priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium') as Priority,
+        dueAt: dmsDeadline,
+        deliveryDetails: {
+            recipientName: order.recipientName,
+            recipientContact: order.recipientContact,
+            deliveryAddress: order.recipientAddress,
+            area: order.area,
+            packageDescription: order.packageDescription,
+            senderAddress: order.senderAddress || 'STARS Operations Office',
+            specialInstructions: order.specialInstructions || '',
+            courierEmployeeId: order.driverEmployeeId || '',
+            dmsOrderId: order.orderId,
+            dmsWaybillNo: order.waybillNo,
+            dmsStatus: order.status,
+        }
+    };
+};
 
 // --- Root Component -----------------------------------------------------------
 
@@ -8888,36 +8923,7 @@ export default function OpsAdminDashboard() {
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
-        let dmsDeadline = '';
-        if (order.expectedDelivery) {
-            try {
-                const ed = new Date(order.expectedDelivery);
-                if (!isNaN(ed.getTime())) {
-                    const pad = (n: number) => String(n).padStart(2, '0');
-                    dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
-                }
-            } catch { }
-        }
-        setInitialTaskData({
-            taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
-            taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
-            taskCategory: 'Delivery Operations',
-            priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
-            dueAt: dmsDeadline,
-            deliveryDetails: {
-                recipientName: order.recipientName,
-                recipientContact: order.recipientContact,
-                deliveryAddress: order.recipientAddress,
-                area: order.area,
-                packageDescription: order.packageDescription,
-                senderAddress: order.senderAddress || 'STARS Operations Office',
-                specialInstructions: order.specialInstructions || '',
-                courierEmployeeId: order.driverEmployeeId || '',
-                dmsOrderId: order.orderId,
-                dmsWaybillNo: order.waybillNo,
-                dmsStatus: order.status,
-            }
-        });
+        setInitialTaskData(buildPreDeliveryTaskInitialData(order));
         setShowNew(true);
     };
 
