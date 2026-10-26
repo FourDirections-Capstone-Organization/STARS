@@ -17,13 +17,11 @@ public class ReportController : ControllerBase
 {
     private readonly IReportService _reportService;
     private readonly AppDbContext _db;
-    private readonly Modules.Analytics.ChartDataService _chartService;
 
-    public ReportController(IReportService reportService, AppDbContext db, Modules.Analytics.ChartDataService chartService)
+    public ReportController(IReportService reportService, AppDbContext db)
     {
         _reportService = reportService;
         _db = db;
-        _chartService = chartService;
     }
 
     [HttpGet("kpi")]
@@ -201,14 +199,6 @@ public class ReportController : ControllerBase
         if (!result.IsSuccess)
             return NotFound(result);
 
-        return Ok(result);
-    }
-
-    [HttpGet("trends/completion-rate")]
-    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
-    public async Task<IActionResult> GetCompletionRateTrend([FromQuery] int weeks = 4)
-    {
-        var result = await _chartService.GetCompletionRateTrendAsync(weeks);
         return Ok(result);
     }
 

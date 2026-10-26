@@ -36,7 +36,7 @@ Redesigning the Biomarker UI layout, modifying notification channels, and changi
     - Dead streaming: StreamAnalyticsService (http://ksqldb:8088), ChartDataService, AnalyticsDashboardController, and AnalyticsTrendController are completely uncalled.
     - Dead DI: Program.cs lines 219-220 register unused IStreamAnalyticsService and ChartDataService.
     - Test gaps: BiomarkerScanTests & StreamAnalyticsTests test private in-file helpers rather than actual services; frontend has zero tests for useBiomarker/BiomarkerDashboard.
-- [ ] Step 2: Remove dead streaming analytics services, controllers, and unused DI registrations
+- [x] Step 2: Remove dead streaming analytics services, controllers, and unused DI registrations
   - Verify: Solution builds cleanly with StreamAnalytics and unused analytics controllers removed
 - [ ] Step 3: Fix BiomarkerScanService SLA and on-time calculations using effective deadlines
   - Verify: Unit tests confirm OnTimeRate, EmployeeLateRate, and OverallSla use real deadline comparison
