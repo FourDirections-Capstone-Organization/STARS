@@ -508,6 +508,125 @@ public class SuitabilityControllerIntegrationTests
     }
 
     [Fact]
+    public async Task GetSuitabilityPreview_CompanyWide_WhenDepartmentIdNull_ReturnsCandidatesAcrossMultipleDepartmentsWithUniqueSequentialRanks()
+    {
+        using var db = CreateInMemoryDb();
+        var dept1 = new Department { Id = Guid.NewGuid(), Name = "Operations" };
+        var dept2 = new Department { Id = Guid.NewGuid(), Name = "Logistics" };
+        db.Departments.AddRange(dept1, dept2);
+
+        var alice = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-001",
+            FirstName = "Alice",
+            LastName = "Smith",
+            DepartmentId = dept1.Id,
+            Role = UserRole.Courier,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        var bob = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-002",
+            FirstName = "Bob",
+            LastName = "Jones",
+            DepartmentId = dept2.Id,
+            Role = UserRole.Courier,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        var charlie = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-003",
+            FirstName = "Charlie",
+            LastName = "Brown",
+            DepartmentId = dept2.Id,
+            Role = UserRole.Dispatcher,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        db.Users.AddRange(alice, bob, charlie);
+        await db.SaveChangesAsync();
+
+        var mockGroq = new Mock<IGroqSuitabilityService>();
+        mockGroq.Setup(g => g.IsConfigured).Returns(false); // test heuristic fallback with multi-department ranking
+
+        var configStore = CreateConfigStore();
+        var service = new SuitabilityService(db, mockGroq.Object, configStore, NullLogger<SuitabilityService>.Instance);
+        var controller = CreateController(service, UserRole.Manager, dept1.Id);
+
+        var actionResult = await controller.GetSuitabilityPreview(departmentId: null, classification: 0, pageSize: 10);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>>().Subject;
+        response.IsSuccess.Should().BeTrue();
+        response.Data!.Items.Should().HaveCount(3);
+
+        // Verify strictly sequential ranks: 1, 2, 3 with no duplicates and single #1
+        var ranks = response.Data.Items.Select(i => i.Rank).ToList();
+        ranks.Should().Equal(new List<int?> { 1, 2, 3 });
+        response.Data.Items.Count(i => i.Rank == 1).Should().Be(1);
+
+        // Verify candidates come from both departments
+        var candidateIds = response.Data.Items.Select(i => i.EmployeeId).ToHashSet();
+        candidateIds.Should().Contain(alice.Id);
+        candidateIds.Should().Contain(bob.Id);
+        candidateIds.Should().Contain(charlie.Id);
+    }
+
+    [Fact]
+    public async Task GetSuitabilityPreview_CompanyWide_WhenDepartmentIdEmptyGuid_ReturnsCandidatesAcrossMultipleDepartments()
+    {
+        using var db = CreateInMemoryDb();
+        var dept1 = new Department { Id = Guid.NewGuid(), Name = "Operations" };
+        var dept2 = new Department { Id = Guid.NewGuid(), Name = "Logistics" };
+        db.Departments.AddRange(dept1, dept2);
+
+        var alice = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-001",
+            FirstName = "Alice",
+            LastName = "Smith",
+            DepartmentId = dept1.Id,
+            Role = UserRole.Courier,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        var bob = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-002",
+            FirstName = "Bob",
+            LastName = "Jones",
+            DepartmentId = dept2.Id,
+            Role = UserRole.Courier,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        db.Users.AddRange(alice, bob);
+        await db.SaveChangesAsync();
+
+        var mockGroq = new Mock<IGroqSuitabilityService>();
+        mockGroq.Setup(g => g.IsConfigured).Returns(false);
+
+        var configStore = CreateConfigStore();
+        var service = new SuitabilityService(db, mockGroq.Object, configStore, NullLogger<SuitabilityService>.Instance);
+        var controller = CreateController(service, UserRole.Manager, dept1.Id);
+
+        var actionResult = await controller.GetSuitabilityPreview(departmentId: Guid.Empty, classification: 0, pageSize: 10);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>>().Subject;
+        response.IsSuccess.Should().BeTrue();
+        response.Data!.Items.Should().HaveCount(2);
+        response.Data.Items.Select(i => i.Rank).Should().Equal(new List<int?> { 1, 2 });
+    }
+
+    [Fact]
     public async Task GetSuitableEmployees_Pagination_HandlesPageSizeAndPageNumber()
     {
         using var db = CreateInMemoryDb();

@@ -78,9 +78,10 @@ export const aiService = {
             `/api/tasks/${taskId}/suitability`, Object.keys(params).length > 0 ? params : undefined);
     },
 
-    /** Get paginated suitability preview for department & classification */
-    getSuitabilityPreview: (departmentId: string, classification: number = 0, pageNumber?: number, pageSize?: number) => {
-        const params: Record<string, any> = { departmentId, classification };
+    /** Get paginated suitability preview for department & classification (omitting departmentId queries company-wide) */
+    getSuitabilityPreview: (departmentId?: string, classification: number = 0, pageNumber?: number, pageSize?: number) => {
+        const params: Record<string, any> = { classification };
+        if (departmentId && departmentId.trim()) params.departmentId = departmentId.trim();
         if (pageNumber !== undefined) params.pageNumber = pageNumber;
         if (pageSize !== undefined) params.pageSize = pageSize;
         return api.get<ApiResponse<PagedResponseDTO<SuitabilityResponseDTO>>>(

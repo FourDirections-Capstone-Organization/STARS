@@ -120,3 +120,42 @@ class SuitabilityCache {
 }
 
 export const suitabilityCache = new SuitabilityCache();
+
+/**
+ * Normalizes suitability candidate items into strictly sequential unique 1..N ranks.
+ * Tie-breaking rules:
+ * 1. Suitability score descending
+ * 2. Active workload ascending
+ * 3. FullName ascending
+ */
+export function reRankSuitabilityItems(items: SuitabilityResponseDTO[]): SuitabilityResponseDTO[] {
+    if (!items || items.length === 0) return [];
+
+    // Deduplicate by employeeId keeping the higher score if duplicates exist
+    const map = new Map<string, SuitabilityResponseDTO>();
+    for (const item of items) {
+        if (!map.has(item.employeeId)) {
+            map.set(item.employeeId, item);
+        } else {
+            const existing = map.get(item.employeeId)!;
+            if (item.suitabilityScore > existing.suitabilityScore) {
+                map.set(item.employeeId, item);
+            }
+        }
+    }
+
+    const uniqueList = Array.from(map.values());
+
+    uniqueList.sort((a, b) => {
+        const scoreDiff = (b.suitabilityScore ?? 0) - (a.suitabilityScore ?? 0);
+        if (Math.abs(scoreDiff) > 0.0001) return scoreDiff;
+        const workloadDiff = (a.workload ?? 0) - (b.workload ?? 0);
+        if (workloadDiff !== 0) return workloadDiff;
+        return (a.fullName || '').localeCompare(b.fullName || '');
+    });
+
+    return uniqueList.map((item, index) => ({
+        ...item,
+        rank: index + 1,
+    }));
+}

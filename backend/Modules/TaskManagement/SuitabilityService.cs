@@ -44,17 +44,21 @@ public class SuitabilityService : ISuitabilityService
     }
 
     private async Task<List<CandidateEvaluationItem>> QueryCandidateMetricsAsync(
-        Guid departmentId,
+        Guid? departmentId,
         UserRole[] eligibleRoles,
         TaskClassification classification,
         Guid? specificEmployeeId = null,
         CancellationToken cancellationToken = default)
     {
         var usersQuery = _db.Users.AsNoTracking()
-            .Where(u => u.DepartmentId == departmentId
-                     && u.AvailabilityStatus == AvailabilityStatus.Active
+            .Where(u => u.AvailabilityStatus == AvailabilityStatus.Active
                      && u.IsActive
                      && eligibleRoles.Contains(u.Role));
+
+        if (departmentId.HasValue && departmentId.Value != Guid.Empty)
+        {
+            usersQuery = usersQuery.Where(u => u.DepartmentId == departmentId.Value);
+        }
 
         if (specificEmployeeId.HasValue)
         {
@@ -328,7 +332,7 @@ public class SuitabilityService : ISuitabilityService
     }
 
     public async Task<ApiResponseDTO<PaginatedResponseDTO<SuitabilityResponseDTO>>> GetSuitabilityPreviewAsync(
-        Guid departmentId, int classification, UserRole callerRole,
+        Guid? departmentId, int classification, UserRole callerRole,
         int pageNumber = 1, int pageSize = 5)
     {
         pageNumber = Math.Max(1, pageNumber);
@@ -345,10 +349,13 @@ public class SuitabilityService : ISuitabilityService
             eligibleRoles,
             taskClassification);
 
+        var isCompanyWide = !departmentId.HasValue || departmentId.Value == Guid.Empty;
         var taskContext = new GroqTaskContext
         {
             TaskId = Guid.Empty,
-            Title = classification == 0 ? "Routine Daily Task Preview" : "Special Task Preview",
+            Title = classification == 0
+                ? (isCompanyWide ? "Company-Wide Routine Daily Task Preview" : "Routine Daily Task Preview")
+                : (isCompanyWide ? "Company-Wide Special Task Preview" : "Special Task Preview"),
             Classification = classification,
             Priority = 1
         };
