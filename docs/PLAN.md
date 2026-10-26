@@ -11,7 +11,7 @@
 
 ## Implementation Steps
 
-- [ ] Step 1: Reproduce the bug across different pre-delivery orders and record failing vs. succeeding cases
+- [x] Step 1: Reproduce the bug across different pre-delivery orders and record failing vs. succeeding cases
   - Verify: Document reproduction results with specific order IDs, symptoms observed, and failure categories
 
 - [ ] Step 2: Identify root causes by comparing data shapes, save handler execution, network traffic, and backdrop stacking
