@@ -28,7 +28,7 @@ Full report: [docs/pre-delivery-root-cause-analysis.md](pre-delivery-root-cause-
 - [x] Step 2: Identify root causes by comparing data shapes, save handler execution, network traffic, and backdrop stacking
   - Verify: Confirm whether handler runs, network requests fire, and multiple backdrops mount without guessing
 
-- [ ] Step 3: Hide TaskModal overlay while DuplicateWarningModal is active and keep modal open until async save completes
+- [x] Step 3: Hide TaskModal overlay while DuplicateWarningModal is active and keep modal open until async save completes
   - Verify: Single backdrop mounts when duplicate warnings trigger, and modal displays loading state until save resolves
 
 - [ ] Step 4: Unlock due date for orders missing expectedDelivery and allow coordinator courier selection when unmapped
