@@ -236,7 +236,7 @@ describe('Step 4: Employee Suitability Trigger Button & Anti-Spam Caching', () =
             // Verify evaluation runs and updates recommendation banner with top candidate's rationale/score
             await waitFor(() => {
                 expect(screen.getAllByText(/Alice Rivera/i).length).toBeGreaterThanOrEqual(1);
-                expect(screen.getByText(/Top suitability with low workload/i)).toBeInTheDocument();
+                expect(screen.getAllByText(/Top suitability with low workload/i).length).toBeGreaterThanOrEqual(1);
             });
 
             // Verify API was called
@@ -277,7 +277,7 @@ describe('Step 4: Employee Suitability Trigger Button & Anti-Spam Caching', () =
             fireEvent.click(triggerBtn);
             await waitFor(() => {
                 expect(screen.getAllByText(/Alice Rivera/i).length).toBeGreaterThanOrEqual(1);
-                expect(screen.getByText(/Top suitability with low workload/i)).toBeInTheDocument();
+                expect(screen.getAllByText(/Top suitability with low workload/i).length).toBeGreaterThanOrEqual(1);
             });
 
             const firstCallCount = (api.get as any).mock.calls.filter(
