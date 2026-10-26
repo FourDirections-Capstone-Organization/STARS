@@ -34,7 +34,7 @@ Full report: [docs/pre-delivery-root-cause-analysis.md](pre-delivery-root-cause-
 - [x] Step 4: Unlock due date for orders missing expectedDelivery and allow coordinator courier selection when unmapped
   - Verify: Missing dates allow manual/quick-pick entry without validation lock, and unmapped couriers can be selected and saved
 
-- [ ] Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission
+- [x] Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission
   - Verify: Orders with historical expectedDelivery dates produce valid future deadlines and succeed without backend 400 rejection
 
 - [ ] Step 6: Run backend and frontend test suites to ensure zero regressions

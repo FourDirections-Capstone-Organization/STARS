@@ -794,6 +794,22 @@ const formatDateForInput = (d: Date): string => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+export const getAdjustedSlaDeadline = (priority: Priority | string, baseDate = new Date()): Date => {
+    const now = baseDate.getTime();
+    switch (priority) {
+        case 'Urgent':
+            return new Date(now + 24 * 60 * 60 * 1000); // 24h SLA
+        case 'High':
+            return new Date(now + 48 * 60 * 60 * 1000); // 48h SLA (1-2 days)
+        case 'Medium':
+            return new Date(now + 72 * 60 * 60 * 1000); // 72h SLA (within 1 week)
+        case 'Low':
+            return new Date(now + 7 * 24 * 60 * 60 * 1000); // 7 days (any future)
+        default:
+            return new Date(now + 48 * 60 * 60 * 1000);
+    }
+};
+
 const getPriorityDeadlineRange = (priority: Priority | ''): { min: string; max?: string; maxDate?: Date; helperText: string } => {
     const now = new Date();
     const minStr = formatDateForInput(now);
@@ -893,16 +909,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         (initial.taskTitle && initial.taskTitle.toLowerCase().includes('pre-delivery'))
     ), [initial]);
 
-    // DMS pre-set deadline is only locked if the DMS order actually provided a valid due date
+    const isHistoricalDeadline = useMemo(() => {
+        if ((initial as any)?.isHistoricalDeadline) return true;
+        if ((initial as any)?.deliveryDetails?.isHistoricalDeadline) return true;
+        if (isPreDelivery && initial.dueAt) {
+            const d = new Date(initial.dueAt);
+            return !isNaN(d.getTime()) && d.getTime() <= Date.now();
+        }
+        return false;
+    }, [initial, isPreDelivery]);
+
+    const originalExpectedDelivery = (initial as any)?.originalExpectedDelivery || (initial as any)?.deliveryDetails?.originalExpectedDelivery || '';
+
+    // DMS pre-set deadline is only locked if the DMS order provided a valid FUTURE due date
     const hasDmsDeadline = Boolean(initial.dueAt && initial.dueAt.trim());
-    const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline;
+    const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline && !isHistoricalDeadline;
+
+    const initialDueAt = useMemo(() => {
+        if (!initial.dueAt) return '';
+        const d = new Date(initial.dueAt);
+        if (isNaN(d.getTime())) return '';
+        if (isPreDelivery && d.getTime() <= Date.now()) {
+            const adjusted = getAdjustedSlaDeadline((initial.priority ?? 'Medium') as Priority);
+            return formatDateForInput(adjusted);
+        }
+        return initial.dueAt.slice(0, 16);
+    }, [initial.dueAt, initial.priority, isPreDelivery]);
 
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
         taskCategory: initial.taskCategory ?? '',
         priority: (initial.priority ?? 'Medium') as Priority,
-        dueAt: initial.dueAt ? initial.dueAt.slice(0, 16) : '',
+        dueAt: initialDueAt,
         isConfidential: initial.isConfidential ?? false,
         assignmentScope: (initial.assignees && initial.assignees.length > 1 ? 'Team' : 'SingleEmployee') as 'SingleEmployee' | 'Team' | 'Department',
         assignedTo: initial.assignedTo ?? '',
@@ -1133,9 +1172,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             if (!val) return 'Due date is required.';
             const d = new Date(val);
             if (isNaN(d.getTime())) return 'Invalid due date.';
+            const now = new Date();
+            if (d.getTime() <= now.getTime()) return 'Due date cannot be in the past.';
             if (!isDmsDeadlineLocked) {
-                const now = new Date();
-                if (d < now) return 'Due date cannot be in the past.';
                 if (form.priority === 'High') {
                     const maxHigh = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
                     if (d > maxHigh) return 'High priority deadline must be within 1 to 2 days only from current date.';
@@ -1199,13 +1238,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         const scopeMap = { SingleEmployee: 0, Team: 1, Department: 2 };
         const prioMap = { Low: 0, Medium: 1, High: 2, Urgent: 3 };
 
+        // Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission
+        let finalDeadline: string | null = null;
+        if (form.dueAt) {
+            const dueDate = new Date(form.dueAt);
+            const now = new Date();
+            if (isPreDelivery && dueDate.getTime() <= now.getTime()) {
+                const adjusted = getAdjustedSlaDeadline(form.priority, now);
+                finalDeadline = adjusted.toISOString();
+            } else {
+                finalDeadline = dueDate.toISOString();
+            }
+        }
+
         const payload: any = {
             title: form.taskTitle.trim(),
             description: form.taskDescription.trim(),
             priorityLevel: prioMap[form.priority] ?? 1,
             classification: 0,
             assignmentScope: scopeMap[form.assignmentScope] ?? 0,
-            deadline: form.dueAt ? new Date(form.dueAt).toISOString() : null,
+            deadline: finalDeadline,
             isConfidential: form.isConfidential,
             assignedUserIds: form.assignmentScope === 'SingleEmployee' && form.assignedTo ? [form.assignedTo] : [],
             teamId: form.assignmentScope === 'Team' ? selectedTeamId || undefined : undefined,
@@ -1225,6 +1277,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
+                isHistoricalDeadline,
+                originalExpectedDelivery: originalExpectedDelivery || (deliveryForm as any).originalExpectedDelivery || undefined,
             };
         }
 
@@ -1363,7 +1417,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     🔒 DMS PRE-SET DEADLINE
                                                 </span>
                                             )}
-                                            {isPreDelivery && !hasDmsDeadline && (
+                                            {isPreDelivery && isHistoricalDeadline && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    ⚡ PAST DMS DATE ADJUSTED TO SLA
+                                                </span>
+                                            )}
+                                            {isPreDelivery && !hasDmsDeadline && !isHistoricalDeadline && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     ⚠️ DMS DEADLINE MISSING — PLEASE SET
                                                 </span>
@@ -1389,6 +1448,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                         {isDmsDeadlineLocked ? (
                                             <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
                                                 Deadline is synchronized and pre-set from DMS.
+                                            </span>
+                                        ) : isPreDelivery && isHistoricalDeadline ? (
+                                            <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
+                                                Original DMS expected delivery has passed. Automatically adjusted to a valid future SLA deadline.
                                             </span>
                                         ) : isPreDelivery && !hasDmsDeadline ? (
                                             <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
@@ -8822,21 +8885,34 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
 
 export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
     let dmsDeadline = '';
+    let isHistoricalDeadline = false;
+    let originalExpectedDelivery = '';
+
     if (order.expectedDelivery) {
         try {
             const ed = new Date(order.expectedDelivery);
             if (!isNaN(ed.getTime())) {
                 const pad = (n: number) => String(n).padStart(2, '0');
-                dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                originalExpectedDelivery = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                const now = new Date();
+                if (ed.getTime() <= now.getTime()) {
+                    isHistoricalDeadline = true;
+                    const adjusted = getAdjustedSlaDeadline(order.priority || 'Medium', now);
+                    dmsDeadline = formatDateForInput(adjusted);
+                } else {
+                    dmsDeadline = originalExpectedDelivery;
+                }
             }
         } catch { }
     }
     return {
         taskTitle: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
-        taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
+        taskDescription: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}${isHistoricalDeadline ? `\n\n[Note: Original DMS expected delivery (${originalExpectedDelivery}) was in the past and has been automatically adjusted to a valid future SLA deadline.]` : ''}`,
         taskCategory: 'Delivery Operations',
         priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium') as Priority,
         dueAt: dmsDeadline,
+        isHistoricalDeadline,
+        originalExpectedDelivery,
         deliveryDetails: {
             recipientName: order.recipientName,
             recipientContact: order.recipientContact,
@@ -8849,6 +8925,8 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
+            isHistoricalDeadline,
+            originalExpectedDelivery,
         }
     };
 };
@@ -9766,6 +9844,18 @@ export default function OpsAdminDashboard() {
     const handleNewTask = async (data: CreateTaskDTO, skipDuplicateCheck = false) => {
         setIsSavingTask(true);
         try {
+            // Step 5: Safety check on deadline for pre-delivery tasks before POST /api/Task
+            const isDelivery = !!(data as any).deliveryDetails;
+            if (isDelivery && data.deadline) {
+                const dDate = new Date(data.deadline);
+                const now = new Date();
+                if (dDate.getTime() <= now.getTime()) {
+                    const prioStr = ['Low', 'Medium', 'High', 'Urgent'][data.priorityLevel] || 'Medium';
+                    const adjusted = getAdjustedSlaDeadline(prioStr, now);
+                    data.deadline = adjusted.toISOString();
+                }
+            }
+
             // Check for duplicates before saving (requirement 1, 7)
             if (!skipDuplicateCheck) {
                 try {

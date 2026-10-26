@@ -329,11 +329,9 @@ describe('Pre-Delivery Root Cause Analysis Test Suite (Step 2)', () => {
             });
 
             const savedPayload = onSaveMock.mock.calls[0][0];
-            // Deadline sent is in the past
+            // Verified Step 5 Fix: Historical DMS deadline is detected and automatically adjusted to valid future SLA deadline
             const payloadDeadline = new Date(savedPayload.deadline);
-            expect(payloadDeadline.getTime()).toBeLessThan(Date.now());
-            // This is what triggers backend TaskService.cs line 61:
-            // "Deadline must be a future date/time" -> 400 Bad Request
+            expect(payloadDeadline.getTime()).toBeGreaterThan(Date.now());
         });
     });
 
