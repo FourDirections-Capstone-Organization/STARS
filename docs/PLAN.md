@@ -31,7 +31,7 @@ Redesigning the assignment UI layout, altering underlying metric collection quer
 ## Implementation Steps
 - [x] Step 1: Map current behavior tracing fallback rationale origin and multi-#1 cause across backend and frontend
   - Verify: Step trace proves SuitabilityService fallback string and AIAssignmentView per-dept rank merging
-- [ ] Step 2: Support Azure (Groq__ApiKey) and local (.env) key resolution with live Groq test
+- [x] Step 2: Support Azure (Groq__ApiKey) and local (.env) key resolution with live Groq test
   - Verify: Tests confirm key resolution from Azure env, Groq__ApiKey, and local .env with verified connectivity
 - [ ] Step 3: Update Groq prompt and schema to output structured factors and plain-language fit justifications
   - Verify: Groq service tests validate structured JSON schema, metric grounding, and response parsing

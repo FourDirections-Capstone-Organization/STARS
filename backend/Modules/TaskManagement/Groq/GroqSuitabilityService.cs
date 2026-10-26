@@ -244,7 +244,7 @@ public class GroqSuitabilityService : IGroqSuitabilityService
 
         var requestPayload = new GroqChatRequest
         {
-            Model = string.IsNullOrWhiteSpace(_settings.Model) ? "llama-3.3-70b-versatile" : _settings.Model,
+            Model = string.IsNullOrWhiteSpace(_settings.Model) ? "openai/gpt-oss-120b" : _settings.Model,
             Temperature = _settings.Temperature,
             MaxTokens = _settings.MaxTokens,
             ResponseFormat = new GroqResponseFormat { Type = "json_object" },

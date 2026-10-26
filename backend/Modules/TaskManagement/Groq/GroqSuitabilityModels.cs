@@ -97,7 +97,7 @@ public class GroqSuitabilityEnvelope
 public class GroqChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = "llama-3.3-70b-versatile";
+    public string Model { get; set; } = "openai/gpt-oss-120b";
 
     [JsonPropertyName("messages")]
     public List<GroqChatMessage> Messages { get; set; } = new();
