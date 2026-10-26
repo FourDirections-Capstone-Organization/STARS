@@ -10,4 +10,5 @@ public class SuitabilityResponseDTO
     public double SuitabilityScore { get; set; }
     public int? Rank { get; set; }
     public string? Rationale { get; set; }
+    public Backend.Modules.TaskManagement.Groq.GroqCandidateFactors? Factors { get; set; }
 }
