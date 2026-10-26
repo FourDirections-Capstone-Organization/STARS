@@ -31,7 +31,7 @@ Full report: [docs/pre-delivery-root-cause-analysis.md](pre-delivery-root-cause-
 - [x] Step 3: Hide TaskModal overlay while DuplicateWarningModal is active and keep modal open until async save completes
   - Verify: Single backdrop mounts when duplicate warnings trigger, and modal displays loading state until save resolves
 
-- [ ] Step 4: Unlock due date for orders missing expectedDelivery and allow coordinator courier selection when unmapped
+- [x] Step 4: Unlock due date for orders missing expectedDelivery and allow coordinator courier selection when unmapped
   - Verify: Missing dates allow manual/quick-pick entry without validation lock, and unmapped couriers can be selected and saved
 
 - [ ] Step 5: Detect past delivery deadlines on pre-delivery orders and adjust to a valid future SLA deadline before submission

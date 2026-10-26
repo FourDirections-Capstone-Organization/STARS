@@ -765,6 +765,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
 interface TaskModalWorkloadInfo {
     accountId: string;
     employeeName: string;
+    employeeNumber?: string;
     workload: number;
     department?: string;
     departmentId?: string;
@@ -892,6 +893,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         (initial.taskTitle && initial.taskTitle.toLowerCase().includes('pre-delivery'))
     ), [initial]);
 
+    // DMS pre-set deadline is only locked if the DMS order actually provided a valid due date
+    const hasDmsDeadline = Boolean(initial.dueAt && initial.dueAt.trim());
+    const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline;
+
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
@@ -924,11 +929,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const [eligibleEmployees, setEligibleEmployees] = useState<TaskModalWorkloadInfo[]>([]);
     const [teamsForTask, setTeamsForTask] = useState<Array<{ id: string; name: string; memberCount: number; departmentId?: string; departmentName?: string; memberIds?: string[] }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string } | null>(null);
+    const [recommendation, setRecommendation] = useState<{ accountId: string; employeeName: string; reason: string; employeeNumber?: string } | null>(null);
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [singleSearch, setSingleSearch] = useState('');
     const [filterDeptId, setFilterDeptId] = useState('');
     const [filterTeamId, setFilterTeamId] = useState('');
+
+    const isCourierUnmapped = useMemo(() => {
+        if (!isPreDelivery || !deliveryForm.courierEmployeeId) return false;
+        const courierId = deliveryForm.courierEmployeeId.trim().toLowerCase();
+        return eligibleEmployees.length > 0 && !eligibleEmployees.some(e =>
+            e.accountId.toLowerCase() === courierId ||
+            (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
+        );
+    }, [isPreDelivery, deliveryForm.courierEmployeeId, eligibleEmployees]);
 
     const slaLocked = form.priority === 'Urgent';
     const deadlineRange = getPriorityDeadlineRange(form.priority);
@@ -964,6 +978,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         rawList = teamMembers.map(tm => ({
                             id: tm.accountId,
                             fullName: tm.employeeName,
+                            employeeNumber: (tm as any).employeeNumber ?? '',
                             role: tm.role,
                             availabilityStatus: tm.presenceStatus,
                             isAvailable: tm.presenceStatus !== 'Offline' && tm.presenceStatus !== 'On Leave',
@@ -974,6 +989,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     const mapped: TaskModalWorkloadInfo[] = rawList.map((e: any) => ({
                         accountId: e.id ?? e.accountId ?? e.userId ?? e.UserId ?? '',
                         employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? e.name ?? 'Unknown').trim(),
+                        employeeNumber: (e.employeeNumber ?? e.EmployeeNumber ?? (e as any).driverEmployeeId ?? '').trim(),
                         workload: typeof e.workload === 'number' ? e.workload : (e.activeTaskCount ?? 0),
                         department: e.departmentName ?? e.department ?? e.Department ?? '',
                         departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : ''),
@@ -996,13 +1012,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             accountId: best.accountId,
                             employeeName: best.employeeName,
                             reason: `Lowest active workload (${best.workload} tasks)`,
+                            employeeNumber: best.employeeNumber || '',
                         });
 
                         // If pre-delivery has a driver/courier ID and assignee is not yet selected, match it
                         if (!form.assignedTo && deliveryForm.courierEmployeeId) {
                             const matched = mapped.find(e =>
                                 e.accountId.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase() ||
-                                (e as any).employeeNumber?.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase()
+                                (e.employeeNumber && e.employeeNumber.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase())
                             );
                             if (matched) {
                                 setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
@@ -1013,6 +1030,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     const mapped: TaskModalWorkloadInfo[] = teamMembers.map(tm => ({
                         accountId: tm.accountId,
                         employeeName: tm.employeeName,
+                        employeeNumber: (tm as any).employeeNumber ?? '',
                         workload: 0,
                         department: '',
                         departmentId: '',
@@ -1115,7 +1133,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             if (!val) return 'Due date is required.';
             const d = new Date(val);
             if (isNaN(d.getTime())) return 'Invalid due date.';
-            if (!isPreDelivery) {
+            if (!isDmsDeadlineLocked) {
                 const now = new Date();
                 if (d < now) return 'Due date cannot be in the past.';
                 if (form.priority === 'High') {
@@ -1340,12 +1358,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                     <div className="field">
                                         <label>
                                             Due Date <span style={{ color: 'var(--status-failed, #ee5d50)' }}>*</span>
-                                            {isPreDelivery && (
+                                            {isDmsDeadlineLocked && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     🔒 DMS PRE-SET DEADLINE
                                                 </span>
                                             )}
-                                            {!isPreDelivery && deadlineRange.maxDate && (
+                                            {isPreDelivery && !hasDmsDeadline && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
+                                                    ⚠️ DMS DEADLINE MISSING — PLEASE SET
+                                                </span>
+                                            )}
+                                            {!isDmsDeadlineLocked && deadlineRange.maxDate && (
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '1px 6px', borderRadius: 4, marginLeft: 6 }}>
                                                     Max: {deadlineRange.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
@@ -1354,25 +1377,29 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                         <input
                                             type="datetime-local"
                                             value={form.dueAt}
-                                            onChange={(slaLocked || isPreDelivery) ? undefined : set('dueAt')}
-                                            min={isPreDelivery ? undefined : deadlineRange.min}
-                                            max={isPreDelivery ? undefined : deadlineRange.max}
-                                            readOnly={slaLocked || isPreDelivery}
-                                            disabled={isPreDelivery}
-                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${(slaLocked || isPreDelivery) ? ' input-sla-locked' : ''}`}
-                                            style={(slaLocked || isPreDelivery) ? { background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 } : {}}
+                                            onChange={(slaLocked || isDmsDeadlineLocked) ? undefined : set('dueAt')}
+                                            min={isDmsDeadlineLocked ? undefined : deadlineRange.min}
+                                            max={isDmsDeadlineLocked ? undefined : deadlineRange.max}
+                                            readOnly={slaLocked || isDmsDeadlineLocked}
+                                            disabled={isDmsDeadlineLocked}
+                                            className={`${errors.dueAt ? 'input-error' : form.dueAt ? 'input-success' : ''}${(slaLocked || isDmsDeadlineLocked) ? ' input-sla-locked' : ''}`}
+                                            style={(slaLocked || isDmsDeadlineLocked) ? { background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 } : {}}
                                         />
                                         <FieldErr name="dueAt" />
-                                        {isPreDelivery ? (
+                                        {isDmsDeadlineLocked ? (
                                             <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
                                                 Deadline is synchronized and pre-set from DMS.
+                                            </span>
+                                        ) : isPreDelivery && !hasDmsDeadline ? (
+                                            <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
+                                                DMS order has no expected delivery date. Please select a deadline manually or use a quick-pick option.
                                             </span>
                                         ) : deadlineRange.helperText && (
                                             <span style={{ fontSize: 11, color: slaLocked ? '#7c1d1d' : 'var(--text-secondary)', marginTop: 3, display: 'block' }}>
                                                 {deadlineRange.helperText}
                                             </span>
                                         )}
-                                        {quickPicks.length > 0 && !slaLocked && !isPreDelivery && (
+                                        {quickPicks.length > 0 && !slaLocked && !isDmsDeadlineLocked && (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                                 <span style={{ fontSize: 10, color: 'var(--text-secondary)', alignSelf: 'center', marginRight: 2 }}>Quick:</span>
                                                 {quickPicks.map(qp => (
@@ -1644,10 +1671,94 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 {/* -- SingleEmployee: pick one user -- */}
                                 {form.assignmentScope === 'SingleEmployee' && (
                                     <div className="emp-picker-section">
+                                        {isCourierUnmapped && (
+                                            <div
+                                                className="unmapped-courier-banner"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '10px 14px',
+                                                    background: 'rgba(217, 119, 6, 0.08)',
+                                                    border: '1px solid rgba(217, 119, 6, 0.3)',
+                                                    borderRadius: 8,
+                                                    marginBottom: 10,
+                                                    fontSize: 12,
+                                                    color: '#92400e',
+                                                    gap: 10,
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                                                    <div>
+                                                        <strong style={{ display: 'block', color: '#b45309' }}>Unmapped DMS Courier</strong>
+                                                        <span>
+                                                            DMS driver ID <strong>"{deliveryForm.courierEmployeeId}"</strong> is not recognized in STARS. Please select an active courier or employee below.
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {recommendation && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const recEmp = eligibleEmployees.find(e => e.accountId === recommendation.accountId);
+                                                            setForm(prev => ({ ...prev, assignedTo: recommendation.accountId }));
+                                                            setDeliveryForm(prev => ({
+                                                                ...prev,
+                                                                courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                            }));
+                                                            setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                        }}
+                                                        style={{
+                                                            background: '#d97706',
+                                                            color: '#ffffff',
+                                                            border: 'none',
+                                                            borderRadius: 6,
+                                                            padding: '6px 12px',
+                                                            fontSize: 11,
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Assign Recommended
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                         {recommendation && (
-                                            <div className="emp-picker-rec-banner">
-                                                <Lightbulb size={13} />
-                                                <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                            <div className="emp-picker-rec-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <Lightbulb size={13} />
+                                                    <span>Recommended: <strong>{recommendation.employeeName}</strong> — {recommendation.reason}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const recEmp = eligibleEmployees.find(e => e.accountId === recommendation.accountId);
+                                                        setForm(prev => ({ ...prev, assignedTo: recommendation.accountId }));
+                                                        if (isPreDelivery) {
+                                                            setDeliveryForm(prev => ({
+                                                                ...prev,
+                                                                courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                            }));
+                                                        }
+                                                        setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                    }}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: '1px solid currentColor',
+                                                        borderRadius: 4,
+                                                        padding: '2px 8px',
+                                                        fontSize: 11,
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        color: 'inherit',
+                                                    }}
+                                                >
+                                                    Assign
+                                                </button>
                                             </div>
                                         )}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
@@ -1697,7 +1808,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     return (
                                                         <div key={e.accountId}
                                                             className={`emp-picker-row${isSelected ? ' selected' : ''}${isRecommended && !isSelected ? ' recommended' : ''}${disabled ? ' disabled' : ''}`}
-                                                            onClick={() => { if (disabled) return; setForm(prev => ({ ...prev, assignedTo: e.accountId })); setErrors(prev => ({ ...prev, assignedTo: '' })); }}
+                                                            onClick={() => {
+                                                                if (disabled) return;
+                                                                setForm(prev => ({ ...prev, assignedTo: e.accountId }));
+                                                                if (isPreDelivery) {
+                                                                    setDeliveryForm(prev => ({
+                                                                        ...prev,
+                                                                        courierEmployeeId: e.employeeNumber || e.employeeName || e.accountId,
+                                                                    }));
+                                                                }
+                                                                setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                            }}
                                                         >
                                                             <input type="radio" name="singleEmp" className="emp-picker-radio" checked={isSelected} disabled={disabled} onChange={() => { }} />
                                                             <div className="emp-picker-info">
@@ -1880,10 +2001,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                 />
                                             </div>
                                             <div className="field" style={{ margin: 0 }}>
-                                                <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                                    {isPreDelivery && isCourierUnmapped && (
+                                                        <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>Unmapped in STARS</span>
+                                                    )}
+                                                </div>
                                                 <input
                                                     value={deliveryForm.courierEmployeeId}
-                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setDeliveryForm(prev => ({ ...prev, courierEmployeeId: val }));
+                                                        const matched = eligibleEmployees.find(emp =>
+                                                            emp.accountId.toLowerCase() === val.trim().toLowerCase() ||
+                                                            (emp as any).employeeNumber?.toLowerCase() === val.trim().toLowerCase()
+                                                        );
+                                                        if (matched) {
+                                                            setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                                            setErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                        }
+                                                    }}
                                                     placeholder="e.g. DRV-001"
                                                     style={{ fontSize: 12 }}
                                                 />
