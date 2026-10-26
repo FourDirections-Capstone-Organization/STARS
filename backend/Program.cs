@@ -180,7 +180,6 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISuitabilityService, SuitabilityService>();
 builder.Services.AddScoped<ISlaRiskPredictionService, SlaRiskPredictionService>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();
-builder.Services.Configure<Neo4jSettings>(builder.Configuration.GetSection("Neo4jSettings"));
 builder.Services.Configure<ExpertSystemConfig>(builder.Configuration.GetSection("ExpertSystemConfig"));
 builder.Services.Configure<BiomarkerThresholds>(builder.Configuration.GetSection("BiomarkerThresholds"));
 builder.Services.Configure<DmsIntegrationSettings>(builder.Configuration.GetSection(DmsIntegrationSettings.SectionName));
