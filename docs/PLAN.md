@@ -44,5 +44,5 @@ Redesigning the Biomarker UI layout, modifying notification channels, and changi
   - Verify: Backend test suite confirms alert creation, severity rules, threshold triggers, and pagination
 - [x] Step 5: Add frontend test suite for useBiomarker hook and BiomarkerDashboard integration
   - Verify: Vitest tests confirm status cards, filtering, alert mapping, and scan trigger handling
-- [ ] Step 6: Run full backend and frontend test suites
+- [x] Step 6: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
