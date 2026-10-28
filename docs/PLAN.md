@@ -176,7 +176,7 @@
     - Test edge cases in `frontend/src/test/EmployeeDashboardEdgeCases.test.tsx`.
     - Run command: `npm --prefix frontend test EmployeeDashboardEdgeCases` (must pass).
 
-- [ ] Step 10: Run Full Backend and Frontend Regression Test Suites
+- [x] Step 10: Run Full Backend and Frontend Regression Test Suites
   - **Files to change**:
     - None (validation step).
   - **Verification**:
