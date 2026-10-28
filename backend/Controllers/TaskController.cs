@@ -54,7 +54,8 @@ public class TaskController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] Models.Enums.TaskStatus? excludeStatus = null,
         [FromQuery] string? excludeStatuses = null,
-        [FromQuery] bool? isOverdue = null)
+        [FromQuery] bool? isOverdue = null,
+        [FromQuery] Guid? createdByUserId = null)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
@@ -107,7 +108,7 @@ public class TaskController : ControllerBase
         var result = await _taskService.GetAllAsync(
             requestUserId, requestUserRole, requestUserDepartmentId,
             pageNumber, pageSize,
-            parsedStatus, priority, classification, assignedToUserId, departmentId, search, excludeStatus, excludedList, isOverdue);
+            parsedStatus, priority, classification, assignedToUserId, departmentId, search, excludeStatus, excludedList, isOverdue, createdByUserId);
         return Ok(result);
     }
 

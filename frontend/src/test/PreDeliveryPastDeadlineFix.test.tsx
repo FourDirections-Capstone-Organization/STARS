@@ -149,7 +149,7 @@ describe('Pre-Delivery Past Delivery Deadline & SLA Adjustment Fix (Step 5)', ()
                 ...pastOrderBase,
                 orderId: 205,
                 waybillNo: 'WB-2026-000205',
-                expectedDelivery: '2026-10-31T15:00:00Z',
+                expectedDelivery: '2026-10-31T08:00:00Z',
             };
 
             const taskInitial = buildPreDeliveryTaskInitialData(futureOrder);

@@ -1,5 +1,6 @@
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 
 namespace Backend.Modules.OrganizationalStructure;
 
@@ -9,4 +10,6 @@ public interface IHierarchyService
     Task<ApiResponseDTO<HierarchyEmployeeDTO>> GetEmployeeHierarchyAsync(Guid employeeId);
     Task<ApiResponseDTO<List<HierarchyEmployeeDTO>>> SearchEmployeesAsync(string query);
     Task<ApiResponseDTO<HierarchyEmployeeDTO>> MapEmployeeHierarchyAsync(MapHierarchyDTO dto, Guid requestUserId);
+    Task<ApiResponseDTO<EmployeeDashboardDTO>> GetEmployeeDashboardAsync(Guid employeeId, Guid requestUserId, UserRole requestUserRole);
 }
+
