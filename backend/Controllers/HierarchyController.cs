@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.OrganizationalStructure;
 using Backend.Modules.RoleBasedAccessControl;
 using Microsoft.AspNetCore.Authorization;
@@ -36,6 +37,27 @@ public class HierarchyController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("employee/{id:guid}/dashboard")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> GetEmployeeDashboard(Guid id)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var requestUserId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var requestUserRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        var result = await _hierarchyService.GetEmployeeDashboardAsync(id, requestUserId, requestUserRole);
+        if (!result.IsSuccess)
+            return NotFound(result);
+
+        return Ok(result);
+    }
+
 
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string query)

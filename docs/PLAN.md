@@ -60,7 +60,7 @@
     - Add unit/integration test in `backend/Tests/TaskManagement/` verifying that querying tasks with `createdByUserId` filters only tasks created by that user and respects server pagination.
     - Run command: `dotnet test backend/Tests/Backend.Tests.csproj --filter "FullyQualifiedName~TaskService"` (must pass).
 
-- [ ] Step 2: Implement Employee Dashboard Summary & Reporting Hierarchy Endpoint
+- [x] Step 2: Implement Employee Dashboard Summary & Reporting Hierarchy Endpoint
   - **Files to change**:
     - `backend/Models/DTOs/EmployeeDashboardDTOs.cs`:
       - Define `EmployeeDashboardDTO` containing:
