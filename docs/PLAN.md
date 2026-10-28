@@ -121,7 +121,7 @@
     - Create component unit test in `frontend/src/test/EmployeeHeader.test.tsx` verifying supervisor card rendering, fallback text for top-level managers, and KPI card numbers.
     - Run command: `npm --prefix frontend test EmployeeHeader` (must pass).
 
-- [ ] Step 6: Create Tabbed Task Lists Component ("Created by Them" & "Assigned to Them")
+- [x] Step 6: Create Tabbed Task Lists Component ("Created by Them" & "Assigned to Them")
   - **Files to change**:
     - `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx` & `EmployeeTaskLists.css`:
       - Tab switch between "Tasks Assigned to Them" and "Tasks Created by Them".
