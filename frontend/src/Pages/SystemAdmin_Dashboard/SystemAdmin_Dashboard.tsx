@@ -3547,13 +3547,59 @@ export default function Dashboard() {
     const currentEmployeeId = localStorage.getItem('employeeId') || '';
     usePreventBackNav();
 
-    const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+    const [activeTab, setActiveTab] = useState<NavTab>(() => {
+        if (typeof window !== 'undefined' && window.location && window.location.search) {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const tabParam = params.get('tab') as NavTab;
+                if (tabParam && ['dashboard', 'employees', 'delivery', 'pre_delivery', 'finance', 'settings', 'roles', 'reports', 'announcements', 'notifications', 'activity_logs', 'tasks', 'team', 'profile', 'org-structure', 'biomarker'].includes(tabParam)) {
+                    return tabParam;
+                }
+            } catch {
+                // Ignore
+            }
+        }
+        return 'dashboard';
+    });
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined' && window.location && window.location.search) {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const tabParam = params.get('tab') as NavTab;
+                    if (tabParam && ['dashboard', 'employees', 'delivery', 'pre_delivery', 'finance', 'settings', 'roles', 'reports', 'announcements', 'notifications', 'activity_logs', 'tasks', 'team', 'profile', 'org-structure', 'biomarker'].includes(tabParam)) {
+                        setActiveTab(tabParam);
+                    }
+                } catch {
+                    // Ignore
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
     // Close any open task detail/edit panels when navigating via the sidebar
     // so they don't linger over a different page.
     const handleNavChange = useCallback((tab: NavTab) => {
         setActiveTab(tab);
         setTmDetailTask(null);
         setTmEditingTask(null);
+        if (typeof window !== 'undefined' && window.history) {
+            try {
+                const url = new URL(window.location.href);
+                if (tab === 'dashboard') {
+                    url.searchParams.delete('tab');
+                } else {
+                    url.searchParams.set('tab', tab);
+                }
+                url.searchParams.delete('employeeId');
+                window.history.pushState({}, '', url.toString());
+            } catch {
+                // Ignore
+            }
+        }
     }, []);
     const SIDEBAR_NAV_GROUPS = React.useMemo(() => [
         {

@@ -146,7 +146,7 @@
 
 ### Phase 4: Org Structure Navigation & Deep Linking Integration
 
-- [ ] Step 8: Wire Employee Card Clicks in Org Structure to Employee Dashboard
+- [x] Step 8: Wire Employee Card Clicks in Org Structure to Employee Dashboard
   - **Files to change**:
     - `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/OrgStructureTab.tsx`:
       - Add state `selectedEmployeeId: string | null` (synchronized with URL query parameter `?tab=org-structure&employeeId=...`).

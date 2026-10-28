@@ -17,6 +17,7 @@ import StatusBadge from '../../../components/ui/StatusBadge';
 import SearchableSelect from '../../../components/ui/SearchableSelect';
 import './OrgStructureTab.css';
 import api from '../../../api';
+import EmployeeDashboard from './EmployeeDashboard/EmployeeDashboard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -315,8 +316,8 @@ function ViewMembersModal({ isOpen, onClose, title, members, icon }: {
 
 // ─── Org Chart Sub-Tab ────────────────────────────────────────────────────────
 
-function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
-    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[]; teams: TeamDTO[]; onOpenMap: (emp?: EmployeeDTO) => void;
+function OrgChartView({ departments, positions, employees, teams, onOpenMap, onSelectEmployee }: {
+    departments: DeptDTO[]; positions: PosDTO[]; employees: EmployeeDTO[]; teams: TeamDTO[]; onOpenMap: (emp?: EmployeeDTO) => void; onSelectEmployee?: (empId: string) => void;
 }) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [pdfLoading, setPdfLoading] = useState(false);
@@ -646,7 +647,7 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                 </div>
                             ) : (
                                 managers.map(e => (
-                                    <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
+                                    <div key={e.id} className="org-chart-node" onClick={() => onSelectEmployee ? onSelectEmployee(e.id) : onOpenMap(e)} title="Click to view employee dashboard">
                                         <div className="org-chart-node-card manager-card">
                                             <div className="node-role" style={{ color: ROLE_COLORS.Manager }}>Manager</div>
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
@@ -677,7 +678,7 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                 </div>
                             ) : (
                                 coordinators.map(e => (
-                                    <div key={e.id} className="org-chart-node" onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
+                                    <div key={e.id} className="org-chart-node" onClick={() => onSelectEmployee ? onSelectEmployee(e.id) : onOpenMap(e)} title="Click to view employee dashboard">
                                         <div className="org-chart-node-card coordinator-card">
                                             <div className="node-role" style={{ color: ROLE_COLORS.Coordinator }}>Coordinator</div>
                                             <div style={{ fontSize: 13, fontWeight: 600 }}>{buildName(e)}</div>
@@ -726,7 +727,7 @@ function OrgChartView({ departments, positions, employees, teams, onOpenMap }: {
                                                     return (
                                                         <div key={e.id} className="dept-member"
                                                             style={{ borderLeft: `3px solid ${ROLE_COLORS[role] || '#ccc'}` }}
-                                                            onClick={() => onOpenMap(e)} title="Click to map or confirm hierarchy">
+                                                            onClick={() => onSelectEmployee ? onSelectEmployee(e.id) : onOpenMap(e)} title="Click to view employee dashboard">
                                                             <div>
                                                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{buildName(e)}</div>
                                                                 <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
@@ -2084,8 +2085,20 @@ function TransfersView({ employees, departments, positions, onRefresh }: {
 
 // ─── Main OrgStructureTab ─────────────────────────────────────────────────────
 
-export default function OrgStructureTab() {
+export default function OrgStructureTab({ initialEmployeeId }: { initialEmployeeId?: string | null } = {}) {
     const [subTab, setSubTab] = useState<SubTab>('org-chart');
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => {
+        if (initialEmployeeId) return initialEmployeeId;
+        if (typeof window !== 'undefined' && window.location && window.location.search) {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('employeeId') || null;
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    });
     const [departments, setDepartments] = useState<DeptDTO[]>([]);
     const [positions, setPositions] = useState<PosDTO[]>([]);
     const [employees, setEmployees] = useState<EmployeeDTO[]>([]);
@@ -2128,9 +2141,62 @@ export default function OrgStructureTab() {
 
     useEffect(() => { fetchAll(); }, []);
 
+    // Synchronize selectedEmployeeId with browser popstate (back/forward)
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined' && window.location) {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    setSelectedEmployeeId(params.get('employeeId') || null);
+                } catch {
+                    // Ignore
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    const handleNavigateToEmployeeDashboard = (empId: string) => {
+        setSelectedEmployeeId(empId);
+        if (typeof window !== 'undefined' && window.history) {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', 'org-structure');
+                url.searchParams.set('employeeId', empId);
+                window.history.pushState({}, '', url.toString());
+            } catch {
+                // Ignore
+            }
+        }
+    };
+
+    const handleBackToOrgChart = () => {
+        setSelectedEmployeeId(null);
+        if (typeof window !== 'undefined' && window.history) {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('employeeId');
+                window.history.pushState({}, '', url.toString());
+            } catch {
+                // Ignore
+            }
+        }
+    };
+
+    const handleSubTabChange = (t: SubTab) => {
+        setSubTab(t);
+        if (selectedEmployeeId) {
+            handleBackToOrgChart();
+        }
+    };
+
     const handleOpenMapping = (emp?: EmployeeDTO) => {
         if (emp) {
             setSelectedMappingEmp(emp);
+        }
+        if (selectedEmployeeId) {
+            handleBackToOrgChart();
         }
         setSubTab('hierarchy-mapping');
     };
@@ -2146,16 +2212,24 @@ export default function OrgStructureTab() {
 
     return (
         <div className="org-root">
-            <SubTabNav tabs={SUB_TABS} activeTab={subTab} onTabChange={t => setSubTab(t as SubTab)} />
+            <SubTabNav tabs={SUB_TABS} activeTab={subTab} onTabChange={t => handleSubTabChange(t as SubTab)} />
 
             {subTab === 'org-chart' && (
-                <OrgChartView
-                    departments={departments}
-                    positions={positions}
-                    employees={employees}
-                    teams={teams}
-                    onOpenMap={handleOpenMapping}
-                />
+                selectedEmployeeId ? (
+                    <EmployeeDashboard
+                        employeeId={selectedEmployeeId}
+                        onBack={handleBackToOrgChart}
+                    />
+                ) : (
+                    <OrgChartView
+                        departments={departments}
+                        positions={positions}
+                        employees={employees}
+                        teams={teams}
+                        onOpenMap={handleOpenMapping}
+                        onSelectEmployee={handleNavigateToEmployeeDashboard}
+                    />
+                )
             )}
             {subTab === 'hierarchy-mapping' && (
                 <HierarchyMappingView
