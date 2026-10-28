@@ -141,6 +141,8 @@ export default function EmployeeDashboard({
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [isNotFound, setIsNotFound] = useState<boolean>(false);
+    const [isUnauthorized, setIsUnauthorized] = useState<boolean>(false);
+    const [isInvalidId, setIsInvalidId] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<TaskListTab>(initialTab);
     const [refreshIndex, setRefreshIndex] = useState<number>(0);
 
@@ -148,6 +150,8 @@ export default function EmployeeDashboard({
     const fetchDashboard = useCallback(async (id: string) => {
         if (!id) {
             setIsNotFound(true);
+            setIsUnauthorized(false);
+            setIsInvalidId(false);
             setError('No employee identifier provided.');
             setIsLoading(false);
             setData(null);
@@ -157,6 +161,8 @@ export default function EmployeeDashboard({
         setIsLoading(true);
         setError(null);
         setIsNotFound(false);
+        setIsUnauthorized(false);
+        setIsInvalidId(false);
 
         try {
             const result = await employeeDashboardService.getEmployeeDashboard(id);
@@ -167,16 +173,30 @@ export default function EmployeeDashboard({
             } else {
                 setData(result);
                 setIsNotFound(false);
+                setIsUnauthorized(false);
+                setIsInvalidId(false);
                 setError(null);
             }
         } catch (err: any) {
             const status = err?.response?.status;
             const message = err?.response?.data?.message || err?.message || 'Failed to load employee dashboard data.';
 
-            if (status === 404 || /not\s*found/i.test(message)) {
+            if (status === 401 || status === 403 || /unauthorized|forbidden|access denied|permission/i.test(message)) {
+                setIsUnauthorized(true);
+                setError(
+                    status === 403 || /forbidden|permission/i.test(message)
+                        ? 'You do not have permission to view this employee dashboard. Only Managers can access this organizational overview.'
+                        : 'Your session has expired or you are unauthorized. Please log in again.'
+                );
+            } else if (status === 400 || /guid|uuid|invalid\s*(guid|id|identifier|format)|malformed/i.test(message)) {
+                setIsInvalidId(true);
+                setError(message || 'The provided employee identifier is invalid. Please return to the organizational chart and select an employee.');
+            } else if (status === 404 || /not\s*found/i.test(message)) {
                 setIsNotFound(true);
+                setError(message);
+            } else {
+                setError(message);
             }
-            setError(message);
             setData(null);
         } finally {
             setIsLoading(false);
@@ -201,7 +221,85 @@ export default function EmployeeDashboard({
         return <EmployeeDashboardSkeleton onBack={onBack} />;
     }
 
-    // ── 2. Not Found State ────────────────────────────────────────────────────
+    // ── 2a. Unauthorized State ─────────────────────────────────────────────────
+    if (isUnauthorized) {
+        return (
+            <div className={`ed-dashboard-container ${className}`} data-testid="employee-dashboard-unauthorized">
+                <div className="ed-state-card ed-unauthorized-card">
+                    <div className="ed-state-icon-wrapper ed-unauthorized-icon">
+                        <ShieldAlert size={44} strokeWidth={1.8} />
+                    </div>
+                    <h2 className="ed-state-title">Access Restricted</h2>
+                    <p className="ed-state-description">
+                        {error || 'You do not have permission to view this employee dashboard. Only Managers can access this organizational overview.'}
+                    </p>
+                    <div className="ed-state-actions">
+                        {onBack && (
+                            <button
+                                type="button"
+                                className="ed-btn ed-btn-primary"
+                                onClick={onBack}
+                                data-testid="employee-dashboard-unauthorized-back-btn"
+                            >
+                                <ArrowLeft size={16} />
+                                <span>Return to Org Structure</span>
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            className="ed-btn ed-btn-secondary"
+                            onClick={handleRetry}
+                            data-testid="employee-dashboard-unauthorized-retry-btn"
+                        >
+                            <RotateCcw size={16} />
+                            <span>Retry</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── 2b. Invalid GUID / Identifier State ───────────────────────────────────
+    if (isInvalidId) {
+        return (
+            <div className={`ed-dashboard-container ${className}`} data-testid="employee-dashboard-invalid-id">
+                <div className="ed-state-card ed-invalid-card">
+                    <div className="ed-state-icon-wrapper ed-invalid-icon">
+                        <AlertCircle size={44} strokeWidth={1.8} />
+                    </div>
+                    <h2 className="ed-state-title">Invalid Employee Identifier</h2>
+                    <p className="ed-state-description">
+                        {error || 'The employee identifier specified in the URL is invalid. Please return to the organizational chart and select an employee.'}
+                    </p>
+                    <div className="ed-state-actions">
+                        {onBack && (
+                            <button
+                                type="button"
+                                className="ed-btn ed-btn-primary"
+                                onClick={onBack}
+                                data-testid="employee-dashboard-invalid-back-btn"
+                            >
+                                <ArrowLeft size={16} />
+                                <span>Return to Org Structure</span>
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            className="ed-btn ed-btn-secondary"
+                            onClick={handleRetry}
+                            data-testid="employee-dashboard-invalid-retry-btn"
+                        >
+                            <RotateCcw size={16} />
+                            <span>Retry Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── 2c. Not Found State ────────────────────────────────────────────────────
     if (isNotFound) {
         return (
             <div className={`ed-dashboard-container ${className}`} data-testid="employee-dashboard-not-found">
@@ -296,6 +394,23 @@ export default function EmployeeDashboard({
                 onRefresh={handleRefresh}
                 isLoading={isLoading}
             />
+
+            {/* 1b. Deactivated Personnel Account Notice Banner */}
+            {!data.isActive && (
+                <div
+                    className="ed-deactivated-banner"
+                    role="alert"
+                    data-testid="ed-deactivated-banner"
+                >
+                    <ShieldAlert size={20} className="ed-deactivated-banner-icon" />
+                    <div className="ed-deactivated-banner-content">
+                        <h4 className="ed-deactivated-banner-title">Deactivated Personnel Account</h4>
+                        <p className="ed-deactivated-banner-desc">
+                            This employee account is deactivated. Historical task records, workload metrics, and reporting lines are preserved for managerial auditing and oversight.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* 2. Visual Analytics Charts (Status Donut, Created vs Assigned, Priority, Trends) */}
             <section
