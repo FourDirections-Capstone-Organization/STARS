@@ -162,7 +162,7 @@
 
 ### Phase 5: Edge Cases, Responsiveness & Verification
 
-- [ ] Step 9: Edge Cases, Mobile Responsiveness, and Access Guards
+- [x] Step 9: Edge Cases, Mobile Responsiveness, and Access Guards
   - **Files to change**:
     - `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeDashboard.css`:
       - Add responsive CSS breakpoints: stack charts on mobile/tablet screens (< 768px, < 1024px), make data tables horizontally scrollable.

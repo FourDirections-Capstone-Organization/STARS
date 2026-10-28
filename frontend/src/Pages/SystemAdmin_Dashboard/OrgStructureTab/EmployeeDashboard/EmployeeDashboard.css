@@ -146,6 +146,18 @@
     border: 1px solid #FED7AA;
 }
 
+.ed-unauthorized-icon {
+    background: #FEF3C7;
+    color: #D97706;
+    border: 1px solid #FDE68A;
+}
+
+.ed-invalid-icon {
+    background: #FFF1F2;
+    color: #E11D48;
+    border: 1px solid #FECDD3;
+}
+
 .ed-error-icon {
     background: #FEF2F2;
     color: #DC2626;
@@ -310,6 +322,49 @@
     border-radius: 14px;
 }
 
+/* ── Deactivated Account Notice Banner ───────────────────────── */
+
+.ed-deactivated-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-left: 4px solid #DC2626;
+    border-radius: var(--r-md, 12px);
+    color: #991B1B;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+    animation: edFadeIn 0.2s ease-out;
+}
+
+.ed-deactivated-banner-icon {
+    color: #DC2626;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.ed-deactivated-banner-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ed-deactivated-banner-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #991B1B;
+    margin: 0;
+    line-height: 1.25;
+}
+
+.ed-deactivated-banner-desc {
+    font-size: 0.82rem;
+    color: #B91C1C;
+    margin: 0;
+    line-height: 1.45;
+}
+
 /* ── Responsive Adaptations ──────────────────────────────────── */
 
 @media (max-width: 1024px) {
@@ -328,12 +383,61 @@
     .ed-skeleton-charts-grid {
         grid-template-columns: 1fr;
     }
+
+    /* Stack analytics charts on tablet screens */
+    .ed-analytics-section .ec-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Ensure table container scrolls horizontally on tablets */
+    .ed-tasks-section .table-card-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 768px) {
+    .ed-dashboard-container {
+        gap: 18px;
+        padding: 0 0 24px 0;
+    }
+
+    .ed-section-title {
+        font-size: 0.98rem;
+    }
+
+    .ed-section-subtitle {
+        font-size: 0.78rem;
+    }
+
+    /* Stack analytics charts on mobile screens */
+    .ed-analytics-section .ec-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px;
+    }
+
+    /* Keep data tables horizontally scrollable with adequate column widths */
+    .ed-tasks-section .table-card-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+    }
+
+    .ed-tasks-section .table-card-data-table {
+        min-width: 680px;
+    }
+
+    .ed-deactivated-banner {
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px 16px;
+    }
 }
 
 @media (max-width: 640px) {
     .ed-dashboard-container {
-        gap: 18px;
-        padding: 0 0 24px 0;
+        gap: 16px;
+        padding: 0 0 20px 0;
     }
 
     .ed-skeleton-hero-card {
