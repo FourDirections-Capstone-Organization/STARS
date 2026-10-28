@@ -97,7 +97,7 @@
 
 ### Phase 3: Visual Analytics & Dashboard UI Components
 
-- [ ] Step 4: Create Reusable Visual Charts for Employee Dashboard
+- [x] Step 4: Create Reusable Visual Charts for Employee Dashboard
   - **Files to change**:
     - `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeCharts.tsx` & `EmployeeCharts.css`:
       - Implement 4 visualizations using Recharts and Speedex OneUI color tokens (`--chart-success`, `--chart-warning`, `--chart-failed`, `--primary`, `--secondary`):
