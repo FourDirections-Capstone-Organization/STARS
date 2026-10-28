@@ -174,7 +174,8 @@ public class TaskService : ITaskService
         string? search = null,
         Models.Enums.TaskStatus? excludeStatus = null,
         List<Models.Enums.TaskStatus>? excludeStatuses = null,
-        bool? isOverdue = null)
+        bool? isOverdue = null,
+        Guid? createdByUserId = null)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -263,6 +264,9 @@ public class TaskService : ITaskService
 
         if (departmentId.HasValue)
             query = query.Where(t => t.AssignedDepartmentId == departmentId.Value);
+
+        if (createdByUserId.HasValue)
+            query = query.Where(t => t.CreatedById == createdByUserId.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {

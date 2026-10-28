@@ -51,7 +51,7 @@
 
 ### Phase 1: Backend Data Model & API Enhancements
 
-- [ ] Step 1: Add `createdByUserId` Filter to Task Management API
+- [x] Step 1: Add `createdByUserId` Filter to Task Management API
   - **Files to change**:
     - `backend/Modules/TaskManagement/ITaskService.cs`: Add `Guid? createdByUserId = null` parameter to `GetAllAsync`.
     - `backend/Modules/TaskManagement/TaskService.cs`: Implement filtering for `createdByUserId` in EF Core query (`if (createdByUserId.HasValue) query = query.Where(t => t.CreatedById == createdByUserId.Value);`).
