@@ -110,7 +110,7 @@
     - Create component unit test in `frontend/src/test/EmployeeCharts.test.tsx` testing rendering with sample metrics and verifying empty state messages when data points are 0.
     - Run command: `npm --prefix frontend test EmployeeCharts` (must pass).
 
-- [ ] Step 5: Create Employee Header and Supervisor "Reports To" Card
+- [x] Step 5: Create Employee Header and Supervisor "Reports To" Card
   - **Files to change**:
     - `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeHeader.tsx` & `EmployeeHeader.css`:
       - Top navigation bar with "← Back to Org Structure" button and quick actions.

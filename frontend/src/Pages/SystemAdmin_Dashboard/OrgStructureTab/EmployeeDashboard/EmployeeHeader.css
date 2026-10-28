@@ -1,0 +1,593 @@
+/* ================================================================
+   EmployeeHeader — Speedex OneUI Profile Hero & Reporting Header
+   Designed for Employee Dashboard within Org Structure Tab
+   ================================================================ */
+
+.eh-container {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+/* ── 1. Top Navigation Bar ────────────────────────────────────── */
+
+.eh-nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-md, 12px);
+    padding: 12px 18px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.eh-nav-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.eh-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--text-secondary, #374151);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.eh-back-btn:hover {
+    background: var(--s1, #F1F5F9);
+    color: var(--primary, #008B8B);
+    border-color: var(--border, #E2E8F0);
+}
+
+.eh-nav-divider {
+    color: var(--border, #CBD5E1);
+    font-size: 0.85rem;
+    user-select: none;
+}
+
+.eh-nav-context {
+    font-size: 0.8rem;
+    color: var(--text-muted, #9CA3AF);
+    font-weight: 500;
+}
+
+.eh-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.eh-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    line-height: 1.2;
+}
+
+.eh-status-active {
+    background: rgba(5, 150, 105, 0.1);
+    color: #059669;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.eh-status-inactive {
+    background: rgba(220, 38, 38, 0.1);
+    color: #DC2626;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.eh-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary, #374151);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.eh-refresh-btn:hover:not(:disabled) {
+    background: var(--s1, #F8FAFC);
+    color: var(--primary, #008B8B);
+    border-color: var(--border-h, #CBD5E1);
+}
+
+.eh-refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@keyframes eh-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.eh-spinning {
+    animation: eh-spin 1s linear infinite;
+}
+
+/* ── 2. Profile Hero Row & Reports-To Split ───────────────────── */
+
+.eh-hero-row {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 18px;
+    align-items: stretch;
+}
+
+/* Profile Main Card */
+.eh-profile-card {
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-md, 12px);
+    padding: 22px 24px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    min-width: 0;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.eh-profile-card:hover {
+    border-color: var(--border-h, #CBD5E1);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+.eh-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.eh-avatar-circle {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #008B8B 0%, #293652 100%);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 1.35rem;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 139, 139, 0.25);
+    border: 3px solid #FFFFFF;
+}
+
+.eh-presence-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2.5px solid #FFFFFF;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.eh-online {
+    background: #10B981;
+}
+
+.eh-offline {
+    background: #94A3B8;
+}
+
+.eh-profile-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.eh-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.eh-full-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary, #0F172A);
+    margin: 0;
+    line-height: 1.25;
+}
+
+.eh-identity-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.eh-emp-no-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+    background: var(--s1, #F1F5F9);
+    border: 1px solid var(--border, #E2E8F0);
+    padding: 3px 8px;
+    border-radius: 6px;
+    line-height: 1.2;
+}
+
+.eh-presence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    line-height: 1.2;
+}
+
+.eh-presence-online {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.eh-presence-offline {
+    background: rgba(148, 163, 184, 0.12);
+    color: #64748B;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.eh-presence-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.eh-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px 18px;
+}
+
+.eh-meta-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+}
+
+.eh-meta-icon {
+    color: var(--primary, #008B8B);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.eh-meta-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.eh-meta-label {
+    font-size: 0.68rem;
+    color: var(--text-muted, #9CA3AF);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1.2;
+}
+
+.eh-meta-value {
+    font-size: 0.82rem;
+    color: var(--text-primary, #0F172A);
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.eh-meta-link {
+    color: var(--primary, #008B8B);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.eh-meta-link:hover {
+    text-decoration: underline;
+    color: #007070;
+}
+
+.eh-avail-tag {
+    color: var(--primary, #008B8B);
+}
+
+/* ── 3. Dedicated "Reports To" Supervisor Card ───────────────── */
+
+.eh-supervisor-card {
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--r-md, 12px);
+    padding: 20px 22px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.eh-supervisor-card:hover {
+    border-color: var(--border-h, #CBD5E1);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+.eh-supervisor-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.eh-supervisor-icon-box {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(0, 139, 139, 0.1);
+    color: var(--primary, #008B8B);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.eh-supervisor-kicker {
+    font-size: 0.67rem;
+    color: var(--text-muted, #9CA3AF);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    display: block;
+    line-height: 1.1;
+}
+
+.eh-supervisor-heading {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary, #0F172A);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.eh-relation-pill {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--primary, #008B8B);
+    background: rgba(0, 139, 139, 0.08);
+    border: 1px solid rgba(0, 139, 139, 0.2);
+    padding: 3px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.eh-supervisor-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    justify-content: center;
+}
+
+/* Executive Board Fallback Styling */
+.eh-exec-fallback {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(41, 54, 82, 0.05) 0%, rgba(0, 139, 139, 0.05) 100%);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.eh-exec-badge-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.eh-exec-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #293652 0%, #1A2238 100%);
+    color: #F59E0B;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(41, 54, 82, 0.2);
+}
+
+.eh-crown-icon {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.eh-exec-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.eh-exec-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary, #0F172A);
+    margin: 0;
+    line-height: 1.25;
+}
+
+.eh-exec-role {
+    font-size: 0.73rem;
+    color: var(--text-secondary, #475569);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.eh-exec-note {
+    font-size: 0.72rem;
+    color: var(--text-muted, #64748B);
+    margin: 0;
+    line-height: 1.35;
+}
+
+/* Standard Supervisor Details */
+.eh-supervisor-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--s1, #F8FAFC);
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.eh-supervisor-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.eh-supervisor-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00A99D 0%, #008B8B 100%);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 169, 157, 0.2);
+}
+
+.eh-supervisor-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.eh-supervisor-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary, #0F172A);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.eh-supervisor-role {
+    font-size: 0.74rem;
+    color: var(--text-secondary, #475569);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.eh-supervisor-emp-no {
+    font-size: 0.7rem;
+    color: var(--text-muted, #9CA3AF);
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 1px;
+}
+
+.eh-relation-note {
+    font-size: 0.71rem;
+    color: var(--text-muted, #64748B);
+    line-height: 1.35;
+    border-top: 1px solid rgba(226, 232, 240, 0.8);
+    padding-top: 8px;
+}
+
+/* ── 4. KPI Status Grid ───────────────────────────────────────── */
+
+.eh-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+}
+
+/* ── Responsive Breakpoints ───────────────────────────────────── */
+
+@media (max-width: 1100px) {
+    .eh-hero-row {
+        grid-template-columns: 1fr;
+    }
+
+    .eh-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .eh-profile-card {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 18px;
+    }
+
+    .eh-name-row {
+        justify-content: center;
+    }
+
+    .eh-meta-grid {
+        grid-template-columns: 1fr;
+        text-align: left;
+    }
+
+    .eh-nav-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .eh-nav-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .eh-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
