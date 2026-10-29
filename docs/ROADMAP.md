@@ -28,8 +28,9 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - Access Control: Role-based authorization restricts configuration endpoints to Managers/SystemAdmin; employees get read-only scorecards.
 
 ## Phases
-- [ ] Phase 1: Core metric calculation engine & database foundation for default KPIs
+- [x] Phase 1: Core metric calculation engine & database foundation for default KPIs
   - Done when: Manager API calculates the 4 default KPIs for an employee over a timeframe with verified backend test coverage.
+  - Completed: KpiConfiguration and KpiItem entities created with composite indexing, KpiCalculationEngine implemented default metrics (OTIF, Accuracy, Completion, AHT), and Manager endpoint verified by 617 backend tests and 125 frontend tests.
 - [ ] Phase 2: Configuration & weighting system with traffic-light thresholds
   - Done when: Manager can save prospective weights (summing to 100%) and thresholds, producing a weighted Employee Performance Score.
 - [ ] Phase 3: Safe custom formula builder & variable data mapping
