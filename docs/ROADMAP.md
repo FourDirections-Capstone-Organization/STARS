@@ -34,8 +34,9 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - [x] Phase 2: Configuration & weighting system with traffic-light thresholds
   - Done when: Manager can save prospective weights (summing to 100%) and thresholds, producing a weighted Employee Performance Score.
   - Completed: Overall thresholds added to KpiConfiguration with migration, configuration CRUD and prospective validation implemented in backend, and Manager configuration UI built with 100% weight sum validation; verified by 657 backend tests and 134 frontend tests.
-- [ ] Phase 3: Safe custom formula builder & variable data mapping
+- [x] Phase 3: Safe custom formula builder & variable data mapping
   - Done when: Manager can construct and test a custom formula using mapped database fields via the safe math parser.
+  - Completed: Tokenized recursive descent SafeFormulaParser and KpiVariableRegistry built with division-by-zero protection, custom formula evaluation integrated into KpiCalculationEngine, and Manager FormulaBuilderModal with dry-run testing deployed; verified by 744 backend tests and 140 frontend tests.
 - [ ] Phase 4: Scope controls & hierarchical drill-down (Department -> Team -> Employee)
   - Done when: Manager can filter evaluations by timeframe, role (Courier vs Encoder), and drill down from department to employee.
 - [ ] Phase 5: Individual scorecards, export (PDF/Excel), & Biomarker AI threshold feed
