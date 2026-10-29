@@ -65,6 +65,31 @@ public class KpiItemRequestDTO : IValidatableObject
                     new[] { nameof(GreenThreshold), nameof(AmberThreshold), nameof(RedThreshold) });
             }
         }
+
+        if (IsCustomFormula)
+        {
+            if (string.IsNullOrWhiteSpace(CustomFormula))
+            {
+                yield return new ValidationResult(
+                    $"Custom formula is required for metric '{Name}' when IsCustomFormula is enabled.",
+                    new[] { nameof(CustomFormula) });
+            }
+            else
+            {
+                var parser = validationContext?.GetService(typeof(Backend.Modules.Analytics.ISafeFormulaParser)) as Backend.Modules.Analytics.ISafeFormulaParser
+                             ?? new Backend.Modules.Analytics.SafeFormulaParser();
+                var registry = validationContext?.GetService(typeof(Backend.Modules.Analytics.IKpiVariableRegistry)) as Backend.Modules.Analytics.IKpiVariableRegistry
+                               ?? new Backend.Modules.Analytics.KpiVariableRegistry();
+
+                var formulaResult = parser.Validate(CustomFormula, registry.GetAllowedVariableNames());
+                if (!formulaResult.IsValid)
+                {
+                    yield return new ValidationResult(
+                        $"Custom formula for '{Name}' is invalid: {formulaResult.ErrorMessage}",
+                        new[] { nameof(CustomFormula) });
+                }
+            }
+        }
     }
 }
 
