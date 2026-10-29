@@ -22,7 +22,7 @@
   - Verify: OTIF, Order Accuracy, Task Completion, and AHT calculations return correct numbers
 - [x] Step 4: Create Manager KPI controller endpoint with timeframe and employee parameters
   - Verify: Endpoint returns 200 OK with default KPI metric results for authorized Managers
-- [ ] Step 5: Add comprehensive backend unit and integration tests for engine and controller
+- [x] Step 5: Add comprehensive backend unit and integration tests for engine and controller
   - Verify: Backend test suite validates calculations, edge cases, zero tasks, and role checks
 - [ ] Step 6: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
