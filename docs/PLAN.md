@@ -20,7 +20,7 @@
   - Verify: Database migration applies cleanly with tables and indexes created in AppDbContext
 - [x] Step 3: Implement KpiCalculationEngine calculating the 4 default metrics for an employee
   - Verify: OTIF, Order Accuracy, Task Completion, and AHT calculations return correct numbers
-- [ ] Step 4: Create Manager KPI controller endpoint with timeframe and employee parameters
+- [x] Step 4: Create Manager KPI controller endpoint with timeframe and employee parameters
   - Verify: Endpoint returns 200 OK with default KPI metric results for authorized Managers
 - [ ] Step 5: Add comprehensive backend unit and integration tests for engine and controller
   - Verify: Backend test suite validates calculations, edge cases, zero tasks, and role checks
