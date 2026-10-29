@@ -8,8 +8,14 @@
 - ReportController exposes legacy unweighted KPI reports.
 
 ## Implementation Steps
-- [ ] Step 1: Confirm starting codebase state, audit log rework transitions, and test baselines
+- [x] Step 1: Confirm starting codebase state, audit log rework transitions, and test baselines
   - Verify: Audit log entries, task completion fields, and existing 579 backend tests confirmed
+  - Baseline findings:
+    - Tests: 579 backend unit/integration tests and 125 frontend tests pass with zero failures.
+    - Push-backs: Logged as StatusChange (OldValue="DonePendingReview", NewValue="InProgress") on Task entity; PushBackComment is cleared upon approval.
+    - Deadlines & Completion: Measured by Status == Completed, effective completion time (UpdatedAt ?? CreatedAt), and effective deadline (RevisedDeadline ?? Deadline).
+    - Attachments: TaskAttachment exists per task without a checklist schema (In-Full evaluated by presence of >= 1 attachment).
+    - Indexing gap: AppDbContext indexes AuditLog only on Timestamp and UserId; composite index needed in Step 2.
 - [ ] Step 2: Create KpiConfiguration and KpiItem entities, seed defaults, and apply migration
   - Verify: Database migration applies cleanly with tables and indexes created in AppDbContext
 - [ ] Step 3: Implement KpiCalculationEngine calculating the 4 default metrics for an employee
