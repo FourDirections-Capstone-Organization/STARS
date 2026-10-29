@@ -11,8 +11,9 @@
 - [x] Step 1: Confirm starting codebase state, organizational models, and test baselines
   - Verify: 744 backend tests and 140 frontend tests pass and scope models confirmed
   - Confirmed: Department (Users, JobPositions), Team (DepartmentId, Members), and User (DepartmentId, Role) organizational hierarchy and baselines verified (744 backend, 140 frontend).
-- [ ] Step 2: Implement hierarchical scope aggregation in KpiCalculationEngine and scope DTOs
+- [x] Step 2: Implement hierarchical scope aggregation in KpiCalculationEngine and scope DTOs
   - Verify: Engine unit tests verify Department, Team, and role-filtered metric calculations
+  - Confirmed: Hierarchical scope DTOs and aggregation methods (Department, Team, Company scope, and role filtering) implemented and verified by 13 unit tests; 757 backend and 140 frontend tests passing.
 - [ ] Step 3: Add hierarchical evaluation endpoints in KpiController with scope filters
   - Verify: Controller integration tests confirm Department, Team, role, and timeframe filtering
 - [ ] Step 4: Build hierarchical drill-down UI with scope controls and breadcrumb navigation
@@ -21,4 +22,3 @@
   - Verify: Dashboard renders drill-down view, connects scope filters, and updates evaluations
 - [ ] Step 6: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
-
