@@ -1,0 +1,387 @@
+/* ================================================================
+   Speedex OneUI — KPI Configuration Styles
+   ================================================================ */
+
+.kpi-config-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+.kpi-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.kpi-config-header-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kpi-config-header-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 4px 0 0;
+}
+
+.kpi-config-filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--s0);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.kpi-config-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.kpi-config-search-input {
+    min-width: 240px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    background: var(--s1);
+    color: var(--tp);
+}
+
+.kpi-config-search-input:focus {
+    border-color: var(--teal);
+    background: #fff;
+}
+
+.kpi-config-select {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    background: var(--s1);
+    color: var(--tp);
+}
+
+.kpi-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+}
+
+.kpi-card {
+    background: var(--s0);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s ease;
+}
+
+.kpi-card:hover {
+    border-color: var(--teal);
+    box-shadow: 0 4px 12px rgba(0, 139, 139, 0.08);
+}
+
+.kpi-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.kpi-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.kpi-card-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.kpi-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kpi-badge-teal {
+    background: var(--teal-bg);
+    color: var(--teal);
+    border: 1px solid var(--teal-ring);
+}
+
+.kpi-badge-active {
+    background: var(--ok-bg);
+    color: var(--ok);
+    border: 1px solid var(--ok-r);
+}
+
+.kpi-badge-inactive {
+    background: rgba(107, 114, 128, 0.1);
+    color: var(--tt);
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.kpi-badge-default {
+    background: rgba(79, 70, 229, 0.1);
+    color: #4f46e5;
+    border: 1px solid rgba(79, 70, 229, 0.2);
+}
+
+.kpi-card-desc {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.kpi-card-dates {
+    font-size: 11.5px;
+    color: var(--tt);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kpi-card-thresholds {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--s1);
+    border-radius: 6px;
+    font-size: 11.5px;
+}
+
+.kpi-threshold-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.kpi-threshold-chip.green {
+    color: var(--ok);
+}
+
+.kpi-threshold-chip.amber {
+    color: var(--warn);
+}
+
+.kpi-threshold-chip.red {
+    color: var(--err);
+}
+
+.kpi-card-items-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.kpi-metric-tag {
+    font-size: 11px;
+    padding: 2px 7px;
+    background: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--ts);
+    font-weight: 500;
+}
+
+.kpi-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+}
+
+/* ================================================================
+   KPI Configuration Editor Styles
+   ================================================================ */
+
+.kpi-editor-card {
+    background: var(--s0);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.kpi-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+}
+
+.kpi-editor-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.kpi-editor-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.kpi-editor-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+
+.kpi-editor-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.kpi-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.kpi-editor-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.kpi-editor-input {
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--tp);
+    background: #fff;
+    outline: none;
+}
+
+.kpi-editor-input:focus {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 2px var(--teal-ring);
+}
+
+.kpi-weight-summary-box {
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--s1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.kpi-weight-progress-track {
+    width: 100%;
+    height: 12px;
+    background: #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+}
+
+.kpi-weight-progress-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.kpi-weight-valid-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+
+.kpi-weight-valid-alert.valid {
+    background: var(--ok-bg);
+    color: var(--ok);
+    border: 1px solid var(--ok-r);
+}
+
+.kpi-weight-valid-alert.invalid {
+    background: var(--err-bg);
+    color: var(--err);
+    border: 1px solid var(--err-r);
+}
+
+.kpi-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.kpi-items-table th {
+    background: var(--s2);
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ts);
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+}
+
+.kpi-items-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.kpi-items-table tr:hover td {
+    background: var(--s1);
+}
+
+.kpi-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
