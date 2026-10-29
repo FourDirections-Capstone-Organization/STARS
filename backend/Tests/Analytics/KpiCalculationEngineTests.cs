@@ -905,5 +905,496 @@ public class KpiCalculationEngineTests
         var relaxedRating = KpiCalculationEngine.DetermineOverallRating(allGreenMetrics, 75.0, totalAssigned: 10, greenThreshold: 80.0, amberThreshold: 65.0);
         Assert.Equal("Amber", relaxedRating);
     }
-}
 
+    [Fact]
+    public void CalculateFromTasks_WithCustomFormula_EvaluatesCorrectlyFromVariables()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var tasks = new List<BackendTask>();
+        // 10 tasks assigned: 8 completed (6 on-time, 2 late), 2 in-progress
+        for (int i = 0; i < 8; i++)
+        {
+            bool isOnTime = i < 6;
+            tasks.Add(new BackendTask
+            {
+                Id = Guid.NewGuid(),
+                Status = TaskStatus.Completed,
+                Deadline = isOnTime ? now.AddHours(2) : now.AddHours(-1),
+                CreatedAt = now.AddHours(-3),
+                UpdatedAt = now,
+                Attachments = new List<TaskAttachment> { new() { FileName = "doc.pdf", FilePath = "/files/doc.pdf" } },
+                Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = now.AddHours(-3) } }
+            });
+        }
+        for (int i = 0; i < 2; i++)
+        {
+            tasks.Add(new BackendTask
+            {
+                Id = Guid.NewGuid(),
+                Status = TaskStatus.InProgress,
+                CreatedAt = now,
+                Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = now } }
+            });
+        }
+
+        var reworkIds = new HashSet<Guid> { tasks[0].Id }; // 1 rework task out of 8 completed
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Custom Formula Config",
+            OverallGreenThreshold = 80.0,
+            OverallAmberThreshold = 60.0,
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "CUSTOM_ON_TIME_RATE",
+                    Name = "Custom On-Time Completion Rate",
+                    IsCustomFormula = true,
+                    CustomFormula = "(on_time_tasks / completed_tasks) * 100",
+                    Weight = 60.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 70.0,
+                    AmberThreshold = 50.0,
+                    RedThreshold = 30.0,
+                    Order = 1
+                },
+                new()
+                {
+                    MetricCode = "CUSTOM_ACCURACY",
+                    Name = "Accurate Ratio Against Total",
+                    IsCustomFormula = true,
+                    CustomFormula = "(accurate_tasks / total_assigned_tasks) * 100",
+                    Weight = 40.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 65.0,
+                    AmberThreshold = 50.0,
+                    RedThreshold = 40.0,
+                    Order = 2
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, tasks, reworkIds, now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Equal(2, result.Metrics.Count);
+
+        // Metric 1: on_time_tasks = 6, completed_tasks = 8 -> (6 / 8) * 100 = 75.0%
+        var metric1 = result.Metrics[0];
+        Assert.Equal("CUSTOM_ON_TIME_RATE", metric1.MetricCode);
+        Assert.True(metric1.IsCustomFormula);
+        Assert.Equal("(on_time_tasks / completed_tasks) * 100", metric1.CustomFormula);
+        Assert.Equal(75.0, metric1.ActualValue);
+        Assert.Equal("Green", metric1.Rating);
+        Assert.Equal(45.0, metric1.WeightedScore); // (75 / 100) * 60 = 45.0
+
+        // Metric 2: accurate_tasks = 7 (8 - 1 rework), total_assigned_tasks = 10 -> (7 / 10) * 100 = 70.0%
+        var metric2 = result.Metrics[1];
+        Assert.Equal("CUSTOM_ACCURACY", metric2.MetricCode);
+        Assert.True(metric2.IsCustomFormula);
+        Assert.Equal(70.0, metric2.ActualValue);
+        Assert.Equal("Green", metric2.Rating);
+        Assert.Equal(28.0, metric2.WeightedScore); // (70 / 100) * 40 = 28.0
+
+        // Overall score: 45.0 + 28.0 = 73.0 -> Amber (73.0 < 80.0 green threshold)
+        Assert.Equal(73.0, result.OverallScore);
+        Assert.Equal("Amber", result.OverallRating);
+    }
+
+    [Fact]
+    public void CalculateFromTasks_WithCustomFormula_ZeroTasks_SafelyDefaultsToZero()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var emptyTasks = new List<BackendTask>();
+        var reworkIds = new HashSet<Guid>();
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Zero Tasks Config",
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "CUSTOM_DIV_ZERO",
+                    Name = "Zero Division Safety Test",
+                    IsCustomFormula = true,
+                    CustomFormula = "(completed_tasks / total_assigned_tasks) * 100",
+                    Weight = 100.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 80.0,
+                    AmberThreshold = 60.0,
+                    RedThreshold = 40.0
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, emptyTasks, reworkIds, now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Single(result.Metrics);
+        var metric = result.Metrics[0];
+        Assert.Equal(0.0, metric.ActualValue);
+        Assert.Equal(0.0, metric.WeightedScore);
+        Assert.Equal("Amber", result.OverallRating); // Zero tasks overall rating defaults to Amber
+    }
+
+    [Fact]
+    public void CalculateFromTasks_HybridStandardAndCustom_ComputesAllScoresCorrectly()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var tasks = new List<BackendTask>();
+        // 4 tasks assigned: all 4 completed, 4 on-time with attachment -> OTIF = 100%, rework = 0
+        for (int i = 0; i < 4; i++)
+        {
+            tasks.Add(new BackendTask
+            {
+                Id = Guid.NewGuid(),
+                Status = TaskStatus.Completed,
+                Deadline = now.AddHours(2),
+                CreatedAt = now.AddHours(-1),
+                UpdatedAt = now,
+                Attachments = new List<TaskAttachment> { new() { FileName = "proof.png", FilePath = "/proof.png" } },
+                Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = now.AddHours(-1) } }
+            });
+        }
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Hybrid Config",
+            OverallGreenThreshold = 85.0,
+            OverallAmberThreshold = 70.0,
+            Items = new List<KpiItem>
+            {
+                // Standard OTIF metric (50% weight)
+                new()
+                {
+                    MetricCode = "OTIF",
+                    Name = "Standard OTIF",
+                    IsCustomFormula = false,
+                    Weight = 50.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 90.0,
+                    AmberThreshold = 75.0,
+                    RedThreshold = 60.0,
+                    Order = 1
+                },
+                // Custom formula: 100 - rework_rate (50% weight)
+                new()
+                {
+                    MetricCode = "CUSTOM_NO_REWORK",
+                    Name = "Custom Perfect Exec",
+                    IsCustomFormula = true,
+                    CustomFormula = "100 - rework_rate",
+                    Weight = 50.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 95.0,
+                    AmberThreshold = 85.0,
+                    RedThreshold = 75.0,
+                    Order = 2
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, tasks, new HashSet<Guid>(), now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Equal(2, result.Metrics.Count);
+
+        var otifMetric = result.Metrics[0];
+        Assert.False(otifMetric.IsCustomFormula);
+        Assert.Equal(100.0, otifMetric.ActualValue);
+        Assert.Equal("Green", otifMetric.Rating);
+        Assert.Equal(50.0, otifMetric.WeightedScore);
+
+        var customMetric = result.Metrics[1];
+        Assert.True(customMetric.IsCustomFormula);
+        Assert.Equal(100.0, customMetric.ActualValue);
+        Assert.Equal("Green", customMetric.Rating);
+        Assert.Equal(50.0, customMetric.WeightedScore);
+
+        Assert.Equal(100.0, result.OverallScore);
+        Assert.Equal("Green", result.OverallRating);
+    }
+
+    [Fact]
+    public void CalculateFromTasks_WithCustomFormula_IsLowerBetter_EvaluatesCorrectly()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var tasks = new List<BackendTask>();
+        for (int i = 0; i < 10; i++)
+        {
+            tasks.Add(new BackendTask
+            {
+                Id = Guid.NewGuid(),
+                Status = TaskStatus.Completed,
+                Deadline = now.AddHours(2),
+                CreatedAt = now.AddHours(-2),
+                UpdatedAt = now,
+                Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = now.AddHours(-2) } }
+            });
+        }
+
+        // 1 rework task out of 10 -> rework_rate = 10.0%
+        var reworkIds = new HashSet<Guid> { tasks[0].Id };
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Lower Is Better Custom Formula",
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "CUSTOM_REWORK_PENALTY",
+                    Name = "Rework Rate Penalty",
+                    IsCustomFormula = true,
+                    CustomFormula = "rework_rate",
+                    IsLowerBetter = true,
+                    Weight = 100.0,
+                    TargetValue = 5.0,
+                    GreenThreshold = 5.0,
+                    AmberThreshold = 10.0,
+                    RedThreshold = 20.0
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, tasks, reworkIds, now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Single(result.Metrics);
+        var metric = result.Metrics[0];
+        Assert.Equal(10.0, metric.ActualValue);
+        Assert.True(metric.IsLowerBetter);
+        Assert.Equal("Amber", metric.Rating); // <= AmberThreshold (10.0) -> Amber
+        // Ratio = TargetValue / ActualValue = 5.0 / 10.0 = 0.5 * 100 = 50.0
+        Assert.Equal(50.0, metric.WeightedScore);
+    }
+
+    [Fact]
+    public void CalculateFromTasks_WithMalformedCustomFormula_DefaultsToZeroWithoutException()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var tasks = new List<BackendTask>
+        {
+            new() { Id = Guid.NewGuid(), Status = TaskStatus.Completed, CreatedAt = now, UpdatedAt = now }
+        };
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Malformed Formula Config",
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "MALFORMED_FORMULA",
+                    Name = "Malformed Test",
+                    IsCustomFormula = true,
+                    CustomFormula = "total_assigned_tasks + + + invalid",
+                    Weight = 100.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 80.0,
+                    AmberThreshold = 60.0,
+                    RedThreshold = 40.0
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, tasks, new HashSet<Guid>(), now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Single(result.Metrics);
+        var metric = result.Metrics[0];
+        Assert.Equal(0.0, metric.ActualValue);
+        Assert.Equal("Red", metric.Rating);
+        Assert.Equal(0.0, metric.WeightedScore);
+    }
+
+    [Fact]
+    public void CalculateFromTasks_WithEmptyCustomFormula_DefaultsToZeroWithoutException()
+    {
+        // Arrange
+        var employee = CreateSampleEmployee();
+        var engine = new KpiCalculationEngine(CreateInMemoryDbContext(), NullLogger<KpiCalculationEngine>.Instance);
+        var now = DateTime.UtcNow;
+
+        var tasks = new List<BackendTask>
+        {
+            new() { Id = Guid.NewGuid(), Status = TaskStatus.Completed, CreatedAt = now, UpdatedAt = now }
+        };
+
+        var config = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Empty Formula Config",
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "EMPTY_FORMULA",
+                    Name = "Empty Formula Test",
+                    IsCustomFormula = true,
+                    CustomFormula = "   ",
+                    Weight = 100.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 80.0,
+                    AmberThreshold = 60.0,
+                    RedThreshold = 40.0
+                }
+            }
+        };
+
+        // Act
+        var result = engine.CalculateFromTasks(employee, tasks, new HashSet<Guid>(), now.AddDays(-1), now.AddDays(1), config);
+
+        // Assert
+        Assert.Single(result.Metrics);
+        var metric = result.Metrics[0];
+        Assert.Equal(0.0, metric.ActualValue);
+        Assert.Equal(0.0, metric.WeightedScore);
+        Assert.Equal("Red", metric.Rating);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CalculateEmployeeKpiAsync_WithCustomFormulaInDatabaseConfig_EvaluatesEndToEnd()
+    {
+        // Arrange
+        var db = CreateInMemoryDbContext();
+        var employee = CreateSampleEmployee();
+        db.Users.Add(employee);
+
+        var now = DateTime.UtcNow;
+        var start = now.AddDays(-7);
+        var end = now.AddDays(1);
+
+        // 5 tasks: 4 completed, 1 rework
+        var task1 = new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task 1",
+            Status = TaskStatus.Completed,
+            Deadline = now.AddHours(2),
+            CreatedAt = start.AddHours(1),
+            UpdatedAt = start.AddHours(3),
+            Attachments = new List<TaskAttachment> { new() { FileName = "doc.jpg", FilePath = "/doc.jpg" } },
+            Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = start.AddHours(1) } }
+        };
+        var task2 = new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task 2",
+            Status = TaskStatus.Completed,
+            Deadline = now.AddHours(2),
+            CreatedAt = start.AddHours(2),
+            UpdatedAt = start.AddHours(4),
+            Attachments = new List<TaskAttachment> { new() { FileName = "doc2.jpg", FilePath = "/doc2.jpg" } },
+            Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = start.AddHours(2) } }
+        };
+        var task3 = new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task 3",
+            Status = TaskStatus.Completed,
+            Deadline = now.AddHours(2),
+            CreatedAt = start.AddHours(3),
+            UpdatedAt = start.AddHours(5),
+            Attachments = new List<TaskAttachment> { new() { FileName = "doc3.jpg", FilePath = "/doc3.jpg" } },
+            Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = start.AddHours(3) } }
+        };
+        var task4 = new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task 4",
+            Status = TaskStatus.Completed,
+            Deadline = now.AddHours(2),
+            CreatedAt = start.AddHours(4),
+            UpdatedAt = start.AddHours(6),
+            PushBackComment = "Needs rework on signature", // marks rework
+            Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = start.AddHours(4) } }
+        };
+        var task5 = new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task 5",
+            Status = TaskStatus.InProgress,
+            CreatedAt = start.AddHours(5),
+            Assignments = new List<TaskAssignment> { new() { AssignedUserId = employee.Id, AssignedAt = start.AddHours(5) } }
+        };
+
+        db.Tasks.AddRange(task1, task2, task3, task4, task5);
+
+        // Active configuration with custom formula
+        var customConfig = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Database Custom Formula Config",
+            IsActive = true,
+            EffectiveStartDate = start.AddDays(-1),
+            OverallGreenThreshold = 80.0,
+            OverallAmberThreshold = 60.0,
+            Items = new List<KpiItem>
+            {
+                new()
+                {
+                    MetricCode = "ACCURACY_CUSTOM",
+                    Name = "Derived Accuracy Rate",
+                    IsCustomFormula = true,
+                    CustomFormula = "(accurate_tasks / completed_tasks) * 100",
+                    Weight = 100.0,
+                    TargetValue = 100.0,
+                    GreenThreshold = 70.0,
+                    AmberThreshold = 50.0,
+                    RedThreshold = 30.0
+                }
+            }
+        };
+        db.KpiConfigurations.Add(customConfig);
+        await db.SaveChangesAsync();
+
+        var engine = new KpiCalculationEngine(db, NullLogger<KpiCalculationEngine>.Instance);
+
+        // Act: 4 completed, 1 rework -> accurate_tasks = 3 -> 3 / 4 * 100 = 75.0%
+        var result = await engine.CalculateEmployeeKpiAsync(employee.Id, start, end, customConfig.Id);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Single(result.Metrics);
+        var metric = result.Metrics[0];
+        Assert.Equal("ACCURACY_CUSTOM", metric.MetricCode);
+        Assert.True(metric.IsCustomFormula);
+        Assert.Equal(75.0, metric.ActualValue);
+        Assert.Equal("Green", metric.Rating);
+        Assert.Equal(75.0, metric.WeightedScore);
+        Assert.Equal(75.0, result.OverallScore);
+    }
+}

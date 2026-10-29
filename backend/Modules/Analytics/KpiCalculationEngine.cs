@@ -12,11 +12,19 @@ public class KpiCalculationEngine : IKpiCalculationEngine
 {
     private readonly AppDbContext _db;
     private readonly ILogger<KpiCalculationEngine> _logger;
+    private readonly ISafeFormulaParser _formulaParser;
+    private readonly IKpiVariableRegistry _variableRegistry;
 
-    public KpiCalculationEngine(AppDbContext db, ILogger<KpiCalculationEngine> logger)
+    public KpiCalculationEngine(
+        AppDbContext db,
+        ILogger<KpiCalculationEngine> logger,
+        ISafeFormulaParser? formulaParser = null,
+        IKpiVariableRegistry? variableRegistry = null)
     {
         _db = db;
         _logger = logger;
+        _formulaParser = formulaParser ?? new SafeFormulaParser();
+        _variableRegistry = variableRegistry ?? new KpiVariableRegistry();
     }
 
     public async System.Threading.Tasks.Task<EmployeeKpiEvaluationResultDTO> CalculateEmployeeKpiAsync(
@@ -140,16 +148,54 @@ public class KpiCalculationEngine : IKpiCalculationEngine
             ? config.Items.OrderBy(i => i.Order).ToList()
             : CreateDefaultFallbackConfiguration().Items.ToList();
 
+        IReadOnlyDictionary<string, double>? resolvedVariables = null;
+
         foreach (var item in itemsToEvaluate)
         {
-            double actualValue = item.MetricCode.ToUpperInvariant() switch
+            double actualValue;
+
+            if (item.IsCustomFormula || !string.IsNullOrWhiteSpace(item.CustomFormula))
             {
-                "OTIF" => otifRate,
-                "ORDER_ACCURACY" => accuracyRate,
-                "COMPLETION_RATE" => completionRate,
-                "AHT" => ahtHours,
-                _ => 0.0
-            };
+                if (string.IsNullOrWhiteSpace(item.CustomFormula))
+                {
+                    _logger.LogWarning("KPI Item {MetricCode} has IsCustomFormula=true but empty CustomFormula expression.", item.MetricCode);
+                    actualValue = 0.0;
+                }
+                else
+                {
+                    resolvedVariables ??= _variableRegistry.ResolveVariableValues(
+                        totalAssigned,
+                        completedCount,
+                        onTimeCount,
+                        inFullCount,
+                        otifCount,
+                        reworkCount,
+                        accurateCount,
+                        totalHandlingHours);
+
+                    try
+                    {
+                        var raw = _formulaParser.Evaluate(item.CustomFormula, resolvedVariables);
+                        actualValue = double.IsNaN(raw) || double.IsInfinity(raw) ? 0.0 : Math.Round(raw, 2);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to evaluate custom formula '{Formula}' for metric '{MetricCode}'. Defaulting to 0.0.", item.CustomFormula, item.MetricCode);
+                        actualValue = 0.0;
+                    }
+                }
+            }
+            else
+            {
+                actualValue = item.MetricCode.ToUpperInvariant() switch
+                {
+                    "OTIF" => otifRate,
+                    "ORDER_ACCURACY" => accuracyRate,
+                    "COMPLETION_RATE" or "TASK_COMPLETION_RATE" => completionRate,
+                    "AHT" or "AVERAGE_HANDLING_TIME" => ahtHours,
+                    _ => 0.0
+                };
+            }
 
             string rating = EvaluateThreshold(actualValue, item);
             double weightedScore = CalculateWeightedScore(actualValue, item);
@@ -166,6 +212,8 @@ public class KpiCalculationEngine : IKpiCalculationEngine
                 AmberThreshold = item.AmberThreshold,
                 RedThreshold = item.RedThreshold,
                 IsLowerBetter = item.IsLowerBetter,
+                IsCustomFormula = item.IsCustomFormula || !string.IsNullOrWhiteSpace(item.CustomFormula),
+                CustomFormula = item.CustomFormula,
                 Rating = rating,
                 WeightedScore = weightedScore
             });
