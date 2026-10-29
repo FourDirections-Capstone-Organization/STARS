@@ -28,6 +28,9 @@ public static class KpiDefaultSeeder
             EffectiveStartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             EffectiveEndDate = null,
             IsActive = true,
+            OverallGreenThreshold = 85.0,
+            OverallAmberThreshold = 70.0,
+            OverallRedThreshold = 60.0,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             Items = new List<KpiItem>

@@ -25,6 +25,21 @@ public class KpiConfiguration
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Overall score threshold for Good / Green performance level (default: 85.0).
+    /// </summary>
+    public double OverallGreenThreshold { get; set; } = 85.0;
+
+    /// <summary>
+    /// Overall score threshold for Warning / Amber performance level (default: 70.0).
+    /// </summary>
+    public double OverallAmberThreshold { get; set; } = 70.0;
+
+    /// <summary>
+    /// Overall score threshold for Critical / Red performance level (default: 60.0).
+    /// </summary>
+    public double OverallRedThreshold { get; set; } = 60.0;
+
     public Guid? CreatedById { get; set; }
     public User? CreatedBy { get; set; }
 

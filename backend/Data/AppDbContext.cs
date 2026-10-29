@@ -376,6 +376,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Description).HasMaxLength(500);
             entity.Property(e => e.TargetRole).HasMaxLength(50);
+            entity.Property(e => e.OverallGreenThreshold).HasDefaultValue(85.0);
+            entity.Property(e => e.OverallAmberThreshold).HasDefaultValue(70.0);
+            entity.Property(e => e.OverallRedThreshold).HasDefaultValue(60.0);
 
             entity.HasOne(c => c.Department)
                 .WithMany()
