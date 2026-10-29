@@ -1109,4 +1109,146 @@ public class KpiControllerTests
     }
 
     #endregion
+
+    #region Formula Testing & Variable Catalog Tests
+
+    [Fact]
+    public void GetFormulaVariables_ReturnsOkWithCatalogOfVariables()
+    {
+        var controller = CreateController();
+
+        var result = controller.GetFormulaVariables();
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<IReadOnlyList<KpiVariableDefinition>>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data.Should().HaveCountGreaterThanOrEqualTo(10);
+        response.Data.Should().Contain(v => v.Name == "completed_tasks");
+        response.Data.Should().Contain(v => v.Name == "total_assigned_tasks");
+    }
+
+    [Fact]
+    public void TestFormula_WithNullOrEmptyFormula_ReturnsBadRequest()
+    {
+        var controller = CreateController();
+
+        var result = controller.TestFormula(new FormulaTestRequestDTO { Formula = "  " });
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var response = badRequest.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeFalse();
+        response.Message.Should().Contain("Formula is required");
+    }
+
+    [Fact]
+    public void TestFormula_WithValidFormulaAndDefaultSamples_CalculatesSuccessfully()
+    {
+        var controller = CreateController();
+
+        // (completed_tasks / total_assigned_tasks) * 100
+        // default samples: completed_tasks = 45, total_assigned_tasks = 50 -> (45/50)*100 = 90.0
+        var result = controller.TestFormula(new FormulaTestRequestDTO
+        {
+            Formula = "(completed_tasks / total_assigned_tasks) * 100"
+        });
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data!.IsValid.Should().BeTrue();
+        response.Data.Result.Should().Be(90.0);
+        response.Data.VariablesUsed.Should().Contain("completed_tasks");
+        response.Data.VariablesUsed.Should().Contain("total_assigned_tasks");
+        response.Data.ResolvedVariables["completed_tasks"].Should().Be(45.0);
+        response.Data.ResolvedVariables["total_assigned_tasks"].Should().Be(50.0);
+    }
+
+    [Fact]
+    public void TestFormula_WithSampleValueOverrides_UsesProvidedSampleValues()
+    {
+        var controller = CreateController();
+
+        var result = controller.TestFormula(new FormulaTestRequestDTO
+        {
+            Formula = "completed_tasks * 2 + on_time_tasks",
+            SampleValues = new Dictionary<string, double>
+            {
+                { "completed_tasks", 10.0 },
+                { "on_time_tasks", 5.0 }
+            }
+        });
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data!.IsValid.Should().BeTrue();
+        // 10 * 2 + 5 = 25.0
+        response.Data.Result.Should().Be(25.0);
+        response.Data.ResolvedVariables["completed_tasks"].Should().Be(10.0);
+        response.Data.ResolvedVariables["on_time_tasks"].Should().Be(5.0);
+    }
+
+    [Fact]
+    public void TestFormula_WithDivisionByZero_ReturnsSafeDefaultZeroWithoutCrashing()
+    {
+        var controller = CreateController();
+
+        var result = controller.TestFormula(new FormulaTestRequestDTO
+        {
+            Formula = "completed_tasks / 0",
+            SampleValues = new Dictionary<string, double>
+            {
+                { "completed_tasks", 100.0 }
+            }
+        });
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data!.IsValid.Should().BeTrue();
+        response.Data.Result.Should().Be(0.0);
+    }
+
+    [Fact]
+    public void TestFormula_WithInvalidSyntax_ReturnsValidationFailureMessage()
+    {
+        var controller = CreateController();
+
+        var result = controller.TestFormula(new FormulaTestRequestDTO
+        {
+            Formula = "completed_tasks + * 10"
+        });
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data!.IsValid.Should().BeFalse();
+        response.Data.ErrorMessage.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void TestFormula_WithUnapprovedVariable_ReturnsNotPermittedErrorMessage()
+    {
+        var controller = CreateController();
+
+        var result = controller.TestFormula(new FormulaTestRequestDTO
+        {
+            Formula = "completed_tasks + hacker_variable"
+        });
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.As<ApiResponseDTO<FormulaTestResponseDTO>>();
+        response.IsSuccess.Should().BeTrue();
+        response.Data.Should().NotBeNull();
+        response.Data!.IsValid.Should().BeFalse();
+        response.Data.ErrorMessage.Should().Contain("hacker_variable");
+        response.Data.ErrorMessage.Should().Contain("not permitted");
+    }
+
+    #endregion
 }

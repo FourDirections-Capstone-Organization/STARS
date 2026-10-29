@@ -77,6 +77,10 @@ public static class KpiConfigurationValidator
         }
 
         // Item level validation
+        var parser = new SafeFormulaParser();
+        var registry = new KpiVariableRegistry();
+        var allowedVars = registry.GetAllowedVariableNames();
+
         for (int i = 0; i < dto.Items.Count; i++)
         {
             var item = dto.Items[i];
@@ -100,9 +104,26 @@ public static class KpiConfigurationValidator
                     errors.Add($"Item[{i}] '{item.Name}': {r.ErrorMessage}");
                 }
             }
+
+            if (item.IsCustomFormula)
+            {
+                if (string.IsNullOrWhiteSpace(item.CustomFormula))
+                {
+                    errors.Add($"Item[{i}] '{item.Name}': Custom formula is required when IsCustomFormula is enabled.");
+                }
+                else
+                {
+                    var formulaResult = parser.Validate(item.CustomFormula, allowedVars);
+                    if (!formulaResult.IsValid)
+                    {
+                        errors.Add($"Item[{i}] '{item.Name}': Custom formula error: {formulaResult.ErrorMessage}");
+                    }
+                }
+            }
         }
 
-        return (errors.Count == 0, errors);
+        var distinctErrors = errors.Distinct().ToList();
+        return (distinctErrors.Count == 0, distinctErrors);
     }
 }
 

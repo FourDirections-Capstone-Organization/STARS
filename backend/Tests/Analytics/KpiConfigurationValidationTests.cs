@@ -439,5 +439,74 @@ public class KpiConfigurationValidationTests
     }
 
     #endregion
+
+    #region Custom Formula Validation Tests
+
+    [Fact]
+    public void Validate_WhenIsCustomFormulaIsTrueAndFormulaEmpty_Fails()
+    {
+        var request = CreateValidConfigurationRequest();
+        request.Items[0].IsCustomFormula = true;
+        request.Items[0].CustomFormula = "";
+
+        var (isValid, errors) = KpiConfigurationValidator.ValidateConfiguration(request);
+
+        isValid.Should().BeFalse();
+        errors.Should().Contain(e => e.Contains("Custom formula is required"));
+    }
+
+    [Fact]
+    public void Validate_WhenIsCustomFormulaIsTrueAndSyntaxInvalid_Fails()
+    {
+        var request = CreateValidConfigurationRequest();
+        request.Items[0].IsCustomFormula = true;
+        request.Items[0].CustomFormula = "completed_tasks + * 2";
+
+        var (isValid, errors) = KpiConfigurationValidator.ValidateConfiguration(request);
+
+        isValid.Should().BeFalse();
+        errors.Should().Contain(e => e.Contains("Custom formula") && (e.Contains("Syntax") || e.Contains("invalid") || e.Contains("Unexpected")));
+    }
+
+    [Fact]
+    public void Validate_WhenIsCustomFormulaUsesUnapprovedVariable_Fails()
+    {
+        var request = CreateValidConfigurationRequest();
+        request.Items[0].IsCustomFormula = true;
+        request.Items[0].CustomFormula = "completed_tasks + unknown_variable";
+
+        var (isValid, errors) = KpiConfigurationValidator.ValidateConfiguration(request);
+
+        isValid.Should().BeFalse();
+        errors.Should().Contain(e => e.Contains("unknown_variable") && e.Contains("not permitted"));
+    }
+
+    [Fact]
+    public void Validate_WhenIsCustomFormulaIsValidArithmeticExpression_Succeeds()
+    {
+        var request = CreateValidConfigurationRequest();
+        request.Items[0].IsCustomFormula = true;
+        request.Items[0].CustomFormula = "(completed_tasks / total_assigned_tasks) * 100";
+
+        var (isValid, errors) = KpiConfigurationValidator.ValidateConfiguration(request);
+
+        isValid.Should().BeTrue();
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_WhenIsCustomFormulaIsFalse_FormulaFieldNotRequired()
+    {
+        var request = CreateValidConfigurationRequest();
+        request.Items[0].IsCustomFormula = false;
+        request.Items[0].CustomFormula = null;
+
+        var (isValid, errors) = KpiConfigurationValidator.ValidateConfiguration(request);
+
+        isValid.Should().BeTrue();
+        errors.Should().BeEmpty();
+    }
+
+    #endregion
 }
 

@@ -19,15 +19,21 @@ public class KpiController : ControllerBase
     private readonly IKpiCalculationEngine _kpiCalculationEngine;
     private readonly AppDbContext _db;
     private readonly ILogger<KpiController> _logger;
+    private readonly ISafeFormulaParser _safeFormulaParser;
+    private readonly IKpiVariableRegistry _variableRegistry;
 
     public KpiController(
         IKpiCalculationEngine kpiCalculationEngine,
         AppDbContext db,
-        ILogger<KpiController> logger)
+        ILogger<KpiController> logger,
+        ISafeFormulaParser? safeFormulaParser = null,
+        IKpiVariableRegistry? variableRegistry = null)
     {
         _kpiCalculationEngine = kpiCalculationEngine;
         _db = db;
         _logger = logger;
+        _safeFormulaParser = safeFormulaParser ?? new SafeFormulaParser();
+        _variableRegistry = variableRegistry ?? new KpiVariableRegistry();
     }
 
     #region Evaluation Endpoints
@@ -457,6 +463,113 @@ public class KpiController : ControllerBase
             _logger.LogError(ex, "Unexpected error deleting KPI configuration {ConfigurationId}.", id);
             return StatusCode(500, ApiResponseDTO<object>.Failure(
                 "An unexpected error occurred while deleting the KPI configuration."));
+        }
+    }
+
+    #endregion
+
+    #region Custom Formula Endpoints
+
+    /// <summary>
+    /// Retrieves all whitelisted KPI variables available for custom arithmetic formulas.
+    /// </summary>
+    [HttpGet("variables")]
+    [HttpGet("formula/variables")]
+    public IActionResult GetFormulaVariables()
+    {
+        try
+        {
+            var variables = _variableRegistry.GetAllVariables();
+            return Ok(ApiResponseDTO<IReadOnlyList<KpiVariableDefinition>>.Success(
+                variables,
+                "Formula variables retrieved successfully."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving formula variables.");
+            return StatusCode(500, ApiResponseDTO<IReadOnlyList<KpiVariableDefinition>>.Failure(
+                "An unexpected error occurred while retrieving formula variables."));
+        }
+    }
+
+    /// <summary>
+    /// Dry-runs and validates a custom arithmetic formula using whitelisted variables and mock values.
+    /// </summary>
+    [HttpPost("formula/test")]
+    [HttpPost("test-formula")]
+    public IActionResult TestFormula([FromBody] FormulaTestRequestDTO request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Formula))
+        {
+            return BadRequest(ApiResponseDTO<FormulaTestResponseDTO>.Failure("Formula is required."));
+        }
+
+        try
+        {
+            var allowedVariables = _variableRegistry.GetAllowedVariableNames();
+            var validationResult = _safeFormulaParser.Validate(request.Formula, allowedVariables);
+
+            if (!validationResult.IsValid)
+            {
+                var invalidResult = new FormulaTestResponseDTO
+                {
+                    IsValid = false,
+                    ErrorMessage = validationResult.ErrorMessage,
+                    VariablesUsed = validationResult.Variables ?? Array.Empty<string>()
+                };
+
+                return Ok(ApiResponseDTO<FormulaTestResponseDTO>.Success(
+                    invalidResult,
+                    "Formula validation failed."));
+            }
+
+            // Build dictionary of variables for calculation using default sample values merged with provided sample values
+            var defaultSamples = _variableRegistry.GetDefaultSampleValues();
+            var resolvedVariables = new Dictionary<string, double>(defaultSamples, StringComparer.OrdinalIgnoreCase);
+
+            if (request.SampleValues != null)
+            {
+                foreach (var (key, val) in request.SampleValues)
+                {
+                    resolvedVariables[key] = val;
+                }
+            }
+
+            var usedVariables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var v in validationResult.Variables)
+            {
+                usedVariables[v] = resolvedVariables.TryGetValue(v, out var val) ? val : 0.0;
+            }
+
+            double calculatedValue = _safeFormulaParser.Evaluate(
+                request.Formula,
+                resolvedVariables,
+                divisionByZeroDefault: 0.0);
+
+            var responseDto = new FormulaTestResponseDTO
+            {
+                IsValid = true,
+                Result = Math.Round(calculatedValue, 4),
+                VariablesUsed = validationResult.Variables,
+                ResolvedVariables = usedVariables
+            };
+
+            return Ok(ApiResponseDTO<FormulaTestResponseDTO>.Success(
+                responseDto,
+                "Formula evaluated successfully."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error testing custom formula: {Formula}", request.Formula);
+            var errorResponse = new FormulaTestResponseDTO
+            {
+                IsValid = false,
+                ErrorMessage = ex.Message
+            };
+
+            return Ok(ApiResponseDTO<FormulaTestResponseDTO>.Success(
+                errorResponse,
+                "Formula evaluation error."));
         }
     }
 
