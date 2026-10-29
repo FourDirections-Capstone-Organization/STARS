@@ -11,7 +11,8 @@ import {
     Calendar,
     HelpCircle,
     Percent,
-    ArrowUpDown
+    ArrowUpDown,
+    Calculator
 } from 'lucide-react';
 import {
     KpiConfigurationFormData,
@@ -19,6 +20,7 @@ import {
     DepartmentOption,
     STANDARD_METRIC_TEMPLATES
 } from './types';
+import { FormulaBuilderModal } from './FormulaBuilderModal';
 import './KpiConfiguration.css';
 
 interface KpiConfigurationEditorProps {
@@ -55,6 +57,7 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
 }) => {
     const [formData, setFormData] = useState<KpiConfigurationFormData>(initialData || DEFAULT_FORM_DATA);
     const [touched, setTouched] = useState<Record<string, boolean>>({});
+    const [editingFormulaIndex, setEditingFormulaIndex] = useState<number | null>(null);
 
     // Calculate total weight
     const totalWeight = useMemo(() => {
@@ -108,6 +111,11 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
             if (item.targetValue < 0) {
                 errors.push(`Target value for '${item.name}' cannot be negative.`);
             }
+            if (item.isCustomFormula) {
+                if (!item.customFormula || !item.customFormula.trim()) {
+                    errors.push(`Custom metric '${item.name || `#${idx + 1}`}' requires a custom formula.`);
+                }
+            }
             if (item.isLowerBetter) {
                 if (item.greenThreshold > item.amberThreshold || item.amberThreshold > item.redThreshold) {
                     errors.push(`Metric '${item.name}' (lower is better): Green (${item.greenThreshold}) must be <= Amber (${item.amberThreshold}), and Amber <= Red (${item.redThreshold}).`);
@@ -156,6 +164,32 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                 }
             ]
         }));
+    };
+
+    const handleAddCustomFormulaMetric = () => {
+        const newIndex = formData.items.length;
+        const newMetricCode = `CUSTOM_${newIndex + 1}`;
+        const newItem: KpiItem = {
+            name: `Custom Metric ${newIndex + 1}`,
+            metricCode: newMetricCode,
+            description: 'Custom formula calculated metric',
+            weight: 0,
+            unit: '%',
+            targetValue: 100,
+            greenThreshold: 90,
+            amberThreshold: 75,
+            redThreshold: 60,
+            isLowerBetter: false,
+            isCustomFormula: true,
+            customFormula: '',
+            order: newIndex + 1
+        };
+
+        setFormData(prev => ({
+            ...prev,
+            items: [...prev.items, newItem]
+        }));
+        setEditingFormulaIndex(newIndex);
     };
 
     const handleAutoBalance = () => {
@@ -208,7 +242,7 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
     };
 
     // Color bar segments for visual weight breakdown
-    const segmentColors = ['#008B8B', '#4f46e5', '#059669', '#d97706', '#ec4899', '#8b5cf6'];
+    const segmentColors = ['#008B8B', '#4f46e5', '#059669', '#d97706', '#ec4899', '#8b5cf6', '#0284c7', '#10b981'];
 
     return (
         <form className="kpi-editor-card" onSubmit={handleSubmit} data-testid="kpi-configuration-editor">
@@ -495,6 +529,9 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                                     background: segmentColors[idx % segmentColors.length]
                                 }} />
                                 <strong>{item.metricCode}</strong>: {item.weight}%
+                                {item.isCustomFormula && (
+                                    <span style={{ color: 'var(--teal)', fontSize: 10 }}>📐</span>
+                                )}
                             </span>
                         ))}
                     </div>
@@ -505,12 +542,12 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                     <table className="kpi-items-table" data-testid="kpi-items-table">
                         <thead>
                             <tr>
-                                <th style={{ width: '22%' }}>Metric Name &amp; Code</th>
-                                <th style={{ width: '15%' }}>Weight (%)</th>
+                                <th style={{ width: '26%' }}>Metric Name &amp; Code</th>
+                                <th style={{ width: '14%' }}>Weight (%)</th>
                                 <th style={{ width: '12%' }}>Target</th>
-                                <th style={{ width: '13%' }}>🟢 Green</th>
-                                <th style={{ width: '13%' }}>🟡 Amber</th>
-                                <th style={{ width: '13%' }}>🔴 Red</th>
+                                <th style={{ width: '12%' }}>🟢 Green</th>
+                                <th style={{ width: '12%' }}>🟡 Amber</th>
+                                <th style={{ width: '12%' }}>🔴 Red</th>
                                 <th style={{ width: '12%', textAlign: 'center' }}>Action</th>
                             </tr>
                         </thead>
@@ -518,11 +555,85 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                             {formData.items.map((item, idx) => (
                                 <tr key={idx} data-testid={`kpi-item-row-${idx}`}>
                                     <td>
-                                        <div style={{ fontWeight: 700, color: 'var(--tp)' }}>{item.name}</div>
+                                        <div style={{ fontWeight: 700, color: 'var(--tp)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                            {item.isCustomFormula ? (
+                                                <input
+                                                    type="text"
+                                                    className="kpi-editor-input"
+                                                    style={{ height: 28, fontSize: 12, fontWeight: 700, width: 140 }}
+                                                    value={item.name}
+                                                    onChange={e => handleItemChange(idx, 'name', e.target.value)}
+                                                    placeholder="Metric Name"
+                                                    data-testid={`custom-metric-name-input-${idx}`}
+                                                />
+                                            ) : (
+                                                <span>{item.name}</span>
+                                            )}
+                                            {item.isCustomFormula && (
+                                                <span className="kpi-badge kpi-badge-teal" style={{ fontSize: 10 }}>
+                                                    Custom Formula
+                                                </span>
+                                            )}
+                                        </div>
                                         <div style={{ fontSize: 11, color: 'var(--tt)', marginTop: 2 }}>
-                                            <code>{item.metricCode}</code> ({item.unit})
+                                            {item.isCustomFormula ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                    <input
+                                                        type="text"
+                                                        className="kpi-editor-input"
+                                                        style={{ height: 24, fontSize: 11, width: 100 }}
+                                                        value={item.metricCode}
+                                                        onChange={e => handleItemChange(idx, 'metricCode', e.target.value.toUpperCase())}
+                                                        placeholder="CODE"
+                                                        data-testid={`custom-metric-code-input-${idx}`}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        className="kpi-editor-input"
+                                                        style={{ height: 24, fontSize: 11, width: 45 }}
+                                                        value={item.unit}
+                                                        onChange={e => handleItemChange(idx, 'unit', e.target.value)}
+                                                        placeholder="unit"
+                                                        data-testid={`custom-metric-unit-input-${idx}`}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <code>{item.metricCode}</code> ({item.unit})
+                                                </>
+                                            )}
                                             {item.isLowerBetter && <span style={{ marginLeft: 6, color: 'var(--teal)', fontWeight: 600 }}>▼ Lower is Better</span>}
                                         </div>
+                                        {item.isCustomFormula && (
+                                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    style={{ padding: '2px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}
+                                                    onClick={() => setEditingFormulaIndex(idx)}
+                                                    data-testid={`edit-formula-btn-${idx}`}
+                                                >
+                                                    <Calculator size={12} /> {item.customFormula ? 'Edit Formula' : 'Set Formula'}
+                                                </button>
+                                                {item.customFormula && (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 11,
+                                                            fontFamily: 'monospace',
+                                                            color: 'var(--teal)',
+                                                            maxWidth: 220,
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                        title={item.customFormula}
+                                                        data-testid={`formula-preview-${idx}`}
+                                                    >
+                                                        <code>{item.customFormula}</code>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -602,7 +713,7 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                     </table>
                 </div>
 
-                {/* Add Metric Template options */}
+                {/* Add Metric Template & Custom Metric options */}
                 <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
                         Add Metric:
@@ -623,6 +734,15 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                             </button>
                         );
                     })}
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleAddCustomFormulaMetric}
+                        style={{ fontSize: 11.5, borderColor: 'var(--teal)', color: 'var(--teal)', fontWeight: 600 }}
+                        data-testid="add-custom-formula-metric-btn"
+                    >
+                        <Plus size={12} /> Custom Formula Metric
+                    </button>
                 </div>
             </div>
 
@@ -645,6 +765,20 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
                     <Save size={14} /> {isSaving ? 'Saving Configuration...' : 'Save Prospective Configuration'}
                 </button>
             </div>
+
+            {/* Formula Builder Modal */}
+            {editingFormulaIndex !== null && formData.items[editingFormulaIndex] && (
+                <FormulaBuilderModal
+                    isOpen={editingFormulaIndex !== null}
+                    initialFormula={formData.items[editingFormulaIndex].customFormula || ''}
+                    metricName={formData.items[editingFormulaIndex].name}
+                    onApply={(newFormula) => {
+                        handleItemChange(editingFormulaIndex, 'customFormula', newFormula);
+                        setEditingFormulaIndex(null);
+                    }}
+                    onClose={() => setEditingFormulaIndex(null)}
+                />
+            )}
         </form>
     );
 };

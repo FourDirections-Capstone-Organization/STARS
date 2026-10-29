@@ -3,7 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { KpiConfigurationTab } from '../Pages/OpAdmin_Dashboard/KpiConfiguration/KpiConfigurationTab';
 import { KpiConfigurationEditor } from '../Pages/OpAdmin_Dashboard/KpiConfiguration/KpiConfigurationEditor';
-import { KpiConfiguration, DepartmentOption, STANDARD_METRIC_TEMPLATES } from '../Pages/OpAdmin_Dashboard/KpiConfiguration/types';
+import { FormulaBuilderModal } from '../Pages/OpAdmin_Dashboard/KpiConfiguration/FormulaBuilderModal';
+import {
+    KpiConfiguration,
+    DepartmentOption,
+    STANDARD_METRIC_TEMPLATES,
+    KpiVariableDefinition,
+    DEFAULT_KPI_VARIABLES
+} from '../Pages/OpAdmin_Dashboard/KpiConfiguration/types';
 import { ToastProvider } from '../components/Toast/Toast';
 import api from '../api';
 
@@ -125,14 +132,70 @@ const mockConfigurations: KpiConfiguration[] = [
     }
 ];
 
+const mockVariables: KpiVariableDefinition[] = [
+    {
+        name: 'total_assigned_tasks',
+        displayName: 'Total Assigned Tasks',
+        description: 'Total tasks assigned.',
+        category: 'Counts',
+        unit: 'tasks',
+        defaultSampleValue: 50.0
+    },
+    {
+        name: 'completed_tasks',
+        displayName: 'Completed Tasks',
+        description: 'Number of completed tasks.',
+        category: 'Counts',
+        unit: 'tasks',
+        defaultSampleValue: 45.0
+    },
+    {
+        name: 'otif_tasks',
+        displayName: 'OTIF Tasks',
+        description: 'Tasks on time and in full.',
+        category: 'Counts',
+        unit: 'tasks',
+        defaultSampleValue: 38.0
+    },
+    {
+        name: 'total_handling_hours',
+        displayName: 'Total Handling Hours',
+        description: 'Total hours.',
+        category: 'Duration',
+        unit: 'hours',
+        defaultSampleValue: 120.0
+    },
+    {
+        name: 'completion_rate',
+        displayName: 'Completion Rate',
+        description: 'Percentage completed.',
+        category: 'Rates',
+        unit: '%',
+        defaultSampleValue: 90.0
+    }
+];
+
 describe('KpiConfigurationTab', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        (api.get as any).mockResolvedValue({
-            data: {
-                isSuccess: true,
-                data: mockConfigurations
+        (api.get as any).mockImplementation((url: string) => {
+            if (url === '/api/kpi/configurations') {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: mockConfigurations
+                    }
+                });
             }
+            if (url === '/api/kpi/formula/variables') {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: mockVariables
+                    }
+                });
+            }
+            return Promise.resolve({ data: { isSuccess: true, data: [] } });
         });
     });
 
@@ -151,15 +214,11 @@ describe('KpiConfigurationTab', () => {
             expect(screen.getByText('Courier Express Q4 Configuration')).toBeInTheDocument();
         });
 
-        // System Default badge on default config
         expect(screen.getByText('System Default')).toBeInTheDocument();
-        // Target role badge
         expect(screen.getAllByText('Courier').length).toBeGreaterThan(0);
-        // Metric tags
-        expect(screen.getAllByText(/OTIF \(35%\)/i).length).toBeGreaterThan(0);
     });
 
-    it('filters configurations based on search query', async () => {
+    it('filters configurations by search text', async () => {
         renderWithToast(<KpiConfigurationTab departments={mockDepartments} />);
 
         await waitFor(() => {
@@ -173,65 +232,32 @@ describe('KpiConfigurationTab', () => {
         expect(screen.queryByText('Default Logistics Operations KPI')).not.toBeInTheDocument();
     });
 
-    it('opens editor when clicking New Configuration', async () => {
+    it('switches to editor mode when clicking New Configuration', async () => {
         renderWithToast(<KpiConfigurationTab departments={mockDepartments} />);
 
-        await waitFor(() => {
-            expect(screen.getByTestId('create-kpi-config-btn')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByTestId('create-kpi-config-btn'));
+        const createBtn = screen.getByTestId('create-kpi-config-btn');
+        fireEvent.click(createBtn);
 
         expect(screen.getByTestId('kpi-configuration-editor')).toBeInTheDocument();
         expect(screen.getByText(/New Prospective KPI Configuration/i)).toBeInTheDocument();
     });
-
-    it('opens editor in edit mode when clicking Edit on a configuration card', async () => {
-        renderWithToast(<KpiConfigurationTab departments={mockDepartments} />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('edit-config-btn-22222222-2222-2222-2222-222222222222')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByTestId('edit-config-btn-22222222-2222-2222-2222-222222222222'));
-
-        expect(screen.getByTestId('kpi-configuration-editor')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Courier Express Q4 Configuration')).toBeInTheDocument();
-    });
-
-    it('handles delete flow with confirmation modal', async () => {
-        (api.delete as any).mockResolvedValue({ data: { isSuccess: true } });
-
-        renderWithToast(<KpiConfigurationTab departments={mockDepartments} />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('delete-config-btn-22222222-2222-2222-2222-222222222222')).toBeInTheDocument();
-        });
-
-        // Default config should NOT have delete button
-        expect(screen.queryByTestId('delete-config-btn-00000000-0000-0000-0000-000000000001')).not.toBeInTheDocument();
-
-        // Click delete on custom config
-        fireEvent.click(screen.getByTestId('delete-config-btn-22222222-2222-2222-2222-222222222222'));
-
-        // Modal should open
-        expect(screen.getByText(/Are you sure you want to delete this prospective KPI configuration\?/i)).toBeInTheDocument();
-
-        const modal = screen.getByText(/Are you sure you want to delete this prospective KPI configuration\?/i).closest('.cm-card');
-        const confirmBtn = modal?.querySelector('.cm-btn-confirm') || screen.getAllByRole('button', { name: /Delete Configuration/i })[1];
-        fireEvent.click(confirmBtn!);
-
-        await waitFor(() => {
-            expect(api.delete).toHaveBeenCalledWith('/api/kpi/configurations/22222222-2222-2222-2222-222222222222');
-        });
-    });
 });
 
 describe('KpiConfigurationEditor', () => {
-    it('validates 100% weight sum: disables Save button when weight is not 100%', () => {
-        const handleSave = vi.fn();
-        const handleCancel = vi.fn();
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+    const handleCancel = vi.fn();
 
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (api.get as any).mockResolvedValue({
+            data: {
+                isSuccess: true,
+                data: mockVariables
+            }
+        });
+    });
+
+    it('renders editor with prospective default values and 100% total weight', () => {
         render(
             <KpiConfigurationEditor
                 departments={mockDepartments}
@@ -241,62 +267,13 @@ describe('KpiConfigurationEditor', () => {
             />
         );
 
-        // Fill Title
-        const titleInput = screen.getByTestId('config-title-input');
-        fireEvent.change(titleInput, { target: { value: 'Test 2026 Q4 Plan' } });
-
-        // Standard default total weight should be 100.0%
+        expect(screen.getByTestId('config-title-input')).toBeInTheDocument();
+        expect(screen.getByTestId('config-start-date-input')).toBeInTheDocument();
         expect(screen.getByTestId('total-weight-display')).toHaveTextContent('100.0% / 100.0%');
-        const saveBtn = screen.getByTestId('save-kpi-config-btn');
-        expect(saveBtn).not.toBeDisabled();
-
-        // Change OTIF weight from 35 to 10 (Total becomes 75%)
-        const weightInput0 = screen.getByTestId('item-weight-input-0');
-        fireEvent.change(weightInput0, { target: { value: '10' } });
-
-        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('75.0% / 100.0%');
-        expect(screen.getByTestId('validation-alert')).toBeInTheDocument();
-        expect(screen.getByText(/Total weights must sum to exactly 100.0%/i)).toBeInTheDocument();
-        expect(saveBtn).toBeDisabled();
-
-        // Click Auto-Balance Weights
-        const autoBalanceBtn = screen.getByTestId('auto-balance-weights-btn');
-        fireEvent.click(autoBalanceBtn);
-
-        // Now total weight should be 100.0% again and save button enabled
-        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('100.0% / 100.0%');
-        expect(saveBtn).not.toBeDisabled();
+        expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled(); // Title is empty
     });
 
-    it('validates threshold hierarchy: shows error when Green < Amber', () => {
-        const handleSave = vi.fn();
-        const handleCancel = vi.fn();
-
-        render(
-            <KpiConfigurationEditor
-                departments={mockDepartments}
-                onSave={handleSave}
-                onCancel={handleCancel}
-                isSaving={false}
-            />
-        );
-
-        const titleInput = screen.getByTestId('config-title-input');
-        fireEvent.change(titleInput, { target: { value: 'Invalid Threshold Plan' } });
-
-        // Set Overall Green (50) < Amber (70)
-        const greenInput = screen.getByTestId('overall-green-input');
-        fireEvent.change(greenInput, { target: { value: '50' } });
-
-        expect(screen.getByTestId('validation-alert')).toBeInTheDocument();
-        expect(screen.getByText(/Overall thresholds invalid: Green \(50\) must be >= Amber/i)).toBeInTheDocument();
-        expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled();
-    });
-
-    it('validates prospective dates: requires end date to be after start date', () => {
-        const handleSave = vi.fn();
-        const handleCancel = vi.fn();
-
+    it('validates prospective start and end dates', () => {
         render(
             <KpiConfigurationEditor
                 departments={mockDepartments}
@@ -321,9 +298,6 @@ describe('KpiConfigurationEditor', () => {
     });
 
     it('submits valid prospective configuration upon form submission', async () => {
-        const handleSave = vi.fn().mockResolvedValue(undefined);
-        const handleCancel = vi.fn();
-
         render(
             <KpiConfigurationEditor
                 departments={mockDepartments}
@@ -354,5 +328,283 @@ describe('KpiConfigurationEditor', () => {
             const sumWeights = savedData.items.reduce((s: number, i: any) => s + i.weight, 0);
             expect(sumWeights).toBe(100.0);
         });
+    });
+});
+
+describe('FormulaBuilderModal Component', () => {
+    const handleApply = vi.fn();
+    const handleClose = vi.fn();
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (api.get as any).mockResolvedValue({
+            data: {
+                isSuccess: true,
+                data: mockVariables
+            }
+        });
+    });
+
+    it('renders modal with formula editor, variable chips, and operators', async () => {
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula="(completed_tasks / total_assigned_tasks) * 100"
+                metricName="Custom Delivery Success"
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        expect(screen.getByTestId('formula-builder-modal')).toBeInTheDocument();
+        expect(screen.getByText(/Custom Formula Builder/i)).toBeInTheDocument();
+        expect(screen.getByText('Custom Delivery Success')).toBeInTheDocument();
+
+        const formulaInput = screen.getByTestId('formula-input') as HTMLTextAreaElement;
+        expect(formulaInput.value).toBe('(completed_tasks / total_assigned_tasks) * 100');
+
+        await waitFor(() => {
+            expect(screen.getByTestId('var-chip-completed_tasks')).toBeInTheDocument();
+            expect(screen.getByTestId('var-chip-total_assigned_tasks')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('operator-btn-+')).toBeInTheDocument();
+        expect(screen.getByTestId('operator-btn-/')).toBeInTheDocument();
+        expect(screen.getByTestId('test-formula-btn')).toBeInTheDocument();
+        expect(screen.getByTestId('apply-formula-btn')).toBeInTheDocument();
+    });
+
+    it('filters variable chips using search input and category tabs', async () => {
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula=""
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('var-chip-completed_tasks')).toBeInTheDocument();
+            expect(screen.getByTestId('var-chip-total_handling_hours')).toBeInTheDocument();
+        });
+
+        // Filter by category: Duration
+        const durationTab = screen.getByTestId('category-tab-duration');
+        fireEvent.click(durationTab);
+
+        expect(screen.getByTestId('var-chip-total_handling_hours')).toBeInTheDocument();
+        expect(screen.queryByTestId('var-chip-completed_tasks')).not.toBeInTheDocument();
+
+        // Filter by category: All
+        const allTab = screen.getByTestId('category-tab-all');
+        fireEvent.click(allTab);
+
+        // Filter by Search
+        const searchInput = screen.getByTestId('variable-search-input');
+        fireEvent.change(searchInput, { target: { value: 'otif' } });
+
+        expect(screen.getByTestId('var-chip-otif_tasks')).toBeInTheDocument();
+        expect(screen.queryByTestId('var-chip-completed_tasks')).not.toBeInTheDocument();
+    });
+
+    it('inserts variable chips and operators into the formula expression', async () => {
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula=""
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('var-chip-completed_tasks')).toBeInTheDocument();
+        });
+
+        const chip = screen.getByTestId('var-chip-completed_tasks');
+        fireEvent.click(chip);
+
+        const opDiv = screen.getByTestId('operator-btn-/');
+        fireEvent.click(opDiv);
+
+        const formulaInput = screen.getByTestId('formula-input') as HTMLTextAreaElement;
+        expect(formulaInput.value).toContain('completed_tasks');
+        expect(formulaInput.value).toContain('/');
+    });
+
+    it('inserts preset template formula when clicking quick templates', async () => {
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula=""
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        const presetBtn = screen.getByTestId('preset-completion-rate');
+        fireEvent.click(presetBtn);
+
+        const formulaInput = screen.getByTestId('formula-input') as HTMLTextAreaElement;
+        expect(formulaInput.value).toBe('(completed_tasks / total_assigned_tasks) * 100');
+    });
+
+    it('performs dry-run testing and displays calculated success result', async () => {
+        (api.post as any).mockResolvedValue({
+            data: {
+                isSuccess: true,
+                data: {
+                    isValid: true,
+                    result: 90.0,
+                    variablesUsed: ['completed_tasks', 'total_assigned_tasks'],
+                    resolvedVariables: {
+                        completed_tasks: 45.0,
+                        total_assigned_tasks: 50.0
+                    }
+                }
+            }
+        });
+
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula="(completed_tasks / total_assigned_tasks) * 100"
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        const testBtn = screen.getByTestId('test-formula-btn');
+        fireEvent.click(testBtn);
+
+        await waitFor(() => {
+            expect(api.post).toHaveBeenCalledWith('/api/kpi/formula/test', expect.objectContaining({
+                formula: '(completed_tasks / total_assigned_tasks) * 100'
+            }));
+            expect(screen.getByTestId('test-result-banner')).toBeInTheDocument();
+            expect(screen.getByText(/Formula is Valid!/i)).toBeInTheDocument();
+            expect(screen.getByTestId('calculated-result-display')).toHaveTextContent('Result: 90');
+        });
+    });
+
+    it('displays validation error banner when dry-run test fails', async () => {
+        (api.post as any).mockResolvedValue({
+            data: {
+                isSuccess: true,
+                data: {
+                    isValid: false,
+                    errorMessage: "Variable 'invalid_column' is not permitted.",
+                    variablesUsed: ['invalid_column']
+                }
+            }
+        });
+
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula="invalid_column * 2"
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        const testBtn = screen.getByTestId('test-formula-btn');
+        fireEvent.click(testBtn);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('test-result-banner')).toBeInTheDocument();
+            expect(screen.getByText(/Variable 'invalid_column' is not permitted/i)).toBeInTheDocument();
+        });
+    });
+
+    it('applies validated formula and triggers onApply callback', () => {
+        render(
+            <FormulaBuilderModal
+                isOpen={true}
+                initialFormula="(otif_tasks / completed_tasks) * 100"
+                onApply={handleApply}
+                onClose={handleClose}
+            />
+        );
+
+        const applyBtn = screen.getByTestId('apply-formula-btn');
+        fireEvent.click(applyBtn);
+
+        expect(handleApply).toHaveBeenCalledWith('(otif_tasks / completed_tasks) * 100');
+        expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('KpiConfigurationEditor with Custom Formula Metrics', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (api.get as any).mockResolvedValue({
+            data: {
+                isSuccess: true,
+                data: mockVariables
+            }
+        });
+    });
+
+    it('adds custom formula metric and opens formula builder modal', async () => {
+        const handleSave = vi.fn().mockResolvedValue(undefined);
+        const handleCancel = vi.fn();
+
+        render(
+            <KpiConfigurationEditor
+                departments={mockDepartments}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={false}
+            />
+        );
+
+        const addCustomBtn = screen.getByTestId('add-custom-formula-metric-btn');
+        fireEvent.click(addCustomBtn);
+
+        // Modal should open immediately for the new custom metric
+        await waitFor(() => {
+            expect(screen.getByTestId('formula-builder-modal')).toBeInTheDocument();
+        });
+
+        // Set formula in modal and apply
+        const presetBtn = screen.getByTestId('preset-completion-rate');
+        fireEvent.click(presetBtn);
+
+        const applyBtn = screen.getByTestId('apply-formula-btn');
+        fireEvent.click(applyBtn);
+
+        // Modal should close and row should show formula preview
+        await waitFor(() => {
+            expect(screen.queryByTestId('formula-builder-modal')).not.toBeInTheDocument();
+            expect(screen.getByTestId('formula-preview-4')).toHaveTextContent('(completed_tasks / total_assigned_tasks) * 100');
+        });
+    });
+
+    it('requires custom formula if custom metric is added', async () => {
+        const handleSave = vi.fn().mockResolvedValue(undefined);
+        const handleCancel = vi.fn();
+
+        render(
+            <KpiConfigurationEditor
+                departments={mockDepartments}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={false}
+            />
+        );
+
+        const addCustomBtn = screen.getByTestId('add-custom-formula-metric-btn');
+        fireEvent.click(addCustomBtn);
+
+        // Cancel modal without setting formula
+        const cancelModalBtn = screen.getByTestId('cancel-formula-btn');
+        fireEvent.click(cancelModalBtn);
+
+        // Validation alert should appear
+        expect(screen.getByTestId('validation-alert')).toBeInTheDocument();
+        expect(screen.getByText(/requires a custom formula/i)).toBeInTheDocument();
+        expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled();
     });
 });

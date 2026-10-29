@@ -176,6 +176,8 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                 amberThreshold: i.amberThreshold,
                 redThreshold: i.redThreshold,
                 isLowerBetter: i.isLowerBetter,
+                isCustomFormula: i.isCustomFormula,
+                customFormula: i.customFormula,
                 order: idx + 1
             }))
         };
@@ -358,25 +360,26 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                         <option value="inactive">Inactive Only</option>
                     </select>
                 </div>
-                <div style={{ fontSize: 12.5, color: 'var(--tt)' }}>
-                    Total: <strong>{filteredConfigurations.length}</strong> configuration{filteredConfigurations.length === 1 ? '' : 's'}
+
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Showing <strong>{filteredConfigurations.length}</strong> of <strong>{configurations.length}</strong> configurations
                 </div>
             </div>
 
-            {/* Content / Loading / Error */}
+            {/* Content List / Cards */}
             {loading ? (
                 <div className="card" style={{ padding: 40, textAlign: 'center' }}>
-                    <Loader2 size={24} className="spin" style={{ margin: '0 auto 8px', color: 'var(--teal)' }} />
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>Loading KPI configurations...</p>
+                    <Loader2 size={30} className="spin" style={{ color: 'var(--teal)', margin: '0 auto 10px' }} />
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Loading KPI configurations...</p>
                 </div>
             ) : apiError ? (
-                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
-                    <AlertCircle size={24} style={{ color: 'var(--err)', margin: '0 auto 8px' }} />
-                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{apiError}</p>
+                <div className="card" style={{ padding: 30, textAlign: 'center', borderColor: 'var(--err-r)' }}>
+                    <AlertCircle size={32} style={{ color: 'var(--err)', margin: '0 auto 10px' }} />
+                    <p style={{ margin: '0 0 12px', color: 'var(--err)', fontWeight: 600 }}>{apiError}</p>
                     <button
                         className="btn btn-secondary btn-sm"
-                        style={{ marginTop: 12 }}
                         onClick={fetchConfigurations}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
                         <RotateCcw size={13} /> Try Again
                     </button>
@@ -398,6 +401,7 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                 <div className="kpi-cards-grid" data-testid="kpi-cards-grid">
                     {filteredConfigurations.map(cfg => {
                         const isDefault = isDefaultConfig(cfg);
+                        const hasCustomFormula = cfg.items?.some(i => i.isCustomFormula);
                         const startDateStr = cfg.effectiveStartDate ? new Date(cfg.effectiveStartDate).toLocaleDateString() : '';
                         const endDateStr = cfg.effectiveEndDate ? new Date(cfg.effectiveEndDate).toLocaleDateString() : 'Ongoing';
 
@@ -415,6 +419,11 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                                             {cfg.targetRole && (
                                                 <span className="kpi-badge kpi-badge-teal">
                                                     {cfg.targetRole}
+                                                </span>
+                                            )}
+                                            {hasCustomFormula && (
+                                                <span className="kpi-badge kpi-badge-teal" title="Contains custom formula metrics">
+                                                    📐 Custom Formula
                                                 </span>
                                             )}
                                             <span className={`kpi-badge ${cfg.isActive ? 'kpi-badge-active' : 'kpi-badge-inactive'}`}>
@@ -456,8 +465,12 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                                         </div>
                                         <div className="kpi-card-items-list">
                                             {(cfg.items || []).map((item, idx) => (
-                                                <span key={idx} className="kpi-metric-tag" title={item.name}>
-                                                    {item.metricCode} ({item.weight}%)
+                                                <span
+                                                    key={idx}
+                                                    className="kpi-metric-tag"
+                                                    title={item.isCustomFormula ? `${item.name}: ${item.customFormula || 'No formula'}` : item.name}
+                                                >
+                                                    {item.metricCode} ({item.weight}%){item.isCustomFormula ? ' 📐' : ''}
                                                 </span>
                                             ))}
                                         </div>
