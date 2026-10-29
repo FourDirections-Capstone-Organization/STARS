@@ -42,6 +42,8 @@ public class KpiMetricValueDTO
     public double AmberThreshold { get; set; }
     public double RedThreshold { get; set; }
     public bool IsLowerBetter { get; set; }
+    public bool IsCustomFormula { get; set; } = false;
+    public string? CustomFormula { get; set; }
     public string Rating { get; set; } = "Green"; // "Green", "Amber", "Red"
     public double WeightedScore { get; set; }
 }
