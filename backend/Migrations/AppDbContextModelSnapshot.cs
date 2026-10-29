@@ -195,6 +195,8 @@ namespace Backend.Migrations
 
                     b.HasIndex("TargetEntity", "TargetEntityId");
 
+                    b.HasIndex("TargetEntity", "TargetEntityId", "ActionType", "Timestamp");
+
                     b.ToTable("AuditLogs");
                 });
 
@@ -405,6 +407,130 @@ namespace Backend.Migrations
                     b.HasIndex("DepartmentId");
 
                     b.ToTable("JobPositions");
+                });
+
+            modelBuilder.Entity("Backend.Models.KpiConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("EffectiveEndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EffectiveStartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TargetRole")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("TargetRole");
+
+                    b.HasIndex("IsActive", "EffectiveStartDate", "EffectiveEndDate");
+
+                    b.ToTable("KpiConfigurations");
+                });
+
+            modelBuilder.Entity("Backend.Models.KpiItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("AmberThreshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomFormula")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double>("GreenThreshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("IsCustomFormula")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLowerBetter")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("KpiConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MetricCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("RedThreshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("TargetValue")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KpiConfigurationId");
+
+                    b.HasIndex("MetricCode");
+
+                    b.ToTable("KpiItems");
                 });
 
             modelBuilder.Entity("Backend.Models.Notification", b =>
@@ -1114,6 +1240,9 @@ namespace Backend.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid?>("TeamLeaderId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1125,6 +1254,8 @@ namespace Backend.Migrations
 
                     b.HasIndex("Name")
                         .IsUnique();
+
+                    b.HasIndex("TeamLeaderId");
 
                     b.ToTable("Teams");
                 });
@@ -1160,6 +1291,11 @@ namespace Backend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AllowedSystems")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("AvailabilityStatus")
                         .HasColumnType("integer");
 
@@ -1172,6 +1308,14 @@ namespace Backend.Migrations
 
                     b.Property<Guid?>("DepartmentId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("DmsAreas")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("DmsRole")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -1195,6 +1339,10 @@ namespace Backend.Migrations
 
                     b.Property<string>("FirstName")
                         .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("FomsRole")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
@@ -1354,6 +1502,34 @@ namespace Backend.Migrations
                         .IsRequired();
 
                     b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Backend.Models.KpiConfiguration", b =>
+                {
+                    b.HasOne("Backend.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Backend.Models.KpiItem", b =>
+                {
+                    b.HasOne("Backend.Models.KpiConfiguration", "KpiConfiguration")
+                        .WithMany("Items")
+                        .HasForeignKey("KpiConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("KpiConfiguration");
                 });
 
             modelBuilder.Entity("Backend.Models.Notification", b =>
@@ -1565,9 +1741,16 @@ namespace Backend.Migrations
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Backend.Models.User", "TeamLeader")
+                        .WithMany()
+                        .HasForeignKey("TeamLeaderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Department");
+
+                    b.Navigation("TeamLeader");
                 });
 
             modelBuilder.Entity("Backend.Models.TeamMember", b =>
@@ -1616,6 +1799,11 @@ namespace Backend.Migrations
             modelBuilder.Entity("Backend.Models.JobPosition", b =>
                 {
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("Backend.Models.KpiConfiguration", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Backend.Models.Task", b =>

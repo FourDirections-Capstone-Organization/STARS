@@ -323,6 +323,47 @@ using (var scope = app.Services.CreateScope())
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DmsAreas"" character varying(250) NULL;
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""FomsRole"" character varying(50) NULL;
                 ALTER TABLE ""Teams"" ADD COLUMN IF NOT EXISTS ""TeamLeaderId"" uuid NULL;
+
+                CREATE TABLE IF NOT EXISTS ""KpiConfigurations"" (
+                    ""Id"" uuid NOT NULL PRIMARY KEY,
+                    ""Title"" character varying(150) NOT NULL,
+                    ""Description"" character varying(500) NULL,
+                    ""TargetRole"" character varying(50) NULL,
+                    ""DepartmentId"" uuid NULL REFERENCES ""Departments"" (""Id"") ON DELETE SET NULL,
+                    ""EffectiveStartDate"" timestamp with time zone NOT NULL,
+                    ""EffectiveEndDate"" timestamp with time zone NULL,
+                    ""IsActive"" boolean NOT NULL DEFAULT true,
+                    ""CreatedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+                    ""CreatedAt"" timestamp with time zone NOT NULL,
+                    ""UpdatedAt"" timestamp with time zone NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_KpiConfigurations_IsActive_EffectiveStartDate_EffectiveEndDate"" ON ""KpiConfigurations"" (""IsActive"", ""EffectiveStartDate"", ""EffectiveEndDate"");
+                CREATE INDEX IF NOT EXISTS ""IX_KpiConfigurations_DepartmentId"" ON ""KpiConfigurations"" (""DepartmentId"");
+                CREATE INDEX IF NOT EXISTS ""IX_KpiConfigurations_TargetRole"" ON ""KpiConfigurations"" (""TargetRole"");
+
+                CREATE TABLE IF NOT EXISTS ""KpiItems"" (
+                    ""Id"" uuid NOT NULL PRIMARY KEY,
+                    ""KpiConfigurationId"" uuid NOT NULL REFERENCES ""KpiConfigurations"" (""Id"") ON DELETE CASCADE,
+                    ""Name"" character varying(100) NOT NULL,
+                    ""MetricCode"" character varying(50) NOT NULL,
+                    ""Description"" character varying(500) NULL,
+                    ""Weight"" double precision NOT NULL,
+                    ""Unit"" character varying(20) NOT NULL,
+                    ""TargetValue"" double precision NOT NULL,
+                    ""GreenThreshold"" double precision NOT NULL,
+                    ""AmberThreshold"" double precision NOT NULL,
+                    ""RedThreshold"" double precision NOT NULL,
+                    ""IsLowerBetter"" boolean NOT NULL DEFAULT false,
+                    ""IsCustomFormula"" boolean NOT NULL DEFAULT false,
+                    ""CustomFormula"" character varying(1000) NULL,
+                    ""Order"" integer NOT NULL DEFAULT 1,
+                    ""CreatedAt"" timestamp with time zone NOT NULL,
+                    ""UpdatedAt"" timestamp with time zone NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_KpiItems_KpiConfigurationId"" ON ""KpiItems"" (""KpiConfigurationId"");
+                CREATE INDEX IF NOT EXISTS ""IX_KpiItems_MetricCode"" ON ""KpiItems"" (""MetricCode"");
+
+                CREATE INDEX IF NOT EXISTS ""IX_AuditLogs_TargetEntity_TargetEntityId_ActionType_Timestamp"" ON ""AuditLogs"" (""TargetEntity"", ""TargetEntityId"", ""ActionType"", ""Timestamp"");
             ");
             Console.WriteLine("[STARTUP] FOMS Integration tables and multi-system user columns verified/created.");
         }
@@ -349,6 +390,9 @@ using (var scope = app.Services.CreateScope())
 
         var notificationSettingsService = scope.ServiceProvider.GetRequiredService<INotificationSettingsService>();
         await notificationSettingsService.SeedDefaultSettingsAsync();
+
+        // Seed default KPI configuration if needed
+        await KpiDefaultSeeder.SeedDefaultKpiConfigurationAsync(db);
         
         Console.WriteLine("[STARTUP] Canonical department, position, and notification settings verified.");
     }
