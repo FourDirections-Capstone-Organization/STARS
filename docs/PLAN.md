@@ -10,6 +10,7 @@
 - Baseline entities confirmed ready for Phase 2 threshold additions.
 - Overall score thresholds (Green: 85.0, Amber: 70.0, Red: 60.0) added to KpiConfiguration with EF Core migration AddOverallThresholdsToKpiConfiguration.
 - Configuration DTOs (KpiConfigurationRequestDTO, KpiItemRequestDTO, response DTOs) and KpiConfigurationValidator implemented and verified with 26 unit tests covering 100% weight sum, threshold hierarchies, and prospective dates.
+- Manager CRUD endpoints (GetAll, GetById, Create, Update, Delete) implemented in KpiController with validation, role/department filtering, and cascade deletion handling; KpiCalculationEngine updated to evaluate custom overall thresholds from persisted configuration, verified with 657 passing backend tests.
 
 ## Implementation Steps
 - [x] Step 1: Confirm starting codebase state, Phase 1 KPI models and test baselines
@@ -18,7 +19,7 @@
   - Verify: Migration adds overall threshold fields and database migration applies cleanly
 - [x] Step 3: Implement configuration DTOs and validation for prospective weights and thresholds
   - Verify: Unit tests confirm 100% weight sum, threshold validation, and prospective dates
-- [ ] Step 4: Implement Manager CRUD endpoints in KpiController and update rating engine
+- [x] Step 4: Implement Manager CRUD endpoints in KpiController and update rating engine
   - Verify: Controller persists prospective configs and engine uses custom overall thresholds
 - [ ] Step 5: Build Manager KPI configuration UI with weight and threshold controls
   - Verify: UI component validates 100% weight sum and submits prospective configurations
