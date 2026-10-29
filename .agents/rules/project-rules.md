@@ -115,3 +115,13 @@ Always verify commands in their designated directory or pass appropriate paths:
   2. Full backend tests pass (`dotnet test`).
   3. Full frontend tests pass (`npm test`).
   4. The user has explicitly approved promoting the finished feature branch to `refactoring/bug-fix`.
+
+---
+
+## 4. Planning Documents
+- `docs/ROADMAP.md` exists only while a large feature is in progress. It holds the goal, design notes, decisions, and phases, not detailed steps.
+- `docs/PLAN.md` holds the steps for the current phase or task only, never for later phases.
+- Never plan or implement a later phase unless the user asks.
+- When a phase finishes: tick the phase in `docs/ROADMAP.md`, add a summary of at most 3 lines under it, and move the finished plan to `docs/archive/plans/phase-N.md`.
+- When all phases finish: set "Status: Complete" in `docs/ROADMAP.md` and ask the user before archiving it to `docs/archive/`.
+- No secrets or credentials in any docs file.
