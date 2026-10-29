@@ -7,6 +7,7 @@ using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Modules.Analytics;
+using Backend.Models.Enums;
 using Backend.Modules.RoleBasedAccessControl;
 
 namespace Backend.Controllers;
@@ -106,6 +107,246 @@ public class KpiController : ControllerBase
         };
 
         return await EvaluateEmployeeKpi(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Evaluates KPI metrics hierarchically across Company, Department, Team, or Employee scope with optional role and timeframe filters.
+    /// </summary>
+    [HttpGet("scope")]
+    [HttpGet("hierarchy")]
+    public async Task<IActionResult> EvaluateHierarchicalScope(
+        [FromQuery] KpiScopeFilterDTO? filter = null,
+        CancellationToken cancellationToken = default)
+    {
+        filter ??= new KpiScopeFilterDTO();
+
+        if (filter.DepartmentId.HasValue && filter.DepartmentId.Value == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure("Department ID cannot be an empty GUID."));
+        }
+
+        if (filter.TeamId.HasValue && filter.TeamId.Value == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure("Team ID cannot be an empty GUID."));
+        }
+
+        if (filter.EmployeeId.HasValue && filter.EmployeeId.Value == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure("Employee ID cannot be an empty GUID."));
+        }
+
+        var (roleValid, parsedRole, roleError) = TryParseRole(filter.Role);
+        if (!roleValid)
+        {
+            return BadRequest(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure(roleError!));
+        }
+
+        var endDate = filter.EndDate ?? DateTime.UtcNow;
+        var startDate = filter.StartDate ?? endDate.AddDays(-30);
+        if (startDate > endDate)
+        {
+            (startDate, endDate) = (endDate, startDate);
+        }
+
+        try
+        {
+            if (filter.EmployeeId.HasValue)
+            {
+                var empResult = await _kpiCalculationEngine.CalculateEmployeeKpiAsync(
+                    filter.EmployeeId.Value,
+                    startDate,
+                    endDate,
+                    filter.ConfigurationId,
+                    cancellationToken);
+
+                var scopeResult = new KpiHierarchyScopeResultDTO
+                {
+                    ScopeLevel = "Employee",
+                    ScopeId = empResult.EmployeeId,
+                    ScopeName = empResult.EmployeeName,
+                    ParentScopeId = empResult.DepartmentId,
+                    ParentScopeName = empResult.DepartmentName,
+                    PeriodStart = empResult.PeriodStart,
+                    PeriodEnd = empResult.PeriodEnd,
+                    RoleFilter = parsedRole?.ToString() ?? empResult.Role,
+                    ConfigurationId = empResult.ConfigurationId,
+                    ConfigurationTitle = empResult.ConfigurationTitle,
+                    TotalDepartments = empResult.DepartmentId.HasValue ? 1 : 0,
+                    TotalTeams = 0,
+                    TotalEmployees = 1,
+                    TotalAssignedTasks = empResult.TotalAssignedTasks,
+                    CompletedTasksCount = empResult.CompletedTasksCount,
+                    OnTimeTasksCount = empResult.OnTimeTasksCount,
+                    InFullTasksCount = empResult.InFullTasksCount,
+                    OtifTasksCount = empResult.OtifTasksCount,
+                    ReworkTasksCount = empResult.ReworkTasksCount,
+                    AccurateTasksCount = empResult.AccurateTasksCount,
+                    TotalHandlingHours = empResult.TotalHandlingHours,
+                    OverallScore = empResult.OverallScore,
+                    AverageEmployeeScore = empResult.OverallScore,
+                    OverallRating = empResult.OverallRating,
+                    Metrics = empResult.Metrics,
+                    Employees = new List<EmployeeKpiEvaluationResultDTO> { empResult }
+                };
+
+                return Ok(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Success(
+                    scopeResult,
+                    "Hierarchical KPI evaluation calculated successfully."));
+            }
+
+            var result = await _kpiCalculationEngine.CalculateHierarchicalScopeAsync(
+                filter.DepartmentId,
+                filter.TeamId,
+                startDate,
+                endDate,
+                parsedRole,
+                filter.ConfigurationId,
+                cancellationToken);
+
+            return Ok(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Success(
+                result,
+                "Hierarchical KPI evaluation calculated successfully."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Scope target not found for KPI evaluation: {Message}", ex.Message);
+            return NotFound(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure(ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid argument for KPI scope evaluation: {Message}", ex.Message);
+            return BadRequest(ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error evaluating KPI scope hierarchy.");
+            return StatusCode(500, ApiResponseDTO<KpiHierarchyScopeResultDTO>.Failure(
+                "An unexpected error occurred while calculating hierarchical KPI evaluation."));
+        }
+    }
+
+    /// <summary>
+    /// Evaluates KPI metrics aggregated for a specific department with optional role, timeframe, and configuration filters.
+    /// </summary>
+    [HttpGet("department/{departmentId:guid}")]
+    public async Task<IActionResult> EvaluateDepartmentKpi(
+        [FromRoute] Guid departmentId,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] string? role = null,
+        [FromQuery] Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (departmentId == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Failure("Department ID is required."));
+        }
+
+        var (roleValid, parsedRole, roleError) = TryParseRole(role);
+        if (!roleValid)
+        {
+            return BadRequest(ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Failure(roleError!));
+        }
+
+        var normalizedEnd = endDate ?? DateTime.UtcNow;
+        var normalizedStart = startDate ?? normalizedEnd.AddDays(-30);
+        if (normalizedStart > normalizedEnd)
+        {
+            (normalizedStart, normalizedEnd) = (normalizedEnd, normalizedStart);
+        }
+
+        try
+        {
+            var result = await _kpiCalculationEngine.CalculateDepartmentKpiAsync(
+                departmentId,
+                normalizedStart,
+                normalizedEnd,
+                parsedRole,
+                configurationId,
+                cancellationToken);
+
+            return Ok(ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Success(
+                result,
+                "Department KPI evaluation calculated successfully."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Department not found for KPI evaluation: {DepartmentId}", departmentId);
+            return NotFound(ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Failure(ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid argument for department KPI evaluation: {Message}", ex.Message);
+            return BadRequest(ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error evaluating KPI for department {DepartmentId}", departmentId);
+            return StatusCode(500, ApiResponseDTO<DepartmentKpiEvaluationResultDTO>.Failure(
+                "An unexpected error occurred while calculating department KPI evaluation."));
+        }
+    }
+
+    /// <summary>
+    /// Evaluates KPI metrics aggregated for a specific team with optional role, timeframe, and configuration filters.
+    /// </summary>
+    [HttpGet("team/{teamId:guid}")]
+    public async Task<IActionResult> EvaluateTeamKpi(
+        [FromRoute] Guid teamId,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] string? role = null,
+        [FromQuery] Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (teamId == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<TeamKpiEvaluationResultDTO>.Failure("Team ID is required."));
+        }
+
+        var (roleValid, parsedRole, roleError) = TryParseRole(role);
+        if (!roleValid)
+        {
+            return BadRequest(ApiResponseDTO<TeamKpiEvaluationResultDTO>.Failure(roleError!));
+        }
+
+        var normalizedEnd = endDate ?? DateTime.UtcNow;
+        var normalizedStart = startDate ?? normalizedEnd.AddDays(-30);
+        if (normalizedStart > normalizedEnd)
+        {
+            (normalizedStart, normalizedEnd) = (normalizedEnd, normalizedStart);
+        }
+
+        try
+        {
+            var result = await _kpiCalculationEngine.CalculateTeamKpiAsync(
+                teamId,
+                normalizedStart,
+                normalizedEnd,
+                parsedRole,
+                configurationId,
+                cancellationToken);
+
+            return Ok(ApiResponseDTO<TeamKpiEvaluationResultDTO>.Success(
+                result,
+                "Team KPI evaluation calculated successfully."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Team not found for KPI evaluation: {TeamId}", teamId);
+            return NotFound(ApiResponseDTO<TeamKpiEvaluationResultDTO>.Failure(ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid argument for team KPI evaluation: {Message}", ex.Message);
+            return BadRequest(ApiResponseDTO<TeamKpiEvaluationResultDTO>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error evaluating KPI for team {TeamId}", teamId);
+            return StatusCode(500, ApiResponseDTO<TeamKpiEvaluationResultDTO>.Failure(
+                "An unexpected error occurred while calculating team KPI evaluation."));
+        }
     }
 
     #endregion
@@ -576,6 +817,21 @@ public class KpiController : ControllerBase
     #endregion
 
     #region Helper Methods
+
+    private static (bool IsValid, UserRole? Role, string? ErrorMessage) TryParseRole(string? roleString)
+    {
+        if (string.IsNullOrWhiteSpace(roleString))
+        {
+            return (true, null, null);
+        }
+
+        if (Enum.TryParse<UserRole>(roleString.Trim(), ignoreCase: true, out var roleVal))
+        {
+            return (true, roleVal, null);
+        }
+
+        return (false, null, $"Invalid role filter '{roleString}'. Valid roles: {string.Join(", ", Enum.GetNames<UserRole>())}");
+    }
 
     private Guid? GetCurrentUserId()
     {

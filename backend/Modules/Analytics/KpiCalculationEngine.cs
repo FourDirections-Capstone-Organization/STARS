@@ -155,6 +155,7 @@ public class KpiCalculationEngine : IKpiCalculationEngine
             EmployeeId = employee.Id,
             EmployeeName = $"{employee.FirstName} {employee.LastName}".Trim(),
             EmployeeNumber = employee.EmployeeNumber,
+            DepartmentId = employee.DepartmentId,
             DepartmentName = employee.Department?.Name,
             JobPositionTitle = employee.JobPosition?.Name,
             Role = employee.Role.ToString(),

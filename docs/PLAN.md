@@ -14,8 +14,10 @@
 - [x] Step 2: Implement hierarchical scope aggregation in KpiCalculationEngine and scope DTOs
   - Verify: Engine unit tests verify Department, Team, and role-filtered metric calculations
   - Confirmed: Hierarchical scope DTOs and aggregation methods (Department, Team, Company scope, and role filtering) implemented and verified by 13 unit tests; 757 backend and 140 frontend tests passing.
-- [ ] Step 3: Add hierarchical evaluation endpoints in KpiController with scope filters
+- [x] Step 3: Add hierarchical evaluation endpoints in KpiController with scope filters
   - Verify: Controller integration tests confirm Department, Team, role, and timeframe filtering
+  - Confirmed: Hierarchical evaluation endpoints (`/api/kpi/scope`, `/api/kpi/department/{id}`, `/api/kpi/team/{id}`) implemented with role, timeframe, and scope filters; verified by 26 controller integration and unit tests (783 backend and 140 frontend tests passing).
+
 - [ ] Step 4: Build hierarchical drill-down UI with scope controls and breadcrumb navigation
   - Verify: Component tests verify Department to Team to Employee drill-down and role filtering
 - [ ] Step 5: Integrate hierarchical drill-down view into Manager dashboard KPI tracking

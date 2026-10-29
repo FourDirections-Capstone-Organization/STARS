@@ -5,6 +5,7 @@ public class EmployeeKpiEvaluationResultDTO
     public Guid EmployeeId { get; set; }
     public string EmployeeName { get; set; } = string.Empty;
     public string EmployeeNumber { get; set; } = string.Empty;
+    public Guid? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
     public string? JobPositionTitle { get; set; }
     public string? Role { get; set; }
