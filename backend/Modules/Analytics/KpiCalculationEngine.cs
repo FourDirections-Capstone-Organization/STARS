@@ -27,6 +27,8 @@ public class KpiCalculationEngine : IKpiCalculationEngine
         _variableRegistry = variableRegistry ?? new KpiVariableRegistry();
     }
 
+    #region Single Employee Evaluation
+
     public async System.Threading.Tasks.Task<EmployeeKpiEvaluationResultDTO> CalculateEmployeeKpiAsync(
         Guid employeeId,
         DateTime startDate,
@@ -137,7 +139,559 @@ public class KpiCalculationEngine : IKpiCalculationEngine
 
         int accurateCount = Math.Max(0, completedCount - reworkCount);
 
-        // Core metric calculations
+        var (metrics, overallScore, overallRating) = EvaluateMetrics(
+            config,
+            totalAssigned,
+            completedCount,
+            onTimeCount,
+            inFullCount,
+            otifCount,
+            reworkCount,
+            accurateCount,
+            totalHandlingHours);
+
+        return new EmployeeKpiEvaluationResultDTO
+        {
+            EmployeeId = employee.Id,
+            EmployeeName = $"{employee.FirstName} {employee.LastName}".Trim(),
+            EmployeeNumber = employee.EmployeeNumber,
+            DepartmentName = employee.Department?.Name,
+            JobPositionTitle = employee.JobPosition?.Name,
+            Role = employee.Role.ToString(),
+            PeriodStart = startDate,
+            PeriodEnd = endDate,
+            ConfigurationId = config.Id,
+            ConfigurationTitle = config.Title,
+            TotalAssignedTasks = totalAssigned,
+            CompletedTasksCount = completedCount,
+            OnTimeTasksCount = onTimeCount,
+            InFullTasksCount = inFullCount,
+            OtifTasksCount = otifCount,
+            ReworkTasksCount = reworkCount,
+            AccurateTasksCount = accurateCount,
+            TotalHandlingHours = Math.Round(totalHandlingHours, 2),
+            OverallScore = overallScore,
+            OverallRating = overallRating,
+            Metrics = metrics
+        };
+    }
+
+    #endregion
+
+    #region Hierarchical Scope Aggregation
+
+    public async System.Threading.Tasks.Task<DepartmentKpiEvaluationResultDTO> CalculateDepartmentKpiAsync(
+        Guid departmentId,
+        DateTime startDate,
+        DateTime endDate,
+        UserRole? roleFilter = null,
+        Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStart = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var normalizedEnd = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        if (normalizedStart > normalizedEnd)
+        {
+            (normalizedStart, normalizedEnd) = (normalizedEnd, normalizedStart);
+        }
+
+        var department = await _db.Departments
+            .Include(d => d.Users)
+                .ThenInclude(u => u.JobPosition)
+            .FirstOrDefaultAsync(d => d.Id == departmentId, cancellationToken);
+
+        if (department == null)
+        {
+            throw new KeyNotFoundException($"Department with ID '{departmentId}' was not found.");
+        }
+
+        var teams = await _db.Teams
+            .Include(t => t.TeamLeader)
+            .Include(t => t.Members)
+                .ThenInclude(m => m.User)
+            .Where(t => t.DepartmentId == departmentId && t.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var matchingUsers = department.Users.AsEnumerable();
+        if (roleFilter.HasValue)
+        {
+            matchingUsers = matchingUsers.Where(u => u.Role == roleFilter.Value);
+        }
+        var userList = matchingUsers.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToList();
+
+        var employeeEvaluations = new List<EmployeeKpiEvaluationResultDTO>();
+        foreach (var user in userList)
+        {
+            var eval = await CalculateEmployeeKpiAsync(user.Id, normalizedStart, normalizedEnd, configurationId, cancellationToken);
+            employeeEvaluations.Add(eval);
+        }
+
+        var config = await ResolveConfigurationForScopeAsync(departmentId, roleFilter, normalizedStart, normalizedEnd, configurationId, cancellationToken);
+
+        return AggregateDepartmentEvaluation(
+            department,
+            teams,
+            employeeEvaluations,
+            normalizedStart,
+            normalizedEnd,
+            roleFilter?.ToString(),
+            config);
+    }
+
+    public async System.Threading.Tasks.Task<TeamKpiEvaluationResultDTO> CalculateTeamKpiAsync(
+        Guid teamId,
+        DateTime startDate,
+        DateTime endDate,
+        UserRole? roleFilter = null,
+        Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStart = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var normalizedEnd = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        if (normalizedStart > normalizedEnd)
+        {
+            (normalizedStart, normalizedEnd) = (normalizedEnd, normalizedStart);
+        }
+
+        var team = await _db.Teams
+            .Include(t => t.Department)
+            .Include(t => t.TeamLeader)
+            .Include(t => t.Members)
+                .ThenInclude(m => m.User)
+                    .ThenInclude(u => u!.JobPosition)
+            .Include(t => t.Members)
+                .ThenInclude(m => m.User)
+                    .ThenInclude(u => u!.Department)
+            .FirstOrDefaultAsync(t => t.Id == teamId, cancellationToken);
+
+        if (team == null)
+        {
+            throw new KeyNotFoundException($"Team with ID '{teamId}' was not found.");
+        }
+
+        var memberUsers = team.Members
+            .Where(m => m.User != null)
+            .Select(m => m.User!)
+            .DistinctBy(u => u.Id)
+            .AsEnumerable();
+
+        if (roleFilter.HasValue)
+        {
+            memberUsers = memberUsers.Where(u => u.Role == roleFilter.Value);
+        }
+        var userList = memberUsers.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToList();
+
+        var memberEvaluations = new List<EmployeeKpiEvaluationResultDTO>();
+        foreach (var user in userList)
+        {
+            var eval = await CalculateEmployeeKpiAsync(user.Id, normalizedStart, normalizedEnd, configurationId, cancellationToken);
+            memberEvaluations.Add(eval);
+        }
+
+        var config = await ResolveConfigurationForScopeAsync(team.DepartmentId, roleFilter, normalizedStart, normalizedEnd, configurationId, cancellationToken);
+
+        return AggregateTeamEvaluation(
+            team,
+            memberEvaluations,
+            normalizedStart,
+            normalizedEnd,
+            roleFilter?.ToString(),
+            config);
+    }
+
+    public async System.Threading.Tasks.Task<KpiHierarchyScopeResultDTO> CalculateHierarchicalScopeAsync(
+        Guid? departmentId,
+        Guid? teamId,
+        DateTime startDate,
+        DateTime endDate,
+        UserRole? roleFilter = null,
+        Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStart = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var normalizedEnd = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        if (normalizedStart > normalizedEnd)
+        {
+            (normalizedStart, normalizedEnd) = (normalizedEnd, normalizedStart);
+        }
+
+        if (teamId.HasValue)
+        {
+            var teamResult = await CalculateTeamKpiAsync(teamId.Value, normalizedStart, normalizedEnd, roleFilter, configurationId, cancellationToken);
+            return new KpiHierarchyScopeResultDTO
+            {
+                ScopeLevel = "Team",
+                ScopeId = teamResult.TeamId,
+                ScopeName = teamResult.TeamName,
+                ParentScopeId = teamResult.DepartmentId,
+                ParentScopeName = teamResult.DepartmentName,
+                PeriodStart = normalizedStart,
+                PeriodEnd = normalizedEnd,
+                RoleFilter = roleFilter?.ToString(),
+                ConfigurationId = teamResult.ConfigurationId,
+                ConfigurationTitle = teamResult.ConfigurationTitle,
+                TotalDepartments = teamResult.DepartmentId.HasValue ? 1 : 0,
+                TotalTeams = 1,
+                TotalEmployees = teamResult.TotalMembers,
+                TotalAssignedTasks = teamResult.TotalAssignedTasks,
+                CompletedTasksCount = teamResult.CompletedTasksCount,
+                OnTimeTasksCount = teamResult.OnTimeTasksCount,
+                InFullTasksCount = teamResult.InFullTasksCount,
+                OtifTasksCount = teamResult.OtifTasksCount,
+                ReworkTasksCount = teamResult.ReworkTasksCount,
+                AccurateTasksCount = teamResult.AccurateTasksCount,
+                TotalHandlingHours = teamResult.TotalHandlingHours,
+                OverallScore = teamResult.OverallScore,
+                AverageEmployeeScore = teamResult.AverageEmployeeScore,
+                OverallRating = teamResult.OverallRating,
+                Metrics = teamResult.Metrics,
+                Teams = new List<TeamKpiSummaryDTO>
+                {
+                    new()
+                    {
+                        TeamId = teamResult.TeamId,
+                        TeamName = teamResult.TeamName,
+                        DepartmentId = teamResult.DepartmentId,
+                        DepartmentName = teamResult.DepartmentName,
+                        TeamLeaderId = teamResult.TeamLeaderId,
+                        TeamLeaderName = teamResult.TeamLeaderName,
+                        MemberCount = teamResult.TotalMembers,
+                        TotalAssignedTasks = teamResult.TotalAssignedTasks,
+                        CompletedTasksCount = teamResult.CompletedTasksCount,
+                        OverallScore = teamResult.OverallScore,
+                        OverallRating = teamResult.OverallRating
+                    }
+                },
+                Employees = teamResult.Employees
+            };
+        }
+
+        if (departmentId.HasValue)
+        {
+            var deptResult = await CalculateDepartmentKpiAsync(departmentId.Value, normalizedStart, normalizedEnd, roleFilter, configurationId, cancellationToken);
+            return new KpiHierarchyScopeResultDTO
+            {
+                ScopeLevel = "Department",
+                ScopeId = deptResult.DepartmentId,
+                ScopeName = deptResult.DepartmentName,
+                PeriodStart = normalizedStart,
+                PeriodEnd = normalizedEnd,
+                RoleFilter = roleFilter?.ToString(),
+                ConfigurationId = deptResult.ConfigurationId,
+                ConfigurationTitle = deptResult.ConfigurationTitle,
+                TotalDepartments = 1,
+                TotalTeams = deptResult.TotalTeams,
+                TotalEmployees = deptResult.TotalEmployees,
+                TotalAssignedTasks = deptResult.TotalAssignedTasks,
+                CompletedTasksCount = deptResult.CompletedTasksCount,
+                OnTimeTasksCount = deptResult.OnTimeTasksCount,
+                InFullTasksCount = deptResult.InFullTasksCount,
+                OtifTasksCount = deptResult.OtifTasksCount,
+                ReworkTasksCount = deptResult.ReworkTasksCount,
+                AccurateTasksCount = deptResult.AccurateTasksCount,
+                TotalHandlingHours = deptResult.TotalHandlingHours,
+                OverallScore = deptResult.OverallScore,
+                AverageEmployeeScore = deptResult.AverageEmployeeScore,
+                OverallRating = deptResult.OverallRating,
+                Metrics = deptResult.Metrics,
+                Departments = new List<DepartmentKpiSummaryDTO>
+                {
+                    new()
+                    {
+                        DepartmentId = deptResult.DepartmentId,
+                        DepartmentName = deptResult.DepartmentName,
+                        TotalEmployees = deptResult.TotalEmployees,
+                        TotalTeams = deptResult.TotalTeams,
+                        TotalAssignedTasks = deptResult.TotalAssignedTasks,
+                        CompletedTasksCount = deptResult.CompletedTasksCount,
+                        OverallScore = deptResult.OverallScore,
+                        OverallRating = deptResult.OverallRating
+                    }
+                },
+                Teams = deptResult.Teams,
+                Employees = deptResult.Employees
+            };
+        }
+
+        // Company / All active departments level
+        var departments = await _db.Departments
+            .Where(d => d.IsActive)
+            .OrderBy(d => d.Name)
+            .ToListAsync(cancellationToken);
+
+        var deptSummaries = new List<DepartmentKpiSummaryDTO>();
+        var allTeamSummaries = new List<TeamKpiSummaryDTO>();
+        var allEmployeeEvaluations = new List<EmployeeKpiEvaluationResultDTO>();
+
+        foreach (var dept in departments)
+        {
+            var deptEval = await CalculateDepartmentKpiAsync(dept.Id, normalizedStart, normalizedEnd, roleFilter, configurationId, cancellationToken);
+            deptSummaries.Add(new DepartmentKpiSummaryDTO
+            {
+                DepartmentId = dept.Id,
+                DepartmentName = dept.Name,
+                TotalEmployees = deptEval.TotalEmployees,
+                TotalTeams = deptEval.TotalTeams,
+                TotalAssignedTasks = deptEval.TotalAssignedTasks,
+                CompletedTasksCount = deptEval.CompletedTasksCount,
+                OverallScore = deptEval.OverallScore,
+                OverallRating = deptEval.OverallRating
+            });
+            allTeamSummaries.AddRange(deptEval.Teams);
+            allEmployeeEvaluations.AddRange(deptEval.Employees);
+        }
+
+        var config = await ResolveConfigurationForScopeAsync(null, roleFilter, normalizedStart, normalizedEnd, configurationId, cancellationToken);
+
+        int totalAssigned = allEmployeeEvaluations.Sum(e => e.TotalAssignedTasks);
+        int completedCount = allEmployeeEvaluations.Sum(e => e.CompletedTasksCount);
+        int onTimeCount = allEmployeeEvaluations.Sum(e => e.OnTimeTasksCount);
+        int inFullCount = allEmployeeEvaluations.Sum(e => e.InFullTasksCount);
+        int otifCount = allEmployeeEvaluations.Sum(e => e.OtifTasksCount);
+        int reworkCount = allEmployeeEvaluations.Sum(e => e.ReworkTasksCount);
+        int accurateCount = allEmployeeEvaluations.Sum(e => e.AccurateTasksCount);
+        double totalHandlingHours = Math.Round(allEmployeeEvaluations.Sum(e => e.TotalHandlingHours), 2);
+
+        var (companyMetrics, companyScore, companyRating) = EvaluateMetrics(
+            config,
+            totalAssigned,
+            completedCount,
+            onTimeCount,
+            inFullCount,
+            otifCount,
+            reworkCount,
+            accurateCount,
+            totalHandlingHours);
+
+        double avgEmpScore = allEmployeeEvaluations.Count > 0
+            ? Math.Round(allEmployeeEvaluations.Average(e => e.OverallScore), 2)
+            : 0.0;
+
+        return new KpiHierarchyScopeResultDTO
+        {
+            ScopeLevel = "Company",
+            ScopeId = null,
+            ScopeName = "All Departments",
+            PeriodStart = normalizedStart,
+            PeriodEnd = normalizedEnd,
+            RoleFilter = roleFilter?.ToString(),
+            ConfigurationId = config.Id,
+            ConfigurationTitle = config.Title,
+            TotalDepartments = departments.Count,
+            TotalTeams = allTeamSummaries.Count,
+            TotalEmployees = allEmployeeEvaluations.Count,
+            TotalAssignedTasks = totalAssigned,
+            CompletedTasksCount = completedCount,
+            OnTimeTasksCount = onTimeCount,
+            InFullTasksCount = inFullCount,
+            OtifTasksCount = otifCount,
+            ReworkTasksCount = reworkCount,
+            AccurateTasksCount = accurateCount,
+            TotalHandlingHours = totalHandlingHours,
+            OverallScore = companyScore,
+            AverageEmployeeScore = avgEmpScore,
+            OverallRating = companyRating,
+            Metrics = companyMetrics,
+            Departments = deptSummaries,
+            Teams = allTeamSummaries,
+            Employees = allEmployeeEvaluations.OrderBy(e => e.EmployeeName).ToList()
+        };
+    }
+
+    public DepartmentKpiEvaluationResultDTO AggregateDepartmentEvaluation(
+        Department department,
+        IReadOnlyList<Team> teams,
+        IReadOnlyList<EmployeeKpiEvaluationResultDTO> employeeEvaluations,
+        DateTime startDate,
+        DateTime endDate,
+        string? roleFilter = null,
+        KpiConfiguration? configuration = null)
+    {
+        var config = configuration ?? CreateDefaultFallbackConfiguration();
+
+        int totalAssigned = employeeEvaluations.Sum(e => e.TotalAssignedTasks);
+        int completedCount = employeeEvaluations.Sum(e => e.CompletedTasksCount);
+        int onTimeCount = employeeEvaluations.Sum(e => e.OnTimeTasksCount);
+        int inFullCount = employeeEvaluations.Sum(e => e.InFullTasksCount);
+        int otifCount = employeeEvaluations.Sum(e => e.OtifTasksCount);
+        int reworkCount = employeeEvaluations.Sum(e => e.ReworkTasksCount);
+        int accurateCount = employeeEvaluations.Sum(e => e.AccurateTasksCount);
+        double totalHandlingHours = Math.Round(employeeEvaluations.Sum(e => e.TotalHandlingHours), 2);
+
+        var (metrics, overallScore, overallRating) = EvaluateMetrics(
+            config,
+            totalAssigned,
+            completedCount,
+            onTimeCount,
+            inFullCount,
+            otifCount,
+            reworkCount,
+            accurateCount,
+            totalHandlingHours);
+
+        double avgEmployeeScore = employeeEvaluations.Count > 0
+            ? Math.Round(employeeEvaluations.Average(e => e.OverallScore), 2)
+            : 0.0;
+
+        // Build Team summaries for this department
+        var teamSummaries = new List<TeamKpiSummaryDTO>();
+        foreach (var team in teams)
+        {
+            var memberUserIds = team.Members?.Select(m => m.UserId).ToHashSet() ?? new HashSet<Guid>();
+            var teamEmployeeEvals = employeeEvaluations.Where(e => memberUserIds.Contains(e.EmployeeId)).ToList();
+
+            int teamAssigned = teamEmployeeEvals.Sum(e => e.TotalAssignedTasks);
+            int teamCompleted = teamEmployeeEvals.Sum(e => e.CompletedTasksCount);
+            int teamOnTime = teamEmployeeEvals.Sum(e => e.OnTimeTasksCount);
+            int teamInFull = teamEmployeeEvals.Sum(e => e.InFullTasksCount);
+            int teamOtif = teamEmployeeEvals.Sum(e => e.OtifTasksCount);
+            int teamRework = teamEmployeeEvals.Sum(e => e.ReworkTasksCount);
+            int teamAccurate = teamEmployeeEvals.Sum(e => e.AccurateTasksCount);
+            double teamHandlingHours = teamEmployeeEvals.Sum(e => e.TotalHandlingHours);
+
+            var (_, teamOverallScore, teamOverallRating) = EvaluateMetrics(
+                config,
+                teamAssigned,
+                teamCompleted,
+                teamOnTime,
+                teamInFull,
+                teamOtif,
+                teamRework,
+                teamAccurate,
+                teamHandlingHours);
+
+            int memberCount = team.Members != null
+                ? (string.IsNullOrWhiteSpace(roleFilter)
+                    ? team.Members.Count
+                    : team.Members.Count(m => m.User != null && string.Equals(m.User.Role.ToString(), roleFilter, StringComparison.OrdinalIgnoreCase)))
+                : 0;
+
+            teamSummaries.Add(new TeamKpiSummaryDTO
+            {
+                TeamId = team.Id,
+                TeamName = team.Name,
+                DepartmentId = department.Id,
+                DepartmentName = department.Name,
+                TeamLeaderId = team.TeamLeaderId,
+                TeamLeaderName = team.TeamLeader != null
+                    ? $"{team.TeamLeader.FirstName} {team.TeamLeader.LastName}".Trim()
+                    : null,
+                MemberCount = memberCount,
+                TotalAssignedTasks = teamAssigned,
+                CompletedTasksCount = teamCompleted,
+                OverallScore = teamOverallScore,
+                OverallRating = teamOverallRating
+            });
+        }
+
+        return new DepartmentKpiEvaluationResultDTO
+        {
+            DepartmentId = department.Id,
+            DepartmentName = department.Name,
+            PeriodStart = startDate,
+            PeriodEnd = endDate,
+            RoleFilter = roleFilter,
+            ConfigurationId = config.Id,
+            ConfigurationTitle = config.Title,
+            TotalEmployees = employeeEvaluations.Count,
+            TotalTeams = teams.Count,
+            TotalAssignedTasks = totalAssigned,
+            CompletedTasksCount = completedCount,
+            OnTimeTasksCount = onTimeCount,
+            InFullTasksCount = inFullCount,
+            OtifTasksCount = otifCount,
+            ReworkTasksCount = reworkCount,
+            AccurateTasksCount = accurateCount,
+            TotalHandlingHours = totalHandlingHours,
+            OverallScore = overallScore,
+            AverageEmployeeScore = avgEmployeeScore,
+            OverallRating = overallRating,
+            Metrics = metrics,
+            Teams = teamSummaries,
+            Employees = employeeEvaluations.OrderBy(e => e.EmployeeName).ToList()
+        };
+    }
+
+    public TeamKpiEvaluationResultDTO AggregateTeamEvaluation(
+        Team team,
+        IReadOnlyList<EmployeeKpiEvaluationResultDTO> memberEvaluations,
+        DateTime startDate,
+        DateTime endDate,
+        string? roleFilter = null,
+        KpiConfiguration? configuration = null)
+    {
+        var config = configuration ?? CreateDefaultFallbackConfiguration();
+
+        int totalAssigned = memberEvaluations.Sum(e => e.TotalAssignedTasks);
+        int completedCount = memberEvaluations.Sum(e => e.CompletedTasksCount);
+        int onTimeCount = memberEvaluations.Sum(e => e.OnTimeTasksCount);
+        int inFullCount = memberEvaluations.Sum(e => e.InFullTasksCount);
+        int otifCount = memberEvaluations.Sum(e => e.OtifTasksCount);
+        int reworkCount = memberEvaluations.Sum(e => e.ReworkTasksCount);
+        int accurateCount = memberEvaluations.Sum(e => e.AccurateTasksCount);
+        double totalHandlingHours = Math.Round(memberEvaluations.Sum(e => e.TotalHandlingHours), 2);
+
+        var (metrics, overallScore, overallRating) = EvaluateMetrics(
+            config,
+            totalAssigned,
+            completedCount,
+            onTimeCount,
+            inFullCount,
+            otifCount,
+            reworkCount,
+            accurateCount,
+            totalHandlingHours);
+
+        double avgEmployeeScore = memberEvaluations.Count > 0
+            ? Math.Round(memberEvaluations.Average(e => e.OverallScore), 2)
+            : 0.0;
+
+        return new TeamKpiEvaluationResultDTO
+        {
+            TeamId = team.Id,
+            TeamName = team.Name,
+            DepartmentId = team.DepartmentId,
+            DepartmentName = team.Department?.Name,
+            TeamLeaderId = team.TeamLeaderId,
+            TeamLeaderName = team.TeamLeader != null
+                ? $"{team.TeamLeader.FirstName} {team.TeamLeader.LastName}".Trim()
+                : null,
+            PeriodStart = startDate,
+            PeriodEnd = endDate,
+            RoleFilter = roleFilter,
+            ConfigurationId = config.Id,
+            ConfigurationTitle = config.Title,
+            TotalMembers = memberEvaluations.Count,
+            TotalAssignedTasks = totalAssigned,
+            CompletedTasksCount = completedCount,
+            OnTimeTasksCount = onTimeCount,
+            InFullTasksCount = inFullCount,
+            OtifTasksCount = otifCount,
+            ReworkTasksCount = reworkCount,
+            AccurateTasksCount = accurateCount,
+            TotalHandlingHours = totalHandlingHours,
+            OverallScore = overallScore,
+            AverageEmployeeScore = avgEmployeeScore,
+            OverallRating = overallRating,
+            Metrics = metrics,
+            Employees = memberEvaluations.OrderBy(e => e.EmployeeName).ToList()
+        };
+    }
+
+    public (List<KpiMetricValueDTO> Metrics, double OverallScore, string OverallRating) EvaluateMetrics(
+        KpiConfiguration config,
+        int totalAssigned,
+        int completedCount,
+        int onTimeCount,
+        int inFullCount,
+        int otifCount,
+        int reworkCount,
+        int accurateCount,
+        double totalHandlingHours)
+    {
         double completionRate = totalAssigned == 0 ? 0.0 : Math.Round((double)completedCount / totalAssigned * 100.0, 2);
         double otifRate = completedCount == 0 ? 0.0 : Math.Round((double)otifCount / completedCount * 100.0, 2);
         double accuracyRate = completedCount == 0 ? 0.0 : Math.Round((double)accurateCount / completedCount * 100.0, 2);
@@ -222,31 +776,12 @@ public class KpiCalculationEngine : IKpiCalculationEngine
         double overallScore = Math.Round(metrics.Sum(m => m.WeightedScore), 2);
         string overallRating = DetermineOverallRating(metrics, overallScore, totalAssigned, config.OverallGreenThreshold, config.OverallAmberThreshold);
 
-        return new EmployeeKpiEvaluationResultDTO
-        {
-            EmployeeId = employee.Id,
-            EmployeeName = $"{employee.FirstName} {employee.LastName}".Trim(),
-            EmployeeNumber = employee.EmployeeNumber,
-            DepartmentName = employee.Department?.Name,
-            JobPositionTitle = employee.JobPosition?.Name,
-            Role = employee.Role.ToString(),
-            PeriodStart = startDate,
-            PeriodEnd = endDate,
-            ConfigurationId = config.Id,
-            ConfigurationTitle = config.Title,
-            TotalAssignedTasks = totalAssigned,
-            CompletedTasksCount = completedCount,
-            OnTimeTasksCount = onTimeCount,
-            InFullTasksCount = inFullCount,
-            OtifTasksCount = otifCount,
-            ReworkTasksCount = reworkCount,
-            AccurateTasksCount = accurateCount,
-            TotalHandlingHours = Math.Round(totalHandlingHours, 2),
-            OverallScore = overallScore,
-            OverallRating = overallRating,
-            Metrics = metrics
-        };
+        return (metrics, overallScore, overallRating);
     }
+
+    #endregion
+
+    #region Configuration Resolution & Helpers
 
     private async System.Threading.Tasks.Task<KpiConfiguration> ResolveConfigurationAsync(
         User user,
@@ -281,6 +816,61 @@ public class KpiCalculationEngine : IKpiCalculationEngine
         if (matched != null) return matched;
 
         // Fallback to default seeded configuration
+        var defaultSeed = await _db.KpiConfigurations
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.Id == KpiDefaultSeeder.DefaultConfigurationId, cancellationToken);
+
+        return defaultSeed ?? CreateDefaultFallbackConfiguration();
+    }
+
+    private async System.Threading.Tasks.Task<KpiConfiguration> ResolveConfigurationForScopeAsync(
+        Guid? departmentId,
+        UserRole? roleFilter,
+        DateTime startDate,
+        DateTime endDate,
+        Guid? configurationId,
+        CancellationToken cancellationToken)
+    {
+        if (configurationId.HasValue)
+        {
+            var specified = await _db.KpiConfigurations
+                .Include(c => c.Items)
+                .FirstOrDefaultAsync(c => c.Id == configurationId.Value, cancellationToken);
+
+            if (specified != null) return specified;
+        }
+
+        var targetRoleStr = roleFilter?.ToString();
+
+        var activeConfigs = await _db.KpiConfigurations
+            .Include(c => c.Items)
+            .Where(c => c.IsActive && c.EffectiveStartDate <= endDate && (c.EffectiveEndDate == null || c.EffectiveEndDate >= startDate))
+            .OrderByDescending(c => c.EffectiveStartDate)
+            .ToListAsync(cancellationToken);
+
+        KpiConfiguration? matched = null;
+        if (departmentId.HasValue && !string.IsNullOrWhiteSpace(targetRoleStr))
+        {
+            matched = activeConfigs.FirstOrDefault(c => c.DepartmentId == departmentId.Value && string.Equals(c.TargetRole, targetRoleStr, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (matched == null && departmentId.HasValue)
+        {
+            matched = activeConfigs.FirstOrDefault(c => c.DepartmentId == departmentId.Value && string.IsNullOrEmpty(c.TargetRole));
+        }
+
+        if (matched == null && !string.IsNullOrWhiteSpace(targetRoleStr))
+        {
+            matched = activeConfigs.FirstOrDefault(c => c.DepartmentId == null && string.Equals(c.TargetRole, targetRoleStr, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (matched == null)
+        {
+            matched = activeConfigs.FirstOrDefault(c => c.DepartmentId == null && string.IsNullOrEmpty(c.TargetRole));
+        }
+
+        if (matched != null) return matched;
+
         var defaultSeed = await _db.KpiConfigurations
             .Include(c => c.Items)
             .FirstOrDefaultAsync(c => c.Id == KpiDefaultSeeder.DefaultConfigurationId, cancellationToken);
@@ -415,4 +1005,6 @@ public class KpiCalculationEngine : IKpiCalculationEngine
             }
         };
     }
+
+    #endregion
 }
