@@ -31,8 +31,9 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - [x] Phase 1: Core metric calculation engine & database foundation for default KPIs
   - Done when: Manager API calculates the 4 default KPIs for an employee over a timeframe with verified backend test coverage.
   - Completed: KpiConfiguration and KpiItem entities created with composite indexing, KpiCalculationEngine implemented default metrics (OTIF, Accuracy, Completion, AHT), and Manager endpoint verified by 617 backend tests and 125 frontend tests.
-- [ ] Phase 2: Configuration & weighting system with traffic-light thresholds
+- [x] Phase 2: Configuration & weighting system with traffic-light thresholds
   - Done when: Manager can save prospective weights (summing to 100%) and thresholds, producing a weighted Employee Performance Score.
+  - Completed: Overall thresholds added to KpiConfiguration with migration, configuration CRUD and prospective validation implemented in backend, and Manager configuration UI built with 100% weight sum validation; verified by 657 backend tests and 134 frontend tests.
 - [ ] Phase 3: Safe custom formula builder & variable data mapping
   - Done when: Manager can construct and test a custom formula using mapped database fields via the safe math parser.
 - [ ] Phase 4: Scope controls & hierarchical drill-down (Department -> Team -> Employee)
