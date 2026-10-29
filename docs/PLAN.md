@@ -16,7 +16,7 @@
     - Deadlines & Completion: Measured by Status == Completed, effective completion time (UpdatedAt ?? CreatedAt), and effective deadline (RevisedDeadline ?? Deadline).
     - Attachments: TaskAttachment exists per task without a checklist schema (In-Full evaluated by presence of >= 1 attachment).
     - Indexing gap: AppDbContext indexes AuditLog only on Timestamp and UserId; composite index needed in Step 2.
-- [ ] Step 2: Create KpiConfiguration and KpiItem entities, seed defaults, and apply migration
+- [x] Step 2: Create KpiConfiguration and KpiItem entities, seed defaults, and apply migration
   - Verify: Database migration applies cleanly with tables and indexes created in AppDbContext
 - [ ] Step 3: Implement KpiCalculationEngine calculating the 4 default metrics for an employee
   - Verify: OTIF, Order Accuracy, Task Completion, and AHT calculations return correct numbers

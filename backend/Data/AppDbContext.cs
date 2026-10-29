@@ -31,6 +31,8 @@ public class AppDbContext : DbContext
     public DbSet<TaskFomsInvoiceDetail> TaskFomsInvoiceDetails => Set<TaskFomsInvoiceDetail>();
     public DbSet<FomsClientFinancialStatus> FomsClientFinancialStatuses => Set<FomsClientFinancialStatus>();
     public DbSet<TaskFomsCollectionDetail> TaskFomsCollectionDetails => Set<TaskFomsCollectionDetail>();
+    public DbSet<KpiConfiguration> KpiConfigurations => Set<KpiConfiguration>();
+    public DbSet<KpiItem> KpiItems => Set<KpiItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -321,6 +323,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.ActionType);
             entity.HasIndex(e => e.Module);
             entity.HasIndex(e => new { e.TargetEntity, e.TargetEntityId });
+            entity.HasIndex(e => new { e.TargetEntity, e.TargetEntityId, e.ActionType, e.Timestamp });
         });
 
         // TaskDeliveryDetail Configuration
@@ -364,6 +367,48 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.InvoiceNumber).IsUnique();
             entity.HasIndex(e => e.ClientAccountId);
+        });
+
+        // KpiConfiguration Configuration
+        modelBuilder.Entity<KpiConfiguration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.TargetRole).HasMaxLength(50);
+
+            entity.HasOne(c => c.Department)
+                .WithMany()
+                .HasForeignKey(c => c.DepartmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.CreatedBy)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(c => c.Items)
+                .WithOne(i => i.KpiConfiguration)
+                .HasForeignKey(i => i.KpiConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.IsActive, e.EffectiveStartDate, e.EffectiveEndDate });
+            entity.HasIndex(e => e.DepartmentId);
+            entity.HasIndex(e => e.TargetRole);
+        });
+
+        // KpiItem Configuration
+        modelBuilder.Entity<KpiItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.MetricCode).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Unit).HasMaxLength(20);
+            entity.Property(e => e.CustomFormula).HasMaxLength(1000);
+
+            entity.HasIndex(e => e.KpiConfigurationId);
+            entity.HasIndex(e => e.MetricCode);
         });
 
         // TaskFomsCollectionDetail Configuration
