@@ -1,3 +1,4 @@
+using Backend.Models.DTOs;
 using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -876,4 +877,33 @@ public class KpiCalculationEngineTests
         // Assert
         Assert.Equal(expectedOverallRating, result.OverallRating);
     }
+    [Fact]
+    public void DetermineOverallRating_WithCustomThresholds_UsesCustomCutoffs()
+    {
+        var allGreenMetrics = new List<KpiMetricValueDTO>
+        {
+            new() { MetricCode = "OTIF", Rating = "Green", WeightedScore = 22.0 },
+            new() { MetricCode = "ORDER_ACCURACY", Rating = "Green", WeightedScore = 22.0 },
+            new() { MetricCode = "COMPLETION_RATE", Rating = "Green", WeightedScore = 22.0 },
+            new() { MetricCode = "AHT", Rating = "Green", WeightedScore = 22.0 }
+        };
+        double overallScore = 88.0;
+
+        // With standard thresholds (Green: 85, Amber: 70) -> 88.0 is Green
+        var standardRating = KpiCalculationEngine.DetermineOverallRating(allGreenMetrics, overallScore, totalAssigned: 10, greenThreshold: 85.0, amberThreshold: 70.0);
+        Assert.Equal("Green", standardRating);
+
+        // With strict custom thresholds (Green: 90, Amber: 80) -> 88.0 is Amber
+        var strictRating = KpiCalculationEngine.DetermineOverallRating(allGreenMetrics, overallScore, totalAssigned: 10, greenThreshold: 90.0, amberThreshold: 80.0);
+        Assert.Equal("Amber", strictRating);
+
+        // With very strict custom thresholds (Green: 95, Amber: 90) -> 88.0 is Red
+        var veryStrictRating = KpiCalculationEngine.DetermineOverallRating(allGreenMetrics, overallScore, totalAssigned: 10, greenThreshold: 95.0, amberThreshold: 90.0);
+        Assert.Equal("Red", veryStrictRating);
+
+        // With relaxed custom thresholds (Green: 80, Amber: 65) -> 75.0 is Amber instead of Red
+        var relaxedRating = KpiCalculationEngine.DetermineOverallRating(allGreenMetrics, 75.0, totalAssigned: 10, greenThreshold: 80.0, amberThreshold: 65.0);
+        Assert.Equal("Amber", relaxedRating);
+    }
 }
+

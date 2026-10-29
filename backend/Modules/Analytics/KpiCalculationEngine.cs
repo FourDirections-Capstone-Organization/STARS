@@ -172,7 +172,7 @@ public class KpiCalculationEngine : IKpiCalculationEngine
         }
 
         double overallScore = Math.Round(metrics.Sum(m => m.WeightedScore), 2);
-        string overallRating = DetermineOverallRating(metrics, overallScore, totalAssigned);
+        string overallRating = DetermineOverallRating(metrics, overallScore, totalAssigned, config.OverallGreenThreshold, config.OverallAmberThreshold);
 
         return new EmployeeKpiEvaluationResultDTO
         {
@@ -276,14 +276,19 @@ public class KpiCalculationEngine : IKpiCalculationEngine
         }
     }
 
-    private static string DetermineOverallRating(List<KpiMetricValueDTO> metrics, double overallScore, int totalAssigned)
+    public static string DetermineOverallRating(
+        List<KpiMetricValueDTO> metrics,
+        double overallScore,
+        int totalAssigned,
+        double greenThreshold = 85.0,
+        double amberThreshold = 70.0)
     {
         if (totalAssigned == 0) return "Amber";
 
-        if (metrics.Any(m => m.Rating == "Red") || overallScore < 70.0)
+        if (metrics.Any(m => m.Rating == "Red") || overallScore < amberThreshold)
             return "Red";
 
-        if (metrics.Any(m => m.Rating == "Amber") || overallScore < 85.0)
+        if (metrics.Any(m => m.Rating == "Amber") || overallScore < greenThreshold)
             return "Amber";
 
         return "Green";
