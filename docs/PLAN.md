@@ -9,13 +9,14 @@
 - Baseline verification confirmed: 617 backend tests and 125 frontend tests passing.
 - Baseline entities confirmed ready for Phase 2 threshold additions.
 - Overall score thresholds (Green: 85.0, Amber: 70.0, Red: 60.0) added to KpiConfiguration with EF Core migration AddOverallThresholdsToKpiConfiguration.
+- Configuration DTOs (KpiConfigurationRequestDTO, KpiItemRequestDTO, response DTOs) and KpiConfigurationValidator implemented and verified with 26 unit tests covering 100% weight sum, threshold hierarchies, and prospective dates.
 
 ## Implementation Steps
 - [x] Step 1: Confirm starting codebase state, Phase 1 KPI models and test baselines
   - Verify: 617 backend tests and 125 frontend tests pass and baseline entities confirmed
 - [x] Step 2: Add customizable overall thresholds to KpiConfiguration and apply migration
   - Verify: Migration adds overall threshold fields and database migration applies cleanly
-- [ ] Step 3: Implement configuration DTOs and validation for prospective weights and thresholds
+- [x] Step 3: Implement configuration DTOs and validation for prospective weights and thresholds
   - Verify: Unit tests confirm 100% weight sum, threshold validation, and prospective dates
 - [ ] Step 4: Implement Manager CRUD endpoints in KpiController and update rating engine
   - Verify: Controller persists prospective configs and engine uses custom overall thresholds
