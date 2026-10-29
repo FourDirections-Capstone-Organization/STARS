@@ -18,7 +18,7 @@
     - Indexing gap: AppDbContext indexes AuditLog only on Timestamp and UserId; composite index needed in Step 2.
 - [x] Step 2: Create KpiConfiguration and KpiItem entities, seed defaults, and apply migration
   - Verify: Database migration applies cleanly with tables and indexes created in AppDbContext
-- [ ] Step 3: Implement KpiCalculationEngine calculating the 4 default metrics for an employee
+- [x] Step 3: Implement KpiCalculationEngine calculating the 4 default metrics for an employee
   - Verify: OTIF, Order Accuracy, Task Completion, and AHT calculations return correct numbers
 - [ ] Step 4: Create Manager KPI controller endpoint with timeframe and employee parameters
   - Verify: Endpoint returns 200 OK with default KPI metric results for authorized Managers
