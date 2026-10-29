@@ -8,11 +8,12 @@
 - frontend/src/Pages/OpAdmin_Dashboard/KpiConfiguration/ lacks custom formula builder and tester UI.
 - Baseline verification confirmed: 657 backend tests and 134 frontend tests passing with zero failures.
 - Baseline models and DTOs confirmed ready for formula parser integration.
+- SafeFormulaParser implemented: tokenized recursive descent parser supporting (+, -, *, /, parentheses), whitelisted variables, zero dynamic code execution, and division-by-zero protection (returning safe default 0.0 or throwing when configured). Verified by 47 unit tests (704 backend tests passing).
 
 ## Implementation Steps
 - [x] Step 1: Confirm starting codebase state, formula fields, and test baselines
   - Verify: 657 backend tests and 134 frontend tests pass and baseline models confirmed
-- [ ] Step 2: Implement safe tokenized arithmetic formula parser with division-by-zero safety
+- [x] Step 2: Implement safe tokenized arithmetic formula parser with division-by-zero safety
   - Verify: Parser unit tests verify operators (+, -, *, /), parentheses, whitelisted tokens, and zero-division
 - [ ] Step 3: Add formula variable registry, DTO validation, and formula test endpoint
   - Verify: Unit and controller tests confirm variable resolution and dry-run formula testing endpoint
