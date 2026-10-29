@@ -67,6 +67,9 @@ public class KpiDatabaseConfigurationTests
 
         Assert.NotNull(config);
         Assert.True(config.IsActive);
+        Assert.Equal(85.0, config.OverallGreenThreshold);
+        Assert.Equal(70.0, config.OverallAmberThreshold);
+        Assert.Equal(60.0, config.OverallRedThreshold);
         Assert.Equal(4, config.Items.Count);
 
         // Verify total weight equals 100%
@@ -108,5 +111,31 @@ public class KpiDatabaseConfigurationTests
 
         Assert.Equal(1, configCount);
         Assert.Equal(4, itemCount);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task AppDbContext_KpiConfiguration_PersistsCustomOverallThresholds()
+    {
+        using var db = CreateInMemoryDbContext();
+
+        var customConfig = new KpiConfiguration
+        {
+            Id = Guid.NewGuid(),
+            Title = "Custom Threshold Config",
+            OverallGreenThreshold = 90.0,
+            OverallAmberThreshold = 80.0,
+            OverallRedThreshold = 65.0,
+            IsActive = true
+        };
+
+        db.KpiConfigurations.Add(customConfig);
+        await db.SaveChangesAsync();
+
+        var retrieved = await db.KpiConfigurations.FirstOrDefaultAsync(c => c.Id == customConfig.Id);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal(90.0, retrieved.OverallGreenThreshold);
+        Assert.Equal(80.0, retrieved.OverallAmberThreshold);
+        Assert.Equal(65.0, retrieved.OverallRedThreshold);
     }
 }

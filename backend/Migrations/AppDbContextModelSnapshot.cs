@@ -437,6 +437,21 @@ namespace Backend.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<double>("OverallAmberThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(70.0);
+
+                    b.Property<double>("OverallGreenThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(85.0);
+
+                    b.Property<double>("OverallRedThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(60.0);
+
                     b.Property<string>("TargetRole")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");

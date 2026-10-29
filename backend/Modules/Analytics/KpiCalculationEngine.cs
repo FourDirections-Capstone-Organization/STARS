@@ -298,6 +298,9 @@ public class KpiCalculationEngine : IKpiCalculationEngine
             Description = "Standard prospective evaluation configuration containing the 4 canonical logistics KPIs.",
             IsActive = true,
             EffectiveStartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            OverallGreenThreshold = 85.0,
+            OverallAmberThreshold = 70.0,
+            OverallRedThreshold = 60.0,
             Items = new List<KpiItem>
             {
                 new()
