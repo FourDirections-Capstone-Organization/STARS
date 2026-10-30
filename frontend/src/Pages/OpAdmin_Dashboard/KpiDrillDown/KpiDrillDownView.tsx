@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, AlertCircle, RefreshCw, Sliders, FileText, FileSpreadsheet } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Sliders, FileText, FileSpreadsheet, ArrowLeft } from 'lucide-react';
 import { exportHierarchyScope } from '../../../services/kpiService';
 import api from '../../../api';
 import { useToast } from '../../../components/Toast/Toast';
@@ -25,6 +25,7 @@ export interface KpiDrillDownViewProps {
     initialTeamId?: string;
     initialRole?: string;
     onNavigateToConfig?: () => void;
+    viewModeControls?: React.ReactNode;
 }
 
 const getDefaultDates = () => {
@@ -42,7 +43,8 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
     initialDepartmentId,
     initialTeamId,
     initialRole = '',
-    onNavigateToConfig
+    onNavigateToConfig,
+    viewModeControls
 }) => {
     let toastMethods = { success: (_m: string) => {}, error: (_m: string) => {}, info: (_m: string) => {} };
     try {
@@ -328,63 +330,138 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
         }
     };
 
+    const isDrilledView = breadcrumbs.length > 1;
+    const previousCrumb = isDrilledView ? breadcrumbs[breadcrumbs.length - 2] : null;
+
     return (
         <div className="kpi-drilldown-container" data-testid="kpi-hierarchical-view">
             {/* Header & Configuration Action */}
-            <div className="kpi-view-header">
-                <div className="kpi-view-title-block">
-                    <h3 className="kpi-view-title">
-                        Hierarchical KPI &amp; Performance Drill-Down
-                    </h3>
-                    <p className="kpi-view-subtitle">
-                        Evaluate weighted logistics KPIs hierarchically from company-wide to departments, teams, and individual employees.
-                    </p>
-                </div>
-                <div className="kpi-header-actions-group">
-                    <button
-                        type="button"
-                        className="kpi-export-btn kpi-export-pdf-btn"
-                        onClick={() => handleExportScope('pdf')}
-                        disabled={loading || isExporting !== null || !data}
-                        title="Export current scope KPI evaluation to PDF"
-                        data-testid="kpi-export-pdf-btn"
-                    >
-                        {isExporting === 'pdf' ? (
-                            <Loader2 size={14} className="kpi-spin" />
-                        ) : (
-                            <FileText size={14} />
-                        )}
-                        <span>Export PDF</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="kpi-export-btn kpi-export-excel-btn"
-                        onClick={() => handleExportScope('excel')}
-                        disabled={loading || isExporting !== null || !data}
-                        title="Export current scope KPI evaluation to Excel"
-                        data-testid="kpi-export-excel-btn"
-                    >
-                        {isExporting === 'excel' ? (
-                            <Loader2 size={14} className="kpi-spin" />
-                        ) : (
-                            <FileSpreadsheet size={14} />
-                        )}
-                        <span>Export Excel</span>
-                    </button>
-                    {onNavigateToConfig && (
+            {isDrilledView ? (
+                <div className="kpi-view-header kpi-view-header-drilled">
+                    <div className="kpi-view-title-block">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                className="kpi-page-back-btn"
+                                onClick={handleBack}
+                                title={`Back to ${previousCrumb?.name || 'Overview'}`}
+                                aria-label={`Back to ${previousCrumb?.name || 'Overview'}`}
+                            >
+                                <ArrowLeft size={15} />
+                                <span>Back to {previousCrumb?.name || 'Overview'}</span>
+                            </button>
+                            <span className="kpi-scope-type-badge">{data?.scopeLevel || 'Drill-Down'} View</span>
+                        </div>
+                        <h3 className="kpi-view-title" style={{ fontSize: '1.25rem', marginTop: 4 }}>
+                            {data?.scopeName || 'Entity Details'}
+                        </h3>
+                        <p className="kpi-view-subtitle">
+                            Dedicated hierarchical performance scorecard for {data?.scopeName}.
+                        </p>
+                    </div>
+                    <div className="kpi-header-actions-group">
+                        {viewModeControls}
                         <button
                             type="button"
-                            className="kpi-header-config-btn"
-                            onClick={onNavigateToConfig}
-                            title="Configure KPI weights and traffic-light thresholds"
-                            data-testid="kpi-nav-to-config-btn"
+                            className="kpi-export-btn kpi-export-pdf-btn"
+                            onClick={() => handleExportScope('pdf')}
+                            disabled={loading || isExporting !== null || !data}
+                            title="Export current scope KPI evaluation to PDF"
+                            data-testid="kpi-export-pdf-btn"
                         >
-                            <Sliders size={15} />
-                            <span>Configure KPIs</span>
+                            {isExporting === 'pdf' ? (
+                                <Loader2 size={14} className="kpi-spin" />
+                            ) : (
+                                <FileText size={14} />
+                            )}
+                            <span>Export PDF</span>
                         </button>
-                    )}
+                        <button
+                            type="button"
+                            className="kpi-export-btn kpi-export-excel-btn"
+                            onClick={() => handleExportScope('excel')}
+                            disabled={loading || isExporting !== null || !data}
+                            title="Export current scope KPI evaluation to Excel"
+                            data-testid="kpi-export-excel-btn"
+                        >
+                            {isExporting === 'excel' ? (
+                                <Loader2 size={14} className="kpi-spin" />
+                            ) : (
+                                <FileSpreadsheet size={14} />
+                            )}
+                            <span>Export Excel</span>
+                        </button>
+                        {onNavigateToConfig && (
+                            <button
+                                type="button"
+                                className="kpi-header-config-btn"
+                                onClick={onNavigateToConfig}
+                                title="Configure KPI weights and traffic-light thresholds"
+                                data-testid="kpi-nav-to-config-btn"
+                            >
+                                <Sliders size={15} />
+                                <span>Configure KPIs</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="kpi-view-header">
+                    <div className="kpi-view-title-block">
+                        <h3 className="kpi-view-title">
+                            Hierarchical KPI &amp; Performance Drill-Down
+                        </h3>
+                        <p className="kpi-view-subtitle">
+                            Evaluate weighted logistics KPIs hierarchically from company-wide to departments, teams, and individual employees.
+                        </p>
+                    </div>
+                    <div className="kpi-header-actions-group">
+                        {viewModeControls}
+                        <button
+                            type="button"
+                            className="kpi-export-btn kpi-export-pdf-btn"
+                            onClick={() => handleExportScope('pdf')}
+                            disabled={loading || isExporting !== null || !data}
+                            title="Export current scope KPI evaluation to PDF"
+                            data-testid="kpi-export-pdf-btn"
+                        >
+                            {isExporting === 'pdf' ? (
+                                <Loader2 size={14} className="kpi-spin" />
+                            ) : (
+                                <FileText size={14} />
+                            )}
+                            <span>Export PDF</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="kpi-export-btn kpi-export-excel-btn"
+                            onClick={() => handleExportScope('excel')}
+                            disabled={loading || isExporting !== null || !data}
+                            title="Export current scope KPI evaluation to Excel"
+                            data-testid="kpi-export-excel-btn"
+                        >
+                            {isExporting === 'excel' ? (
+                                <Loader2 size={14} className="kpi-spin" />
+                            ) : (
+                                <FileSpreadsheet size={14} />
+                            )}
+                            <span>Export Excel</span>
+                        </button>
+                        {onNavigateToConfig && (
+                            <button
+                                type="button"
+                                className="kpi-header-config-btn"
+                                onClick={onNavigateToConfig}
+                                title="Configure KPI weights and traffic-light thresholds"
+                                data-testid="kpi-nav-to-config-btn"
+                            >
+                                <Sliders size={15} />
+                                <span>Configure KPIs</span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
             {/* Breadcrumb Navigation Bar */}
             <KpiBreadcrumbs
                 breadcrumbs={breadcrumbs}
