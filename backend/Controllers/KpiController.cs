@@ -14,7 +14,7 @@ namespace Backend.Controllers;
 
 [ApiController]
 [Route("api/kpi")]
-[Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+[Authorize]
 public class KpiController : ControllerBase
 {
     private readonly IKpiCalculationEngine _kpiCalculationEngine;
@@ -22,19 +22,22 @@ public class KpiController : ControllerBase
     private readonly ILogger<KpiController> _logger;
     private readonly ISafeFormulaParser _safeFormulaParser;
     private readonly IKpiVariableRegistry _variableRegistry;
+    private readonly IKpiExportService _kpiExportService;
 
     public KpiController(
         IKpiCalculationEngine kpiCalculationEngine,
         AppDbContext db,
         ILogger<KpiController> logger,
         ISafeFormulaParser? safeFormulaParser = null,
-        IKpiVariableRegistry? variableRegistry = null)
+        IKpiVariableRegistry? variableRegistry = null,
+        IKpiExportService? kpiExportService = null)
     {
         _kpiCalculationEngine = kpiCalculationEngine;
         _db = db;
         _logger = logger;
         _safeFormulaParser = safeFormulaParser ?? new SafeFormulaParser();
         _variableRegistry = variableRegistry ?? new KpiVariableRegistry();
+        _kpiExportService = kpiExportService ?? new KpiExportService();
     }
 
     #region Evaluation Endpoints
@@ -50,6 +53,12 @@ public class KpiController : ControllerBase
         if (request == null || !request.EmployeeId.HasValue || request.EmployeeId.Value == Guid.Empty)
         {
             return BadRequest(ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure("Employee ID is required."));
+        }
+
+        if (!CanAccessEmployeeData(request.EmployeeId.Value))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure(
+                "Forbidden: You do not have permission to view another employee's KPI evaluation."));
         }
 
         var endDate = request.EndDate ?? DateTime.UtcNow;
@@ -110,10 +119,273 @@ public class KpiController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves the KPI scorecard for the authenticated employee over a timeframe.
+    /// </summary>
+    [HttpGet("my-scorecard")]
+    [HttpGet("scorecard")]
+    public async Task<IActionResult> GetMyScorecard(
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (!currentUserId.HasValue)
+        {
+            return Unauthorized(ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure("User is not authenticated."));
+        }
+
+        var endDateResolved = endDate ?? DateTime.UtcNow;
+        var startDateResolved = startDate ?? endDateResolved.AddDays(-30);
+        if (startDateResolved > endDateResolved)
+        {
+            (startDateResolved, endDateResolved) = (endDateResolved, startDateResolved);
+        }
+
+        try
+        {
+            var result = await _kpiCalculationEngine.CalculateEmployeeKpiAsync(
+                currentUserId.Value,
+                startDateResolved,
+                endDateResolved,
+                configurationId,
+                cancellationToken);
+
+            return Ok(ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Success(
+                result,
+                "Employee scorecard retrieved successfully."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Employee not found for scorecard: {EmployeeId}", currentUserId);
+            return NotFound(ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving scorecard for employee {EmployeeId}", currentUserId);
+            return StatusCode(500, ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure(
+                "An unexpected error occurred while retrieving employee scorecard."));
+        }
+    }
+
+    /// <summary>
+    /// Retrieves the KPI scorecard for a specific employee (requires Manager role or self-access).
+    /// </summary>
+    [HttpGet("scorecard/{employeeId:guid}")]
+    public async Task<IActionResult> GetEmployeeScorecard(
+        [FromRoute] Guid employeeId,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] Guid? configurationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeeId == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure("Employee ID is required."));
+        }
+
+        if (!CanAccessEmployeeData(employeeId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseDTO<EmployeeKpiEvaluationResultDTO>.Failure(
+                "Forbidden: You do not have permission to view another employee's KPI scorecard."));
+        }
+
+        return await EvaluateEmployeeKpiByRoute(employeeId, startDate, endDate, configurationId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Exports an employee's scorecard to PDF or Excel.
+    /// Non-managers may only export their own scorecard.
+    /// </summary>
+    [HttpGet("export/scorecard")]
+    [HttpGet("scorecard/export")]
+    public async Task<IActionResult> ExportEmployeeScorecard(
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] Guid? configurationId = null,
+        [FromQuery] string? format = "pdf",
+        CancellationToken cancellationToken = default)
+    {
+        var targetEmployeeId = employeeId ?? GetCurrentUserId();
+        if (!targetEmployeeId.HasValue || targetEmployeeId.Value == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure("Employee ID is required or user must be authenticated."));
+        }
+
+        if (!CanAccessEmployeeData(targetEmployeeId.Value))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponseDTO<object>.Failure(
+                "Forbidden: You do not have permission to export another employee's KPI scorecard."));
+        }
+
+        var endDateResolved = endDate ?? DateTime.UtcNow;
+        var startDateResolved = startDate ?? endDateResolved.AddDays(-30);
+        if (startDateResolved > endDateResolved)
+        {
+            (startDateResolved, endDateResolved) = (endDateResolved, startDateResolved);
+        }
+
+        try
+        {
+            var scorecard = await _kpiCalculationEngine.CalculateEmployeeKpiAsync(
+                targetEmployeeId.Value,
+                startDateResolved,
+                endDateResolved,
+                configurationId,
+                cancellationToken);
+
+            var exportFormat = (format ?? "pdf").Trim().ToLowerInvariant();
+            var sanitizedName = SanitizeFileName(scorecard.EmployeeName);
+            var dateSuffix = DateTime.UtcNow.ToString("yyyyMMdd");
+
+            if (exportFormat == "pdf")
+            {
+                var pdfBytes = _kpiExportService.ExportEmployeeScorecardPdf(scorecard);
+                return File(pdfBytes, "application/pdf", $"Scorecard_{sanitizedName}_{dateSuffix}.pdf");
+            }
+            else if (exportFormat is "excel" or "xlsx")
+            {
+                var excelBytes = _kpiExportService.ExportEmployeeScorecardExcel(scorecard);
+                return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Scorecard_{sanitizedName}_{dateSuffix}.xlsx");
+            }
+            else
+            {
+                return BadRequest(ApiResponseDTO<object>.Failure("Invalid export format. Supported formats are 'pdf' and 'excel'."));
+            }
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Employee not found for scorecard export: {EmployeeId}", targetEmployeeId);
+            return NotFound(ApiResponseDTO<object>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error exporting scorecard for employee {EmployeeId}", targetEmployeeId);
+            return StatusCode(500, ApiResponseDTO<object>.Failure(
+                "An unexpected error occurred while generating scorecard export."));
+        }
+    }
+
+    /// <summary>
+    /// Exports hierarchical scope KPI results to PDF or Excel (Manager only).
+    /// </summary>
+    [HttpGet("export/scope")]
+    [HttpGet("scope/export")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> ExportHierarchyScope(
+        [FromQuery] KpiScopeFilterDTO? filter = null,
+        [FromQuery] string? format = "pdf",
+        CancellationToken cancellationToken = default)
+    {
+        filter ??= new KpiScopeFilterDTO();
+
+        var (roleValid, parsedRole, roleError) = TryParseRole(filter.Role);
+        if (!roleValid)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure(roleError!));
+        }
+
+        var endDate = filter.EndDate ?? DateTime.UtcNow;
+        var startDate = filter.StartDate ?? endDate.AddDays(-30);
+        if (startDate > endDate)
+        {
+            (startDate, endDate) = (endDate, startDate);
+        }
+
+        try
+        {
+            KpiHierarchyScopeResultDTO scopeResult;
+
+            if (filter.EmployeeId.HasValue)
+            {
+                var empResult = await _kpiCalculationEngine.CalculateEmployeeKpiAsync(
+                    filter.EmployeeId.Value,
+                    startDate,
+                    endDate,
+                    filter.ConfigurationId,
+                    cancellationToken);
+
+                scopeResult = new KpiHierarchyScopeResultDTO
+                {
+                    ScopeLevel = "Employee",
+                    ScopeId = empResult.EmployeeId,
+                    ScopeName = empResult.EmployeeName,
+                    ParentScopeId = empResult.DepartmentId,
+                    ParentScopeName = empResult.DepartmentName,
+                    PeriodStart = empResult.PeriodStart,
+                    PeriodEnd = empResult.PeriodEnd,
+                    RoleFilter = parsedRole?.ToString() ?? empResult.Role,
+                    ConfigurationId = empResult.ConfigurationId,
+                    ConfigurationTitle = empResult.ConfigurationTitle,
+                    TotalDepartments = empResult.DepartmentId.HasValue ? 1 : 0,
+                    TotalTeams = 0,
+                    TotalEmployees = 1,
+                    TotalAssignedTasks = empResult.TotalAssignedTasks,
+                    CompletedTasksCount = empResult.CompletedTasksCount,
+                    OnTimeTasksCount = empResult.OnTimeTasksCount,
+                    InFullTasksCount = empResult.InFullTasksCount,
+                    OtifTasksCount = empResult.OtifTasksCount,
+                    ReworkTasksCount = empResult.ReworkTasksCount,
+                    AccurateTasksCount = empResult.AccurateTasksCount,
+                    TotalHandlingHours = empResult.TotalHandlingHours,
+                    OverallScore = empResult.OverallScore,
+                    AverageEmployeeScore = empResult.OverallScore,
+                    OverallRating = empResult.OverallRating,
+                    Metrics = empResult.Metrics,
+                    Employees = new List<EmployeeKpiEvaluationResultDTO> { empResult }
+                };
+            }
+            else
+            {
+                scopeResult = await _kpiCalculationEngine.CalculateHierarchicalScopeAsync(
+                    filter.DepartmentId,
+                    filter.TeamId,
+                    startDate,
+                    endDate,
+                    parsedRole,
+                    filter.ConfigurationId,
+                    cancellationToken);
+            }
+
+            var exportFormat = (format ?? "pdf").Trim().ToLowerInvariant();
+            var dateSuffix = DateTime.UtcNow.ToString("yyyyMMdd");
+            var safeScope = SanitizeFileName($"{scopeResult.ScopeLevel}_{scopeResult.ScopeName}");
+
+            if (exportFormat == "pdf")
+            {
+                var pdfBytes = _kpiExportService.ExportHierarchyScopePdf(scopeResult);
+                return File(pdfBytes, "application/pdf", $"KpiScope_{safeScope}_{dateSuffix}.pdf");
+            }
+            else if (exportFormat is "excel" or "xlsx")
+            {
+                var excelBytes = _kpiExportService.ExportHierarchyScopeExcel(scopeResult);
+                return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"KpiScope_{safeScope}_{dateSuffix}.xlsx");
+            }
+            else
+            {
+                return BadRequest(ApiResponseDTO<object>.Failure("Invalid export format. Supported formats are 'pdf' and 'excel'."));
+            }
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Entity not found for scope export.");
+            return NotFound(ApiResponseDTO<object>.Failure(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error generating scope export.");
+            return StatusCode(500, ApiResponseDTO<object>.Failure(
+                "An unexpected error occurred while generating scope export."));
+        }
+    }
+
+    /// <summary>
     /// Evaluates KPI metrics hierarchically across Company, Department, Team, or Employee scope with optional role and timeframe filters.
     /// </summary>
     [HttpGet("scope")]
     [HttpGet("hierarchy")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> EvaluateHierarchicalScope(
         [FromQuery] KpiScopeFilterDTO? filter = null,
         CancellationToken cancellationToken = default)
@@ -229,6 +501,7 @@ public class KpiController : ControllerBase
     /// Evaluates KPI metrics aggregated for a specific department with optional role, timeframe, and configuration filters.
     /// </summary>
     [HttpGet("department/{departmentId:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> EvaluateDepartmentKpi(
         [FromRoute] Guid departmentId,
         [FromQuery] DateTime? startDate = null,
@@ -291,6 +564,7 @@ public class KpiController : ControllerBase
     /// Evaluates KPI metrics aggregated for a specific team with optional role, timeframe, and configuration filters.
     /// </summary>
     [HttpGet("team/{teamId:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> EvaluateTeamKpi(
         [FromRoute] Guid teamId,
         [FromQuery] DateTime? startDate = null,
@@ -357,6 +631,7 @@ public class KpiController : ControllerBase
     /// Retrieves all KPI configurations with optional filtering by department, target role, or active status.
     /// </summary>
     [HttpGet("configurations")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> GetAllConfigurations(
         [FromQuery] Guid? departmentId = null,
         [FromQuery] string? targetRole = null,
@@ -410,6 +685,7 @@ public class KpiController : ControllerBase
     /// Retrieves a specific KPI configuration by its unique identifier.
     /// </summary>
     [HttpGet("configurations/{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> GetConfigurationById(
         [FromRoute] Guid id,
         CancellationToken cancellationToken = default)
@@ -445,6 +721,7 @@ public class KpiController : ControllerBase
     /// Creates a new prospective KPI configuration with weighted items and thresholds.
     /// </summary>
     [HttpPost("configurations")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> CreateConfiguration(
         [FromBody] KpiConfigurationRequestDTO request,
         CancellationToken cancellationToken = default)
@@ -557,6 +834,7 @@ public class KpiController : ControllerBase
     /// Updates an existing KPI configuration and its items.
     /// </summary>
     [HttpPut("configurations/{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> UpdateConfiguration(
         [FromRoute] Guid id,
         [FromBody] KpiConfigurationRequestDTO request,
@@ -670,6 +948,7 @@ public class KpiController : ControllerBase
     /// The default system configuration cannot be deleted.
     /// </summary>
     [HttpDelete("configurations/{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public async Task<IActionResult> DeleteConfiguration(
         [FromRoute] Guid id,
         CancellationToken cancellationToken = default)
@@ -716,6 +995,7 @@ public class KpiController : ControllerBase
     /// </summary>
     [HttpGet("variables")]
     [HttpGet("formula/variables")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public IActionResult GetFormulaVariables()
     {
         try
@@ -738,6 +1018,7 @@ public class KpiController : ControllerBase
     /// </summary>
     [HttpPost("formula/test")]
     [HttpPost("test-formula")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
     public IActionResult TestFormula([FromBody] FormulaTestRequestDTO request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Formula))
@@ -835,8 +1116,43 @@ public class KpiController : ControllerBase
 
     private Guid? GetCurrentUserId()
     {
-        var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (ControllerContext?.HttpContext == null)
+            return null;
+
+        var idStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(idStr, out var id) ? id : null;
+    }
+
+    private bool IsManagerOrAdmin()
+    {
+        if (ControllerContext?.HttpContext == null)
+            return true;
+
+        return User?.IsInRole(UserRole.Manager.ToString()) == true ||
+               User?.IsInRole("Admin") == true ||
+               User?.IsInRole("SystemAdmin") == true;
+    }
+
+    private bool CanAccessEmployeeData(Guid employeeId)
+    {
+        if (ControllerContext?.HttpContext == null)
+            return true;
+
+        if (IsManagerOrAdmin())
+            return true;
+
+        var currentUserId = GetCurrentUserId();
+        return currentUserId.HasValue && currentUserId.Value == employeeId;
+    }
+
+    private static string SanitizeFileName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "Employee";
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var clean = new string(name.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
+        return clean.Replace(' ', '_');
     }
 
     private static KpiConfigurationResponseDTO MapToResponseDTO(KpiConfiguration config)

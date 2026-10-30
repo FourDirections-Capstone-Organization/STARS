@@ -128,16 +128,35 @@ public class KpiControllerTests
     }
 
     [Fact]
-    public void Controller_HasManagerOnlyAuthorizePolicy()
+    public void Controller_HasAuthorizeAttribute()
     {
-        // Assert that KpiController is decorated with ManagerOnly policy
+        // Assert that KpiController is decorated with Authorize attribute
         var classAuthorizeAttrs = typeof(KpiController)
             .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
             .Cast<AuthorizeAttribute>()
             .ToList();
 
         classAuthorizeAttrs.Should().NotBeEmpty();
-        classAuthorizeAttrs.Should().Contain(a => a.Policy == AuthorizationPolicies.ManagerOnly);
+    }
+
+    [Theory]
+    [InlineData("EvaluateHierarchicalScope")]
+    [InlineData("GetAllConfigurations")]
+    [InlineData("CreateConfiguration")]
+    [InlineData("UpdateConfiguration")]
+    [InlineData("DeleteConfiguration")]
+    [InlineData("GetFormulaVariables")]
+    [InlineData("TestFormula")]
+    [InlineData("ExportHierarchyScope")]
+    public void ManagerEndpoints_HaveManagerOnlyAuthorizePolicy(string methodName)
+    {
+        var method = typeof(KpiController).GetMethod(methodName);
+        method.Should().NotBeNull();
+        var authorizeAttrs = method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .ToList();
+        authorizeAttrs.Should().NotBeEmpty();
+        authorizeAttrs.Should().Contain(a => a.Policy == AuthorizationPolicies.ManagerOnly);
     }
 
     #region Evaluation Endpoint Tests

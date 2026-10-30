@@ -48,7 +48,7 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - Push-back audit query: Confirm using AuditLog rework transitions for accuracy rate vs adding a persistent pushback counter (blocks Phase 1).
 - Historical evaluation storage: Confirm calculating dynamically via prospective config versions vs saving static scorecard snapshots (blocks Phase 2).
 - Formula variable whitelist: Finalize the list of approved numeric fields exposed to custom formulas (blocks Phase 3).
-- Biomarker threshold source: Confirm whether configurable KPI thresholds override or supplement appsettings BiomarkerThresholds (blocks Phase 5).
+- Biomarker threshold source: Configurable KPI thresholds supplement appsettings BiomarkerThresholds by generating red-zone KPI alerts alongside operational backlog checks (confirmed).
 
 ## Risks
 - AuditLog query latency: Deriving pushbacks from AuditLogs across long timeframes may require a composite index on (EntityId, Action, CreatedAt).
