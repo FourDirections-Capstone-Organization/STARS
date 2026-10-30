@@ -89,6 +89,7 @@ import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBa
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import { KpiConfigurationTab } from './KpiConfiguration';
 import { KpiDrillDownView } from './KpiDrillDown';
+import { EvaluationTemplateTab } from './PerformanceEvaluation';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
@@ -198,7 +199,8 @@ type NavTab =
     | 'activity_logs'
     | 'announcements'
     | 'notifications'
-    | 'notification_settings';
+    | 'notification_settings'
+    | 'evaluation_templates';
 
 export interface TeamMember {
     accountId: string;
@@ -4698,7 +4700,7 @@ const PRESET_OPTIONS = [
     { label: '7 Days (1 Week)', value: 7, unit: 'Days' as const },
 ];
 
-const NotificationSettingsTab: React.FC = () => {
+const NotificationSettingsTab: React.FC<{ onTabChange?: (tab: NavTab) => void }> = ({ onTabChange }) => {
     const { success, error } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -4777,6 +4779,16 @@ const NotificationSettingsTab: React.FC = () => {
     return (
         <div className="dashboard-content" style={{ padding: '24px 32px' }}>
             <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {onTabChange && (
+                    <SubTabNav
+                        tabs={[
+                            { key: 'notification_settings', label: 'Notification Settings', icon: <Clock size={14} /> },
+                            { key: 'evaluation_templates', label: 'Evaluation Templates', icon: <Sliders size={14} /> },
+                        ]}
+                        activeTab="notification_settings"
+                        onTabChange={key => onTabChange(key as NavTab)}
+                    />
+                )}
                 {/* ── Hero Banner ── */}
                 <div
                     style={{
@@ -9216,6 +9228,7 @@ export default function OpsAdminDashboard() {
                     subItems: [
                         { label: 'Profile', onClick: () => handleNavChange('profile'), active: activeTab === 'profile' },
                         { label: 'Notification Settings', onClick: () => handleNavChange('notification_settings'), active: activeTab === 'notification_settings' },
+                        { label: 'Evaluation Templates', onClick: () => handleNavChange('evaluation_templates'), active: activeTab === 'evaluation_templates' },
                     ],
                 },
             ],
@@ -10535,6 +10548,7 @@ export default function OpsAdminDashboard() {
         announcements: 'Announcements',
         notifications: 'Notifications',
         notification_settings: 'Notification Settings',
+        evaluation_templates: 'Evaluation Templates',
     };
 
     // -- Fetch dashboard data on mount and when filters change --
@@ -11001,7 +11015,22 @@ export default function OpsAdminDashboard() {
                         />
                     </div>
                 )}
-                {activeTab === 'notification_settings' && <NotificationSettingsTab />}
+                {activeTab === 'notification_settings' && <NotificationSettingsTab onTabChange={handleNavChange} />}
+                {activeTab === 'evaluation_templates' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <SubTabNav
+                                tabs={[
+                                    { key: 'notification_settings', label: 'Notification Settings', icon: <Clock size={14} /> },
+                                    { key: 'evaluation_templates', label: 'Evaluation Templates', icon: <Sliders size={14} /> },
+                                ]}
+                                activeTab="evaluation_templates"
+                                onTabChange={key => handleNavChange(key as NavTab)}
+                            />
+                            <EvaluationTemplateTab departments={departments.map(d => ({ id: d.id, name: d.name }))} />
+                        </div>
+                    </div>
+                )}
             </main>
 
             {/* -- Modals -- */}
