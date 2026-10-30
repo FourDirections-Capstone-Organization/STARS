@@ -88,6 +88,7 @@ import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import { KpiConfigurationTab } from './KpiConfiguration';
+import { KpiDrillDownView } from './KpiDrillDown';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
@@ -5444,6 +5445,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     };
 
     // --- KPI Tracking State ---
+    const [kpiViewMode, setKpiViewMode] = useState<'drilldown' | 'legacy'>('drilldown');
     const initialKpiDates = useMemo(() => computeDateRange('Monthly'), []);
     const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
         dateRangeStart: initialKpiDates.start,
@@ -6021,7 +6023,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
     // Auto-load initial report data on mount or tab change
     useEffect(() => {
-        if (reportSubTab === 'kpi-tracking' && !kpiData && !kpiLoading && !kpiError) {
+        if (reportSubTab === 'kpi-tracking' && kpiViewMode === 'legacy' && !kpiData && !kpiLoading && !kpiError) {
             handleKpiGenerate();
         } else if (reportSubTab === 'task-completion' && !tcReport && !tcLoading && !tcError) {
             handleTcGenerate();
@@ -6123,6 +6125,43 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
             {/* 1. KPI Tracking */}
             {reportSubTab === 'kpi-tracking' && (
+
+                <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+                        <div className="kpi-mode-toggle-bar" role="group" aria-label="KPI View Mode">
+                            <button
+                                type="button"
+                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'drilldown' ? 'active' : ''}`}
+                                onClick={() => setKpiViewMode('drilldown')}
+                                data-testid="kpi-view-mode-drilldown"
+                            >
+                                <BarChart3 size={14} />
+                                <span>Hierarchical Drill-Down</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'legacy' ? 'active' : ''}`}
+                                onClick={() => {
+                                    setKpiViewMode('legacy');
+                                    if (!kpiData && !kpiLoading && !kpiError) {
+                                        handleKpiGenerate();
+                                    }
+                                }}
+                                data-testid="kpi-view-mode-legacy"
+                            >
+                                <FileText size={14} />
+                                <span>Legacy SLA Overview</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {kpiViewMode === 'drilldown' ? (
+                        <KpiDrillDownView
+                            departments={departments.map(d => ({ id: d.id, name: d.name }))}
+                            onNavigateToConfig={() => setReportSubTab('kpi-configuration')}
+                        />
+                    ) : (
+
                 <>
                     <div className="card report-filter-card">
                         <div style={{ marginBottom: 12 }}>
@@ -6426,6 +6465,8 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                     </div>
                                 )}
                             </div>
+                        </>
+                    )}
                         </>
                     )}
                 </>

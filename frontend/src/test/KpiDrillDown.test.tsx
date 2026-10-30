@@ -14,6 +14,7 @@ import {
 } from '../Pages/OpAdmin_Dashboard/KpiDrillDown';
 import { ToastProvider } from '../components/Toast/Toast';
 import api from '../api';
+import { ReportsTab } from '../Pages/OpAdmin_Dashboard/OpAdmin_Dashboard';
 
 vi.mock('../api');
 
@@ -627,6 +628,148 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
                 expect(screen.getByTestId('kpi-error-banner')).toBeInTheDocument();
             });
             expect(screen.getByTestId('kpi-error-banner')).toHaveTextContent('Network error loading scope data');
+        });
+
+        it('renders header and handles navigation to KPI configuration when clicked', async () => {
+            const onNavigate = vi.fn();
+            (api.get as any).mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    data: mockCompanyData
+                }
+            });
+
+            render(
+                <ToastProvider>
+                    <KpiDrillDownView
+                        departments={mockDepartmentOptions}
+                        onNavigateToConfig={onNavigate}
+                    />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-nav-to-config-btn')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByTestId('kpi-nav-to-config-btn'));
+            expect(onNavigate).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('Manager Dashboard ReportsTab Integration', () => {
+        beforeEach(() => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url === '/api/reports/filter-options') {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                departments: [{ id: 'dept-1', name: 'Logistics Operations' }],
+                                employees: [{ id: 'emp-1', name: 'Carlos Courier' }]
+                            }
+                        }
+                    });
+                }
+                if (url === '/api/kpi/scope') {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: mockCompanyData
+                        }
+                    });
+                }
+                if (url.startsWith('/api/kpi/configurations')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: []
+                        }
+                    });
+                }
+                if (url.startsWith('/api/reports/kpi')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                totalCompletedTasks: 12,
+                                totalOnTimeTasks: 10,
+                                totalLateTasks: 2,
+                                overallOnTimeRate: 83,
+                                overallLateRate: 17,
+                                employeeKpis: []
+                            }
+                        }
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: {} } });
+            });
+        });
+
+        it('renders hierarchical drill-down view by default under KPI tracking', async () => {
+            render(
+                <ToastProvider>
+                    <ReportsTab teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]} />
+                </ToastProvider>
+            );
+
+            // Verify the view mode toggle is present and set to drilldown
+            expect(screen.getByTestId('kpi-view-mode-drilldown')).toHaveClass('active');
+            expect(screen.getByTestId('kpi-view-mode-legacy')).not.toHaveClass('active');
+
+            // Verify KpiDrillDownView is mounted and active
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-hierarchical-view')).toBeInTheDocument();
+            });
+            expect(screen.getByTestId('kpi-company-view')).toBeInTheDocument();
+            expect(screen.getByText('Hierarchical KPI & Performance Drill-Down')).toBeInTheDocument();
+        });
+
+        it('allows toggling between hierarchical drill-down and legacy SLA overview', async () => {
+            render(
+                <ToastProvider>
+                    <ReportsTab teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]} />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-hierarchical-view')).toBeInTheDocument();
+            });
+
+            // Switch to Legacy SLA Overview
+            const legacyBtn = screen.getByTestId('kpi-view-mode-legacy');
+            fireEvent.click(legacyBtn);
+
+            expect(screen.getByTestId('kpi-view-mode-legacy')).toHaveClass('active');
+            expect(screen.getByTestId('kpi-view-mode-drilldown')).not.toHaveClass('active');
+            expect(screen.getByText('📊 KPI Tracking & SLA Performance')).toBeInTheDocument();
+
+            // Switch back to Hierarchical Drill-Down
+            const drilldownBtn = screen.getByTestId('kpi-view-mode-drilldown');
+            fireEvent.click(drilldownBtn);
+
+            expect(screen.getByTestId('kpi-view-mode-drilldown')).toHaveClass('active');
+            expect(screen.getByTestId('kpi-hierarchical-view')).toBeInTheDocument();
+        });
+
+        it('navigates to KPI configuration tab from header action button', async () => {
+            render(
+                <ToastProvider>
+                    <ReportsTab teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]} />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-nav-to-config-btn')).toBeInTheDocument();
+            });
+
+            // Click Configure KPIs
+            fireEvent.click(screen.getByTestId('kpi-nav-to-config-btn'));
+
+            // Verify KPI Configuration sub-tab content is rendered
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-configuration-tab')).toBeInTheDocument();
+            });
         });
     });
 });

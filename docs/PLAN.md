@@ -21,7 +21,8 @@
   - Verify: Component tests verify Department to Team to Employee drill-down and role filtering
   - Confirmed: Hierarchical drill-down UI (KpiDrillDownView, KpiBreadcrumbs, KpiScopeControls, KpiMetricCards, KpiDrillDownTable) built with role filtering and breadcrumb navigation; verified by 12 component tests (783 backend and 152 frontend tests passing).
 
-- [ ] Step 5: Integrate hierarchical drill-down view into Manager dashboard KPI tracking
+- [x] Step 5: Integrate hierarchical drill-down view into Manager dashboard KPI tracking
   - Verify: Dashboard renders drill-down view, connects scope filters, and updates evaluations
+  - Confirmed: Hierarchical drill-down view (`KpiDrillDownView`) integrated into Manager dashboard KPI tracking tab as primary view with view-mode toggle (Drill-Down vs Legacy SLA) and direct navigation to KPI Configuration; verified by 16 drill-down & dashboard integration tests (783 backend and 156 frontend tests passing).
 - [ ] Step 6: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures

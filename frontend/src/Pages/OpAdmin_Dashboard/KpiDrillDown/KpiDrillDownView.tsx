@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Sliders } from 'lucide-react';
 import api from '../../../api';
 import { useToast } from '../../../components/Toast/Toast';
 import {
@@ -18,11 +18,12 @@ import { KpiMetricCards } from './KpiMetricCards';
 import { KpiDrillDownTable } from './KpiDrillDownTable';
 import './KpiDrillDown.css';
 
-interface KpiDrillDownViewProps {
+export interface KpiDrillDownViewProps {
     departments?: DepartmentOption[];
     initialDepartmentId?: string;
     initialTeamId?: string;
     initialRole?: string;
+    onNavigateToConfig?: () => void;
 }
 
 const getDefaultDates = () => {
@@ -39,7 +40,8 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
     departments = [],
     initialDepartmentId,
     initialTeamId,
-    initialRole = ''
+    initialRole = '',
+    onNavigateToConfig
 }) => {
     let toastMethods = { success: (_m: string) => {}, error: (_m: string) => {}, info: (_m: string) => {} };
     try {
@@ -303,6 +305,29 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
 
     return (
         <div className="kpi-drilldown-container" data-testid="kpi-hierarchical-view">
+            {/* Header & Configuration Action */}
+            <div className="kpi-view-header">
+                <div className="kpi-view-title-block">
+                    <h3 className="kpi-view-title">
+                        Hierarchical KPI &amp; Performance Drill-Down
+                    </h3>
+                    <p className="kpi-view-subtitle">
+                        Evaluate weighted logistics KPIs hierarchically from company-wide to departments, teams, and individual employees.
+                    </p>
+                </div>
+                {onNavigateToConfig && (
+                    <button
+                        type="button"
+                        className="kpi-header-config-btn"
+                        onClick={onNavigateToConfig}
+                        title="Configure KPI weights and traffic-light thresholds"
+                        data-testid="kpi-nav-to-config-btn"
+                    >
+                        <Sliders size={15} />
+                        <span>Configure KPIs</span>
+                    </button>
+                )}
+            </div>
             {/* Breadcrumb Navigation Bar */}
             <KpiBreadcrumbs
                 breadcrumbs={breadcrumbs}
