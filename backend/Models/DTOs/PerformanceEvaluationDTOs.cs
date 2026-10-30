@@ -160,3 +160,76 @@ public class ReviewResultDTO
     public List<EmployeeReviewScoreDTO> Employees { get; set; } = new();
 }
 
+/// <summary>
+/// Result of template validation containing validation outcome and error messages.
+/// </summary>
+public class TemplateValidationResult
+{
+    public bool IsValid => Errors.Count == 0;
+    public List<string> Errors { get; set; } = new();
+
+    public static TemplateValidationResult Success() => new();
+    public static TemplateValidationResult Fail(string error) => new() { Errors = { error } };
+    public static TemplateValidationResult Fail(IEnumerable<string> errors) => new() { Errors = errors.ToList() };
+}
+
+/// <summary>
+/// Generic result wrapper for template service operations with HTTP-compatible status codes.
+/// </summary>
+public class TemplateServiceResult<T>
+{
+    public bool IsSuccess { get; set; }
+    public int StatusCode { get; set; } = 200;
+    public string? Message { get; set; }
+    public List<string> Errors { get; set; } = new();
+    public T? Data { get; set; }
+
+    public static TemplateServiceResult<T> Success(T data, string message = "Success") =>
+        new() { IsSuccess = true, StatusCode = 200, Data = data, Message = message };
+
+    public static TemplateServiceResult<T> Failure(int statusCode, string message, IEnumerable<string>? errors = null) =>
+        new() { IsSuccess = false, StatusCode = statusCode, Message = message, Errors = errors?.ToList() ?? new() };
+}
+
+/// <summary>
+/// Result of a performance review workflow status transition.
+/// </summary>
+public class WorkflowTransitionResult
+{
+    public bool IsSuccess { get; set; }
+    public int StatusCode { get; set; } = 200;
+    public string? ErrorMessage { get; set; }
+    public PerformanceReview? Review { get; set; }
+    public ReviewWorkflowStatus? PreviousStatus { get; set; }
+    public ReviewWorkflowStatus? NewStatus { get; set; }
+    public string? FrozenScoresJson { get; set; }
+
+    public static WorkflowTransitionResult Success(PerformanceReview review, ReviewWorkflowStatus prev, ReviewWorkflowStatus current, string? frozenScoresJson = null) =>
+        new()
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Review = review,
+            PreviousStatus = prev,
+            NewStatus = current,
+            FrozenScoresJson = frozenScoresJson ?? review.FrozenScoresJson
+        };
+
+    public static WorkflowTransitionResult Failure(int statusCode, string errorMessage) =>
+        new()
+        {
+            IsSuccess = false,
+            StatusCode = statusCode,
+            ErrorMessage = errorMessage
+        };
+}
+
+/// <summary>
+/// DTO for requesting a review workflow status transition.
+/// </summary>
+public class ReviewStatusTransitionDTO
+{
+    public ReviewWorkflowStatus TargetStatus { get; set; }
+    public string? TransitionComment { get; set; }
+}
+

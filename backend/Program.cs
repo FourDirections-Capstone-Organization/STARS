@@ -22,6 +22,7 @@ using System.Text.Json.Serialization;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.FomsIntegration;
 using Backend.Modules.TaskManagement.Groq;
+using Backend.Modules.PerformanceEvaluation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -181,6 +182,9 @@ builder.Services.AddScoped<ISuitabilityService, SuitabilityService>();
 builder.Services.AddScoped<ISlaRiskPredictionService, SlaRiskPredictionService>();
 builder.Services.AddScoped<IKpiCalculationEngine, KpiCalculationEngine>();
 builder.Services.AddScoped<IKpiExportService, KpiExportService>();
+builder.Services.AddScoped<IPerformanceReviewScoringService, PerformanceReviewScoringService>();
+builder.Services.AddScoped<IReviewWorkflowService, ReviewWorkflowService>();
+builder.Services.AddScoped<IEvaluationTemplateService, EvaluationTemplateService>();
 builder.Services.AddSingleton<ISafeFormulaParser, SafeFormulaParser>();
 builder.Services.AddSingleton<IKpiVariableRegistry, KpiVariableRegistry>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();
