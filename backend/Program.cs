@@ -180,6 +180,7 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISuitabilityService, SuitabilityService>();
 builder.Services.AddScoped<ISlaRiskPredictionService, SlaRiskPredictionService>();
 builder.Services.AddScoped<IKpiCalculationEngine, KpiCalculationEngine>();
+builder.Services.AddScoped<IKpiExportService, KpiExportService>();
 builder.Services.AddSingleton<ISafeFormulaParser, SafeFormulaParser>();
 builder.Services.AddSingleton<IKpiVariableRegistry, KpiVariableRegistry>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();
