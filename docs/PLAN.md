@@ -24,7 +24,10 @@ Target Feature Branch: fix/kpi-deployed-500-errors
   - Findings: KpiDefaultSeeder crashes when inserting default config with missing threshold columns (PostgreSQL 42703), leaving the table unseeded.
   - Findings: Both GET /api/kpi/configurations (KpiController:668) and GET /api/kpi/scope (KpiCalculationEngine:850) query EF Core KpiConfigurations, failing on missing threshold columns and triggering 500 responses.
   - Verify: Inspection confirms both endpoints fail at EF Core queries to KpiConfigurations due to missing threshold columns
-- [ ] Step 3: Fix startup DDL, record migrations in history, ensure seed execution, and add regression tests
-  - Verify: Regression test fails without threshold columns and passes once DDL and seeder execute cleanly
+- [x] Step 3: Fix startup DDL, record migrations in history, ensure seed execution, and add regression tests
+  - Findings: Created DatabaseStartupDdl with threshold columns (OverallGreenThreshold, OverallAmberThreshold, OverallRedThreshold) in KpiConfigurations CREATE and ALTER statements.
+  - Findings: Recorded both 20261029101146_AddKpiConfigurationAndItems and 20261029111153_AddOverallThresholdsToKpiConfiguration into __EFMigrationsHistory to prevent MigrateAsync table conflicts.
+  - Findings: Enhanced KpiDefaultSeeder to safely repair 0.0 threshold values on existing records.
+  - Verify: Added 5 regression tests in KpiDatabaseConfigurationTests validating that legacy DDL fails validation without threshold columns/migrations and passes with updated DDL and seeder execution.
 - [ ] Step 4: Run full backend and frontend test suites
   - Verify: dotnet test passes all backend tests and npm test passes all frontend tests
