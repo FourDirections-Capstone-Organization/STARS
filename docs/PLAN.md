@@ -40,10 +40,10 @@
   - Run: `dotnet ef migrations add AddPerformanceEvaluation --project backend` (generated `20261030052606_AddPerformanceEvaluation`)
   - Verify: PostgreSQL SQL generation verified (`dotnet ef migrations script`); full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) verified with 848 passed, 0 failed.
 
-- [ ] Step 3: Scoring service — single server-side source of truth (security: server-side-only, frozen bypass)
+- [x] Step 3: Scoring service — single server-side source of truth (security: server-side-only, frozen bypass)
   - Files: `backend/Modules/PerformanceEvaluation/IPerformanceReviewScoringService.cs`, `PerformanceReviewScoringService.cs`, `backend/Models/DTOs/PerformanceEvaluationDTOs.cs` (CriterionScoreDTO, SectionScoreDTO, EmployeeReviewScoreDTO, ReviewResultDTO)
   - Rules: non-KPI section score = Σ(managerScore×weight)/Σ(weight) normalized to 0–100; KPI section = `IKpiCalculationEngine.CalculateEmployeeKpiAsync().OverallScore`; weighted final = Σ(sectionScore×sectionWeight)/Σ(sectionWeight); rating label from RatingBand; outlier flag when |self−manager| ≥ 2; if Finalized deserialize FrozenScoresJson. Extensibility: new CriterionType = 1 enum value (Step 1) + 1 scorer `case`.
-  - Verify: xUnit tests in `backend/Tests/Analytics/PerformanceReviewScoringTests.cs` — standard, KPI passthrough, outlier, band boundary, frozen bypass, zero-weight, missing ratings, multi-employee (≥ 8 cases).
+  - Verify: xUnit tests in `backend/Tests/Analytics/PerformanceReviewScoringTests.cs` (19 test invocations across 10 scenarios including standard, KPI passthrough, outlier, band boundary, frozen bypass, zero-weight, missing ratings, multi-employee, KPI-linked metric extraction, and DB freeze persistence); full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) verified with 867 passed, 0 failed.
 
 - [ ] Step 4: Workflow + template services and DI registration (security: server-side state enforcement, ManagerOnly)
   - Files: `backend/Modules/PerformanceEvaluation/ReviewWorkflowService.cs` + interface (illegal transitions return 422; Finalize freezes scores via scoring service), `EvaluationTemplateService.cs` + interface (CRUD; validate section weights sum 100±0.5%, criterion weights per section sum 100±0.5%, ≤1 IsKpiSection, non-overlapping RatingBands; block update when template in use by non-Draft review), `backend/Program.cs` (register all PE scoped services)
