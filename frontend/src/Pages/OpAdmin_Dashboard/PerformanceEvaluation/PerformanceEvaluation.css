@@ -2786,3 +2786,360 @@
     padding-top: 8px;
     border-top: 1px solid #e2e8f0;
 }
+
+
+/* ==========================================================================
+   Step 11: CSV Export Bar and Performance Evaluation Charts
+   ========================================================================== */
+
+/* Review Export Bar */
+.pe-export-bar {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pe-export-bar-filters {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.pe-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pe-filter-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.pe-input-sm {
+    height: 34px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+}
+
+.pe-input-sm:focus {
+    outline: none;
+    border-color: var(--teal, #00A99D);
+    box-shadow: 0 0 0 2px rgba(0, 169, 157, 0.15);
+}
+
+.pe-reset-filters-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    align-self: flex-end;
+}
+
+.pe-export-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pe-export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    padding: 7px 16px;
+    background: var(--teal, #00A99D);
+    color: #ffffff;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.pe-export-csv-btn:hover:not(:disabled) {
+    background: #008f85;
+}
+
+/* Charts Grid & Layout */
+.pe-charts-view-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.pe-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 20px;
+}
+
+@media (max-width: 980px) {
+    .pe-charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pe-chart-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+}
+
+.pe-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    gap: 12px;
+}
+
+.pe-chart-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pe-chart-subtitle {
+    margin: 4px 0 0 0;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.pe-chart-employee-selector {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pe-selector-icon {
+    position: absolute;
+    left: 8px;
+    color: #64748b;
+    pointer-events: none;
+}
+
+.pe-chart-employee-selector .pe-form-select {
+    padding-left: 28px;
+    height: 34px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+}
+
+.pe-chart-body {
+    flex: 1;
+    width: 100%;
+    min-height: 320px;
+}
+
+/* Custom In-Chart Legend */
+.pe-chart-custom-legend {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 12px;
+    padding: 6px 12px;
+    background: #f8fafc;
+    border-radius: 6px;
+    font-size: 0.775rem;
+    color: #475569;
+}
+
+.pe-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pe-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.pe-color-teal {
+    background: #00A99D;
+}
+
+.pe-color-amber {
+    background: #D97706;
+}
+
+/* Chart Placeholder & Empty States */
+.pe-chart-placeholder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 36px 20px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    gap: 10px;
+}
+
+.pe-placeholder-icon {
+    color: #64748b;
+}
+
+.pe-chart-placeholder h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.pe-chart-placeholder p {
+    margin: 0;
+    font-size: 0.825rem;
+    color: #64748b;
+    max-width: 320px;
+    line-height: 1.4;
+}
+
+.pe-placeholder-badge {
+    margin-top: 6px;
+    padding: 3px 8px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.725rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+.pe-chart-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-style: italic;
+    background: #f8fafc;
+    border-radius: 8px;
+    min-height: 280px;
+}
+
+/* Tooltip Styles */
+.pe-chart-tooltip {
+    background: #1e293b;
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid #334155;
+    max-width: 280px;
+}
+
+.pe-chart-tooltip-header {
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.pe-chart-tooltip-header strong {
+    font-size: 0.85rem;
+    color: #f8fafc;
+}
+
+.pe-chart-tooltip-badge {
+    font-size: 0.7rem;
+    color: #94a3b8;
+}
+
+.pe-chart-tooltip-kpi-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: #fbbf24;
+    font-weight: 600;
+}
+
+.pe-chart-tooltip-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.pe-chart-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.pe-chart-tooltip-row span {
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+
+.pe-chart-tooltip-row strong {
+    color: #ffffff;
+    font-size: 0.8rem;
+}
+
+.pe-chart-tooltip-outlier {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #f87171;
+    font-size: 0.725rem;
+    font-weight: 600;
+}
+
+.pe-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+}
+
+.pe-dot-indigo {
+    background: #818cf8;
+}
+
+.pe-dot-teal {
+    background: #2dd4bf;
+}
+
+.pe-text-outlier {
+    color: #f87171 !important;
+}
