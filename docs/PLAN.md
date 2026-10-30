@@ -29,5 +29,7 @@ Target Feature Branch: fix/kpi-deployed-500-errors
   - Findings: Recorded both 20261029101146_AddKpiConfigurationAndItems and 20261029111153_AddOverallThresholdsToKpiConfiguration into __EFMigrationsHistory to prevent MigrateAsync table conflicts.
   - Findings: Enhanced KpiDefaultSeeder to safely repair 0.0 threshold values on existing records.
   - Verify: Added 5 regression tests in KpiDatabaseConfigurationTests validating that legacy DDL fails validation without threshold columns/migrations and passes with updated DDL and seeder execution.
-- [ ] Step 4: Run full backend and frontend test suites
+- [x] Step 4: Run full backend and frontend test suites
+  - Findings: Executed full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) - 842 passed, 0 failed.
+  - Findings: Executed full frontend test suite (`npm --prefix frontend test`) - 263 passed across 31 test files, 0 failed.
   - Verify: dotnet test passes all backend tests and npm test passes all frontend tests
