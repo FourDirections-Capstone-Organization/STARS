@@ -233,3 +233,109 @@ public class ReviewStatusTransitionDTO
     public string? TransitionComment { get; set; }
 }
 
+
+
+/// <summary>
+/// DTO for creating a new performance review.
+/// </summary>
+public class CreatePerformanceReviewDTO
+{
+    public Guid TemplateId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public ReviewScope Scope { get; set; } = ReviewScope.Individual;
+    public DateTime PeriodStart { get; set; }
+    public DateTime PeriodEnd { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public Guid? TeamId { get; set; }
+    public Guid? EmployeeId { get; set; }
+    public Guid? ReviewerId { get; set; }
+}
+
+/// <summary>
+/// Lightweight summary DTO for performance review listings.
+/// </summary>
+public class PerformanceReviewSummaryDTO
+{
+    public Guid Id { get; set; }
+    public Guid TemplateId { get; set; }
+    public string TemplateTitle { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public ReviewScope Scope { get; set; }
+    public ReviewWorkflowStatus Status { get; set; }
+    public DateTime PeriodStart { get; set; }
+    public DateTime PeriodEnd { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public Guid? TeamId { get; set; }
+    public string? TeamName { get; set; }
+    public Guid? EmployeeId { get; set; }
+    public string? EmployeeName { get; set; }
+    public Guid? ReviewerId { get; set; }
+    public string? ReviewerName { get; set; }
+    public bool IsFinalized { get; set; }
+    public DateTime? FinalizedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Submission DTO for an individual criterion score.
+/// </summary>
+public class CriterionRatingSubmissionDTO
+{
+    public Guid CriterionId { get; set; }
+    public double? SelfScore { get; set; }
+    public string? SelfComment { get; set; }
+    public double? ManagerScore { get; set; }
+    public string? ManagerComment { get; set; }
+}
+
+/// <summary>
+/// DTO for updating ratings on a performance review.
+/// Supports both batch submissions and single-criterion submissions.
+/// </summary>
+public class SubmitReviewRatingsDTO
+{
+    public Guid? EmployeeId { get; set; }
+    public List<CriterionRatingSubmissionDTO> Ratings { get; set; } = new();
+
+    // Direct single-criterion payload support
+    public Guid? CriterionId { get; set; }
+    public double? SelfScore { get; set; }
+    public string? SelfComment { get; set; }
+    public double? ManagerScore { get; set; }
+    public string? ManagerComment { get; set; }
+
+    public List<CriterionRatingSubmissionDTO> GetNormalizedRatings()
+    {
+        var list = new List<CriterionRatingSubmissionDTO>(Ratings);
+        if (CriterionId.HasValue && CriterionId.Value != Guid.Empty && !list.Any(r => r.CriterionId == CriterionId.Value))
+        {
+            list.Add(new CriterionRatingSubmissionDTO
+            {
+                CriterionId = CriterionId.Value,
+                SelfScore = SelfScore,
+                SelfComment = SelfComment,
+                ManagerScore = ManagerScore,
+                ManagerComment = ManagerComment
+            });
+        }
+        return list;
+    }
+}
+
+/// <summary>
+/// Filter criteria for querying performance reviews.
+/// </summary>
+public class PerformanceReviewFilterDTO
+{
+    public ReviewWorkflowStatus? Status { get; set; }
+    public ReviewScope? Scope { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public Guid? TeamId { get; set; }
+    public Guid? EmployeeId { get; set; }
+}
