@@ -33,6 +33,14 @@ public class AppDbContext : DbContext
     public DbSet<TaskFomsCollectionDetail> TaskFomsCollectionDetails => Set<TaskFomsCollectionDetail>();
     public DbSet<KpiConfiguration> KpiConfigurations => Set<KpiConfiguration>();
     public DbSet<KpiItem> KpiItems => Set<KpiItem>();
+    public DbSet<EvaluationTemplate> EvaluationTemplates => Set<EvaluationTemplate>();
+    public DbSet<EvaluationSection> EvaluationSections => Set<EvaluationSection>();
+    public DbSet<EvaluationCriterion> EvaluationCriteria => Set<EvaluationCriterion>();
+    public DbSet<RatingBand> RatingBands => Set<RatingBand>();
+    public DbSet<PerformanceReview> PerformanceReviews => Set<PerformanceReview>();
+    public DbSet<CriterionRating> CriterionRatings => Set<CriterionRating>();
+    public DbSet<AiRecommendation> AiRecommendations => Set<AiRecommendation>();
+    public DbSet<DevelopmentPlanItem> DevelopmentPlanItems => Set<DevelopmentPlanItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -426,6 +434,259 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+        // EvaluationTemplate Configuration
+        modelBuilder.Entity<EvaluationTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.TargetRole).HasMaxLength(50);
+
+            entity.HasOne(t => t.Department)
+                .WithMany()
+                .HasForeignKey(t => t.DepartmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(t => t.CreatedBy)
+                .WithMany()
+                .HasForeignKey(t => t.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(t => t.Sections)
+                .WithOne(s => s.Template)
+                .HasForeignKey(s => s.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(t => t.RatingBands)
+                .WithOne(b => b.Template)
+                .HasForeignKey(b => b.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(t => t.Reviews)
+                .WithOne(r => r.Template)
+                .HasForeignKey(r => r.TemplateId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.DepartmentId);
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.TargetRole);
+        });
+
+        // EvaluationSection Configuration
+        modelBuilder.Entity<EvaluationSection>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Description).HasMaxLength(500);
+
+            entity.HasOne(s => s.Template)
+                .WithMany(t => t.Sections)
+                .HasForeignKey(s => s.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(s => s.Criteria)
+                .WithOne(c => c.Section)
+                .HasForeignKey(c => c.SectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TemplateId);
+        });
+
+        // EvaluationCriterion Configuration
+        modelBuilder.Entity<EvaluationCriterion>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.MetricCode).HasMaxLength(50);
+
+            entity.HasOne(c => c.Section)
+                .WithMany(s => s.Criteria)
+                .HasForeignKey(c => c.SectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(c => c.Ratings)
+                .WithOne(r => r.Criterion)
+                .HasForeignKey(r => r.CriterionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.SectionId);
+            entity.HasIndex(e => e.MetricCode);
+        });
+
+        // RatingBand Configuration
+        modelBuilder.Entity<RatingBand>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Label).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Color).HasMaxLength(30);
+            entity.Property(e => e.Description).HasMaxLength(500);
+
+            entity.HasOne(b => b.Template)
+                .WithMany(t => t.RatingBands)
+                .HasForeignKey(b => b.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TemplateId);
+        });
+
+        // PerformanceReview Configuration
+        modelBuilder.Entity<PerformanceReview>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.FrozenScoresJson).HasColumnType("text");
+
+            entity.HasOne(r => r.Template)
+                .WithMany(t => t.Reviews)
+                .HasForeignKey(r => r.TemplateId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Department)
+                .WithMany()
+                .HasForeignKey(r => r.DepartmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.Team)
+                .WithMany()
+                .HasForeignKey(r => r.TeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.Employee)
+                .WithMany()
+                .HasForeignKey(r => r.EmployeeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.Reviewer)
+                .WithMany()
+                .HasForeignKey(r => r.ReviewerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.CreatedBy)
+                .WithMany()
+                .HasForeignKey(r => r.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.FinalizedBy)
+                .WithMany()
+                .HasForeignKey(r => r.FinalizedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(r => r.Ratings)
+                .WithOne(cr => cr.Review)
+                .HasForeignKey(cr => cr.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(r => r.AiRecommendations)
+                .WithOne(ai => ai.Review)
+                .HasForeignKey(ai => ai.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(r => r.DevelopmentPlanItems)
+                .WithOne(dpi => dpi.Review)
+                .HasForeignKey(dpi => dpi.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.TemplateId);
+            entity.HasIndex(e => e.EmployeeId);
+            entity.HasIndex(e => e.DepartmentId);
+            entity.HasIndex(e => new { e.PeriodStart, e.PeriodEnd });
+        });
+
+        // CriterionRating Configuration
+        modelBuilder.Entity<CriterionRating>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SelfComment).HasMaxLength(1000);
+            entity.Property(e => e.ManagerComment).HasMaxLength(1000);
+
+            entity.HasOne(cr => cr.Review)
+                .WithMany(r => r.Ratings)
+                .HasForeignKey(cr => cr.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cr => cr.Employee)
+                .WithMany()
+                .HasForeignKey(cr => cr.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(cr => cr.Criterion)
+                .WithMany(c => c.Ratings)
+                .HasForeignKey(cr => cr.CriterionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.ReviewId, e.EmployeeId, e.CriterionId }).IsUnique();
+            entity.HasIndex(e => e.EmployeeId);
+            entity.HasIndex(e => e.CriterionId);
+        });
+
+        // AiRecommendation Configuration
+        modelBuilder.Entity<AiRecommendation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Summary).HasColumnType("text");
+            entity.Property(e => e.StrengthsJson).HasColumnType("text");
+            entity.Property(e => e.ImprovementAreasJson).HasColumnType("text");
+            entity.Property(e => e.ActionItemsJson).HasColumnType("text");
+            entity.Property(e => e.TrainingTopicsJson).HasColumnType("text");
+            entity.Property(e => e.RawResponseJson).HasColumnType("text");
+            entity.Property(e => e.ManualNotes).HasMaxLength(2000);
+
+            entity.HasOne(ai => ai.Review)
+                .WithMany(r => r.AiRecommendations)
+                .HasForeignKey(ai => ai.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(ai => ai.Employee)
+                .WithMany()
+                .HasForeignKey(ai => ai.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(ai => ai.ReviewedBy)
+                .WithMany()
+                .HasForeignKey(ai => ai.ReviewedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.ReviewId, e.EmployeeId });
+            entity.HasIndex(e => e.Status);
+        });
+
+        // DevelopmentPlanItem Configuration
+        modelBuilder.Entity<DevelopmentPlanItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.SuccessMeasure).HasMaxLength(500);
+            entity.Property(e => e.Timeframe).HasMaxLength(100);
+            entity.Property(e => e.ManagerNotes).HasMaxLength(1000);
+            entity.Property(e => e.EmployeeNotes).HasMaxLength(1000);
+
+            entity.HasOne(dpi => dpi.Review)
+                .WithMany(r => r.DevelopmentPlanItems)
+                .HasForeignKey(dpi => dpi.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(dpi => dpi.Employee)
+                .WithMany()
+                .HasForeignKey(dpi => dpi.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(dpi => dpi.CompletedBy)
+                .WithMany()
+                .HasForeignKey(dpi => dpi.CompletedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(dpi => dpi.CreatedBy)
+                .WithMany()
+                .HasForeignKey(dpi => dpi.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ReviewId);
+            entity.HasIndex(e => e.EmployeeId);
+            entity.HasIndex(e => e.IsCompleted);
         });
     }
 }

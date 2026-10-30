@@ -35,10 +35,10 @@
   - Files: `backend/Models/EvaluationTemplate.cs`, `EvaluationSection.cs`, `EvaluationCriterion.cs`, `RatingBand.cs`, `PerformanceReview.cs`, `CriterionRating.cs`, `AiRecommendation.cs`, `DevelopmentPlanItem.cs`, `backend/Models/Enums/CriterionType.cs` (Standard, KpiLinked), `ReviewWorkflowStatus.cs` (Draft→SelfAssessment→ManagerReview→HrReview→Acknowledgment→Finalized), `ReviewScope.cs`, `AiRecommendationStatus.cs` (Pending, Approved, Rejected, ManualOverride)
   - Verify: `dotnet build backend/Backend.csproj` succeeded with 0 errors; full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) verified with 842 passed, 0 failed.
 
-- [ ] Step 2: EF Core config, DbSets, and migration
-  - Files: `backend/Data/AppDbContext.cs` (DbSets + OnModelCreating: unique index on CriterionRating(ReviewId,EmployeeId,CriterionId), index on WorkflowStatus, FrozenScoresJson as `text`), `backend/Program.cs` (startup DDL + migration ID)
-  - Run: `dotnet ef migrations add AddPerformanceEvaluation --project backend`
-  - Verify: `dotnet ef database update` succeeds locally; `dotnet test backend/Tests/Backend.Tests.csproj` ≥ 506 tests pass.
+- [x] Step 2: EF Core config, DbSets, and migration
+  - Files: `backend/Data/AppDbContext.cs` (DbSets + OnModelCreating: unique index on CriterionRating(ReviewId,EmployeeId,CriterionId), index on WorkflowStatus, FrozenScoresJson as `text`), `backend/Data/DatabaseStartupDdl.cs` (idempotent DDL + migration history entry), `backend/Program.cs` (startup DDL log)
+  - Run: `dotnet ef migrations add AddPerformanceEvaluation --project backend` (generated `20261030052606_AddPerformanceEvaluation`)
+  - Verify: PostgreSQL SQL generation verified (`dotnet ef migrations script`); full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) verified with 848 passed, 0 failed.
 
 - [ ] Step 3: Scoring service — single server-side source of truth (security: server-side-only, frozen bypass)
   - Files: `backend/Modules/PerformanceEvaluation/IPerformanceReviewScoringService.cs`, `PerformanceReviewScoringService.cs`, `backend/Models/DTOs/PerformanceEvaluationDTOs.cs` (CriterionScoreDTO, SectionScoreDTO, EmployeeReviewScoreDTO, ReviewResultDTO)
