@@ -22,6 +22,7 @@ public class PerformanceReviewScoringService : IPerformanceReviewScoringService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         WriteIndented = false
     };
 

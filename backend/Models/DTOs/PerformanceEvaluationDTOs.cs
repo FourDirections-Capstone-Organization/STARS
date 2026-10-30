@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using Backend.Models;
 using Backend.Models.Enums;
 
 namespace Backend.Models.DTOs;
@@ -338,4 +340,152 @@ public class PerformanceReviewFilterDTO
     public Guid? DepartmentId { get; set; }
     public Guid? TeamId { get; set; }
     public Guid? EmployeeId { get; set; }
+}
+
+/// <summary>
+/// DTO representing an action or development plan item for an employee.
+/// </summary>
+public class DevelopmentPlanItemDTO
+{
+    public Guid Id { get; set; }
+    public Guid ReviewId { get; set; }
+    public string? ReviewTitle { get; set; }
+    public Guid EmployeeId { get; set; }
+    public string? EmployeeName { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string? SuccessMeasure { get; set; }
+    public string? Timeframe { get; set; }
+    public DateTime? TargetCompletionDate { get; set; }
+    public bool IsCompleted { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public Guid? CompletedById { get; set; }
+    public string? CompletedByName { get; set; }
+    public Guid? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? ManagerNotes { get; set; }
+    public string? EmployeeNotes { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// DTO for creating an individual development plan item.
+/// </summary>
+public class CreateDevelopmentPlanItemDTO
+{
+    [Required]
+    [MaxLength(500)]
+    public string Description { get; set; } = string.Empty;
+
+    [MaxLength(500)]
+    public string? SuccessMeasure { get; set; }
+
+    [MaxLength(100)]
+    public string? Timeframe { get; set; }
+
+    public DateTime? TargetCompletionDate { get; set; }
+
+    [MaxLength(1000)]
+    public string? ManagerNotes { get; set; }
+}
+
+/// <summary>
+/// Request payload for creating one or more development plan items.
+/// Supports both single item payload and batch items list.
+/// </summary>
+public class CreateDevelopmentPlanRequestDTO
+{
+    public string? Description { get; set; }
+    public string? SuccessMeasure { get; set; }
+    public string? Timeframe { get; set; }
+    public DateTime? TargetCompletionDate { get; set; }
+    public string? ManagerNotes { get; set; }
+
+    public List<CreateDevelopmentPlanItemDTO>? Items { get; set; }
+
+    public List<CreateDevelopmentPlanItemDTO> GetNormalizedItems()
+    {
+        var result = new List<CreateDevelopmentPlanItemDTO>();
+        if (Items != null && Items.Count > 0)
+        {
+            result.AddRange(Items.Where(i => !string.IsNullOrWhiteSpace(i.Description)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(Description) && !result.Any(i => i.Description == Description))
+        {
+            result.Add(new CreateDevelopmentPlanItemDTO
+            {
+                Description = Description,
+                SuccessMeasure = SuccessMeasure,
+                Timeframe = Timeframe,
+                TargetCompletionDate = TargetCompletionDate,
+                ManagerNotes = ManagerNotes
+            });
+        }
+
+        return result;
+    }
+}
+
+/// <summary>
+/// DTO for updating a development plan item.
+/// </summary>
+public class UpdateDevelopmentPlanItemDTO
+{
+    [MaxLength(500)]
+    public string? Description { get; set; }
+
+    [MaxLength(500)]
+    public string? SuccessMeasure { get; set; }
+
+    [MaxLength(100)]
+    public string? Timeframe { get; set; }
+
+    public DateTime? TargetCompletionDate { get; set; }
+
+    public bool? IsCompleted { get; set; }
+
+    [MaxLength(1000)]
+    public string? ManagerNotes { get; set; }
+
+    [MaxLength(1000)]
+    public string? EmployeeNotes { get; set; }
+}
+
+/// <summary>
+/// Extension methods for mapping DevelopmentPlanItem entity to DTO.
+/// </summary>
+public static class DevelopmentPlanMappingExtensions
+{
+    public static DevelopmentPlanItemDTO ToDTO(this DevelopmentPlanItem item)
+    {
+        return new DevelopmentPlanItemDTO
+        {
+            Id = item.Id,
+            ReviewId = item.ReviewId,
+            ReviewTitle = item.Review?.Title,
+            EmployeeId = item.EmployeeId,
+            EmployeeName = item.Employee != null
+                ? $"{item.Employee.FirstName} {item.Employee.LastName}".Trim()
+                : null,
+            Description = item.Description,
+            SuccessMeasure = item.SuccessMeasure,
+            Timeframe = item.Timeframe,
+            TargetCompletionDate = item.TargetCompletionDate,
+            IsCompleted = item.IsCompleted,
+            CompletedAt = item.CompletedAt,
+            CompletedById = item.CompletedById,
+            CompletedByName = item.CompletedBy != null
+                ? $"{item.CompletedBy.FirstName} {item.CompletedBy.LastName}".Trim()
+                : null,
+            CreatedById = item.CreatedById,
+            CreatedByName = item.CreatedBy != null
+                ? $"{item.CreatedBy.FirstName} {item.CreatedBy.LastName}".Trim()
+                : null,
+            ManagerNotes = item.ManagerNotes,
+            EmployeeNotes = item.EmployeeNotes,
+            CreatedAt = item.CreatedAt,
+            UpdatedAt = item.UpdatedAt
+        };
+    }
 }
