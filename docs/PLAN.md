@@ -17,9 +17,10 @@
 - [x] Step 3: Add hierarchical evaluation endpoints in KpiController with scope filters
   - Verify: Controller integration tests confirm Department, Team, role, and timeframe filtering
   - Confirmed: Hierarchical evaluation endpoints (`/api/kpi/scope`, `/api/kpi/department/{id}`, `/api/kpi/team/{id}`) implemented with role, timeframe, and scope filters; verified by 26 controller integration and unit tests (783 backend and 140 frontend tests passing).
-
-- [ ] Step 4: Build hierarchical drill-down UI with scope controls and breadcrumb navigation
+- [x] Step 4: Build hierarchical drill-down UI with scope controls and breadcrumb navigation
   - Verify: Component tests verify Department to Team to Employee drill-down and role filtering
+  - Confirmed: Hierarchical drill-down UI (KpiDrillDownView, KpiBreadcrumbs, KpiScopeControls, KpiMetricCards, KpiDrillDownTable) built with role filtering and breadcrumb navigation; verified by 12 component tests (783 backend and 152 frontend tests passing).
+
 - [ ] Step 5: Integrate hierarchical drill-down view into Manager dashboard KPI tracking
   - Verify: Dashboard renders drill-down view, connects scope filters, and updates evaluations
 - [ ] Step 6: Run full backend and frontend test suites
