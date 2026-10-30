@@ -73,6 +73,7 @@ import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
 import { ReportsTab, TeamTab, TeamMember } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
+import { EvaluationTemplateTab, PerformanceReviewTab } from '../OpAdmin_Dashboard/PerformanceEvaluation';
 import TaskManager from '../../components/TaskManager/TaskManager';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
@@ -105,7 +106,9 @@ type NavTab =
     | 'team'
     | 'profile'
     | 'org-structure'
-    | 'biomarker';
+    | 'biomarker'
+    | 'evaluation_templates'
+    | 'performance_reviews';
 
 // ─── Updated Types ────────────────────────────────────────────────────────────
 
@@ -3614,6 +3617,7 @@ export default function Dashboard() {
         { label: 'Task Management', onClick: () => handleNavChange('tasks'), active: activeTab === 'tasks' },
         { label: 'Team Management', onClick: () => handleNavChange('team'), active: activeTab === 'team' },
         { label: 'Reports', onClick: () => handleNavChange('reports'), active: activeTab === 'reports' },
+        { label: 'Performance Reviews', onClick: () => handleNavChange('performance_reviews'), active: activeTab === 'performance_reviews' },
         { label: 'Role Management', onClick: () => handleNavChange('roles'), active: activeTab === 'roles' },
         { label: 'Org Structure', onClick: () => handleNavChange('org-structure'), active: activeTab === 'org-structure' },
         { label: 'Activity Logs', onClick: () => handleNavChange('activity_logs'), active: activeTab === 'activity_logs' },
@@ -3641,6 +3645,7 @@ export default function Dashboard() {
         subItems: [
         { label: 'Announcements', onClick: () => handleNavChange('announcements'), active: activeTab === 'announcements' },
         { label: 'Settings', onClick: () => handleNavChange('settings'), active: activeTab === 'settings' },
+        { label: 'Evaluation Templates', onClick: () => handleNavChange('evaluation_templates'), active: activeTab === 'evaluation_templates' },
         { label: 'Notifications', onClick: () => handleNavChange('notifications'), active: activeTab === 'notifications' },
         ],
         },
@@ -5045,7 +5050,9 @@ export default function Dashboard() {
         tasks: 'Task Manager',
         team: 'Team Management',
         'org-structure': 'Organizational Structure',
-        biomarker: 'Biomarker Alert Dashboard'
+        biomarker: 'Biomarker Alert Dashboard',
+        evaluation_templates: 'Evaluation Templates',
+        performance_reviews: 'Performance Reviews',
     };
 
     return (
@@ -5545,6 +5552,21 @@ export default function Dashboard() {
                                 );
                             })}
                         </DataTable>
+                    </div>
+                )}
+                {activeTab === 'evaluation_templates' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <EvaluationTemplateTab departments={departments} />
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'performance_reviews' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                            <PerformanceReviewTab departments={departments} />
+                        </div>
                     </div>
                 )}
             </main>
