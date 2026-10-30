@@ -244,7 +244,7 @@ using (var scope = app.Services.CreateScope())
         try
         {
             await DatabaseStartupDdl.ApplyStartupDdlAsync(db);
-            Console.WriteLine("[STARTUP] FOMS Integration, KPI tables, thresholds, and multi-system user columns verified/created.");
+            Console.WriteLine("[STARTUP] FOMS Integration, KPI tables, thresholds, Performance Evaluation tables, and multi-system user columns verified/created.");
         }
         catch (Exception ddlEx)
         {
