@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Backend.Models;
 
@@ -7,12 +8,14 @@ public class CriterionRating
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid ReviewId { get; set; }
+    [JsonIgnore]
     public PerformanceReview? Review { get; set; }
 
     public Guid EmployeeId { get; set; }
     public User? Employee { get; set; }
 
     public Guid CriterionId { get; set; }
+    [JsonIgnore]
     public EvaluationCriterion? Criterion { get; set; }
 
     /// <summary>

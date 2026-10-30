@@ -36,11 +36,11 @@ export const getRatingBadgeClass = (rating: TrafficLightRating) => {
 export const getComprehensiveRatingLabel = (rating: TrafficLightRating | string): string => {
     switch (rating) {
         case 'Green':
-            return 'On Track (Green)';
+            return 'On Track';
         case 'Amber':
-            return 'Needs Attention (Amber)';
+            return 'Needs Attention';
         case 'Red':
-            return 'Critical (Red)';
+            return 'Critical';
         default:
             return rating || 'N/A';
     }

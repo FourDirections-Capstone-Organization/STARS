@@ -413,7 +413,7 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
             render(<KpiMetricCards data={mockCompanyData} />);
 
             expect(screen.getByText('92.4%')).toBeInTheDocument();
-            expect(screen.getByTestId('kpi-overall-rating-badge')).toHaveTextContent('Green');
+            expect(screen.getByTestId('kpi-overall-rating-badge')).toHaveTextContent('On Track');
             expect(screen.getByText('140 / 150')).toBeInTheDocument();
 
             // Check metric cards

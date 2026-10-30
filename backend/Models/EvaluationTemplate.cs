@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Backend.Models;
 
@@ -34,6 +35,7 @@ public class EvaluationTemplate
 
     public ICollection<EvaluationSection> Sections { get; set; } = new List<EvaluationSection>();
     public ICollection<RatingBand> RatingBands { get; set; } = new List<RatingBand>();
+    [JsonIgnore]
     public ICollection<PerformanceReview> Reviews { get; set; } = new List<PerformanceReview>();
 }
 

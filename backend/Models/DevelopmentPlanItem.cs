@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Backend.Models;
 
@@ -7,6 +8,7 @@ public class DevelopmentPlanItem
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid ReviewId { get; set; }
+    [JsonIgnore]
     public PerformanceReview? Review { get; set; }
 
     public Guid EmployeeId { get; set; }

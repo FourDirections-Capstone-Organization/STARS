@@ -62,10 +62,20 @@ public class PerformanceEvaluationController : ControllerBase
         [FromQuery] string? targetRole,
         CancellationToken cancellationToken = default)
     {
-        var templates = await _templateService.GetAllTemplatesAsync(
-            activeOnly, departmentId, targetRole, cancellationToken);
+        try
+        {
+            var templates = await _templateService.GetAllTemplatesAsync(
+                activeOnly, departmentId, targetRole, cancellationToken);
 
-        return Ok(ApiResponseDTO<IReadOnlyList<EvaluationTemplate>>.Success(templates));
+            return Ok(ApiResponseDTO<IReadOnlyList<EvaluationTemplate>>.Success(templates));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving evaluation templates.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponseDTO<IReadOnlyList<EvaluationTemplate>>.Failure(
+                    "An unexpected error occurred while retrieving evaluation templates."));
+        }
     }
 
     /// <summary>
@@ -242,8 +252,8 @@ public class PerformanceEvaluationController : ControllerBase
             Description = request.Description?.Trim(),
             Scope = request.Scope,
             Status = ReviewWorkflowStatus.Draft,
-            PeriodStart = request.PeriodStart,
-            PeriodEnd = request.PeriodEnd,
+            PeriodStart = request.PeriodStart.Kind == DateTimeKind.Utc ? request.PeriodStart : DateTime.SpecifyKind(request.PeriodStart, DateTimeKind.Utc),
+            PeriodEnd = request.PeriodEnd.Kind == DateTimeKind.Utc ? request.PeriodEnd : DateTime.SpecifyKind(request.PeriodEnd, DateTimeKind.Utc),
             DepartmentId = request.DepartmentId,
             TeamId = request.TeamId,
             EmployeeId = request.EmployeeId,
@@ -273,83 +283,98 @@ public class PerformanceEvaluationController : ControllerBase
         [FromQuery] PerformanceReviewFilterDTO filter,
         CancellationToken cancellationToken = default)
     {
-        filter ??= new PerformanceReviewFilterDTO();
-
-        if (filter.EmployeeId.HasValue && !CanAccessEmployeeData(filter.EmployeeId.Value))
+        try
         {
-            return StatusCode(
-                StatusCodes.Status403Forbidden,
-                ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Failure(
-                    "Forbidden: You do not have permission to view another employee's performance reviews."));
-        }
+            filter ??= new PerformanceReviewFilterDTO();
 
-        var query = _context.PerformanceReviews
-            .AsNoTracking()
-            .Include(r => r.Template)
-            .Include(r => r.Department)
-            .Include(r => r.Team)
-            .Include(r => r.Employee)
-            .Include(r => r.Reviewer)
-            .Include(r => r.Ratings)
-            .AsQueryable();
-
-        if (!IsManagerOrAdmin())
-        {
-            var currentUserId = GetCurrentUserId();
-            if (!currentUserId.HasValue)
+            if (filter.EmployeeId.HasValue && !CanAccessEmployeeData(filter.EmployeeId.Value))
             {
-                return Unauthorized(ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Failure(
-                    "User is not authenticated."));
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Failure(
+                        "Forbidden: You do not have permission to view another employee's performance reviews."));
             }
 
-            query = query.Where(r =>
-                r.EmployeeId == currentUserId.Value ||
-                r.Ratings.Any(rt => rt.EmployeeId == currentUserId.Value));
-        }
+            var query = _context.PerformanceReviews
+                .AsNoTracking()
+                .Include(r => r.Template)
+                .Include(r => r.Department)
+                .Include(r => r.Team)
+                .Include(r => r.Employee)
+                .Include(r => r.Reviewer)
+                .AsQueryable();
 
-        if (filter.Status.HasValue)
+            if (!IsManagerOrAdmin())
+            {
+                var currentUserId = GetCurrentUserId();
+                if (!currentUserId.HasValue)
+                {
+                    return Unauthorized(ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Failure(
+                        "User is not authenticated."));
+                }
+
+                query = query.Where(r =>
+                    r.EmployeeId == currentUserId.Value ||
+                    r.Ratings.Any(rt => rt.EmployeeId == currentUserId.Value));
+            }
+
+            if (filter.Status.HasValue)
+            {
+                query = query.Where(r => r.Status == filter.Status.Value);
+            }
+
+            if (filter.Scope.HasValue)
+            {
+                query = query.Where(r => r.Scope == filter.Scope.Value);
+            }
+
+            if (filter.StartDate.HasValue)
+            {
+                var startUtc = filter.StartDate.Value.Kind == DateTimeKind.Utc
+                    ? filter.StartDate.Value
+                    : DateTime.SpecifyKind(filter.StartDate.Value, DateTimeKind.Utc);
+                query = query.Where(r => r.PeriodEnd >= startUtc);
+            }
+
+            if (filter.EndDate.HasValue)
+            {
+                var endUtc = filter.EndDate.Value.Kind == DateTimeKind.Utc
+                    ? filter.EndDate.Value
+                    : DateTime.SpecifyKind(filter.EndDate.Value, DateTimeKind.Utc);
+                query = query.Where(r => r.PeriodStart <= endUtc);
+            }
+
+            if (filter.DepartmentId.HasValue)
+            {
+                query = query.Where(r => r.DepartmentId == filter.DepartmentId.Value);
+            }
+
+            if (filter.TeamId.HasValue)
+            {
+                query = query.Where(r => r.TeamId == filter.TeamId.Value);
+            }
+
+            if (filter.EmployeeId.HasValue)
+            {
+                query = query.Where(r => r.EmployeeId == filter.EmployeeId.Value);
+            }
+
+            var reviews = await query
+                .OrderByDescending(r => r.PeriodEnd)
+                .ThenByDescending(r => r.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            var summaries = reviews.Select(r => MapToSummaryDTO(r, r.Template?.Title ?? string.Empty)).ToList();
+
+            return Ok(ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Success(summaries));
+        }
+        catch (Exception ex)
         {
-            query = query.Where(r => r.Status == filter.Status.Value);
+            _logger.LogError(ex, "Unexpected error retrieving performance reviews.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Failure(
+                    "An unexpected error occurred while retrieving performance reviews."));
         }
-
-        if (filter.Scope.HasValue)
-        {
-            query = query.Where(r => r.Scope == filter.Scope.Value);
-        }
-
-        if (filter.StartDate.HasValue)
-        {
-            query = query.Where(r => r.PeriodEnd >= filter.StartDate.Value);
-        }
-
-        if (filter.EndDate.HasValue)
-        {
-            query = query.Where(r => r.PeriodStart <= filter.EndDate.Value);
-        }
-
-        if (filter.DepartmentId.HasValue)
-        {
-            query = query.Where(r => r.DepartmentId == filter.DepartmentId.Value);
-        }
-
-        if (filter.TeamId.HasValue)
-        {
-            query = query.Where(r => r.TeamId == filter.TeamId.Value);
-        }
-
-        if (filter.EmployeeId.HasValue)
-        {
-            query = query.Where(r => r.EmployeeId == filter.EmployeeId.Value);
-        }
-
-        var reviews = await query
-            .OrderByDescending(r => r.PeriodEnd)
-            .ThenByDescending(r => r.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        var summaries = reviews.Select(r => MapToSummaryDTO(r, r.Template?.Title ?? string.Empty)).ToList();
-
-        return Ok(ApiResponseDTO<List<PerformanceReviewSummaryDTO>>.Success(summaries));
     }
 
     /// <summary>
@@ -1235,7 +1260,10 @@ public class PerformanceEvaluationController : ControllerBase
         if (ControllerContext?.HttpContext == null)
             return null;
 
-        var idStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var idStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User?.FindFirst("sub")?.Value
+                    ?? User?.FindFirst("nameid")?.Value
+                    ?? User?.FindFirst("id")?.Value;
         return Guid.TryParse(idStr, out var id) ? id : null;
     }
 
@@ -1244,9 +1272,21 @@ public class PerformanceEvaluationController : ControllerBase
         if (ControllerContext?.HttpContext == null)
             return true;
 
-        return User?.IsInRole(UserRole.Manager.ToString()) == true ||
-               User?.IsInRole("Admin") == true ||
-               User?.IsInRole("SystemAdmin") == true;
+        if (User == null)
+            return false;
+
+        var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value ?? User.FindFirst("role")?.Value;
+        if (!string.IsNullOrEmpty(roleClaim) &&
+            (roleClaim.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
+             roleClaim.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+             roleClaim.Equals("SystemAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return User.IsInRole(UserRole.Manager.ToString()) ||
+               User.IsInRole("Admin") ||
+               User.IsInRole("SystemAdmin");
     }
 
     private bool CanAccessEmployeeData(Guid employeeId)

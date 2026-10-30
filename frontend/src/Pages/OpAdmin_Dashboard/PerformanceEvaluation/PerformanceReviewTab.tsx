@@ -96,7 +96,7 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
         setLoading(true);
         setApiError('');
         try {
-            const [reviewsData, templatesData] = await Promise.all([
+            const [reviewsRes, templatesRes] = await Promise.allSettled([
                 fetchReviews({
                     status: filterStatus !== 'ALL' ? filterStatus : undefined,
                     scope: filterScope !== 'ALL' ? filterScope : undefined,
@@ -105,12 +105,23 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                 }),
                 fetchTemplates({ activeOnly: true })
             ]);
-            setReviews(reviewsData);
-            setTemplates(templatesData);
-        } catch (err: any) {
-            const msg = err.response?.data?.message || err.message || 'Failed to load performance reviews.';
-            setApiError(msg);
-            error(msg);
+
+            if (reviewsRes.status === 'fulfilled') {
+                setReviews(reviewsRes.value);
+            } else {
+                const err = reviewsRes.reason;
+                const msg = err?.response?.data?.message || err?.message || 'Failed to load performance reviews.';
+                setApiError(msg);
+                error(msg);
+            }
+
+            if (templatesRes.status === 'fulfilled') {
+                setTemplates(templatesRes.value);
+            } else {
+                const err = templatesRes.reason;
+                const msg = err?.response?.data?.message || err?.message || 'Failed to load evaluation templates.';
+                error(msg);
+            }
         } finally {
             setLoading(false);
         }

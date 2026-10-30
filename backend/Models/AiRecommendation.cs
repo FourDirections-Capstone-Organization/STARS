@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Backend.Models.Enums;
 
 namespace Backend.Models;
@@ -8,6 +9,7 @@ public class AiRecommendation
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid ReviewId { get; set; }
+    [JsonIgnore]
     public PerformanceReview? Review { get; set; }
 
     public Guid EmployeeId { get; set; }
