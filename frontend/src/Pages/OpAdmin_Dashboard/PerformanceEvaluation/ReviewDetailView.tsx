@@ -18,7 +18,8 @@ import {
     RotateCcw,
     Check,
     Sparkles,
-    Target
+    Target,
+    BarChart3
 } from 'lucide-react';
 import {
     ReviewResultDTO,
@@ -28,11 +29,16 @@ import {
 import {
     fetchReviewById,
     submitReviewRatings,
-    transitionReviewWorkflow
+    transitionReviewWorkflow,
+    exportReviewCsv
 } from '../../../services/performanceEvaluationService';
 import { RatingGrid } from './RatingGrid';
 import { AiRecommendationPanel } from './AiRecommendationPanel';
 import { DevelopmentPlanPanel } from './DevelopmentPlanPanel';
+import { ReviewExportBar } from './ReviewExportBar';
+import { CriterionComparisonChart } from './charts/CriterionComparisonChart';
+import { RatingDistributionChart } from './charts/RatingDistributionChart';
+import { SectionBreakdownChart } from './charts/SectionBreakdownChart';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
 import { useToast } from '../../../components/Toast/Toast';
 
@@ -87,8 +93,14 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     const [apiError, setApiError] = useState<string>('');
     const [isSavingRatings, setIsSavingRatings] = useState<boolean>(false);
     const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
+    const [isHeaderExporting, setIsHeaderExporting] = useState<boolean>(false);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
-    const [activeDetailTab, setActiveDetailTab] = useState<'ratings' | 'ai' | 'plan'>('ratings');
+    const [activeDetailTab, setActiveDetailTab] = useState<'ratings' | 'ai' | 'plan' | 'charts'>('ratings');
+
+    // Chart filter state (Step 11: re-render on date/scope filter change)
+    const [chartStartDate, setChartStartDate] = useState<string>('');
+    const [chartEndDate, setChartEndDate] = useState<string>('');
+    const [chartScopeFilter, setChartScopeFilter] = useState<string>('ALL');
 
     // Confirmation modal for workflow transition
     const [confirmModal, setConfirmModal] = useState<{
@@ -118,6 +130,12 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
             if (data.employees && data.employees.length > 0 && !selectedEmployeeId) {
                 setSelectedEmployeeId(data.employees[0].employeeId);
             }
+            if (data.periodStart && !chartStartDate) {
+                setChartStartDate(data.periodStart.slice(0, 10));
+            }
+            if (data.periodEnd && !chartEndDate) {
+                setChartEndDate(data.periodEnd.slice(0, 10));
+            }
             onReviewUpdated?.(data);
         } catch (err: any) {
             const msg = err.response?.data?.message || err.message || 'Failed to load review details.';
@@ -126,7 +144,7 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
         } finally {
             setLoading(false);
         }
-    }, [reviewId, onReviewUpdated, error, selectedEmployeeId]);
+    }, [reviewId, onReviewUpdated, error, selectedEmployeeId, chartStartDate, chartEndDate]);
 
     useEffect(() => {
         loadReview();
@@ -135,6 +153,47 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     const currentEmployee = useMemo(() => {
         return review?.employees?.find(e => e.employeeId === selectedEmployeeId) || review?.employees?.[0];
     }, [review?.employees, selectedEmployeeId]);
+
+    // Reset chart filters back to original review dates and all scopes
+    const handleResetChartFilters = useCallback(() => {
+        setChartStartDate(review?.periodStart ? review.periodStart.slice(0, 10) : '');
+        setChartEndDate(review?.periodEnd ? review.periodEnd.slice(0, 10) : '');
+        setChartScopeFilter('ALL');
+    }, [review?.periodStart, review?.periodEnd]);
+
+    // Filter review data for charts based on date/scope filters (re-renders without extra API calls)
+    const filteredReviewForCharts = useMemo(() => {
+        if (!review) return review;
+        let filteredEmployees = review.employees || [];
+
+        if (chartScopeFilter && chartScopeFilter !== 'ALL') {
+            filteredEmployees = filteredEmployees.filter(
+                e => e.role === chartScopeFilter || e.jobPositionTitle === chartScopeFilter || e.departmentName === chartScopeFilter
+            );
+        }
+
+        return {
+            ...review,
+            periodStart: chartStartDate || review.periodStart,
+            periodEnd: chartEndDate || review.periodEnd,
+            employees: filteredEmployees
+        };
+    }, [review, chartScopeFilter, chartStartDate, chartEndDate]);
+
+    // Header export handler
+    const handleHeaderExportCsv = async () => {
+        if (!review?.reviewId || isHeaderExporting) return;
+        setIsHeaderExporting(true);
+        try {
+            await exportReviewCsv(review.reviewId);
+            success('Performance review CSV exported successfully.');
+        } catch (err: any) {
+            const msg = err.response?.data?.message || err.message || 'Failed to export CSV.';
+            error(msg);
+        } finally {
+            setIsHeaderExporting(false);
+        }
+    };
 
     // Handle ratings submission
     const handleSaveRatings = async (employeeId: string, ratings: CriterionRatingSubmissionDTO[]) => {
@@ -248,6 +307,27 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
                 </button>
 
                 <div className="pe-detail-action-buttons">
+                    <button
+                        type="button"
+                        className="pe-btn pe-btn-secondary pe-btn-sm"
+                        onClick={handleHeaderExportCsv}
+                        disabled={isHeaderExporting}
+                        data-testid="header-export-csv-btn"
+                        title="Export Review Ratings and Scores to CSV"
+                    >
+                        {isHeaderExporting ? (
+                            <>
+                                <Loader2 className="pe-spinner" size={14} />
+                                <span>Exporting...</span>
+                            </>
+                        ) : (
+                            <>
+                                <FileSpreadsheet size={14} />
+                                <span>Export CSV</span>
+                            </>
+                        )}
+                    </button>
+
                     {prevStatus && !review.isFinalized && (
                         <button
                             type="button"
@@ -415,6 +495,17 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
                     <Target size={15} />
                     <span>Development Plan</span>
                 </button>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeDetailTab === 'charts'}
+                    className={`pe-detail-tab-btn ${activeDetailTab === 'charts' ? 'active' : ''}`}
+                    onClick={() => setActiveDetailTab('charts')}
+                    data-testid="detail-tab-charts"
+                >
+                    <BarChart3 size={15} />
+                    <span>Charts & Analytics</span>
+                </button>
             </div>
 
             {/* Tab Body Section */}
@@ -450,6 +541,36 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
                         employees={review.employees}
                         onEmployeeChange={setSelectedEmployeeId}
                     />
+                )}
+
+                {activeDetailTab === 'charts' && (
+                    <div className="pe-charts-view-container" data-testid="pe-charts-view">
+                        <ReviewExportBar
+                            review={review}
+                            startDate={chartStartDate}
+                            endDate={chartEndDate}
+                            onStartDateChange={setChartStartDate}
+                            onEndDateChange={setChartEndDate}
+                            scopeFilter={chartScopeFilter}
+                            onScopeFilterChange={setChartScopeFilter}
+                            onResetFilters={handleResetChartFilters}
+                        />
+                        <div className="pe-charts-grid">
+                            <CriterionComparisonChart
+                                review={filteredReviewForCharts || review}
+                                selectedEmployeeId={selectedEmployeeId}
+                                onEmployeeChange={setSelectedEmployeeId}
+                            />
+                            <RatingDistributionChart
+                                review={filteredReviewForCharts || review}
+                            />
+                            <SectionBreakdownChart
+                                review={filteredReviewForCharts || review}
+                                selectedEmployeeId={selectedEmployeeId}
+                                onEmployeeChange={setSelectedEmployeeId}
+                            />
+                        </div>
+                    </div>
                 )}
             </div>
 
