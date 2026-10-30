@@ -19,8 +19,10 @@
   - Completed: KpiController authorization scoped with [Authorize] class-level and endpoint-level ManagerOnly controls; employee self-scorecard endpoints (GET /my-scorecard, GET /scorecard/{id}) added with 403 Forbidden enforcement for non-manager cross-employee access.
   - Completed: IKpiExportService and KpiExportService implemented with QuestPDF and ClosedXML, supporting individual scorecard PDF/Excel and hierarchical scope PDF/Excel exports.
   - Verified: 815 backend tests pass (32 new unit and controller tests) and 156 frontend tests pass.
-- [ ] Step 3: Feed configurable KPI red-zone alerts into BiomarkerScanService
+- [x] Step 3: Feed configurable KPI red-zone alerts into BiomarkerScanService
   - Verify: Unit and integration tests confirm Biomarker Scan generates Critical alerts for red-zone KPI metrics
+  - Completed: BiomarkerScanService integrated with IKpiCalculationEngine to evaluate prospective active KpiConfigurations at department and employee levels, generating Critical severity alerts when any KPI metric or overall score enters the red zone.
+  - Verified: 823 backend tests pass (8 new Biomarker scan KPI red-zone tests) and 156 frontend tests pass.
 - [ ] Step 4: Build employee scorecard view and export controls in frontend dashboards
   - Verify: Component tests verify employee scorecard rendering, metrics breakdown, and export triggers
 - [ ] Step 5: Run full backend and frontend test suites

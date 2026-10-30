@@ -1225,4 +1225,612 @@ public class BiomarkerScanTests
             alerts.Should().BeEmpty();
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 5. Configurable KPI Red-Zone Alert Triggers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_OtifBelowRedThreshold_GeneratesCriticalAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Field Logistics", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Alice",
+                LastName = "Smith",
+                Email = "alice@example.com",
+                EmployeeNumber = "EMP101",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+
+            // 2 completed tasks: 1 on-time with attachment, 1 late with attachment -> 50% OTIF (< 60% default Red threshold)
+            var task1 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Task 1",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-5),
+                UpdatedAt = now.AddDays(-3),
+                Deadline = now.AddDays(-1),
+                Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = "pod.pdf" } }
+            };
+            var task2 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Task 2",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-5),
+                UpdatedAt = now.AddDays(-1),
+                Deadline = now.AddDays(-3),
+                Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = "pod2.pdf" } }
+            };
+
+            db.Tasks.AddRange(task1, task2);
+            db.TaskAssignments.AddRange(
+                new TaskAssignment { TaskId = task1.Id, AssignedUserId = empId },
+                new TaskAssignment { TaskId = task2.Id, AssignedUserId = empId }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "OTIF" && a.EmployeeNumber == "EMP101");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(50.0);
+            alert.ThresholdValue.Should().Be(60.0);
+            alert.Description.Should().Contain("red-zone");
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_CustomThreshold_TriggersWhenDefaultWouldNot()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Express Dispatch", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "David",
+                LastName = "Courier",
+                Email = "david@example.com",
+                EmployeeNumber = "EMP102",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            // Custom configuration with strict 80% red threshold for OTIF (default is 60%)
+            var customConfig = new KpiConfiguration
+            {
+                Id = Guid.NewGuid(),
+                Title = "Strict Courier KPI",
+                TargetRole = "Courier",
+                DepartmentId = deptId,
+                IsActive = true,
+                EffectiveStartDate = now.AddDays(-30),
+                OverallGreenThreshold = 90.0,
+                OverallAmberThreshold = 80.0,
+                OverallRedThreshold = 70.0,
+                Items = new List<KpiItem>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        MetricCode = "OTIF",
+                        Name = "On-Time In-Full Rate",
+                        Weight = 100.0,
+                        Unit = "%",
+                        TargetValue = 95.0,
+                        GreenThreshold = 90.0,
+                        AmberThreshold = 85.0,
+                        RedThreshold = 80.0,
+                        IsLowerBetter = false,
+                        Order = 1
+                    }
+                }
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+            db.KpiConfigurations.Add(customConfig);
+
+            // 4 completed tasks: 3 on-time with attachment, 1 late -> 75% OTIF.
+            // Under default 60% this is Amber (not Red). Under custom 80% this is Red!
+            for (int i = 0; i < 4; i++)
+            {
+                bool isLate = (i == 3);
+                var t = new Backend.Models.Task
+                {
+                    Id = Guid.NewGuid(),
+                    Title = $"Task {i}",
+                    AssignedDepartmentId = deptId,
+                    Status = Backend.Models.Enums.TaskStatus.Completed,
+                    CreatedAt = now.AddDays(-10),
+                    UpdatedAt = isLate ? now.AddDays(-1) : now.AddDays(-5),
+                    Deadline = now.AddDays(-3),
+                    Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = $"proof_{i}.jpg" } }
+                };
+                db.Tasks.Add(t);
+                db.TaskAssignments.Add(new TaskAssignment { TaskId = t.Id, AssignedUserId = empId });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "OTIF" && a.EmployeeNumber == "EMP102");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(75.0);
+            alert.ThresholdValue.Should().Be(80.0);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_OrderAccuracyBelowRedThreshold_GeneratesCriticalAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Billing", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Karen",
+                LastName = "Encoder",
+                Email = "karen@example.com",
+                EmployeeNumber = "EMP103",
+                DepartmentId = deptId,
+                Role = UserRole.Encoder,
+                IsActive = true
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+
+            // 2 completed tasks: both had rework comments -> 0% accuracy (< 70% Red threshold)
+            var task1 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Encoder Task 1",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-5),
+                UpdatedAt = now.AddDays(-2),
+                Deadline = now.AddDays(1),
+                PushBackComment = "Missing invoice number"
+            };
+            var task2 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Encoder Task 2",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-5),
+                UpdatedAt = now.AddDays(-1),
+                Deadline = now.AddDays(1),
+                PushBackComment = "Amount mismatch"
+            };
+
+            db.Tasks.AddRange(task1, task2);
+            db.TaskAssignments.AddRange(
+                new TaskAssignment { TaskId = task1.Id, AssignedUserId = empId },
+                new TaskAssignment { TaskId = task2.Id, AssignedUserId = empId }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "ORDER_ACCURACY" && a.EmployeeNumber == "EMP103");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(0.0);
+            alert.ThresholdValue.Should().Be(70.0);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_AhtExceedsRedThreshold_GeneratesCriticalAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Operations", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Sam",
+                LastName = "Slow",
+                Email = "sam@example.com",
+                EmployeeNumber = "EMP104",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+
+            // 1 completed task with 100 hours handling time (> 72 hours Red threshold)
+            var task = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Slow Delivery",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddHours(-110),
+                UpdatedAt = now.AddHours(-10),
+                Deadline = now.AddDays(1)
+            };
+
+            db.Tasks.Add(task);
+            db.TaskAssignments.Add(new TaskAssignment { TaskId = task.Id, AssignedUserId = empId, AssignedAt = now.AddHours(-110) });
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "AHT" && a.EmployeeNumber == "EMP104");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(100.0);
+            alert.ThresholdValue.Should().Be(12.0);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_CustomFormulaMetric_RedThreshold_GeneratesCriticalAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Custom Dept", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Frank",
+                LastName = "Formulas",
+                Email = "frank@example.com",
+                EmployeeNumber = "EMP105",
+                DepartmentId = deptId,
+                Role = UserRole.Encoder,
+                IsActive = true
+            };
+
+            // Custom formula metric: ReworkRate = (ReworkTasks / CompletedTasks) * 100
+            // RedThreshold = 30.0 (IsLowerBetter = true)
+            var customConfig = new KpiConfiguration
+            {
+                Id = Guid.NewGuid(),
+                Title = "Custom Formula Config",
+                TargetRole = "Encoder",
+                DepartmentId = deptId,
+                IsActive = true,
+                EffectiveStartDate = now.AddDays(-30),
+                OverallGreenThreshold = 85.0,
+                OverallAmberThreshold = 70.0,
+                OverallRedThreshold = 60.0,
+                Items = new List<KpiItem>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        MetricCode = "REWORK_RATE",
+                        Name = "Rework Rate",
+                        Weight = 100.0,
+                        Unit = "%",
+                        TargetValue = 5.0,
+                        GreenThreshold = 10.0,
+                        AmberThreshold = 20.0,
+                        RedThreshold = 30.0,
+                        IsLowerBetter = true,
+                        IsCustomFormula = true,
+                        CustomFormula = "(rework_tasks / completed_tasks) * 100",
+                        Order = 1
+                    }
+                }
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+            db.KpiConfigurations.Add(customConfig);
+
+            // 2 completed tasks: 1 with rework -> 50% rework rate (> 30% Red threshold)
+            var t1 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Task 1",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-3),
+                UpdatedAt = now.AddDays(-1),
+                PushBackComment = "Rework needed"
+            };
+            var t2 = new Backend.Models.Task
+            {
+                Id = Guid.NewGuid(),
+                Title = "Task 2",
+                AssignedDepartmentId = deptId,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                CreatedAt = now.AddDays(-3),
+                UpdatedAt = now.AddDays(-1)
+            };
+
+            db.Tasks.AddRange(t1, t2);
+            db.TaskAssignments.AddRange(
+                new TaskAssignment { TaskId = t1.Id, AssignedUserId = empId },
+                new TaskAssignment { TaskId = t2.Id, AssignedUserId = empId }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "REWORK_RATE" && a.EmployeeNumber == "EMP105");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(50.0);
+            alert.ThresholdValue.Should().Be(30.0);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_OverallScoreRedZone_GeneratesCriticalOverallScoreAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Field Ops", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Grace",
+                LastName = "LowScore",
+                Email = "grace@example.com",
+                EmployeeNumber = "EMP106",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            var customConfig = new KpiConfiguration
+            {
+                Id = Guid.NewGuid(),
+                Title = "Strict Overall KPI",
+                TargetRole = "Courier",
+                DepartmentId = deptId,
+                IsActive = true,
+                EffectiveStartDate = now.AddDays(-30),
+                OverallGreenThreshold = 85.0,
+                OverallAmberThreshold = 75.0,
+                OverallRedThreshold = 70.0,
+                Items = new List<KpiItem>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        MetricCode = "OTIF",
+                        Name = "On-Time In-Full Rate",
+                        Weight = 100.0,
+                        Unit = "%",
+                        TargetValue = 100.0,
+                        GreenThreshold = 95.0,
+                        AmberThreshold = 85.0,
+                        RedThreshold = 75.0,
+                        IsLowerBetter = false,
+                        Order = 1
+                    }
+                }
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+            db.KpiConfigurations.Add(customConfig);
+
+            // 2 completed tasks, both late -> 0% OTIF, overall score = 0 < 70
+            var t1 = new Backend.Models.Task { Id = Guid.NewGuid(), Title = "T1", AssignedDepartmentId = deptId, Status = Backend.Models.Enums.TaskStatus.Completed, CreatedAt = now.AddDays(-5), UpdatedAt = now.AddDays(-1), Deadline = now.AddDays(-3) };
+            var t2 = new Backend.Models.Task { Id = Guid.NewGuid(), Title = "T2", AssignedDepartmentId = deptId, Status = Backend.Models.Enums.TaskStatus.Completed, CreatedAt = now.AddDays(-5), UpdatedAt = now.AddDays(-1), Deadline = now.AddDays(-3) };
+
+            db.Tasks.AddRange(t1, t2);
+            db.TaskAssignments.AddRange(
+                new TaskAssignment { TaskId = t1.Id, AssignedUserId = empId },
+                new TaskAssignment { TaskId = t2.Id, AssignedUserId = empId }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var alert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.MetricName == "EmployeeKpiOverallScore" && a.EmployeeNumber == "EMP106");
+
+            alert.Should().NotBeNull();
+            alert!.Severity.Should().Be("Critical");
+            alert.CurrentValue.Should().Be(0.0);
+            alert.ThresholdValue.Should().Be(70.0);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_GoodMetrics_GeneratesNoCriticalKpiAlerts()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Top Ops", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Hank",
+                LastName = "Star",
+                Email = "hank@example.com",
+                EmployeeNumber = "EMP107",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+
+            // 4 completed tasks: all on-time, with attachments, 0 rework, fast handling time
+            for (int i = 0; i < 4; i++)
+            {
+                var t = new Backend.Models.Task
+                {
+                    Id = Guid.NewGuid(),
+                    Title = $"Star Task {i}",
+                    AssignedDepartmentId = deptId,
+                    Status = Backend.Models.Enums.TaskStatus.Completed,
+                    CreatedAt = now.AddDays(-2),
+                    UpdatedAt = now.AddDays(-1),
+                    Deadline = now.AddDays(1),
+                    Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = $"proof_{i}.png" } }
+                };
+                db.Tasks.Add(t);
+                db.TaskAssignments.Add(new TaskAssignment { TaskId = t.Id, AssignedUserId = empId });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var criticalAlerts = await db.BiomarkerAlerts
+                .Where(a => a.EmployeeNumber == "EMP107" && a.Severity == "Critical")
+                .ToListAsync();
+
+            criticalAlerts.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task RunBiomarkerScanAsync_ConfigurableKpi_DepartmentKpiRedZone_GeneratesCriticalAlert()
+    {
+        var (scanService, scopeFactory) = CreateScanService();
+        var now = DateTime.UtcNow;
+        var deptId = Guid.NewGuid();
+        var empId = Guid.NewGuid();
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var dept = new Department { Id = deptId, Name = "Underperforming Dept", IsActive = true };
+            var emp = new User
+            {
+                Id = empId,
+                FirstName = "Dept",
+                LastName = "Member",
+                Email = "dept@example.com",
+                EmployeeNumber = "EMP108",
+                DepartmentId = deptId,
+                Role = UserRole.Courier,
+                IsActive = true
+            };
+
+            db.Departments.Add(dept);
+            db.Users.Add(emp);
+
+            // 2 completed tasks: both late with attachments -> 0% OTIF for department (< 60% Red threshold)
+            var t1 = new Backend.Models.Task { Id = Guid.NewGuid(), Title = "T1", AssignedDepartmentId = deptId, Status = Backend.Models.Enums.TaskStatus.Completed, CreatedAt = now.AddDays(-5), UpdatedAt = now.AddDays(-1), Deadline = now.AddDays(-3), Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = "doc1.pdf" } } };
+            var t2 = new Backend.Models.Task { Id = Guid.NewGuid(), Title = "T2", AssignedDepartmentId = deptId, Status = Backend.Models.Enums.TaskStatus.Completed, CreatedAt = now.AddDays(-5), UpdatedAt = now.AddDays(-1), Deadline = now.AddDays(-3), Attachments = new List<TaskAttachment> { new() { Id = Guid.NewGuid(), FileName = "doc2.pdf" } } };
+
+            db.Tasks.AddRange(t1, t2);
+            db.TaskAssignments.AddRange(
+                new TaskAssignment { TaskId = t1.Id, AssignedUserId = empId },
+                new TaskAssignment { TaskId = t2.Id, AssignedUserId = empId }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        await scanService.RunBiomarkerScanAsync(now.Date);
+
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var deptAlert = await db.BiomarkerAlerts.FirstOrDefaultAsync(a => a.DepartmentId == deptId && a.MetricName == "OTIF" && a.EmployeeNumber == null);
+
+            deptAlert.Should().NotBeNull();
+            deptAlert!.Severity.Should().Be("Critical");
+            deptAlert.CurrentValue.Should().Be(0.0);
+            deptAlert.ThresholdValue.Should().Be(60.0);
+        }
+    }
+
 }
