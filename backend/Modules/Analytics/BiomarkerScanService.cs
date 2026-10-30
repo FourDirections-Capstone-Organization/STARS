@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Backend.Models.DTOs;
 using Microsoft.Extensions.Options;
 using Backend.Data;
 using Backend.Models;
@@ -39,16 +41,18 @@ public class BiomarkerScanService : BackgroundService
             if (stoppingToken.IsCancellationRequested)
                 break;
 
-            await RunBiomarkerScanAsync(DateTime.UtcNow.Date);
+            await RunBiomarkerScanAsync(DateTime.UtcNow.Date, stoppingToken);
         }
     }
 
-    public async Task RunBiomarkerScanAsync(DateTime scanDate)
+    public async Task RunBiomarkerScanAsync(DateTime scanDate, CancellationToken cancellationToken = default)
     {
         try
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var kpiEngine = scope.ServiceProvider.GetService<IKpiCalculationEngine>()
+                ?? new KpiCalculationEngine(db, scope.ServiceProvider.GetService<ILogger<KpiCalculationEngine>>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<KpiCalculationEngine>.Instance);
 
             _logger.LogInformation("Running biomarker scan for {ScanDate}", scanDate.ToString("yyyy-MM-dd"));
 
@@ -56,6 +60,14 @@ public class BiomarkerScanService : BackgroundService
             var now = DateTime.UtcNow;
             var th = _thresholds.Value;
             var scanDateTime = now;
+
+            var normalizedScanDate = scanDate.Kind == DateTimeKind.Utc ? scanDate : DateTime.SpecifyKind(scanDate, DateTimeKind.Utc);
+            var kpiEndDate = normalizedScanDate.Date.AddDays(1);
+            var kpiStartDate = kpiEndDate.AddDays(-30);
+
+            var activeConfigs = await db.KpiConfigurations
+                .Where(c => c.IsActive)
+                .ToDictionaryAsync(c => c.Id, cancellationToken);
 
             // ─── Department-level metrics ───
             var departments = await db.Departments.Where(d => d.IsActive).ToListAsync();
@@ -137,6 +149,61 @@ public class BiomarkerScanService : BackgroundService
                         Severity = "Warning",
                         Description = $"Department {dept.Name} has {stuckTasks} task(s) stuck InProgress for >{th.StuckTaskHours}h"
                     });
+                }
+
+                // ─── Configurable Department KPI Red-Zone Evaluation ───
+                try
+                {
+                    var deptKpi = await kpiEngine.CalculateDepartmentKpiAsync(dept.Id, kpiStartDate, kpiEndDate, cancellationToken: cancellationToken);
+                    if (deptKpi.TotalAssignedTasks > 0)
+                    {
+                        foreach (var m in deptKpi.Metrics)
+                        {
+                            bool isEvaluatable = (m.MetricCode == "COMPLETION_RATE" || m.MetricCode == "TASK_COMPLETION_RATE")
+                                ? deptKpi.TotalAssignedTasks >= 3
+                                : deptKpi.CompletedTasksCount > 0;
+
+                            if (isEvaluatable && m.Rating == "Red")
+                            {
+                                alerts.Add(new BiomarkerAlert
+                                {
+                                    ScanDateTime = scanDateTime,
+                                    ScanDate = scanDate,
+                                    DepartmentId = dept.Id,
+                                    DepartmentName = dept.Name,
+                                    MetricName = m.MetricCode,
+                                    CurrentValue = m.ActualValue,
+                                    ThresholdValue = m.RedThreshold,
+                                    Severity = "Critical",
+                                    Description = $"Department {dept.Name} breached red-zone threshold for {m.Name} ({m.MetricCode}): {m.ActualValue}{m.Unit} (Red threshold: {m.RedThreshold}{m.Unit})"
+                                });
+                            }
+                        }
+
+                        if (deptKpi.CompletedTasksCount > 0 && deptKpi.OverallRating == "Red")
+                        {
+                            double deptRedThresh = deptKpi.ConfigurationId.HasValue && activeConfigs.TryGetValue(deptKpi.ConfigurationId.Value, out var dcfg)
+                                ? dcfg.OverallRedThreshold
+                                : 60.0;
+
+                            alerts.Add(new BiomarkerAlert
+                            {
+                                ScanDateTime = scanDateTime,
+                                ScanDate = scanDate,
+                                DepartmentId = dept.Id,
+                                DepartmentName = dept.Name,
+                                MetricName = "DepartmentKpiOverallScore",
+                                CurrentValue = deptKpi.OverallScore,
+                                ThresholdValue = deptRedThresh,
+                                Severity = "Critical",
+                                Description = $"Department {dept.Name} overall KPI score ({deptKpi.OverallScore}) is in the Critical red zone (threshold: {deptRedThresh})"
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to evaluate KPI red zones for department {DeptName}", dept.Name);
                 }
             }
 
@@ -228,6 +295,65 @@ public class BiomarkerScanService : BackgroundService
                         Severity = "Warning",
                         Description = $"Employee {emp.EmployeeNumber} has {activeAssignments} active tasks (threshold: {th.MaxWorkloadPerEmployee})"
                     });
+                }
+
+                // ─── Configurable Employee KPI Red-Zone Evaluation ───
+                try
+                {
+                    var empKpi = await kpiEngine.CalculateEmployeeKpiAsync(emp.Id, kpiStartDate, kpiEndDate, cancellationToken: cancellationToken);
+                    if (empKpi.TotalAssignedTasks > 0)
+                    {
+                        foreach (var m in empKpi.Metrics)
+                        {
+                            bool isEvaluatable = (m.MetricCode == "COMPLETION_RATE" || m.MetricCode == "TASK_COMPLETION_RATE")
+                                ? empKpi.TotalAssignedTasks >= 3
+                                : empKpi.CompletedTasksCount > 0;
+
+                            if (isEvaluatable && m.Rating == "Red")
+                            {
+                                alerts.Add(new BiomarkerAlert
+                                {
+                                    ScanDateTime = scanDateTime,
+                                    ScanDate = scanDate,
+                                    DepartmentId = emp.DepartmentId,
+                                    DepartmentName = emp.Department?.Name ?? "Unknown",
+                                    EmployeeName = $"{emp.FirstName} {emp.LastName}",
+                                    EmployeeNumber = emp.EmployeeNumber,
+                                    MetricName = m.MetricCode,
+                                    CurrentValue = m.ActualValue,
+                                    ThresholdValue = m.RedThreshold,
+                                    Severity = "Critical",
+                                    Description = $"Employee {emp.EmployeeNumber} ({emp.FirstName} {emp.LastName}) breached red-zone threshold for {m.Name} ({m.MetricCode}): {m.ActualValue}{m.Unit} (Red threshold: {m.RedThreshold}{m.Unit})"
+                                });
+                            }
+                        }
+
+                        if (empKpi.CompletedTasksCount > 0 && empKpi.OverallRating == "Red")
+                        {
+                            double empRedThresh = empKpi.ConfigurationId.HasValue && activeConfigs.TryGetValue(empKpi.ConfigurationId.Value, out var ecfg)
+                                ? ecfg.OverallRedThreshold
+                                : 60.0;
+
+                            alerts.Add(new BiomarkerAlert
+                            {
+                                ScanDateTime = scanDateTime,
+                                ScanDate = scanDate,
+                                DepartmentId = emp.DepartmentId,
+                                DepartmentName = emp.Department?.Name ?? "Unknown",
+                                EmployeeName = $"{emp.FirstName} {emp.LastName}",
+                                EmployeeNumber = emp.EmployeeNumber,
+                                MetricName = "EmployeeKpiOverallScore",
+                                CurrentValue = empKpi.OverallScore,
+                                ThresholdValue = empRedThresh,
+                                Severity = "Critical",
+                                Description = $"Employee {emp.EmployeeNumber} ({emp.FirstName} {emp.LastName}) overall KPI score ({empKpi.OverallScore}) is in the Critical red zone (threshold: {empRedThresh})"
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to evaluate KPI red zones for employee {EmployeeNumber}", emp.EmployeeNumber);
                 }
             }
 
