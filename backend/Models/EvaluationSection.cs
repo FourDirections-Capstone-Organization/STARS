@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Backend.Models;
 
@@ -7,6 +8,7 @@ public class EvaluationSection
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid TemplateId { get; set; }
+    [JsonIgnore]
     public EvaluationTemplate? Template { get; set; }
 
     [Required]

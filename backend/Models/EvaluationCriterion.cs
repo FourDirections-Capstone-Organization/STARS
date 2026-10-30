@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Backend.Models.Enums;
 
 namespace Backend.Models;
@@ -8,6 +9,7 @@ public class EvaluationCriterion
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid SectionId { get; set; }
+    [JsonIgnore]
     public EvaluationSection? Section { get; set; }
 
     [Required]
@@ -29,6 +31,7 @@ public class EvaluationCriterion
 
     public int Order { get; set; } = 1;
 
+    [JsonIgnore]
     public ICollection<CriterionRating> Ratings { get; set; } = new List<CriterionRating>();
 }
 

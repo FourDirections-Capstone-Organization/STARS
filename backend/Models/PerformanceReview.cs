@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Backend.Models.Enums;
 
 namespace Backend.Models;
@@ -54,8 +55,11 @@ public class PerformanceReview
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    [JsonIgnore]
     public ICollection<CriterionRating> Ratings { get; set; } = new List<CriterionRating>();
+    [JsonIgnore]
     public ICollection<AiRecommendation> AiRecommendations { get; set; } = new List<AiRecommendation>();
+    [JsonIgnore]
     public ICollection<DevelopmentPlanItem> DevelopmentPlanItems { get; set; } = new List<DevelopmentPlanItem>();
 }
 
