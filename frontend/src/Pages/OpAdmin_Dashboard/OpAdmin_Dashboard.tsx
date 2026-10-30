@@ -201,7 +201,8 @@ type NavTab =
     | 'notifications'
     | 'notification_settings'
     | 'evaluation_templates'
-    | 'performance_reviews';
+    | 'performance_reviews'
+    | 'kpi_configuration';
 
 export interface TeamMember {
     accountId: string;
@@ -5274,9 +5275,21 @@ const DateRangeEngineField: React.FC<{
     );
 };
 
-export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; employeeName: string; role?: string }> }> = ({ teamMembers }) => {
+export const ReportsTab: React.FC<{
+    teamMembers: Array<{ accountId: string; employeeName: string; role?: string }>;
+    onNavigateToTab?: (tab: NavTab) => void;
+    onNavigateToConfig?: () => void;
+}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig }) => {
     const { success, error } = useToast();
-    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'kpi-configuration' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
+    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
+
+    const handleConfigClick = () => {
+        if (onNavigateToTab) {
+            onNavigateToTab('kpi_configuration');
+        } else if (onNavigateToConfig) {
+            onNavigateToConfig();
+        }
+    };
 
     // Shared filter options
     const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
@@ -6122,7 +6135,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
-                    { key: 'kpi-configuration', label: 'KPI Configuration', icon: <Sliders size={14} /> },
                     { key: 'task-completion', label: 'Task Completion', icon: <FileText size={14} /> },
                     { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
                     { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
@@ -6138,97 +6150,133 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
             {/* 1. KPI Tracking */}
             {reportSubTab === 'kpi-tracking' && (
-
                 <>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-                        <div className="kpi-mode-toggle-bar" role="group" aria-label="KPI View Mode">
-                            <button
-                                type="button"
-                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'drilldown' ? 'active' : ''}`}
-                                onClick={() => setKpiViewMode('drilldown')}
-                                data-testid="kpi-view-mode-drilldown"
-                            >
-                                <BarChart3 size={14} />
-                                <span>Hierarchical Drill-Down</span>
-                            </button>
-                            <button
-                                type="button"
-                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'legacy' ? 'active' : ''}`}
-                                onClick={() => {
-                                    setKpiViewMode('legacy');
-                                    if (!kpiData && !kpiLoading && !kpiError) {
-                                        handleKpiGenerate();
-                                    }
-                                }}
-                                data-testid="kpi-view-mode-legacy"
-                            >
-                                <FileText size={14} />
-                                <span>Legacy SLA Overview</span>
-                            </button>
-                        </div>
-                    </div>
-
                     {kpiViewMode === 'drilldown' ? (
                         <KpiDrillDownView
                             departments={departments.map(d => ({ id: d.id, name: d.name }))}
-                            onNavigateToConfig={() => setReportSubTab('kpi-configuration')}
+                            onNavigateToConfig={handleConfigClick}
+                            viewModeControls={
+                                <div className="kpi-mode-toggle-bar" role="group" aria-label="KPI View Mode">
+                                    <button
+                                        type="button"
+                                        className={`kpi-mode-toggle-btn ${kpiViewMode === 'drilldown' ? 'active' : ''}`}
+                                        onClick={() => setKpiViewMode('drilldown')}
+                                        data-testid="kpi-view-mode-drilldown"
+                                    >
+                                        <BarChart3 size={14} />
+                                        <span>Hierarchical Drill-Down</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`kpi-mode-toggle-btn ${kpiViewMode === 'legacy' ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setKpiViewMode('legacy');
+                                            if (!kpiData && !kpiLoading && !kpiError) {
+                                                handleKpiGenerate();
+                                            }
+                                        }}
+                                        data-testid="kpi-view-mode-legacy"
+                                    >
+                                        <FileText size={14} />
+                                        <span>Legacy SLA Overview</span>
+                                    </button>
+                                </div>
+                            }
                         />
                     ) : (
-
-                <>
-                    <div className="card report-filter-card">
-                        <div style={{ marginBottom: 12 }}>
-                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                                📊 KPI Tracking &amp; SLA Performance
-                            </h3>
-                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-                                Track on-time task delivery rates, identify overdue trends, and evaluate employee SLA compliance.
-                            </p>
-                        </div>
-                        <div className="report-filter-bar">
-                            <div className="report-filter-fields">
-                                <DateRangeEngineField
-                                    dateRangeStart={kpiFilter.dateRangeStart}
-                                    dateRangeEnd={kpiFilter.dateRangeEnd}
-                                    onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
-                                    showFiscalYear={false}
-                                />
-                                <div className="field" style={{ minWidth: 200 }}>
-                                    <label>Employee Filter</label>
-                                    <SearchableSelect
-                                        value={kpiFilter.employeeId}
-                                        onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
-                                        options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
-                                        placeholder="All Employees"
-                                        searchPlaceholder="Search employees..."
-                                        width="100%"
-                                    />
-                                </div>
-                            </div>
-                            <div className="report-filter-actions-right">
-                                {kpiData && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <select
-                                            className="report-select"
-                                            value={kpiExportFormat}
-                                            onChange={e => setKpiExportFormat(e.target.value as 'Csv' | 'Excel')}
-                                            style={{ width: 130, height: 34, fontSize: 12.5 }}
+                        <>
+                            <div className="card report-filter-card">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                                    <div>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                            📊 KPI Tracking &amp; SLA Performance
+                                        </h3>
+                                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                                            Track on-time task delivery rates, identify overdue trends, and evaluate employee SLA compliance.
+                                        </p>
+                                    </div>
+                                    <div className="kpi-header-actions-group">
+                                        <div className="kpi-mode-toggle-bar" role="group" aria-label="KPI View Mode">
+                                            <button
+                                                type="button"
+                                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'drilldown' ? 'active' : ''}`}
+                                                onClick={() => setKpiViewMode('drilldown')}
+                                                data-testid="kpi-view-mode-drilldown"
+                                            >
+                                                <BarChart3 size={14} />
+                                                <span>Hierarchical Drill-Down</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'legacy' ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    setKpiViewMode('legacy');
+                                                    if (!kpiData && !kpiLoading && !kpiError) {
+                                                        handleKpiGenerate();
+                                                    }
+                                                }}
+                                                data-testid="kpi-view-mode-legacy"
+                                            >
+                                                <FileText size={14} />
+                                                <span>Legacy SLA Overview</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="kpi-header-config-btn"
+                                            onClick={handleConfigClick}
+                                            title="Configure KPI weights and thresholds"
+                                            data-testid="kpi-nav-to-config-btn"
                                         >
-                                            <option value="Csv">📝 CSV (.csv)</option>
-                                            <option value="Excel">📊 Excel (.xlsx)</option>
-                                        </select>
-                                        <button className="btn" onClick={() => handleKpiExport(kpiExportFormat)} title="Export KPI Data" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                            <Download size={14} /> Export
+                                            <Sliders size={14} />
+                                            <span>Configure KPIs</span>
                                         </button>
                                     </div>
-                                )}
-                                <button type="button" className="btn btn-secondary" onClick={() => setReportSubTab('kpi-configuration')} title="Configure KPI weights and thresholds" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sliders size={14} /> Configure KPIs</button>
-                                <button className="btn btn-teal" onClick={() => handleKpiGenerate()} disabled={kpiLoading} style={{ height: 34 }}>
-                                    {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
-                                </button>
+                                </div>
+                                <div className="report-filter-bar">
+                                    <div className="report-filter-fields">
+                                        <DateRangeEngineField
+                                            dateRangeStart={kpiFilter.dateRangeStart}
+                                            dateRangeEnd={kpiFilter.dateRangeEnd}
+                                            onChange={(start, end) => setKpiFilter(prev => ({ ...prev, dateRangeStart: start, dateRangeEnd: end }))}
+                                            showFiscalYear={false}
+                                        />
+                                        <div className="field" style={{ minWidth: 200 }}>
+                                            <label>Employee Filter</label>
+                                            <SearchableSelect
+                                                value={kpiFilter.employeeId}
+                                                onChange={val => setKpiFilter(prev => ({ ...prev, employeeId: val }))}
+                                                options={allEmployeeOptions.map(m => ({ value: m.accountId, label: m.employeeName }))}
+                                                placeholder="All Employees"
+                                                searchPlaceholder="Search employees..."
+                                                width="100%"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="report-filter-actions-right">
+                                        {kpiData && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <select
+                                                    className="report-select"
+                                                    value={kpiExportFormat}
+                                                    onChange={e => setKpiExportFormat(e.target.value as 'Csv' | 'Excel')}
+                                                    style={{ width: 130, height: 34, fontSize: 12.5 }}
+                                                >
+                                                    <option value="Csv">📝 CSV (.csv)</option>
+                                                    <option value="Excel">📊 Excel (.xlsx)</option>
+                                                </select>
+                                                <button className="btn" onClick={() => handleKpiExport(kpiExportFormat)} title="Export KPI Data" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                    <Download size={14} /> Export
+                                                </button>
+                                            </div>
+                                        )}
+                                        <button type="button" className="btn btn-secondary" onClick={handleConfigClick} title="Configure KPI weights and thresholds" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sliders size={14} /> Configure KPIs</button>
+                                        <button className="btn btn-teal" onClick={() => handleKpiGenerate()} disabled={kpiLoading} style={{ height: 34 }}>
+                                            {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
                     {kpiError && (
                         <div className="card" style={{ marginTop: 16 }}>
@@ -6485,12 +6533,6 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                 </>
             )}
 
-            {/* 1b. KPI Configuration */}
-            {reportSubTab === 'kpi-configuration' && (
-                <KpiConfigurationTab
-                    departments={departments.map(d => ({ id: d.id, name: d.name }))}
-                />
-            )}
 
             {/* 2. Task Completion Report */}
             {reportSubTab === 'task-completion' && (
@@ -9231,6 +9273,7 @@ export default function OpsAdminDashboard() {
                         { label: 'Profile', onClick: () => handleNavChange('profile'), active: activeTab === 'profile' },
                         { label: 'Notification Settings', onClick: () => handleNavChange('notification_settings'), active: activeTab === 'notification_settings' },
                         { label: 'Evaluation Templates', onClick: () => handleNavChange('evaluation_templates'), active: activeTab === 'evaluation_templates' },
+                        { label: 'KPI Configuration', onClick: () => handleNavChange('kpi_configuration'), active: activeTab === 'kpi_configuration' },
                     ],
                 },
             ],
@@ -10552,6 +10595,7 @@ export default function OpsAdminDashboard() {
         notification_settings: 'Notification Settings',
         evaluation_templates: 'Evaluation Templates',
         performance_reviews: 'Performance Reviews',
+        kpi_configuration: 'KPI Configuration',
     };
 
     // -- Fetch dashboard data on mount and when filters change --
@@ -10798,7 +10842,7 @@ export default function OpsAdminDashboard() {
                 )}
                 {activeTab === 'templates' && <TemplateTab teamMembers={teamMembers} />}
                 {activeTab === 'approvals' && <ApprovalsWrapper />}
-                {activeTab === 'reports' && <ReportsTab teamMembers={teamMembers} />}
+                {activeTab === 'reports' && <ReportsTab teamMembers={teamMembers} onNavigateToTab={handleNavChange} />}
                 {activeTab === 'profile' && <ProfileTab />}
                 {activeTab === 'reopen' && (
                     <ReopenTab
@@ -11021,11 +11065,12 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'notification_settings' && <NotificationSettingsTab onTabChange={handleNavChange} />}
                 {activeTab === 'evaluation_templates' && (
                     <div className="dashboard-content" style={{ padding: '24px 32px' }}>
-                        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                        <div style={{ width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
                             <SubTabNav
                                 tabs={[
                                     { key: 'notification_settings', label: 'Notification Settings', icon: <Clock size={14} /> },
                                     { key: 'evaluation_templates', label: 'Evaluation Templates', icon: <Sliders size={14} /> },
+                                    { key: 'kpi_configuration', label: 'KPI Configuration', icon: <Sliders size={14} /> },
                                 ]}
                                 activeTab="evaluation_templates"
                                 onTabChange={key => handleNavChange(key as NavTab)}
@@ -11034,9 +11079,25 @@ export default function OpsAdminDashboard() {
                         </div>
                     </div>
                 )}
+                {activeTab === 'kpi_configuration' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <SubTabNav
+                                tabs={[
+                                    { key: 'notification_settings', label: 'Notification Settings', icon: <Clock size={14} /> },
+                                    { key: 'evaluation_templates', label: 'Evaluation Templates', icon: <Sliders size={14} /> },
+                                    { key: 'kpi_configuration', label: 'KPI Configuration', icon: <Sliders size={14} /> },
+                                ]}
+                                activeTab="kpi_configuration"
+                                onTabChange={key => handleNavChange(key as NavTab)}
+                            />
+                            <KpiConfigurationTab departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))} />
+                        </div>
+                    </div>
+                )}
                 {activeTab === 'performance_reviews' && (
                     <div className="dashboard-content" style={{ padding: '24px 32px' }}>
-                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                        <div style={{ width: '100%', margin: '0 auto' }}>
                             <PerformanceReviewTab departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))} />
                         </div>
                     </div>

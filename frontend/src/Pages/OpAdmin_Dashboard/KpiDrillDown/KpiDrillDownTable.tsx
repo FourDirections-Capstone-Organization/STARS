@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     ChevronRight,
     Users,
@@ -19,8 +19,9 @@ import {
     EmployeeKpiEvaluationResultDTO,
     TrafficLightRating
 } from './types';
-import { getRatingBadgeClass, getRatingIcon } from './KpiMetricCards';
+import { getRatingBadgeClass, getRatingIcon, getComprehensiveRatingLabel } from './KpiMetricCards';
 import { exportScorecard } from '../../../services/kpiService';
+import Pagination from '../../../components/ui/Pagination';
 
 interface KpiDrillDownTableProps {
     data: KpiHierarchyScopeResultDTO;
@@ -41,6 +42,20 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
     const query = searchQuery.trim().toLowerCase();
     const [deptTab, setDeptTab] = useState<'teams' | 'employees'>('teams');
 
+    // Pagination states (Speedex OneUI global pattern)
+    const [deptPage, setDeptPage] = useState(1);
+    const [deptTeamsPage, setDeptTeamsPage] = useState(1);
+    const [deptEmployeesPage, setDeptEmployeesPage] = useState(1);
+    const [teamMembersPage, setTeamMembersPage] = useState(1);
+    const PAGE_SIZE = 8;
+
+    useEffect(() => {
+        setDeptPage(1);
+        setDeptTeamsPage(1);
+        setDeptEmployeesPage(1);
+        setTeamMembersPage(1);
+    }, [query, deptTab, data.scopeId, data.scopeLevel]);
+
     // ──────────────────────────────────────────────
     // 1. Company Level View: Departments Table
     // ──────────────────────────────────────────────
@@ -48,6 +63,8 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
         const filteredDepartments = (data.departments || []).filter((dept) =>
             query ? dept.departmentName.toLowerCase().includes(query) : true
         );
+        const totalDeptPages = Math.max(1, Math.ceil(filteredDepartments.length / PAGE_SIZE));
+        const pagedDepartments = filteredDepartments.slice((deptPage - 1) * PAGE_SIZE, deptPage * PAGE_SIZE);
 
         return (
             <div className="kpi-drilldown-card" data-testid="kpi-company-view">
@@ -80,7 +97,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredDepartments.map((dept) => (
+                                {pagedDepartments.map((dept) => (
                                     <tr
                                         key={dept.departmentId}
                                         className="kpi-clickable-row"
@@ -106,7 +123,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                                 className={`kpi-rating-badge ${getRatingBadgeClass(dept.overallRating)}`}
                                             >
                                                 {getRatingIcon(dept.overallRating)}
-                                                <span>{dept.overallRating}</span>
+                                                <span>{getComprehensiveRatingLabel(dept.overallRating)}</span>
                                             </span>
                                         </td>
                                         <td className="text-right">
@@ -127,6 +144,18 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 ))}
                             </tbody>
                         </table>
+                        {filteredDepartments.length > 0 && (
+                            <div className="table-card-pagination-bar">
+                                <span className="table-card-pagination-info">
+                                    Showing {Math.min((deptPage - 1) * PAGE_SIZE + 1, filteredDepartments.length)}–{Math.min(deptPage * PAGE_SIZE, filteredDepartments.length)} of {filteredDepartments.length} departments
+                                </span>
+                                <Pagination
+                                    currentPage={deptPage}
+                                    totalPages={totalDeptPages}
+                                    onPageChange={setDeptPage}
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -143,6 +172,8 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                   (team.teamLeaderName && team.teamLeaderName.toLowerCase().includes(query))
                 : true
         );
+        const totalTeamsPages = Math.max(1, Math.ceil(filteredTeams.length / PAGE_SIZE));
+        const pagedTeams = filteredTeams.slice((deptTeamsPage - 1) * PAGE_SIZE, deptTeamsPage * PAGE_SIZE);
 
         const filteredEmployees = (data.employees || []).filter((emp) =>
             query
@@ -151,6 +182,8 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                   (emp.role && emp.role.toLowerCase().includes(query))
                 : true
         );
+        const totalDeptEmpPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
+        const pagedDeptEmployees = filteredEmployees.slice((deptEmployeesPage - 1) * PAGE_SIZE, deptEmployeesPage * PAGE_SIZE);
 
         return (
             <div className="kpi-drilldown-card" data-testid="kpi-department-view">
@@ -193,7 +226,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredTeams.map((team) => (
+                                    {pagedTeams.map((team) => (
                                         <tr
                                             key={team.teamId}
                                             className="kpi-clickable-row"
@@ -219,7 +252,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                                     className={`kpi-rating-badge ${getRatingBadgeClass(team.overallRating)}`}
                                                 >
                                                     {getRatingIcon(team.overallRating)}
-                                                    <span>{team.overallRating}</span>
+                                                    <span>{getComprehensiveRatingLabel(team.overallRating)}</span>
                                                 </span>
                                             </td>
                                             <td className="text-right">
@@ -240,6 +273,18 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                     ))}
                                 </tbody>
                             </table>
+                            {filteredTeams.length > 0 && (
+                                <div className="table-card-pagination-bar">
+                                    <span className="table-card-pagination-info">
+                                        Showing {Math.min((deptTeamsPage - 1) * PAGE_SIZE + 1, filteredTeams.length)}–{Math.min(deptTeamsPage * PAGE_SIZE, filteredTeams.length)} of {filteredTeams.length} teams
+                                    </span>
+                                    <Pagination
+                                        currentPage={deptTeamsPage}
+                                        totalPages={totalTeamsPages}
+                                        onPageChange={setDeptTeamsPage}
+                                    />
+                                </div>
+                            )}
                         </div>
                     )
                 ) : filteredEmployees.length === 0 ? (
@@ -259,7 +304,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredEmployees.map((emp) => (
+                                {pagedDeptEmployees.map((emp) => (
                                     <tr
                                         key={emp.employeeId}
                                         className="kpi-clickable-row"
@@ -289,7 +334,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                                 className={`kpi-rating-badge ${getRatingBadgeClass(emp.overallRating)}`}
                                             >
                                                 {getRatingIcon(emp.overallRating)}
-                                                <span>{emp.overallRating}</span>
+                                                <span>{getComprehensiveRatingLabel(emp.overallRating)}</span>
                                             </span>
                                         </td>
                                         <td className="text-right">
@@ -310,6 +355,18 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 ))}
                             </tbody>
                         </table>
+                        {filteredEmployees.length > 0 && (
+                            <div className="table-card-pagination-bar">
+                                <span className="table-card-pagination-info">
+                                    Showing {Math.min((deptEmployeesPage - 1) * PAGE_SIZE + 1, filteredEmployees.length)}–{Math.min(deptEmployeesPage * PAGE_SIZE, filteredEmployees.length)} of {filteredEmployees.length} employees
+                                </span>
+                                <Pagination
+                                    currentPage={deptEmployeesPage}
+                                    totalPages={totalDeptEmpPages}
+                                    onPageChange={setDeptEmployeesPage}
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -327,6 +384,8 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                   (emp.role && emp.role.toLowerCase().includes(query))
                 : true
         );
+        const totalTeamMemberPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
+        const pagedTeamMembers = filteredEmployees.slice((teamMembersPage - 1) * PAGE_SIZE, teamMembersPage * PAGE_SIZE);
 
         return (
             <div className="kpi-drilldown-card" data-testid="kpi-team-view">
@@ -360,7 +419,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredEmployees.map((emp) => {
+                                {pagedTeamMembers.map((emp) => {
                                     const otifMetric = emp.metrics?.find((m) => m.metricCode === 'OTIF');
                                     const accMetric = emp.metrics?.find((m) => m.metricCode === 'ORDER_ACCURACY');
 
@@ -399,7 +458,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                                     className={`kpi-rating-badge ${getRatingBadgeClass(emp.overallRating)}`}
                                                 >
                                                     {getRatingIcon(emp.overallRating)}
-                                                    <span>{emp.overallRating}</span>
+                                                    <span>{getComprehensiveRatingLabel(emp.overallRating)}</span>
                                                 </span>
                                             </td>
                                             <td className="text-right">
@@ -421,6 +480,18 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                 })}
                             </tbody>
                         </table>
+                        {filteredEmployees.length > 0 && (
+                            <div className="table-card-pagination-bar">
+                                <span className="table-card-pagination-info">
+                                    Showing {Math.min((teamMembersPage - 1) * PAGE_SIZE + 1, filteredEmployees.length)}–{Math.min(teamMembersPage * PAGE_SIZE, filteredEmployees.length)} of {filteredEmployees.length} members
+                                </span>
+                                <Pagination
+                                    currentPage={teamMembersPage}
+                                    totalPages={totalTeamMemberPages}
+                                    onPageChange={setTeamMembersPage}
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -517,7 +588,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                                         className={`kpi-rating-badge ${getRatingBadgeClass(metric.rating)}`}
                                     >
                                         {getRatingIcon(metric.rating)}
-                                        <span>{metric.rating}</span>
+                                        <span>{getComprehensiveRatingLabel(metric.rating)}</span>
                                     </span>
                                 </td>
                             </tr>

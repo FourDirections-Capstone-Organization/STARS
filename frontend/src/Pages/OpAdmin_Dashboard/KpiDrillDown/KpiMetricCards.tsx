@@ -33,6 +33,19 @@ export const getRatingBadgeClass = (rating: TrafficLightRating) => {
     }
 };
 
+export const getComprehensiveRatingLabel = (rating: TrafficLightRating | string): string => {
+    switch (rating) {
+        case 'Green':
+            return 'On Track (Green)';
+        case 'Amber':
+            return 'Needs Attention (Amber)';
+        case 'Red':
+            return 'Critical (Red)';
+        default:
+            return rating || 'N/A';
+    }
+};
+
 export const getRatingIcon = (rating: TrafficLightRating) => {
     switch (rating) {
         case 'Green':
@@ -112,7 +125,7 @@ export const KpiMetricCards: React.FC<KpiMetricCardsProps> = ({ data }) => {
                                 data-testid="kpi-overall-rating-badge"
                             >
                                 {getRatingIcon(overallRating)}
-                                <span>{overallRating}</span>
+                                <span>{getComprehensiveRatingLabel(overallRating)}</span>
                             </span>
                         </div>
                     </div>
@@ -147,7 +160,7 @@ export const KpiMetricCards: React.FC<KpiMetricCardsProps> = ({ data }) => {
                                 </div>
                                 <span className={`kpi-metric-status ${getRatingBadgeClass(metric.rating)}`}>
                                     {getRatingIcon(metric.rating)}
-                                    <span>{metric.rating}</span>
+                                    <span>{getComprehensiveRatingLabel(metric.rating)}</span>
                                 </span>
                             </div>
 

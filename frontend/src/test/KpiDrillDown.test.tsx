@@ -757,9 +757,13 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
         });
 
         it('navigates to KPI configuration tab from header action button', async () => {
+            const onNavigateToTab = vi.fn();
             render(
                 <ToastProvider>
-                    <ReportsTab teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]} />
+                    <ReportsTab
+                        teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]}
+                        onNavigateToTab={onNavigateToTab}
+                    />
                 </ToastProvider>
             );
 
@@ -770,10 +774,8 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
             // Click Configure KPIs
             fireEvent.click(screen.getByTestId('kpi-nav-to-config-btn'));
 
-            // Verify KPI Configuration sub-tab content is rendered
-            await waitFor(() => {
-                expect(screen.getByTestId('kpi-configuration-tab')).toBeInTheDocument();
-            });
+            // Verify KPI Configuration navigation to General tab is triggered
+            expect(onNavigateToTab).toHaveBeenCalledWith('kpi_configuration');
         });
 
         it('renders scope export PDF and Excel buttons and triggers scope export file download', async () => {

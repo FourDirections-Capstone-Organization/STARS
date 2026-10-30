@@ -472,6 +472,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                     </label>
                     <input
                         type="text"
+                        className="form-input"
                         value={title}
                         onChange={e => setTitle(e.target.value)}
                         placeholder="e.g., Annual Courier Operational Review"
@@ -482,6 +483,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                     <label>Target Role (Optional)</label>
                     <input
                         type="text"
+                        className="form-input"
                         value={targetRole}
                         onChange={e => setTargetRole(e.target.value)}
                         placeholder="e.g., Courier, Operations Coordinator, Dispatcher"
@@ -490,6 +492,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                 <div className="pe-form-group">
                     <label>Department Scope (Optional)</label>
                     <select
+                        className="form-input"
                         value={departmentId}
                         onChange={e => setDepartmentId(e.target.value)}
                     >
@@ -507,6 +510,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                 <label>Description</label>
                 <textarea
                     rows={2}
+                    className="form-input"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                     placeholder="Provide guidelines, cycle context, or objectives for this performance template..."
@@ -654,6 +658,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                             <label>Section Title <span style={{ color: '#ee5d50' }}>*</span></label>
                                             <input
                                                 type="text"
+                                                className="form-input"
                                                 value={section.title}
                                                 onChange={e => handleSectionChange(sIdx, 'title', e.target.value)}
                                                 placeholder="e.g. Core Competencies or Operational KPI"
@@ -664,6 +669,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                             <label>Section Weight (%) <span style={{ color: '#ee5d50' }}>*</span></label>
                                             <input
                                                 type="number"
+                                                className="form-input"
                                                 min={0}
                                                 max={100}
                                                 step={0.5}
@@ -678,6 +684,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                         <label>Section Description (Optional)</label>
                                         <input
                                             type="text"
+                                            className="form-input"
                                             value={section.description || ''}
                                             onChange={e => handleSectionChange(sIdx, 'description', e.target.value)}
                                             placeholder="Brief explanation of how this section is evaluated..."
@@ -746,6 +753,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                                         <td>
                                                             <input
                                                                 type="text"
+                                                                className="form-input"
                                                                 value={crit.title}
                                                                 onChange={e => handleCriterionChange(sIdx, cIdx, 'title', e.target.value)}
                                                                 placeholder="e.g. Quality of Output"
@@ -755,6 +763,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                                         </td>
                                                         <td>
                                                             <select
+                                                                className="form-input"
                                                                 value={crit.criterionType}
                                                                 onChange={e => handleCriterionChange(sIdx, cIdx, 'criterionType', e.target.value as CriterionType)}
                                                                 style={{ width: '100%' }}
@@ -766,6 +775,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                                         <td>
                                                             <input
                                                                 type="text"
+                                                                className="form-input"
                                                                 value={crit.metricCode || ''}
                                                                 onChange={e => handleCriterionChange(sIdx, cIdx, 'metricCode', e.target.value)}
                                                                 placeholder="e.g. OVERALL_SCORE"
@@ -779,6 +789,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                                         <td>
                                                             <input
                                                                 type="number"
+                                                                className="form-input"
                                                                 min={0}
                                                                 max={100}
                                                                 step={0.5}
@@ -864,6 +875,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                     <td>
                                         <input
                                             type="text"
+                                            className="form-input"
                                             value={band.label}
                                             onChange={e => handleRatingBandChange(bIdx, 'label', e.target.value)}
                                             placeholder="e.g. Outstanding"
@@ -874,6 +886,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                     <td>
                                         <input
                                             type="number"
+                                            className="form-input"
                                             min={0}
                                             max={100}
                                             step={0.1}
@@ -886,6 +899,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                     <td>
                                         <input
                                             type="number"
+                                            className="form-input"
                                             min={0}
                                             max={100}
                                             step={0.1}
@@ -911,6 +925,7 @@ export const EvaluationTemplateEditor: React.FC<EvaluationTemplateEditorProps> =
                                     <td>
                                         <input
                                             type="text"
+                                            className="form-input"
                                             value={band.description || ''}
                                             onChange={e => handleRatingBandChange(bIdx, 'description', e.target.value)}
                                             placeholder="Evaluation guidelines for this rating level..."

@@ -74,6 +74,7 @@ import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
 import { ReportsTab, TeamTab, TeamMember } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import { EvaluationTemplateTab, PerformanceReviewTab } from '../OpAdmin_Dashboard/PerformanceEvaluation';
+import { KpiConfigurationTab } from '../OpAdmin_Dashboard/KpiConfiguration';
 import TaskManager from '../../components/TaskManager/TaskManager';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
@@ -108,7 +109,8 @@ type NavTab =
     | 'org-structure'
     | 'biomarker'
     | 'evaluation_templates'
-    | 'performance_reviews';
+    | 'performance_reviews'
+    | 'kpi_configuration';
 
 // ─── Updated Types ────────────────────────────────────────────────────────────
 
@@ -3646,6 +3648,7 @@ export default function Dashboard() {
         { label: 'Announcements', onClick: () => handleNavChange('announcements'), active: activeTab === 'announcements' },
         { label: 'Settings', onClick: () => handleNavChange('settings'), active: activeTab === 'settings' },
         { label: 'Evaluation Templates', onClick: () => handleNavChange('evaluation_templates'), active: activeTab === 'evaluation_templates' },
+        { label: 'KPI Configuration', onClick: () => handleNavChange('kpi_configuration'), active: activeTab === 'kpi_configuration' },
         { label: 'Notifications', onClick: () => handleNavChange('notifications'), active: activeTab === 'notifications' },
         ],
         },
@@ -5053,6 +5056,7 @@ export default function Dashboard() {
         biomarker: 'Biomarker Alert Dashboard',
         evaluation_templates: 'Evaluation Templates',
         performance_reviews: 'Performance Reviews',
+        kpi_configuration: 'KPI Configuration',
     };
 
     return (
@@ -5562,9 +5566,17 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {activeTab === 'kpi_configuration' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <KpiConfigurationTab departments={departments} />
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'performance_reviews' && (
                     <div className="dashboard-content" style={{ padding: '24px 32px' }}>
-                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                        <div style={{ width: '100%', margin: '0 auto' }}>
                             <PerformanceReviewTab departments={departments} />
                         </div>
                     </div>
