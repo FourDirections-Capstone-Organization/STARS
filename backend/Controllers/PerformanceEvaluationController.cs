@@ -28,6 +28,7 @@ public class PerformanceEvaluationController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ILogger<PerformanceEvaluationController> _logger;
     private readonly IAiRecommendationGenerationService? _aiService;
+    private readonly IPerformanceReviewCsvExportService? _csvExportService;
 
     public PerformanceEvaluationController(
         IEvaluationTemplateService templateService,
@@ -35,7 +36,8 @@ public class PerformanceEvaluationController : ControllerBase
         IPerformanceReviewScoringService scoringService,
         AppDbContext context,
         ILogger<PerformanceEvaluationController> logger,
-        IAiRecommendationGenerationService? aiService = null)
+        IAiRecommendationGenerationService? aiService = null,
+        IPerformanceReviewCsvExportService? csvExportService = null)
     {
         _templateService = templateService;
         _workflowService = workflowService;
@@ -43,6 +45,7 @@ public class PerformanceEvaluationController : ControllerBase
         _context = context;
         _logger = logger;
         _aiService = aiService;
+        _csvExportService = csvExportService;
     }
 
     #region Evaluation Template Endpoints
@@ -814,6 +817,413 @@ public class PerformanceEvaluationController : ControllerBase
 
         var dto = recommendation.ToDTO();
         return Ok(ApiResponseDTO<AiRecommendationDTO>.Success(dto));
+    }
+
+    #endregion
+
+    #region Development Plan Endpoints
+
+    /// <summary>
+    /// Retrieves development plan items for a specific employee within a performance review.
+    /// Access is restricted to Managers or the target employee themselves.
+    /// </summary>
+    [HttpGet("reviews/{reviewId:guid}/development-plan/{employeeId:guid}")]
+    public async Task<IActionResult> GetReviewDevelopmentPlan(
+        Guid reviewId,
+        Guid employeeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanAccessEmployeeData(employeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponseDTO<object>.Failure("Forbidden: You do not have permission to view another employee's development plan."));
+        }
+
+        var reviewExists = await _context.PerformanceReviews
+            .AsNoTracking()
+            .AnyAsync(r => r.Id == reviewId, cancellationToken);
+
+        if (!reviewExists)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"Performance review with ID '{reviewId}' was not found."));
+        }
+
+        var items = await _context.DevelopmentPlanItems
+            .AsNoTracking()
+            .Include(i => i.Employee)
+            .Include(i => i.Review)
+            .Include(i => i.CompletedBy)
+            .Include(i => i.CreatedBy)
+            .Where(i => i.ReviewId == reviewId && i.EmployeeId == employeeId)
+            .OrderBy(i => i.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var dtos = items.Select(i => i.ToDTO()).ToList();
+        return Ok(ApiResponseDTO<List<DevelopmentPlanItemDTO>>.Success(dtos));
+    }
+
+    /// <summary>
+    /// Creates one or more development plan items for an employee within a performance review.
+    /// Restricted to Managers and Administrators. Blocked if an AI recommendation is still in Pending status.
+    /// </summary>
+    [HttpPost("reviews/{reviewId:guid}/development-plan/{employeeId:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> CreateDevelopmentPlan(
+        Guid reviewId,
+        Guid employeeId,
+        [FromBody] CreateDevelopmentPlanRequestDTO request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsManagerOrAdmin())
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponseDTO<object>.Failure("Forbidden: Only managers and administrators can create development plan items."));
+        }
+
+        if (request == null)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure("Plan item configuration is required."));
+        }
+
+        var itemsToCreate = request.GetNormalizedItems();
+        if (itemsToCreate.Count == 0)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure("At least one development plan item with a valid description is required."));
+        }
+
+        var reviewExists = await _context.PerformanceReviews
+            .AsNoTracking()
+            .AnyAsync(r => r.Id == reviewId, cancellationToken);
+
+        if (!reviewExists)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"Performance review with ID '{reviewId}' was not found."));
+        }
+
+        var employeeExists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == employeeId, cancellationToken);
+
+        if (!employeeExists)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"Employee with ID '{employeeId}' was not found."));
+        }
+
+        // Rule: plan creation blocked when AI recommendation is Pending
+        var aiRecommendation = await _context.AiRecommendations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.ReviewId == reviewId && r.EmployeeId == employeeId, cancellationToken);
+
+        if (aiRecommendation != null && aiRecommendation.Status == AiRecommendationStatus.Pending)
+        {
+            return StatusCode(
+                StatusCodes.Status422UnprocessableEntity,
+                ApiResponseDTO<object>.Failure("Cannot create development plan items while AI recommendation is pending review. Please approve, reject, or manually override the recommendation first."));
+        }
+
+        var currentUserId = GetCurrentUserId();
+        var createdEntities = new List<DevelopmentPlanItem>();
+
+        foreach (var itemDto in itemsToCreate)
+        {
+            var entity = new DevelopmentPlanItem
+            {
+                Id = Guid.NewGuid(),
+                ReviewId = reviewId,
+                EmployeeId = employeeId,
+                Description = itemDto.Description.Trim(),
+                SuccessMeasure = itemDto.SuccessMeasure?.Trim(),
+                Timeframe = itemDto.Timeframe?.Trim(),
+                TargetCompletionDate = itemDto.TargetCompletionDate,
+                ManagerNotes = itemDto.ManagerNotes?.Trim(),
+                CreatedById = currentUserId,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                IsCompleted = false
+            };
+
+            createdEntities.Add(entity);
+            _context.DevelopmentPlanItems.Add(entity);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var createdIds = createdEntities.Select(e => e.Id).ToList();
+        var savedItems = await _context.DevelopmentPlanItems
+            .AsNoTracking()
+            .Include(i => i.Employee)
+            .Include(i => i.Review)
+            .Include(i => i.CompletedBy)
+            .Include(i => i.CreatedBy)
+            .Where(i => createdIds.Contains(i.Id))
+            .OrderBy(i => i.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var resultDtos = savedItems.Select(i => i.ToDTO()).ToList();
+        return StatusCode(
+            StatusCodes.Status201Created,
+            ApiResponseDTO<List<DevelopmentPlanItemDTO>>.Success(
+                resultDtos,
+                $"{resultDtos.Count} development plan item(s) created successfully."));
+    }
+
+    /// <summary>
+    /// Updates an existing development plan item.
+    /// Employees can complete their own items and update employee notes.
+    /// Managers can update all fields including description, timeframe, and manager notes.
+    /// Non-managers updating items belonging to others are blocked with 403 Forbidden.
+    /// </summary>
+    [HttpPut("development-plan/{itemId:guid}")]
+    public async Task<IActionResult> UpdateDevelopmentPlanItem(
+        Guid itemId,
+        [FromBody] UpdateDevelopmentPlanItemDTO request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request == null)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure("Update payload is required."));
+        }
+
+        var item = await _context.DevelopmentPlanItems
+            .Include(i => i.Employee)
+            .Include(i => i.Review)
+            .Include(i => i.CompletedBy)
+            .Include(i => i.CreatedBy)
+            .FirstOrDefaultAsync(i => i.Id == itemId, cancellationToken);
+
+        if (item == null)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"Development plan item with ID '{itemId}' was not found."));
+        }
+
+        var isManager = IsManagerOrAdmin();
+        var currentUserId = GetCurrentUserId();
+
+        if (!isManager)
+        {
+            // Non-manager: must be authenticated and must be the owner of this plan item
+            if (!currentUserId.HasValue || item.EmployeeId != currentUserId.Value)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponseDTO<object>.Failure("Forbidden: You do not have permission to update another employee's development plan item."));
+            }
+
+            // Employee is completing or commenting on their own item
+            if (request.IsCompleted.HasValue)
+            {
+                if (request.IsCompleted.Value && !item.IsCompleted)
+                {
+                    item.IsCompleted = true;
+                    item.CompletedAt = DateTime.UtcNow;
+                    item.CompletedById = currentUserId;
+                }
+                else if (!request.IsCompleted.Value && item.IsCompleted)
+                {
+                    item.IsCompleted = false;
+                    item.CompletedAt = null;
+                    item.CompletedById = null;
+                }
+            }
+
+            if (request.EmployeeNotes != null)
+            {
+                item.EmployeeNotes = request.EmployeeNotes.Trim();
+            }
+        }
+        else
+        {
+            // Manager/Admin: can update all fields
+            if (!string.IsNullOrWhiteSpace(request.Description))
+            {
+                item.Description = request.Description.Trim();
+            }
+
+            if (request.SuccessMeasure != null)
+            {
+                item.SuccessMeasure = request.SuccessMeasure.Trim();
+            }
+
+            if (request.Timeframe != null)
+            {
+                item.Timeframe = request.Timeframe.Trim();
+            }
+
+            if (request.TargetCompletionDate.HasValue)
+            {
+                item.TargetCompletionDate = request.TargetCompletionDate;
+            }
+
+            if (request.ManagerNotes != null)
+            {
+                item.ManagerNotes = request.ManagerNotes.Trim();
+            }
+
+            if (request.EmployeeNotes != null)
+            {
+                item.EmployeeNotes = request.EmployeeNotes.Trim();
+            }
+
+            if (request.IsCompleted.HasValue)
+            {
+                if (request.IsCompleted.Value && !item.IsCompleted)
+                {
+                    item.IsCompleted = true;
+                    item.CompletedAt = DateTime.UtcNow;
+                    item.CompletedById = currentUserId;
+                }
+                else if (!request.IsCompleted.Value && item.IsCompleted)
+                {
+                    item.IsCompleted = false;
+                    item.CompletedAt = null;
+                    item.CompletedById = null;
+                }
+            }
+        }
+
+        item.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(ApiResponseDTO<DevelopmentPlanItemDTO>.Success(
+            item.ToDTO(),
+            "Development plan item updated successfully."));
+    }
+
+    /// <summary>
+    /// Retrieves all development plan items for a specific employee across all reviews.
+    /// Can be filtered by completion status and review ID.
+    /// Restricted to Managers or the employee themselves.
+    /// </summary>
+    [HttpGet("employees/{employeeId:guid}/development-plan")]
+    public async Task<IActionResult> GetEmployeeDevelopmentPlans(
+        Guid employeeId,
+        [FromQuery] bool? isCompleted,
+        [FromQuery] Guid? reviewId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanAccessEmployeeData(employeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponseDTO<object>.Failure("Forbidden: You do not have permission to view another employee's development plan."));
+        }
+
+        var query = _context.DevelopmentPlanItems
+            .AsNoTracking()
+            .Include(i => i.Employee)
+            .Include(i => i.Review)
+            .Include(i => i.CompletedBy)
+            .Include(i => i.CreatedBy)
+            .Where(i => i.EmployeeId == employeeId)
+            .AsQueryable();
+
+        if (isCompleted.HasValue)
+        {
+            query = query.Where(i => i.IsCompleted == isCompleted.Value);
+        }
+
+        if (reviewId.HasValue)
+        {
+            query = query.Where(i => i.ReviewId == reviewId.Value);
+        }
+
+        var items = await query
+            .OrderByDescending(i => i.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var dtos = items.Select(i => i.ToDTO()).ToList();
+        return Ok(ApiResponseDTO<List<DevelopmentPlanItemDTO>>.Success(dtos));
+    }
+
+    #endregion
+
+    #region CSV Export Endpoints
+
+    /// <summary>
+    /// Exports performance review evaluation results to RFC 4180 compliant CSV format.
+    /// Employs formula injection guards (=+-@) and excludes AI recommendation text.
+    /// Scoped to the caller's permissions (employees only see their own records).
+    /// </summary>
+    [HttpGet("reviews/{id:guid}/export/csv")]
+    public async Task<IActionResult> ExportReviewCsv(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var review = await _context.PerformanceReviews
+            .AsNoTracking()
+            .Include(r => r.Ratings)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+        if (review == null)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"Performance review with ID '{id}' was not found."));
+        }
+
+        if (!IsManagerOrAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (!currentUserId.HasValue)
+            {
+                return Unauthorized(ApiResponseDTO<object>.Failure("User is not authenticated."));
+            }
+
+            if (review.Scope == ReviewScope.Individual)
+            {
+                if (review.EmployeeId != currentUserId.Value)
+                {
+                    return StatusCode(
+                        StatusCodes.Status403Forbidden,
+                        ApiResponseDTO<object>.Failure(
+                            "Forbidden: You do not have permission to export another employee's performance review."));
+                }
+            }
+            else
+            {
+                var isIncluded = review.Ratings.Any(rt => rt.EmployeeId == currentUserId.Value) ||
+                                 review.EmployeeId == currentUserId.Value;
+
+                if (!isIncluded)
+                {
+                    return StatusCode(
+                        StatusCodes.Status403Forbidden,
+                        ApiResponseDTO<object>.Failure(
+                            "Forbidden: You do not have permission to export this performance review."));
+                }
+            }
+        }
+
+        var result = await _scoringService.CalculateReviewScoreAsync(id, cancellationToken);
+
+        if (!IsManagerOrAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            result.Employees = result.Employees
+                .Where(e => e.EmployeeId == currentUserId!.Value)
+                .ToList();
+
+            if (result.Employees.Count == 0)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponseDTO<object>.Failure(
+                        "Forbidden: You do not have permission to export this performance review."));
+            }
+        }
+
+        var exporter = _csvExportService ?? new PerformanceReviewCsvExportService(_scoringService);
+        var csvBytes = exporter.ExportReviewToCsv(result);
+
+        var safeTitle = string.Join("_", (review.Title ?? "performance_review").Split(Path.GetInvalidFileNameChars()));
+        var fileName = $"{safeTitle}_{id}.csv";
+
+        return File(csvBytes, "text/csv; charset=utf-8", fileName);
     }
 
     #endregion
