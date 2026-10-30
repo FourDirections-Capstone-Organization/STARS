@@ -37,8 +37,9 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - [x] Phase 3: Safe custom formula builder & variable data mapping
   - Done when: Manager can construct and test a custom formula using mapped database fields via the safe math parser.
   - Completed: Tokenized recursive descent SafeFormulaParser and KpiVariableRegistry built with division-by-zero protection, custom formula evaluation integrated into KpiCalculationEngine, and Manager FormulaBuilderModal with dry-run testing deployed; verified by 744 backend tests and 140 frontend tests.
-- [ ] Phase 4: Scope controls & hierarchical drill-down (Department -> Team -> Employee)
+- [x] Phase 4: Scope controls & hierarchical drill-down (Department -> Team -> Employee)
   - Done when: Manager can filter evaluations by timeframe, role (Courier vs Encoder), and drill down from department to employee.
+  - Completed: Scope aggregation DTOs and hierarchical evaluation engine built, REST scope query endpoints deployed with role and timeframe filters, and interactive breadcrumb drill-down UI with view toggle integrated into Manager Dashboard; verified by 783 backend tests and 156 frontend tests.
 - [ ] Phase 5: Individual scorecards, export (PDF/Excel), & Biomarker AI threshold feed
   - Done when: Employees can view their scorecard, export to PDF/Excel, and Biomarker Scan flags critical KPI red-zone alerts.
 
