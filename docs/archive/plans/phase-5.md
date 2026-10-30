@@ -28,5 +28,6 @@
   - Completed: Employee scorecard view component created with overall score, traffic-light status, metric cards, timeframe selectors, and PDF/Excel export triggers.
   - Completed: Integrated "My Scorecard" tab into OpEmployee_Dashboard and added scope/employee PDF/Excel export controls to OpAdmin_Dashboard KpiDrillDown.
   - Verified: 165 frontend tests pass (9 new component & integration tests) and 823 backend tests pass.
-- [ ] Step 5: Run full backend and frontend test suites
+- [x] Step 5: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
+  - Completed: Verified all 823 backend tests (Backend.Tests.dll) and all 165 frontend tests (across 24 test files) pass cleanly with zero failures.
