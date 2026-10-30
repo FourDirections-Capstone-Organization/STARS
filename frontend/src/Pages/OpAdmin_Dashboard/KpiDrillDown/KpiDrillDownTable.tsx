@@ -7,6 +7,7 @@ import {
     TrendingUp,
     Shield,
     FileText,
+    FileSpreadsheet,
     CheckCircle2,
     Clock,
     AlertCircle
@@ -19,6 +20,7 @@ import {
     TrafficLightRating
 } from './types';
 import { getRatingBadgeClass, getRatingIcon } from './KpiMetricCards';
+import { exportScorecard } from '../../../services/kpiService';
 
 interface KpiDrillDownTableProps {
     data: KpiHierarchyScopeResultDTO;
@@ -441,6 +443,28 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                 </div>
                 {emp && (
                     <div className="kpi-employee-meta-tags">
+                        <div className="kpi-emp-export-btns">
+                            <button
+                                type="button"
+                                className="kpi-export-btn kpi-export-pdf-btn"
+                                onClick={() => exportScorecard(emp.employeeId, 'pdf', data.periodStart, data.periodEnd)}
+                                data-testid="emp-export-pdf-btn"
+                                title="Export employee scorecard to PDF"
+                            >
+                                <FileText size={14} />
+                                <span>Export PDF</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="kpi-export-btn kpi-export-excel-btn"
+                                onClick={() => exportScorecard(emp.employeeId, 'excel', data.periodStart, data.periodEnd)}
+                                data-testid="emp-export-excel-btn"
+                                title="Export employee scorecard to Excel"
+                            >
+                                <FileSpreadsheet size={14} />
+                                <span>Export Excel</span>
+                            </button>
+                        </div>
                         <span className="kpi-emp-number-badge">ID: #{emp.employeeNumber}</span>
                         {emp.role && <span className="kpi-role-badge">{emp.role}</span>}
                         {emp.jobPositionTitle && (

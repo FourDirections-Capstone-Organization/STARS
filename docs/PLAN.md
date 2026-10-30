@@ -23,7 +23,10 @@
   - Verify: Unit and integration tests confirm Biomarker Scan generates Critical alerts for red-zone KPI metrics
   - Completed: BiomarkerScanService integrated with IKpiCalculationEngine to evaluate prospective active KpiConfigurations at department and employee levels, generating Critical severity alerts when any KPI metric or overall score enters the red zone.
   - Verified: 823 backend tests pass (8 new Biomarker scan KPI red-zone tests) and 156 frontend tests pass.
-- [ ] Step 4: Build employee scorecard view and export controls in frontend dashboards
+- [x] Step 4: Build employee scorecard view and export controls in frontend dashboards
   - Verify: Component tests verify employee scorecard rendering, metrics breakdown, and export triggers
+  - Completed: Employee scorecard view component created with overall score, traffic-light status, metric cards, timeframe selectors, and PDF/Excel export triggers.
+  - Completed: Integrated "My Scorecard" tab into OpEmployee_Dashboard and added scope/employee PDF/Excel export controls to OpAdmin_Dashboard KpiDrillDown.
+  - Verified: 165 frontend tests pass (9 new component & integration tests) and 823 backend tests pass.
 - [ ] Step 5: Run full backend and frontend test suites
   - Verify: All dotnet test and npm test suites pass with zero failures
