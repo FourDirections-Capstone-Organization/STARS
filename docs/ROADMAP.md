@@ -1,6 +1,6 @@
 # Configurable KPI & Performance Evaluation Roadmap
 
-**Status**: In progress
+**Status**: Complete
 **Target Feature Branch**: `feature/configurable-kpi`
 
 ## Goal
@@ -40,8 +40,9 @@ Redesigning task execution workflows, modifying FOMS financial reports, or rewri
 - [x] Phase 4: Scope controls & hierarchical drill-down (Department -> Team -> Employee)
   - Done when: Manager can filter evaluations by timeframe, role (Courier vs Encoder), and drill down from department to employee.
   - Completed: Scope aggregation DTOs and hierarchical evaluation engine built, REST scope query endpoints deployed with role and timeframe filters, and interactive breadcrumb drill-down UI with view toggle integrated into Manager Dashboard; verified by 783 backend tests and 156 frontend tests.
-- [ ] Phase 5: Individual scorecards, export (PDF/Excel), & Biomarker AI threshold feed
+- [x] Phase 5: Individual scorecards, export (PDF/Excel), & Biomarker AI threshold feed
   - Done when: Employees can view their scorecard, export to PDF/Excel, and Biomarker Scan flags critical KPI red-zone alerts.
+  - Completed: Individual employee scorecards deployed with PDF/Excel export (ClosedXML/QuestPDF), hierarchical scope exports, and BiomarkerScanService integration triggering Critical red-zone alerts; verified by 823 backend tests and 165 frontend tests.
 
 ## Decisions to confirm
 - In-Full criteria: Define whether In-Full requires >= 1 attachment or an explicit checklist (blocks Phase 1).
