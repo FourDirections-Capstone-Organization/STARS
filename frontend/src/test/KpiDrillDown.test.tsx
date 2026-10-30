@@ -305,6 +305,8 @@ const mockDepartmentOptions: DepartmentOption[] = [
 
 describe('Hierarchical KPI Drill-Down UI Components', () => {
     beforeEach(() => {
+        global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+        global.URL.revokeObjectURL = vi.fn();
         vi.clearAllMocks();
     });
 
@@ -659,6 +661,8 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
 
     describe('Manager Dashboard ReportsTab Integration', () => {
         beforeEach(() => {
+        global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+        global.URL.revokeObjectURL = vi.fn();
             (api.get as any).mockImplementation((url: string) => {
                 if (url === '/api/reports/filter-options') {
                     return Promise.resolve({
@@ -771,5 +775,126 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
                 expect(screen.getByTestId('kpi-configuration-tab')).toBeInTheDocument();
             });
         });
+
+        it('renders scope export PDF and Excel buttons and triggers scope export file download', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url === '/api/kpi/scope') {
+                    return Promise.resolve({ data: { isSuccess: true, data: mockCompanyData } });
+                }
+                if (url === '/api/kpi/export/scope') {
+                    return Promise.resolve({ data: new Blob(['pdf-data'], { type: 'application/pdf' }) });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(
+                <ToastProvider>
+                    <KpiDrillDownView />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-export-pdf-btn')).toBeInTheDocument();
+                expect(screen.getByTestId('kpi-export-excel-btn')).toBeInTheDocument();
+            });
+
+            // Click Export PDF
+            fireEvent.click(screen.getByTestId('kpi-export-pdf-btn'));
+
+            await waitFor(() => {
+                expect(api.get).toHaveBeenCalledWith(
+                    '/api/kpi/export/scope',
+                    expect.objectContaining({
+                        level: 'Company',
+                        format: 'pdf'
+                    }),
+                    expect.objectContaining({
+                        responseType: 'blob'
+                    })
+                );
+            });
+
+            // Click Export Excel
+            fireEvent.click(screen.getByTestId('kpi-export-excel-btn'));
+
+            await waitFor(() => {
+                expect(api.get).toHaveBeenCalledWith(
+                    '/api/kpi/export/scope',
+                    expect.objectContaining({
+                        level: 'Company',
+                        format: 'excel'
+                    }),
+                    expect.objectContaining({
+                        responseType: 'blob'
+                    })
+                );
+            });
+        });
+
+        it('renders individual employee scorecard export buttons in employee view and triggers export', async () => {
+            const employeeScopeData: KpiHierarchyScopeResultDTO = {
+                ...mockCompanyData,
+                scopeLevel: 'Employee',
+                scopeId: 'emp-101',
+                scopeName: 'Carlos Courier',
+                employees: [
+                    {
+                        employeeId: 'emp-101',
+                        employeeName: 'Carlos Courier',
+                        employeeNumber: 'EMP001',
+                        periodStart: '2026-01-01',
+                        periodEnd: '2026-01-31',
+                        totalAssignedTasks: 10,
+                        completedTasksCount: 10,
+                        onTimeTasksCount: 10,
+                        inFullTasksCount: 10,
+                        otifTasksCount: 10,
+                        reworkTasksCount: 0,
+                        accurateTasksCount: 10,
+                        totalHandlingHours: 20,
+                        overallScore: 100,
+                        overallRating: 'Green',
+                        metrics: []
+                    }
+                ]
+            };
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url === '/api/kpi/scope') {
+                    return Promise.resolve({ data: { isSuccess: true, data: employeeScopeData } });
+                }
+                if (url.startsWith('/api/kpi/export/scorecard')) {
+                    return Promise.resolve({ data: new Blob(['pdf-data'], { type: 'application/pdf' }) });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(
+                <ToastProvider>
+                    <KpiDrillDownView initialDepartmentId="dept-1" />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('emp-export-pdf-btn')).toBeInTheDocument();
+                expect(screen.getByTestId('emp-export-excel-btn')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByTestId('emp-export-pdf-btn'));
+
+            await waitFor(() => {
+                expect(api.get).toHaveBeenCalledWith(
+                    '/api/kpi/export/scorecard',
+                    expect.objectContaining({
+                        employeeId: 'emp-101',
+                        format: 'pdf'
+                    }),
+                    expect.objectContaining({
+                        responseType: 'blob'
+                    })
+                );
+            });
+        });
+
     });
 });

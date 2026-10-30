@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, AlertCircle, RefreshCw, Sliders } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Sliders, FileText, FileSpreadsheet } from 'lucide-react';
+import { exportHierarchyScope } from '../../../services/kpiService';
 import api from '../../../api';
 import { useToast } from '../../../components/Toast/Toast';
 import {
@@ -78,6 +79,7 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
     const [data, setData] = useState<KpiHierarchyScopeResultDTO | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string | null>(null);
+    const [isExporting, setIsExporting] = useState<'pdf' | 'excel' | null>(null);
 
     // Fetch scope evaluation
     const fetchScopeData = useCallback(async (currentFilters: ScopeFilterState) => {
@@ -231,6 +233,29 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
         setFilters(nextFilters);
     };
 
+
+    // Scope Export Handler
+    const handleExportScope = async (format: 'pdf' | 'excel') => {
+        if (!data) return;
+        setIsExporting(format);
+        try {
+            await exportHierarchyScope(
+                data.scopeLevel,
+                data.scopeId,
+                format,
+                filters.startDate,
+                filters.endDate,
+                filters.role
+            );
+            toastMethods.success(`${format.toUpperCase()} report exported successfully.`);
+        } catch (err: any) {
+            const msg = err?.response?.data?.message || err?.message || `Failed to export ${format.toUpperCase()} report.`;
+            toastMethods.error(msg);
+        } finally {
+            setIsExporting(null);
+        }
+    };
+
     // Up one level (Back button)
     const handleBack = () => {
         if (breadcrumbs.length <= 1) return;
@@ -315,18 +340,50 @@ export const KpiDrillDownView: React.FC<KpiDrillDownViewProps> = ({
                         Evaluate weighted logistics KPIs hierarchically from company-wide to departments, teams, and individual employees.
                     </p>
                 </div>
-                {onNavigateToConfig && (
+                <div className="kpi-header-actions-group">
                     <button
                         type="button"
-                        className="kpi-header-config-btn"
-                        onClick={onNavigateToConfig}
-                        title="Configure KPI weights and traffic-light thresholds"
-                        data-testid="kpi-nav-to-config-btn"
+                        className="kpi-export-btn kpi-export-pdf-btn"
+                        onClick={() => handleExportScope('pdf')}
+                        disabled={loading || isExporting !== null || !data}
+                        title="Export current scope KPI evaluation to PDF"
+                        data-testid="kpi-export-pdf-btn"
                     >
-                        <Sliders size={15} />
-                        <span>Configure KPIs</span>
+                        {isExporting === 'pdf' ? (
+                            <Loader2 size={14} className="kpi-spin" />
+                        ) : (
+                            <FileText size={14} />
+                        )}
+                        <span>Export PDF</span>
                     </button>
-                )}
+                    <button
+                        type="button"
+                        className="kpi-export-btn kpi-export-excel-btn"
+                        onClick={() => handleExportScope('excel')}
+                        disabled={loading || isExporting !== null || !data}
+                        title="Export current scope KPI evaluation to Excel"
+                        data-testid="kpi-export-excel-btn"
+                    >
+                        {isExporting === 'excel' ? (
+                            <Loader2 size={14} className="kpi-spin" />
+                        ) : (
+                            <FileSpreadsheet size={14} />
+                        )}
+                        <span>Export Excel</span>
+                    </button>
+                    {onNavigateToConfig && (
+                        <button
+                            type="button"
+                            className="kpi-header-config-btn"
+                            onClick={onNavigateToConfig}
+                            title="Configure KPI weights and traffic-light thresholds"
+                            data-testid="kpi-nav-to-config-btn"
+                        >
+                            <Sliders size={15} />
+                            <span>Configure KPIs</span>
+                        </button>
+                    )}
+                </div>
             </div>
             {/* Breadcrumb Navigation Bar */}
             <KpiBreadcrumbs
