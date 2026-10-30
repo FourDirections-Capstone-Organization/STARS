@@ -89,7 +89,7 @@ import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBa
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
 import { KpiConfigurationTab } from './KpiConfiguration';
 import { KpiDrillDownView } from './KpiDrillDown';
-import { EvaluationTemplateTab } from './PerformanceEvaluation';
+import { EvaluationTemplateTab, PerformanceReviewTab } from './PerformanceEvaluation';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
@@ -200,7 +200,8 @@ type NavTab =
     | 'announcements'
     | 'notifications'
     | 'notification_settings'
-    | 'evaluation_templates';
+    | 'evaluation_templates'
+    | 'performance_reviews';
 
 export interface TeamMember {
     accountId: string;
@@ -9202,6 +9203,7 @@ export default function OpsAdminDashboard() {
                         { label: 'Team', onClick: () => handleNavChange('team'), active: activeTab === 'team' },
                         { label: 'Task Templates', onClick: () => handleNavChange('templates'), active: activeTab === 'templates' },
                         { label: 'Reports', onClick: () => handleNavChange('reports'), active: activeTab === 'reports' },
+                        { label: 'Performance Reviews', onClick: () => handleNavChange('performance_reviews'), active: activeTab === 'performance_reviews' },
                         { label: 'Activity Logs', onClick: () => handleNavChange('activity_logs'), active: activeTab === 'activity_logs' },
                         { label: 'Announcements', onClick: () => handleNavChange('announcements'), active: activeTab === 'announcements' },
                         { label: 'Notifications', onClick: () => handleNavChange('notifications'), active: activeTab === 'notifications' },
@@ -10549,6 +10551,7 @@ export default function OpsAdminDashboard() {
         notifications: 'Notifications',
         notification_settings: 'Notification Settings',
         evaluation_templates: 'Evaluation Templates',
+        performance_reviews: 'Performance Reviews',
     };
 
     // -- Fetch dashboard data on mount and when filters change --
@@ -11027,7 +11030,14 @@ export default function OpsAdminDashboard() {
                                 activeTab="evaluation_templates"
                                 onTabChange={key => handleNavChange(key as NavTab)}
                             />
-                            <EvaluationTemplateTab departments={departments.map(d => ({ id: d.id, name: d.name }))} />
+                            <EvaluationTemplateTab departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))} />
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'performance_reviews' && (
+                    <div className="dashboard-content" style={{ padding: '24px 32px' }}>
+                        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                            <PerformanceReviewTab departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))} />
                         </div>
                     </div>
                 )}
