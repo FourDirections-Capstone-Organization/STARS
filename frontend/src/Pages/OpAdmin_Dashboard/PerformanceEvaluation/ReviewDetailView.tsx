@@ -41,6 +41,7 @@ import { RatingDistributionChart } from './charts/RatingDistributionChart';
 import { SectionBreakdownChart } from './charts/SectionBreakdownChart';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
 import { useToast } from '../../../components/Toast/Toast';
+import { PerformanceErrorBoundary } from './PerformanceErrorBoundary';
 
 export interface ReviewDetailViewProps {
     reviewId: string;
@@ -122,18 +123,19 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     const [transitionComment, setTransitionComment] = useState<string>('');
 
     const loadReview = useCallback(async () => {
+        if (!reviewId) return;
         setLoading(true);
         setApiError('');
         try {
             const data = await fetchReviewById(reviewId);
             setReview(data);
-            if (data.employees && data.employees.length > 0 && !selectedEmployeeId) {
+            if (data?.employees && data.employees.length > 0 && !selectedEmployeeId) {
                 setSelectedEmployeeId(data.employees[0].employeeId);
             }
-            if (data.periodStart && !chartStartDate) {
+            if (typeof data?.periodStart === 'string' && !chartStartDate) {
                 setChartStartDate(data.periodStart.slice(0, 10));
             }
-            if (data.periodEnd && !chartEndDate) {
+            if (typeof data?.periodEnd === 'string' && !chartEndDate) {
                 setChartEndDate(data.periodEnd.slice(0, 10));
             }
             onReviewUpdated?.(data);
@@ -156,8 +158,8 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
 
     // Reset chart filters back to original review dates and all scopes
     const handleResetChartFilters = useCallback(() => {
-        setChartStartDate(review?.periodStart ? review.periodStart.slice(0, 10) : '');
-        setChartEndDate(review?.periodEnd ? review.periodEnd.slice(0, 10) : '');
+        setChartStartDate(typeof review?.periodStart === 'string' ? review.periodStart.slice(0, 10) : '');
+        setChartEndDate(typeof review?.periodEnd === 'string' ? review.periodEnd.slice(0, 10) : '');
         setChartScopeFilter('ALL');
     }, [review?.periodStart, review?.periodEnd]);
 
@@ -268,6 +270,20 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
         }
     };
 
+    if (!reviewId) {
+        return (
+            <div className="pe-error-card">
+                <AlertTriangle size={32} color="#ee5d50" />
+                <h4>Invalid Review</h4>
+                <p>No valid review ID was specified.</p>
+                <button type="button" className="pe-btn pe-btn-secondary" onClick={onBack}>
+                    <ArrowLeft size={16} />
+                    Back to Performance Reviews
+                </button>
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="pe-loading-state">
@@ -298,293 +314,295 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     const prevStageLabel = prevStatus ? WORKFLOW_STAGES.find(s => s.status === prevStatus)?.label : null;
 
     return (
-        <div className="pe-review-detail-container">
-            {/* Top Navigation & Action Header */}
-            <div className="pe-detail-nav-bar">
-                <button type="button" className="pe-back-button" onClick={onBack}>
-                    <ArrowLeft size={16} />
-                    <span>Back to Reviews</span>
-                </button>
-
-                <div className="pe-detail-action-buttons">
-                    <button
-                        type="button"
-                        className="pe-btn pe-btn-secondary pe-btn-sm"
-                        onClick={handleHeaderExportCsv}
-                        disabled={isHeaderExporting}
-                        data-testid="header-export-csv-btn"
-                        title="Export Review Ratings and Scores to CSV"
-                    >
-                        {isHeaderExporting ? (
-                            <>
-                                <Loader2 className="pe-spinner" size={14} />
-                                <span>Exporting...</span>
-                            </>
-                        ) : (
-                            <>
-                                <FileSpreadsheet size={14} />
-                                <span>Export CSV</span>
-                            </>
-                        )}
+        <PerformanceErrorBoundary onReset={onBack}>
+            <div className="pe-review-detail-container">
+                {/* Top Navigation & Action Header */}
+                <div className="pe-detail-nav-bar">
+                    <button type="button" className="pe-back-button" onClick={onBack}>
+                        <ArrowLeft size={16} />
+                        <span>Back to Reviews</span>
                     </button>
 
-                    {prevStatus && !review.isFinalized && (
+                    <div className="pe-detail-action-buttons">
                         <button
                             type="button"
                             className="pe-btn pe-btn-secondary pe-btn-sm"
-                            onClick={() => requestTransition(prevStatus)}
-                            disabled={isTransitioning}
+                            onClick={handleHeaderExportCsv}
+                            disabled={isHeaderExporting}
+                            data-testid="header-export-csv-btn"
+                            title="Export Review Ratings and Scores to CSV"
                         >
-                            <CornerDownLeft size={14} />
-                            Send Back to {prevStageLabel}
-                        </button>
-                    )}
-
-                    {nextStatus && (
-                        <button
-                            type="button"
-                            className="pe-btn pe-btn-primary pe-btn-sm"
-                            onClick={() => requestTransition(nextStatus)}
-                            disabled={isTransitioning}
-                            data-testid="advance-stage-btn"
-                        >
-                            {isTransitioning ? (
+                            {isHeaderExporting ? (
                                 <>
                                     <Loader2 className="pe-spinner" size={14} />
-                                    Transitioning...
+                                    <span>Exporting...</span>
                                 </>
                             ) : (
                                 <>
-                                    <span>Advance to {nextStageLabel}</span>
-                                    <ArrowRight size={14} />
+                                    <FileSpreadsheet size={14} />
+                                    <span>Export CSV</span>
                                 </>
                             )}
                         </button>
-                    )}
-                </div>
-            </div>
 
-            {/* Review Title & Header Card */}
-            <div className="pe-detail-header-card">
-                <div className="pe-detail-header-main">
-                    <div className="pe-title-status-line">
-                        <h2 className="pe-detail-review-title">{review.title}</h2>
-                        <span className={`pe-workflow-badge pe-stage-${(review.status || 'Draft').toLowerCase()}`}>
-                            {review.status || 'Draft'}
-                        </span>
-                        {review.isFinalized && (
-                            <span className="pe-badge pe-badge-finalized">
-                                <Shield size={12} /> Frozen Snapshot
-                            </span>
-                        )}
-                    </div>
-                    {review.description && (
-                        <p className="pe-detail-review-desc">{review.description}</p>
-                    )}
-
-                    {/* Metadata Chips */}
-                    <div className="pe-detail-meta-chips">
-                        <span className="pe-meta-chip">
-                            <Layers size={14} /> Template: <strong>{review.templateTitle}</strong>
-                        </span>
-                        <span className="pe-meta-chip">
-                            <Shield size={14} /> Scope: <strong>{review.scope}</strong>
-                        </span>
-                        <span className="pe-meta-chip">
-                            <Calendar size={14} /> Period: <strong>{review.periodStart?.slice(0, 10)}</strong> to <strong>{review.periodEnd?.slice(0, 10)}</strong>
-                        </span>
-                        {review.departmentName && (
-                            <span className="pe-meta-chip">
-                                <Building size={14} /> Dept: <strong>{review.departmentName}</strong>
-                            </span>
-                        )}
-                        {review.reviewerName && (
-                            <span className="pe-meta-chip">
-                                <User size={14} /> Reviewer: <strong>{review.reviewerName}</strong>
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                {/* Score and Rating Summary */}
-                <div className="pe-detail-header-score">
-                    <div className="pe-overall-score-box">
-                        <span className="pe-overall-score-label">Overall Review Score</span>
-                        <div className="pe-overall-score-row">
-                            <span className="pe-overall-score-value">{review.overallScore != null ? review.overallScore.toFixed(1) : '0.0'}</span>
-                            <span className="pe-overall-score-max">/ 100</span>
-                        </div>
-                        <div className="pe-overall-rating-tag">
-                            <Award size={15} />
-                            <span>{review.overallRating || 'Unassigned'}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Workflow Status Bar (Stepper) */}
-            <div className="pe-workflow-stepper-card">
-                <div className="pe-stepper-title-row">
-                    <span className="pe-stepper-header-title">
-                        <Clock size={16} /> Workflow Progression
-                    </span>
-                    <span className="pe-current-stage-indicator">
-                        Stage {currentStageIndex + 1} of {WORKFLOW_STAGES.length}: <strong>{review.status}</strong>
-                    </span>
-                </div>
-
-                <div className="pe-stepper-stages-bar">
-                    {WORKFLOW_STAGES.map((stage, idx) => {
-                        const isPast = idx < currentStageIndex;
-                        const isCurrent = idx === currentStageIndex;
-                        const isUpcoming = idx > currentStageIndex;
-
-                        return (
-                            <div
-                                key={stage.status}
-                                className={`pe-step-node ${isPast ? 'pe-step-completed' : ''} ${isCurrent ? 'pe-step-active' : ''} ${isUpcoming ? 'pe-step-upcoming' : ''}`}
+                        {prevStatus && !review.isFinalized && (
+                            <button
+                                type="button"
+                                className="pe-btn pe-btn-secondary pe-btn-sm"
+                                onClick={() => requestTransition(prevStatus)}
+                                disabled={isTransitioning}
                             >
-                                <div className="pe-step-circle">
-                                    {isPast ? <Check size={14} /> : (idx + 1)}
-                                </div>
-                                <div className="pe-step-label-wrap">
-                                    <span className="pe-step-label">{stage.label}</span>
-                                    <span className="pe-step-desc">{stage.description}</span>
-                                </div>
-                                {idx < WORKFLOW_STAGES.length - 1 && (
-                                    <div className={`pe-step-connector ${isPast ? 'pe-connector-completed' : ''}`} />
+                                <CornerDownLeft size={14} />
+                                Send Back to {prevStageLabel}
+                            </button>
+                        )}
+
+                        {nextStatus && (
+                            <button
+                                type="button"
+                                className="pe-btn pe-btn-primary pe-btn-sm"
+                                onClick={() => requestTransition(nextStatus)}
+                                disabled={isTransitioning}
+                                data-testid="advance-stage-btn"
+                            >
+                                {isTransitioning ? (
+                                    <>
+                                        <Loader2 className="pe-spinner" size={14} />
+                                        Transitioning...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Advance to {nextStageLabel}</span>
+                                        <ArrowRight size={14} />
+                                    </>
                                 )}
-                            </div>
-                        );
-                    })}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            {/* Detail Navigation Tabs */}
-            <div className="pe-detail-tab-nav" role="tablist">
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeDetailTab === 'ratings'}
-                    className={`pe-detail-tab-btn ${activeDetailTab === 'ratings' ? 'active' : ''}`}
-                    onClick={() => setActiveDetailTab('ratings')}
-                    data-testid="detail-tab-ratings"
-                >
-                    <FileSpreadsheet size={15} />
-                    <span>Evaluation Ratings</span>
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeDetailTab === 'ai'}
-                    className={`pe-detail-tab-btn ${activeDetailTab === 'ai' ? 'active' : ''}`}
-                    onClick={() => setActiveDetailTab('ai')}
-                    data-testid="detail-tab-ai"
-                >
-                    <Sparkles size={15} />
-                    <span>AI Recommendations</span>
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeDetailTab === 'plan'}
-                    className={`pe-detail-tab-btn ${activeDetailTab === 'plan' ? 'active' : ''}`}
-                    onClick={() => setActiveDetailTab('plan')}
-                    data-testid="detail-tab-plan"
-                >
-                    <Target size={15} />
-                    <span>Development Plan</span>
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeDetailTab === 'charts'}
-                    className={`pe-detail-tab-btn ${activeDetailTab === 'charts' ? 'active' : ''}`}
-                    onClick={() => setActiveDetailTab('charts')}
-                    data-testid="detail-tab-charts"
-                >
-                    <BarChart3 size={15} />
-                    <span>Charts & Analytics</span>
-                </button>
-            </div>
+                {/* Review Title & Header Card */}
+                <div className="pe-detail-header-card">
+                    <div className="pe-detail-header-main">
+                        <div className="pe-title-status-line">
+                            <h2 className="pe-detail-review-title">{review.title}</h2>
+                            <span className={`pe-workflow-badge pe-stage-${(review.status || 'Draft').toLowerCase()}`}>
+                                {review.status || 'Draft'}
+                            </span>
+                            {review.isFinalized && (
+                                <span className="pe-badge pe-badge-finalized">
+                                    <Shield size={12} /> Frozen Snapshot
+                                </span>
+                            )}
+                        </div>
+                        {review.description && (
+                            <p className="pe-detail-review-desc">{review.description}</p>
+                        )}
 
-            {/* Tab Body Section */}
-            <div className="pe-detail-body-section">
-                {activeDetailTab === 'ratings' && (
-                    <RatingGrid
-                        review={review}
-                        selectedEmployeeId={selectedEmployeeId}
-                        onEmployeeChange={setSelectedEmployeeId}
-                        onSaveRatings={handleSaveRatings}
-                        isSaving={isSavingRatings}
-                        isReadOnly={review.isFinalized}
-                    />
-                )}
-
-                {activeDetailTab === 'ai' && (
-                    <AiRecommendationPanel
-                        reviewId={review.reviewId}
-                        employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
-                        employeeName={currentEmployee?.employeeName}
-                        templateId={review.templateId}
-                        employees={review.employees}
-                        onEmployeeChange={setSelectedEmployeeId}
-                        onNavigateToPlan={() => setActiveDetailTab('plan')}
-                    />
-                )}
-
-                {activeDetailTab === 'plan' && (
-                    <DevelopmentPlanPanel
-                        reviewId={review.reviewId}
-                        employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
-                        employeeName={currentEmployee?.employeeName}
-                        employees={review.employees}
-                        onEmployeeChange={setSelectedEmployeeId}
-                    />
-                )}
-
-                {activeDetailTab === 'charts' && (
-                    <div className="pe-charts-view-container" data-testid="pe-charts-view">
-                        <ReviewExportBar
-                            review={review}
-                            startDate={chartStartDate}
-                            endDate={chartEndDate}
-                            onStartDateChange={setChartStartDate}
-                            onEndDateChange={setChartEndDate}
-                            scopeFilter={chartScopeFilter}
-                            onScopeFilterChange={setChartScopeFilter}
-                            onResetFilters={handleResetChartFilters}
-                        />
-                        <div className="pe-charts-grid">
-                            <CriterionComparisonChart
-                                review={filteredReviewForCharts || review}
-                                selectedEmployeeId={selectedEmployeeId}
-                                onEmployeeChange={setSelectedEmployeeId}
-                            />
-                            <RatingDistributionChart
-                                review={filteredReviewForCharts || review}
-                            />
-                            <SectionBreakdownChart
-                                review={filteredReviewForCharts || review}
-                                selectedEmployeeId={selectedEmployeeId}
-                                onEmployeeChange={setSelectedEmployeeId}
-                            />
+                        {/* Metadata Chips */}
+                        <div className="pe-detail-meta-chips">
+                            <span className="pe-meta-chip">
+                                <Layers size={14} /> Template: <strong>{review.templateTitle}</strong>
+                            </span>
+                            <span className="pe-meta-chip">
+                                <Shield size={14} /> Scope: <strong>{review.scope}</strong>
+                            </span>
+                            <span className="pe-meta-chip">
+                                <Calendar size={14} /> Period: <strong>{typeof review.periodStart === 'string' ? review.periodStart.slice(0, 10) : ''}</strong> to <strong>{typeof review.periodEnd === 'string' ? review.periodEnd.slice(0, 10) : ''}</strong>
+                            </span>
+                            {review.departmentName && (
+                                <span className="pe-meta-chip">
+                                    <Building size={14} /> Dept: <strong>{review.departmentName}</strong>
+                                </span>
+                            )}
+                            {review.reviewerName && (
+                                <span className="pe-meta-chip">
+                                    <User size={14} /> Reviewer: <strong>{review.reviewerName}</strong>
+                                </span>
+                            )}
                         </div>
                     </div>
-                )}
-            </div>
 
-            {/* Transition Confirmation Modal */}
-            <ConfirmationModal
-                isOpen={confirmModal.isOpen}
-                variant={confirmModal.variant}
-                title={confirmModal.title}
-                description={confirmModal.description}
-                confirmLabel={confirmModal.confirmLabel}
-                cancelLabel="Cancel"
-                onConfirm={handleConfirmTransition}
-                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false, targetStatus: null }))}
-            />
-        </div>
+                    {/* Score and Rating Summary */}
+                    <div className="pe-detail-header-score">
+                        <div className="pe-overall-score-box">
+                            <span className="pe-overall-score-label">Overall Review Score</span>
+                            <div className="pe-overall-score-row">
+                                <span className="pe-overall-score-value">{review.overallScore != null && !isNaN(Number(review.overallScore)) ? Number(review.overallScore).toFixed(1) : '0.0'}</span>
+                                <span className="pe-overall-score-max">/ 100</span>
+                            </div>
+                            <div className="pe-overall-rating-tag">
+                                <Award size={15} />
+                                <span>{review.overallRating || 'Unassigned'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Workflow Status Bar (Stepper) */}
+                <div className="pe-workflow-stepper-card">
+                    <div className="pe-stepper-title-row">
+                        <span className="pe-stepper-header-title">
+                            <Clock size={16} /> Workflow Progression
+                        </span>
+                        <span className="pe-current-stage-indicator">
+                            Stage {currentStageIndex >= 0 ? currentStageIndex + 1 : 1} of {WORKFLOW_STAGES.length}: <strong>{review.status}</strong>
+                        </span>
+                    </div>
+
+                    <div className="pe-stepper-stages-bar">
+                        {WORKFLOW_STAGES.map((stage, idx) => {
+                            const isPast = idx < currentStageIndex;
+                            const isCurrent = idx === currentStageIndex;
+                            const isUpcoming = idx > currentStageIndex;
+
+                            return (
+                                <div
+                                    key={stage.status}
+                                    className={`pe-step-node ${isPast ? 'pe-step-completed' : ''} ${isCurrent ? 'pe-step-active' : ''} ${isUpcoming ? 'pe-step-upcoming' : ''}`}
+                                >
+                                    <div className="pe-step-circle">
+                                        {isPast ? <Check size={14} /> : (idx + 1)}
+                                    </div>
+                                    <div className="pe-step-label-wrap">
+                                        <span className="pe-step-label">{stage.label}</span>
+                                        <span className="pe-step-desc">{stage.description}</span>
+                                    </div>
+                                    {idx < WORKFLOW_STAGES.length - 1 && (
+                                        <div className={`pe-step-connector ${isPast ? 'pe-connector-completed' : ''}`} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Detail Navigation Tabs */}
+                <div className="pe-detail-tab-nav" role="tablist">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === 'ratings'}
+                        className={`pe-detail-tab-btn ${activeDetailTab === 'ratings' ? 'active' : ''}`}
+                        onClick={() => setActiveDetailTab('ratings')}
+                        data-testid="detail-tab-ratings"
+                    >
+                        <FileSpreadsheet size={15} />
+                        <span>Evaluation Ratings</span>
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === 'ai'}
+                        className={`pe-detail-tab-btn ${activeDetailTab === 'ai' ? 'active' : ''}`}
+                        onClick={() => setActiveDetailTab('ai')}
+                        data-testid="detail-tab-ai"
+                    >
+                        <Sparkles size={15} />
+                        <span>AI Recommendations</span>
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === 'plan'}
+                        className={`pe-detail-tab-btn ${activeDetailTab === 'plan' ? 'active' : ''}`}
+                        onClick={() => setActiveDetailTab('plan')}
+                        data-testid="detail-tab-plan"
+                    >
+                        <Target size={15} />
+                        <span>Development Plan</span>
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === 'charts'}
+                        className={`pe-detail-tab-btn ${activeDetailTab === 'charts' ? 'active' : ''}`}
+                        onClick={() => setActiveDetailTab('charts')}
+                        data-testid="detail-tab-charts"
+                    >
+                        <BarChart3 size={15} />
+                        <span>Charts & Analytics</span>
+                    </button>
+                </div>
+
+                {/* Tab Body Section */}
+                <div className="pe-detail-body-section">
+                    {activeDetailTab === 'ratings' && (
+                        <RatingGrid
+                            review={review}
+                            selectedEmployeeId={selectedEmployeeId}
+                            onEmployeeChange={setSelectedEmployeeId}
+                            onSaveRatings={handleSaveRatings}
+                            isSaving={isSavingRatings}
+                            isReadOnly={review.isFinalized}
+                        />
+                    )}
+
+                    {activeDetailTab === 'ai' && (
+                        <AiRecommendationPanel
+                            reviewId={review.reviewId}
+                            employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
+                            employeeName={currentEmployee?.employeeName}
+                            templateId={review.templateId}
+                            employees={review.employees}
+                            onEmployeeChange={setSelectedEmployeeId}
+                            onNavigateToPlan={() => setActiveDetailTab('plan')}
+                        />
+                    )}
+
+                    {activeDetailTab === 'plan' && (
+                        <DevelopmentPlanPanel
+                            reviewId={review.reviewId}
+                            employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
+                            employeeName={currentEmployee?.employeeName}
+                            employees={review.employees}
+                            onEmployeeChange={setSelectedEmployeeId}
+                        />
+                    )}
+
+                    {activeDetailTab === 'charts' && (
+                        <div className="pe-charts-view-container" data-testid="pe-charts-view">
+                            <ReviewExportBar
+                                review={review}
+                                startDate={chartStartDate}
+                                endDate={chartEndDate}
+                                onStartDateChange={setChartStartDate}
+                                onEndDateChange={setChartEndDate}
+                                scopeFilter={chartScopeFilter}
+                                onScopeFilterChange={setChartScopeFilter}
+                                onResetFilters={handleResetChartFilters}
+                            />
+                            <div className="pe-charts-grid">
+                                <CriterionComparisonChart
+                                    review={filteredReviewForCharts || review}
+                                    selectedEmployeeId={selectedEmployeeId}
+                                    onEmployeeChange={setSelectedEmployeeId}
+                                />
+                                <RatingDistributionChart
+                                    review={filteredReviewForCharts || review}
+                                />
+                                <SectionBreakdownChart
+                                    review={filteredReviewForCharts || review}
+                                    selectedEmployeeId={selectedEmployeeId}
+                                    onEmployeeChange={setSelectedEmployeeId}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Transition Confirmation Modal */}
+                <ConfirmationModal
+                    isOpen={confirmModal.isOpen}
+                    variant={confirmModal.variant}
+                    title={confirmModal.title}
+                    description={confirmModal.description}
+                    confirmLabel={confirmModal.confirmLabel}
+                    cancelLabel="Cancel"
+                    onConfirm={handleConfirmTransition}
+                    onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false, targetStatus: null }))}
+                />
+            </div>
+        </PerformanceErrorBoundary>
     );
 };

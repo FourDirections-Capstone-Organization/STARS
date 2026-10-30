@@ -180,7 +180,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                     >
                         {review.employees.map(emp => (
                             <option key={emp.employeeId} value={emp.employeeId}>
-                                {emp.employeeName} {emp.jobPositionTitle ? `(${emp.jobPositionTitle})` : ''} — Score: {emp.finalScore.toFixed(1)} [{emp.ratingLabel}] {emp.outlierCount > 0 ? `• ⚠️ ${emp.outlierCount} outliers` : ''}
+                                {emp.employeeName} {emp.jobPositionTitle ? `(${emp.jobPositionTitle})` : ''} — Score: {(emp.finalScore ?? 0).toFixed(1)} [{emp.ratingLabel || 'Unrated'}] {(emp.outlierCount ?? 0) > 0 ? `• ⚠️ ${emp.outlierCount} outliers` : ''}
                             </option>
                         ))}
                     </select>
@@ -216,7 +216,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                 <div className="pe-employee-score-badges">
                     <div className="pe-score-card">
                         <span className="pe-score-label">Overall Score</span>
-                        <span className="pe-score-value">{currentEmployee.finalScore.toFixed(1)} <small>/ 100</small></span>
+                        <span className="pe-score-value">{(currentEmployee.finalScore ?? 0).toFixed(1)} <small>/ 100</small></span>
                     </div>
                     <div
                         className="pe-rating-band-pill"
@@ -228,7 +228,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                         <Award size={16} />
                         <span>{currentEmployee.ratingLabel || 'Unassigned'}</span>
                     </div>
-                    {currentEmployee.outlierCount > 0 && (
+                    {(currentEmployee.outlierCount ?? 0) > 0 && (
                         <div className="pe-outlier-counter-pill" title={`${currentEmployee.outlierCount} evaluation criteria have a gap ≥ 2.0`}>
                             <AlertTriangle size={15} />
                             <span>{currentEmployee.outlierCount} Outlier{currentEmployee.outlierCount > 1 ? 's' : ''}</span>
@@ -270,9 +270,9 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                             )}
                                         </div>
                                         <div className="pe-section-meta-row">
-                                            <span>Weight: <strong>{section.weight}%</strong> of total</span>
+                                            <span>Weight: <strong>{section.weight ?? 0}%</strong> of total</span>
                                             <span className="pe-bullet">•</span>
-                                            <span>Section Score: <strong>{section.score.toFixed(1)} / 100</strong> (Weighted: <strong>{section.weightedScore.toFixed(1)}%</strong>)</span>
+                                            <span>Section Score: <strong>{(section.score ?? 0).toFixed(1)} / 100</strong> (Weighted: <strong>{(section.weightedScore ?? 0).toFixed(1)}%</strong>)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -286,7 +286,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                             <Activity size={15} color="var(--teal, #00A99D)" />
                                             STARS Calculation Engine Performance Snapshot (Read-Only)
                                         </span>
-                                        <span className="pe-kpi-live-badge">Live KPI Pass-Through: {section.score.toFixed(1)}</span>
+                                        <span className="pe-kpi-live-badge">Live KPI Pass-Through: {(section.score ?? 0).toFixed(1)}</span>
                                     </div>
                                     <p className="pe-kpi-box-description">
                                         Scores in this section are calculated automatically by the STARS calculation engine based on logged operational tasks, punctuality, and SLA accuracy over the evaluation window.
@@ -294,38 +294,47 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
 
                                     {section.kpiMetrics && section.kpiMetrics.length > 0 && (
                                         <div className="pe-kpi-metrics-grid">
-                                            {section.kpiMetrics.map((km, kmIdx) => (
-                                                <div
-                                                    key={km.metricCode || kmIdx}
-                                                    className="pe-kpi-metric-card"
-                                                    onMouseEnter={() => setActiveTooltipMetric(km.metricCode)}
-                                                    onMouseLeave={() => setActiveTooltipMetric(null)}
-                                                >
-                                                    <div className="pe-kpi-metric-header">
-                                                        <span className="pe-kpi-metric-name">{km.metricName}</span>
-                                                        <span className="pe-kpi-metric-code">{km.metricCode}</span>
+                                            {section.kpiMetrics.map((km: any, kmIdx: number) => {
+                                                const metricCode = km.metricCode || '';
+                                                const metricName = km.metricName || km.name || metricCode || 'KPI Metric';
+                                                const actualVal = km.actualValue ?? km.value ?? 0;
+                                                const targetVal = km.targetValue ?? km.target ?? 0;
+                                                const scoreVal = km.score ?? km.actualValue ?? km.weightedScore ?? 0;
+                                                const unit = km.unit || '';
+
+                                                return (
+                                                    <div
+                                                        key={metricCode || kmIdx}
+                                                        className="pe-kpi-metric-card"
+                                                        onMouseEnter={() => setActiveTooltipMetric(metricCode)}
+                                                        onMouseLeave={() => setActiveTooltipMetric(null)}
+                                                    >
+                                                        <div className="pe-kpi-metric-header">
+                                                            <span className="pe-kpi-metric-name">{metricName}</span>
+                                                            <span className="pe-kpi-metric-code">{metricCode}</span>
+                                                        </div>
+                                                        <div className="pe-kpi-metric-values">
+                                                            <div>
+                                                                <span className="pe-metric-sublabel">Actual</span>
+                                                                <span className="pe-metric-num">{actualVal} {unit}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="pe-metric-sublabel">Target</span>
+                                                                <span className="pe-metric-num">{targetVal} {unit}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="pe-metric-sublabel">Score</span>
+                                                                <span className="pe-metric-score-tag">{Number(scoreVal).toFixed(1)}%</span>
+                                                            </div>
+                                                        </div>
+                                                        {activeTooltipMetric === metricCode && (
+                                                            <div className="pe-kpi-tooltip">
+                                                                <strong>{metricName} ({metricCode})</strong>: Current value is {actualVal} against target of {targetVal} ({Number(scoreVal).toFixed(1)}% achievement).
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="pe-kpi-metric-values">
-                                                        <div>
-                                                            <span className="pe-metric-sublabel">Actual</span>
-                                                            <span className="pe-metric-num">{km.value} {km.unit || ''}</span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="pe-metric-sublabel">Target</span>
-                                                            <span className="pe-metric-num">{km.target} {km.unit || ''}</span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="pe-metric-sublabel">Score</span>
-                                                            <span className="pe-metric-score-tag">{km.score.toFixed(1)}%</span>
-                                                        </div>
-                                                    </div>
-                                                    {activeTooltipMetric === km.metricCode && (
-                                                        <div className="pe-kpi-tooltip">
-                                                            <strong>{km.metricName} ({km.metricCode})</strong>: Current value is {km.value} against target of {km.target} ({km.score.toFixed(1)}% achievement).
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -384,8 +393,8 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                                     {/* Self Score */}
                                                     <td>
                                                         {section.isKpiSection ? (
-                                                            <span className="pe-score-readonly-pill">
-                                                                {crit.selfScore != null ? crit.selfScore.toFixed(1) : '—'}
+                                                             <span className="pe-score-readonly-pill">
+                                                                {crit.selfScore != null ? Number(crit.selfScore).toFixed(1) : '—'}
                                                             </span>
                                                         ) : (
                                                             <select
@@ -409,7 +418,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                                     <td>
                                                         {section.isKpiSection ? (
                                                             <span className="pe-score-readonly-pill">
-                                                                {crit.managerScore != null ? crit.managerScore.toFixed(1) : (section.score != null ? (section.score / 20).toFixed(1) : '—')}
+                                                                {crit.managerScore != null ? Number(crit.managerScore).toFixed(1) : (section.score != null ? (Number(section.score) / 20).toFixed(1) : '—')}
                                                             </span>
                                                         ) : (
                                                             <select
@@ -434,7 +443,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                                         <div className="pe-gap-cell">
                                                             {diff !== null ? (
                                                                 <span className={`pe-gap-value ${diff > 0 ? 'pe-gap-pos' : diff < 0 ? 'pe-gap-neg' : 'pe-gap-neutral'}`}>
-                                                                    {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
+                                                                    {diff > 0 ? `+${Number(diff).toFixed(1)}` : Number(diff).toFixed(1)}
                                                                 </span>
                                                             ) : (
                                                                 <span className="pe-gap-empty">—</span>
@@ -443,7 +452,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
                                                             {isOutlier && (
                                                                 <span
                                                                     className="pe-outlier-pill"
-                                                                    title={`Significant discrepancy: |Manager (${mScore}) - Self (${sScore})| = ${absDiff?.toFixed(1)} ≥ 2.0`}
+                                                                    title={`Significant discrepancy: |Manager (${mScore}) - Self (${sScore})| = ${absDiff != null ? Number(absDiff).toFixed(1) : ''} ≥ 2.0`}
                                                                     data-testid={`outlier-badge-${crit.criterionId}`}
                                                                 >
                                                                     <AlertTriangle size={11} /> Outlier (|Δ| ≥ 2)

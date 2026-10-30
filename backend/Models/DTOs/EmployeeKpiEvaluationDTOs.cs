@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Backend.Models.DTOs;
 
 public class EmployeeKpiEvaluationResultDTO
@@ -47,6 +49,18 @@ public class KpiMetricValueDTO
     public string? CustomFormula { get; set; }
     public string Rating { get; set; } = "Green"; // "Green", "Amber", "Red"
     public double WeightedScore { get; set; }
+
+    [JsonPropertyName("metricName")]
+    public string MetricName { get => Name; set => Name = value; }
+
+    [JsonPropertyName("value")]
+    public double Value { get => ActualValue; set => ActualValue = value; }
+
+    [JsonPropertyName("target")]
+    public double Target { get => TargetValue; set => TargetValue = value; }
+
+    [JsonPropertyName("score")]
+    public double Score { get => WeightedScore; set => WeightedScore = value; }
 }
 
 public class KpiEvaluationRequestDTO

@@ -35,6 +35,7 @@ import {
     createReview
 } from '../../../services/performanceEvaluationService';
 import { ReviewDetailView } from './ReviewDetailView';
+import { PerformanceErrorBoundary } from './PerformanceErrorBoundary';
 import './PerformanceEvaluation.css';
 
 interface PerformanceReviewTabProps {
@@ -231,11 +232,15 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                 departmentId: createForm.scope === 'Department' ? createForm.departmentId : undefined,
                 employeeId: createForm.scope === 'Individual' ? createForm.employeeId : undefined
             });
-            success(`Performance review '${created.title}' created successfully.`);
+            const createdTitle = created?.title || createForm.title || 'Review';
+            success(`Performance review '${createdTitle}' created successfully.`);
             setIsCreateModalOpen(false);
             await loadData();
             // Automatically open detail view of newly created review
-            setSelectedReviewId(created.id);
+            const newId = created?.id || (created as any)?.reviewId || (created as any)?.data?.id;
+            if (newId) {
+                setSelectedReviewId(newId);
+            }
         } catch (err: any) {
             const msg = err.response?.data?.message || err.message || 'Failed to create performance review.';
             error(msg);
@@ -247,13 +252,18 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
     // If detail view is open
     if (selectedReviewId) {
         return (
-            <ReviewDetailView
-                reviewId={selectedReviewId}
-                onBack={() => {
-                    setSelectedReviewId(null);
-                    loadData();
-                }}
-            />
+            <PerformanceErrorBoundary onReset={() => {
+                setSelectedReviewId(null);
+                loadData();
+            }}>
+                <ReviewDetailView
+                    reviewId={selectedReviewId}
+                    onBack={() => {
+                        setSelectedReviewId(null);
+                        loadData();
+                    }}
+                />
+            </PerformanceErrorBoundary>
         );
     }
 

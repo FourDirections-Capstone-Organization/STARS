@@ -109,11 +109,17 @@ export interface SectionScoreDTO {
     weightedScore: number;
     criteria: CriterionScoreDTO[];
     kpiMetrics?: Array<{
-        metricCode: string;
-        metricName: string;
-        value: number;
-        target: number;
-        score: number;
+        metricCode?: string;
+        metricName?: string;
+        name?: string;
+        value?: number;
+        actualValue?: number;
+        target?: number;
+        targetValue?: number;
+        score?: number;
+        weightedScore?: number;
+        weight?: number;
+        rating?: string;
         unit?: string;
     }> | null;
 }

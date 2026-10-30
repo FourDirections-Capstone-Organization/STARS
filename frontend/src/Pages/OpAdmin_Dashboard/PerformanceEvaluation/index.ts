@@ -9,4 +9,5 @@ export { ReviewExportBar } from './ReviewExportBar';
 export { CriterionComparisonChart } from './charts/CriterionComparisonChart';
 export { RatingDistributionChart } from './charts/RatingDistributionChart';
 export { SectionBreakdownChart } from './charts/SectionBreakdownChart';
+export { PerformanceErrorBoundary } from './PerformanceErrorBoundary';
 export * from './types';

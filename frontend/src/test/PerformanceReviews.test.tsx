@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PerformanceReviewTab } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/PerformanceReviewTab';
+import { PerformanceErrorBoundary } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/PerformanceErrorBoundary';
 import { ReviewDetailView } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/ReviewDetailView';
 import { RatingGrid } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/RatingGrid';
 import {
@@ -470,6 +471,105 @@ describe('Performance Reviews & Rating Grid UI', () => {
                     expect.objectContaining({ criterionId: 'crit-2' })
                 ])
             );
+        });
+    });
+
+    it('handles newly created review with backend KPI metrics shape without white page crash', async () => {
+        const reviewWithBackendMetrics: ReviewResultDTO = {
+            ...mockReviewDetail,
+            employees: [
+                {
+                    ...mockReviewDetail.employees[0],
+                    sections: [
+                        {
+                            sectionId: 'sec-kpi-backend',
+                            sectionTitle: 'Automated Operations KPIs',
+                            weight: 100,
+                            order: 1,
+                            isKpiSection: true,
+                            score: 88.5,
+                            weightedScore: 88.5,
+                            criteria: [],
+                            // Backend KpiMetricValueDTO shape (without score, value, target, metricName)
+                            kpiMetrics: [
+                                {
+                                    metricCode: 'OTIF',
+                                    name: 'On-Time In-Full Delivery',
+                                    actualValue: 94.5,
+                                    targetValue: 90.0,
+                                    weightedScore: 18.9,
+                                    rating: 'Green',
+                                    unit: '%'
+                                } as any
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        renderWithToast(
+            <RatingGrid
+                review={reviewWithBackendMetrics}
+                onSaveRatings={vi.fn()}
+            />
+        );
+
+        // Asserts that KPI section renders properly using mapped name, actualValue, and score from weightedScore
+        expect(screen.getByText('On-Time In-Full Delivery')).toBeInTheDocument();
+        expect(screen.getByText('94.5 %')).toBeInTheDocument();
+        expect(screen.getByText('94.5%')).toBeInTheDocument();
+    });
+
+    it('renders PerformanceErrorBoundary fallback instead of crashing when child throws an error', () => {
+        const ThrowingChild = () => {
+            throw new Error('Simulated test render error');
+        };
+
+        // Suppress console.error in test log for expected error
+        const originalError = console.error;
+        console.error = vi.fn();
+
+        const onResetMock = vi.fn();
+        renderWithToast(
+            <PerformanceErrorBoundary onReset={onResetMock}>
+                <ThrowingChild />
+            </PerformanceErrorBoundary>
+        );
+
+        expect(screen.getByText('Unable to Display Performance Review')).toBeInTheDocument();
+        expect(screen.getByText(/Simulated test render error/i)).toBeInTheDocument();
+
+        // Click Back to Reviews
+        const backBtn = screen.getByRole('button', { name: /back to performance reviews/i });
+        fireEvent.click(backBtn);
+        expect(onResetMock).toHaveBeenCalledTimes(1);
+
+        console.error = originalError;
+    });
+
+    it('automatically transitions to ReviewDetailView upon creating a review', async () => {
+        renderWithToast(<PerformanceReviewTab departments={mockDepartments} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Click "+ New Review Cycle"
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Fill form
+        const titleInput = screen.getByLabelText(/review cycle title/i);
+        fireEvent.change(titleInput, { target: { value: 'New Test Review Cycle' } });
+
+        const submitBtn = screen.getByRole('button', { name: /^create review cycle$/i });
+        fireEvent.click(submitBtn);
+
+        // Detail view should open automatically and render the review detail
+        await waitFor(() => {
+            expect(screen.getByText('Workflow Progression')).toBeInTheDocument();
+            expect(screen.getByText('Evaluation Ratings')).toBeInTheDocument();
         });
     });
 });
