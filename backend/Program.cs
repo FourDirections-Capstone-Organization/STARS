@@ -185,6 +185,7 @@ builder.Services.AddScoped<IKpiExportService, KpiExportService>();
 builder.Services.AddScoped<IPerformanceReviewScoringService, PerformanceReviewScoringService>();
 builder.Services.AddScoped<IReviewWorkflowService, ReviewWorkflowService>();
 builder.Services.AddScoped<IEvaluationTemplateService, EvaluationTemplateService>();
+builder.Services.AddScoped<IAiRecommendationGenerationService, AiRecommendationGenerationService>();
 builder.Services.AddSingleton<ISafeFormulaParser, SafeFormulaParser>();
 builder.Services.AddSingleton<IKpiVariableRegistry, KpiVariableRegistry>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();

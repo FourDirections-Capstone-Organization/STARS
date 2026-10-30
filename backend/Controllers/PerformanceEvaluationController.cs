@@ -27,19 +27,22 @@ public class PerformanceEvaluationController : ControllerBase
     private readonly IPerformanceReviewScoringService _scoringService;
     private readonly AppDbContext _context;
     private readonly ILogger<PerformanceEvaluationController> _logger;
+    private readonly IAiRecommendationGenerationService? _aiService;
 
     public PerformanceEvaluationController(
         IEvaluationTemplateService templateService,
         IReviewWorkflowService workflowService,
         IPerformanceReviewScoringService scoringService,
         AppDbContext context,
-        ILogger<PerformanceEvaluationController> logger)
+        ILogger<PerformanceEvaluationController> logger,
+        IAiRecommendationGenerationService? aiService = null)
     {
         _templateService = templateService;
         _workflowService = workflowService;
         _scoringService = scoringService;
         _context = context;
         _logger = logger;
+        _aiService = aiService;
     }
 
     #region Evaluation Template Endpoints
@@ -690,6 +693,127 @@ public class PerformanceEvaluationController : ControllerBase
 
         return Ok(ApiResponseDTO<WorkflowTransitionResult>.Success(
             result, $"Review transitioned to '{result.NewStatus}' successfully."));
+    }
+
+    #endregion
+
+    #region AI Recommendation Endpoints
+
+    /// <summary>
+    /// Generates or regenerates an AI-powered performance recommendation for a specific employee within a review.
+    /// Restricted to Managers and Administrators. Returns 422 if the evaluation template has AI recommendations disabled.
+    /// </summary>
+    [HttpPost("reviews/{reviewId:guid}/ai-recommend/{employeeId:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> GenerateAiRecommendation(
+        Guid reviewId,
+        Guid employeeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (_aiService == null)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                ApiResponseDTO<object>.Failure("AI recommendation service is not configured."));
+        }
+
+        var managerId = GetCurrentUserId() ?? Guid.Empty;
+        var result = await _aiService.GenerateRecommendationAsync(
+            reviewId, employeeId, managerId, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return StatusCode(
+                result.StatusCode,
+                ApiResponseDTO<object>.Failure(result.ErrorMessage ?? "Failed to generate AI recommendation."));
+        }
+
+        var dto = result.Recommendation!.ToDTO();
+        return Ok(ApiResponseDTO<AiRecommendationDTO>.Success(
+            dto, "AI recommendation generated successfully."));
+    }
+
+    /// <summary>
+    /// Updates an existing AI recommendation (e.g. approve, reject, edit summary/items, manual override).
+    /// Restricted to Managers and Administrators. Does NOT mutate review scores or review workflow status.
+    /// </summary>
+    [HttpPut("reviews/{reviewId:guid}/ai-recommend/{employeeId:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> UpdateAiRecommendation(
+        Guid reviewId,
+        Guid employeeId,
+        [FromBody] UpdateAiRecommendationDTO request,
+        CancellationToken cancellationToken = default)
+    {
+        if (_aiService == null)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                ApiResponseDTO<object>.Failure("AI recommendation service is not configured."));
+        }
+
+        if (request == null)
+        {
+            return BadRequest(ApiResponseDTO<object>.Failure("Update payload is required."));
+        }
+
+        var reviewerId = GetCurrentUserId() ?? Guid.Empty;
+        var result = await _aiService.UpdateRecommendationAsync(
+            reviewId, employeeId, request, reviewerId, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return StatusCode(
+                result.StatusCode,
+                ApiResponseDTO<object>.Failure(result.ErrorMessage ?? "Failed to update AI recommendation."));
+        }
+
+        var dto = result.Recommendation!.ToDTO();
+        return Ok(ApiResponseDTO<AiRecommendationDTO>.Success(
+            dto, "AI recommendation updated successfully."));
+    }
+
+    /// <summary>
+    /// Retrieves the AI recommendation for a specific employee within a review.
+    /// Managers can view recommendations in any status; employees can only view their own Approved recommendations.
+    /// </summary>
+    [HttpGet("reviews/{reviewId:guid}/ai-recommend/{employeeId:guid}")]
+    public async Task<IActionResult> GetAiRecommendation(
+        Guid reviewId,
+        Guid employeeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (_aiService == null)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                ApiResponseDTO<object>.Failure("AI recommendation service is not configured."));
+        }
+
+        if (!CanAccessEmployeeData(employeeId))
+        {
+            return Forbid();
+        }
+
+        var recommendation = await _aiService.GetRecommendationAsync(
+            reviewId, employeeId, cancellationToken);
+
+        if (recommendation == null)
+        {
+            return NotFound(ApiResponseDTO<object>.Failure(
+                $"AI recommendation not found for review '{reviewId}' and employee '{employeeId}'."));
+        }
+
+        // Non-manager employees can only view recommendations that have been Approved
+        if (!IsManagerOrAdmin() && recommendation.Status != AiRecommendationStatus.Approved)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponseDTO<object>.Failure("AI recommendation is not yet approved by reviewer."));
+        }
+
+        var dto = recommendation.ToDTO();
+        return Ok(ApiResponseDTO<AiRecommendationDTO>.Success(dto));
     }
 
     #endregion
