@@ -199,8 +199,8 @@ export const transitionReviewWorkflow = async (
 // AI Recommendation APIs
 // ============================================================================
 
-const parseAiRecommendation = (rec: any): AiRecommendationDTO => {
-    if (!rec) return rec;
+const parseAiRecommendation = (rec: any): AiRecommendationDTO | null => {
+    if (!rec || typeof rec !== 'object' || !rec.id) return null;
     const parsed: AiRecommendationDTO = { ...rec };
     try {
         if (rec.strengthsJson && !parsed.strengths) {
@@ -241,8 +241,8 @@ export const generateAiRecommendation = async (
     employeeId: string
 ): Promise<AiRecommendationDTO> => {
     const res = await api.post(`/api/performance/reviews/${reviewId}/ai-recommend/${employeeId}`);
-    const data = res.data?.data ?? res.data;
-    return parseAiRecommendation(data);
+    const data = res.data?.data !== undefined ? res.data.data : res.data;
+    return parseAiRecommendation(data) as AiRecommendationDTO;
 };
 
 /**
@@ -254,8 +254,8 @@ export const updateAiRecommendation = async (
     data: UpdateAiRecommendationDTO
 ): Promise<AiRecommendationDTO> => {
     const res = await api.put(`/api/performance/reviews/${reviewId}/ai-recommend/${employeeId}`, data);
-    const result = res.data?.data ?? res.data;
-    return parseAiRecommendation(result);
+    const result = res.data?.data !== undefined ? res.data.data : res.data;
+    return parseAiRecommendation(result) as AiRecommendationDTO;
 };
 
 /**
@@ -266,7 +266,7 @@ export const fetchAiRecommendation = async (
     employeeId: string
 ): Promise<AiRecommendationDTO | null> => {
     const res = await api.get(`/api/performance/reviews/${reviewId}/ai-recommend/${employeeId}`);
-    const data = res.data?.data ?? res.data;
+    const data = res.data?.data !== undefined ? res.data.data : res.data;
     return data ? parseAiRecommendation(data) : null;
 };
 

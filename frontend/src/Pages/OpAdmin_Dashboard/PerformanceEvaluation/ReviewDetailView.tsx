@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -16,7 +16,9 @@ import {
     Building,
     Award,
     RotateCcw,
-    Check
+    Check,
+    Sparkles,
+    Target
 } from 'lucide-react';
 import {
     ReviewResultDTO,
@@ -29,6 +31,8 @@ import {
     transitionReviewWorkflow
 } from '../../../services/performanceEvaluationService';
 import { RatingGrid } from './RatingGrid';
+import { AiRecommendationPanel } from './AiRecommendationPanel';
+import { DevelopmentPlanPanel } from './DevelopmentPlanPanel';
 import ConfirmationModal from '../../../components/ConfirmationModal/ConfirmationModal';
 import { useToast } from '../../../components/Toast/Toast';
 
@@ -84,6 +88,7 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     const [isSavingRatings, setIsSavingRatings] = useState<boolean>(false);
     const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+    const [activeDetailTab, setActiveDetailTab] = useState<'ratings' | 'ai' | 'plan'>('ratings');
 
     // Confirmation modal for workflow transition
     const [confirmModal, setConfirmModal] = useState<{
@@ -126,6 +131,10 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
     useEffect(() => {
         loadReview();
     }, [reviewId]);
+
+    const currentEmployee = useMemo(() => {
+        return review?.employees?.find(e => e.employeeId === selectedEmployeeId) || review?.employees?.[0];
+    }, [review?.employees, selectedEmployeeId]);
 
     // Handle ratings submission
     const handleSaveRatings = async (employeeId: string, ratings: CriterionRatingSubmissionDTO[]) => {
@@ -371,16 +380,77 @@ export const ReviewDetailView: React.FC<ReviewDetailViewProps> = ({
                 </div>
             </div>
 
-            {/* Rating Grid Section */}
+            {/* Detail Navigation Tabs */}
+            <div className="pe-detail-tab-nav" role="tablist">
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeDetailTab === 'ratings'}
+                    className={`pe-detail-tab-btn ${activeDetailTab === 'ratings' ? 'active' : ''}`}
+                    onClick={() => setActiveDetailTab('ratings')}
+                    data-testid="detail-tab-ratings"
+                >
+                    <FileSpreadsheet size={15} />
+                    <span>Evaluation Ratings</span>
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeDetailTab === 'ai'}
+                    className={`pe-detail-tab-btn ${activeDetailTab === 'ai' ? 'active' : ''}`}
+                    onClick={() => setActiveDetailTab('ai')}
+                    data-testid="detail-tab-ai"
+                >
+                    <Sparkles size={15} />
+                    <span>AI Recommendations</span>
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeDetailTab === 'plan'}
+                    className={`pe-detail-tab-btn ${activeDetailTab === 'plan' ? 'active' : ''}`}
+                    onClick={() => setActiveDetailTab('plan')}
+                    data-testid="detail-tab-plan"
+                >
+                    <Target size={15} />
+                    <span>Development Plan</span>
+                </button>
+            </div>
+
+            {/* Tab Body Section */}
             <div className="pe-detail-body-section">
-                <RatingGrid
-                    review={review}
-                    selectedEmployeeId={selectedEmployeeId}
-                    onEmployeeChange={setSelectedEmployeeId}
-                    onSaveRatings={handleSaveRatings}
-                    isSaving={isSavingRatings}
-                    isReadOnly={review.isFinalized}
-                />
+                {activeDetailTab === 'ratings' && (
+                    <RatingGrid
+                        review={review}
+                        selectedEmployeeId={selectedEmployeeId}
+                        onEmployeeChange={setSelectedEmployeeId}
+                        onSaveRatings={handleSaveRatings}
+                        isSaving={isSavingRatings}
+                        isReadOnly={review.isFinalized}
+                    />
+                )}
+
+                {activeDetailTab === 'ai' && (
+                    <AiRecommendationPanel
+                        reviewId={review.reviewId}
+                        employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
+                        employeeName={currentEmployee?.employeeName}
+                        templateId={review.templateId}
+                        employees={review.employees}
+                        onEmployeeChange={setSelectedEmployeeId}
+                        onNavigateToPlan={() => setActiveDetailTab('plan')}
+                    />
+                )}
+
+                {activeDetailTab === 'plan' && (
+                    <DevelopmentPlanPanel
+                        reviewId={review.reviewId}
+                        employeeId={selectedEmployeeId || review.employees?.[0]?.employeeId || ''}
+                        employeeName={currentEmployee?.employeeName}
+                        employees={review.employees}
+                        onEmployeeChange={setSelectedEmployeeId}
+                    />
+                )}
             </div>
 
             {/* Transition Confirmation Modal */}

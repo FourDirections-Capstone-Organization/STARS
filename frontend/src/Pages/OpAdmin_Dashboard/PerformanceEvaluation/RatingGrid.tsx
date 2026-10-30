@@ -164,7 +164,7 @@ export const RatingGrid: React.FC<RatingGridProps> = ({
     }
 
     return (
-        <div className="pe-rating-grid-container">
+        <div className="pe-rating-grid-container" data-testid="rating-grid">
             {/* Multi-Employee Selector when review covers multiple employees */}
             {review.employees && review.employees.length > 1 && (
                 <div className="pe-employee-selector-card">
