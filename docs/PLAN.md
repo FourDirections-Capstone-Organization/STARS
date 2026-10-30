@@ -1,35 +1,84 @@
-# Fix KPI Endpoints 500 Errors Plan
+# Performance Evaluation with AI Recommendations – Implementation Plan
 
-Target Feature Branch: fix/kpi-deployed-500-errors
+**Feature branch:** `feature/performance-evaluation` | **Step branches:** `step-N-<short-name>`
+
+> [!IMPORTANT]
+> Never push to `refactoring/bug-fix` directly. All steps land on `step-N-*`, then merge into `feature/performance-evaluation`.
+
+---
 
 ## Findings so far
-- backend/Program.cs: raw DDL creates KpiConfigurations without overall threshold columns and omits migration history entries.
-- backend/Migrations/20261029111153_AddOverallThresholdsToKpiConfiguration.cs: migration adding OverallGreen, Amber, and Red thresholds.
-- backend/Data/KpiDefaultSeeder.cs: default seed fails inserting into KpiConfigurations when threshold columns are missing.
-- backend/Controllers/KpiController.cs: scope and configurations endpoints catch EF Core exceptions and return generic 500 errors.
-- backend/Modules/Analytics/KpiCalculationEngine.cs: resolves configuration from KpiConfigurations table during hierarchical scope evaluation.
+- **Groq/LLM:** `GroqSuitabilityService` + `GroqSettings` already exist; reuse HTTP client, key resolution, and chat models.
+- **KPI callable per employee:** `IKpiCalculationEngine.CalculateEmployeeKpiAsync(employeeId, start, end)` exists and returns `OverallScore` (0–100) — usable as the KPI section score.
+- **Charting:** Recharts `^3.8.1` already installed; reuse for all three charts.
+- **Export:** `KpiExportService` uses ClosedXML (Excel/PDF). CSV export for this feature is plain text — no new library needed.
+- **Roles:** `ManagerOnly` and `CoordinatorAndAbove` policies exist in `AuthorizationPolicies`. No `HR` role in `UserRole` enum.
+- **AppDbContext + EF migrations pattern:** established; startup DDL pattern exists in `Program.cs`.
 
-## Decisions to confirm
-- Confirm whether to update deployed Azure database schema automatically via Program.cs startup DDL or manual SQL script.
-- Confirm whether to enhance 500 error handling in KpiController to log detailed exception messages and return them in development.
+---
 
-## Implementation Steps
-- [x] Step 1: Reproduce locally and trace failure points for both endpoints against local and deployed environments
-  - Findings: GET /api/kpi/configurations fails at KpiController.cs line 668 (_db.KpiConfigurations.ToListAsync) when EF Core selects OverallGreen/Amber/RedThreshold.
-  - Findings: GET /api/kpi/scope fails at KpiCalculationEngine.cs line 850 (ResolveConfigurationForScopeAsync) querying KpiConfigurations for scope evaluation.
-  - Findings: Startup DDL in Program.cs created KpiConfigurations without threshold columns and omitted __EFMigrationsHistory entries, causing MigrateAsync to fail on table conflict and skipping KpiDefaultSeeder.
-- [x] Step 2: Confirm both endpoints share the root cause of missing threshold columns and unapplied migrations
-  - Findings: Startup DDL in Program.cs created KpiConfigurations without OverallGreenThreshold, OverallAmberThreshold, and OverallRedThreshold, and omitted 20261029101146_AddKpiConfigurationAndItems from __EFMigrationsHistory.
-  - Findings: On startup, MigrateAsync attempts 20261029101146_AddKpiConfigurationAndItems, fails with PostgreSQL 42P07 (relation exists), and aborts before 20261029111153_AddOverallThresholdsToKpiConfiguration runs.
-  - Findings: KpiDefaultSeeder crashes when inserting default config with missing threshold columns (PostgreSQL 42703), leaving the table unseeded.
-  - Findings: Both GET /api/kpi/configurations (KpiController:668) and GET /api/kpi/scope (KpiCalculationEngine:850) query EF Core KpiConfigurations, failing on missing threshold columns and triggering 500 responses.
-  - Verify: Inspection confirms both endpoints fail at EF Core queries to KpiConfigurations due to missing threshold columns
-- [x] Step 3: Fix startup DDL, record migrations in history, ensure seed execution, and add regression tests
-  - Findings: Created DatabaseStartupDdl with threshold columns (OverallGreenThreshold, OverallAmberThreshold, OverallRedThreshold) in KpiConfigurations CREATE and ALTER statements.
-  - Findings: Recorded both 20261029101146_AddKpiConfigurationAndItems and 20261029111153_AddOverallThresholdsToKpiConfiguration into __EFMigrationsHistory to prevent MigrateAsync table conflicts.
-  - Findings: Enhanced KpiDefaultSeeder to safely repair 0.0 threshold values on existing records.
-  - Verify: Added 5 regression tests in KpiDatabaseConfigurationTests validating that legacy DDL fails validation without threshold columns/migrations and passes with updated DDL and seeder execution.
-- [x] Step 4: Run full backend and frontend test suites
-  - Findings: Executed full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) - 842 passed, 0 failed.
-  - Findings: Executed full frontend test suite (`npm --prefix frontend test`) - 263 passed across 31 test files, 0 failed.
-  - Verify: dotnet test passes all backend tests and npm test passes all frontend tests
+## Open Questions / Assumptions
+
+| # | Question | Assumption |
+|---|----------|------------|
+| 1 | **LLM provider & data policy:** Is Groq the approved provider for de-identified performance data? | Assume yes — reuse `GroqSettings`; de-identified payload (role title, criterion names+scores, KPI codes+values, trimmed comments only). |
+| 2 | **AI text in CSV:** Spec says "do not include AI text unless approved" but does not define the approved column format. | Omit AI columns from CSV in Step 7; add in a follow-up once product owner specifies column name/format. |
+| 3 | **HR role:** `UserRole` has no `HR` value; spec mentions "HR review" stage. | `HrReview → Acknowledgment` transition is available to any `Manager`; flag for product owner — may need new `HrOfficer` value. |
+| 4 | **Charting library:** Already confirmed — Recharts `^3.8.1`. | No new library needed. |
+| 5 | **Template / band changes on open vs. finalized reviews:** Spec says scores are not stored on open reviews, so band changes apply immediately. | Open reviews: live re-compute on every load (no freeze). Finalized reviews: `FrozenScoresJson` snapshot is immutable; band changes have no effect. |
+
+---
+
+## Steps
+
+- [x] Step 1: Domain models — templates, reviews, ratings, AI recommendation, development plan
+  - Files: `backend/Models/EvaluationTemplate.cs`, `EvaluationSection.cs`, `EvaluationCriterion.cs`, `RatingBand.cs`, `PerformanceReview.cs`, `CriterionRating.cs`, `AiRecommendation.cs`, `DevelopmentPlanItem.cs`, `backend/Models/Enums/CriterionType.cs` (Standard, KpiLinked), `ReviewWorkflowStatus.cs` (Draft→SelfAssessment→ManagerReview→HrReview→Acknowledgment→Finalized), `ReviewScope.cs`, `AiRecommendationStatus.cs` (Pending, Approved, Rejected, ManualOverride)
+  - Verify: `dotnet build backend/Backend.csproj` succeeded with 0 errors; full backend test suite (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`) verified with 842 passed, 0 failed.
+
+- [ ] Step 2: EF Core config, DbSets, and migration
+  - Files: `backend/Data/AppDbContext.cs` (DbSets + OnModelCreating: unique index on CriterionRating(ReviewId,EmployeeId,CriterionId), index on WorkflowStatus, FrozenScoresJson as `text`), `backend/Program.cs` (startup DDL + migration ID)
+  - Run: `dotnet ef migrations add AddPerformanceEvaluation --project backend`
+  - Verify: `dotnet ef database update` succeeds locally; `dotnet test backend/Tests/Backend.Tests.csproj` ≥ 506 tests pass.
+
+- [ ] Step 3: Scoring service — single server-side source of truth (security: server-side-only, frozen bypass)
+  - Files: `backend/Modules/PerformanceEvaluation/IPerformanceReviewScoringService.cs`, `PerformanceReviewScoringService.cs`, `backend/Models/DTOs/PerformanceEvaluationDTOs.cs` (CriterionScoreDTO, SectionScoreDTO, EmployeeReviewScoreDTO, ReviewResultDTO)
+  - Rules: non-KPI section score = Σ(managerScore×weight)/Σ(weight) normalized to 0–100; KPI section = `IKpiCalculationEngine.CalculateEmployeeKpiAsync().OverallScore`; weighted final = Σ(sectionScore×sectionWeight)/Σ(sectionWeight); rating label from RatingBand; outlier flag when |self−manager| ≥ 2; if Finalized deserialize FrozenScoresJson. Extensibility: new CriterionType = 1 enum value (Step 1) + 1 scorer `case`.
+  - Verify: xUnit tests in `backend/Tests/Analytics/PerformanceReviewScoringTests.cs` — standard, KPI passthrough, outlier, band boundary, frozen bypass, zero-weight, missing ratings, multi-employee (≥ 8 cases).
+
+- [ ] Step 4: Workflow + template services and DI registration (security: server-side state enforcement, ManagerOnly)
+  - Files: `backend/Modules/PerformanceEvaluation/ReviewWorkflowService.cs` + interface (illegal transitions return 422; Finalize freezes scores via scoring service), `EvaluationTemplateService.cs` + interface (CRUD; validate section weights sum 100±0.5%, criterion weights per section sum 100±0.5%, ≤1 IsKpiSection, non-overlapping RatingBands; block update when template in use by non-Draft review), `backend/Program.cs` (register all PE scoped services)
+  - Verify: unit tests — illegal transition (e.g. Draft→Finalized) returns 422; freeze writes non-null JSON; template weight validation rejects bad configs.
+
+- [ ] Step 5: Performance Evaluation controller — templates, reviews, scoring, workflow (security: ManagerOnly policy, CanAccessEmployeeData guard mirrors KpiController)
+  - Files: `backend/Controllers/PerformanceEvaluationController.cs` — `GET/POST/PUT/DELETE /api/performance/templates`, `POST /api/performance/reviews`, `GET /api/performance/reviews` (filter by status/scope/date), `GET /api/performance/reviews/{id}` (returns ReviewResultDTO), `PUT /api/performance/reviews/{id}/ratings` (self-score in SelfAssessment; manager-score in ManagerReview), `POST /api/performance/reviews/{id}/transition`, `GET /api/performance/reviews/{id}/score`
+  - Verify: integration tests — CRUD round-trip, 403 on cross-employee access, workflow enforcement; `dotnet test` passes.
+
+- [ ] Step 6: AI recommendation service (security: de-identified payload, validated JSON, no score/workflow mutation)
+  - Files: `backend/Modules/PerformanceEvaluation/AiRecommendationGenerationService.cs` + interface + `AiRecommendationModels.cs` (PerformanceAiPayload: roleTitle, criterionScores, kpiSnapshot, trimmedComments ≤500 chars — NO name/ID; PerformanceAiResponse: summary, strengths[], improvementAreas[], actionItems[{description,successMeasure,timeframe}], trainingTopics[])
+  - Reuse: `GroqSettings`, `GroqChatRequest/Response/Message`, HTTP client factory. Override MaxTokens=2048. System prompt enforces `json_object` response_format, rejects injection, forbids score/workflow change. Server validates all required fields; persist with Status=Pending; Status=ManualOverride on Groq failure. Extensibility: new AI output section = 1 new field in PerformanceAiResponse + 1 new line in system prompt. Endpoints in controller: `POST /api/performance/reviews/{reviewId}/ai-recommend/{employeeId}` (Manager only), `PUT` same path (approve/reject/edit).
+  - Verify: unit tests — mock Groq HTTP; JSON schema enforcement; PII not in payload; fallback on HTTP fail; disabled template returns 422.
+
+- [ ] Step 7: Development plan endpoints + CSV export service (security: ManagerOnly plan creation; employee for completion; CSV injection guard; permission-scoped export)
+  - Files: controller extensions (`GET/POST /api/performance/reviews/{reviewId}/development-plan/{employeeId}`, `PUT /api/performance/development-plan/{itemId}`, `GET /api/performance/employees/{employeeId}/development-plan`); `backend/Modules/PerformanceEvaluation/PerformanceReviewCsvExportService.cs` + interface — calls scoring service (no duplicated logic); columns: Employee,EmployeeNumber,Department,JobPosition,Section,Criterion,SelfScore,ManagerScore,Gap,IsOutlier,ManagerComment,WeightedFinalScore,RatingLabel; CSV injection guard (prefix `=+-@` cells with `'`); RFC 4180 quoting; AI text excluded; `GET /api/performance/reviews/{id}/export/csv`
+  - Verify: unit tests — injection guard (`=SUM(1,2)` → `'=SUM(1,2)`), RFC-4180 quoting, live vs. frozen values, 403 on cross-employee; plan creation blocked when Pending; employee completes own items only.
+
+- [ ] Step 8: Frontend types, service, and template management UI (Settings sub-tab)
+  - Files: `frontend/src/Pages/OpAdmin_Dashboard/PerformanceEvaluation/types.ts`, `frontend/src/services/performanceEvaluationService.ts` (all API functions: templates, reviews, ratings, transitions, AI, plan, CSV export), `EvaluationTemplateTab.tsx`, `EvaluationTemplateEditor.tsx` (section accordion, criterion rows, weight-sum banners, AI toggle, KPI-section radio, rating band table), `PerformanceEvaluation.css`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx` (add Evaluation Templates Settings sub-tab)
+  - Verify: `npm --prefix frontend test`; manual: create template with two weighted sections, save, reload.
+
+- [ ] Step 9: Review list, creation, detail, and rating grid UI
+  - Files: `PerformanceReviewTab.tsx` (date-range picker, scope selector, template selector, status badges, pagination), `ReviewDetailView.tsx` (workflow status bar, Advance Stage button), `RatingGrid.tsx` (employee×criterion rows: self-score 1–5 dropdown, manager-score 1–5 dropdown, computed gap, outlier badge when |self−manager|≥2, comment textarea; KPI section row read-only with live KPI score and metrics tooltip), `OpAdmin_Dashboard.tsx` (add Performance Reviews tab)
+  - Verify: `npm --prefix frontend test`; manual: enter ratings, observe live gap computation and outlier badge.
+
+- [ ] Step 10: AI recommendation panel and development plan panel UI
+  - Files: `AiRecommendationPanel.tsx` (Generate button disabled if isAiEnabled=false; spinner; structured result: summary, strengths, improvement areas, action items table, training topics; inline edit + Approve/Reject; ManualOverride textarea; employee sees panel only when status=Approved), `DevelopmentPlanPanel.tsx` (manager: Create Plan button after approval; employee: checklist with Mark Complete; prior-cycle open items banner)
+  - Verify: `npm --prefix frontend test`; manual: generate AI, approve, confirm employee sees it.
+
+- [ ] Step 11: CSV export button and three charts (Recharts; same scored data as review screen, no extra API calls)
+  - Files: `ReviewExportBar.tsx` (Export CSV, blob download pattern from kpiService.ts), `charts/CriterionComparisonChart.tsx` (BarChart grouped: self vs. manager per criterion; employee dropdown in team scope), `charts/RatingDistributionChart.tsx` (PieChart rating-label counts; team scope only, else placeholder), `charts/SectionBreakdownChart.tsx` (BarChart per employee; KPI section highlighted with distinct color); wire all three charts into `ReviewDetailView.tsx` Charts tab — data from already-loaded ReviewResultDTO; re-render on date/scope filter change.
+  - Verify: `npm --prefix frontend test` snapshot tests for all three charts; manual: export CSV and open in text editor; change date range, verify charts refresh.
+
+- [ ] Step 12: Full backend and frontend test suites
+  - Run: `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` and `npm --prefix frontend test`
+  - Fix any regressions from new DI registrations, context changes, or controller additions.
+  - Verify: ≥ 506 backend tests pass, ≥ 52 frontend tests pass, 0 failed in either suite.
