@@ -1,0 +1,402 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Performance Evaluation Step 11: Export Bar and Charts > CriterionComparisonChart > matches snapshot for criterion comparison chart structure 1`] = `
+<div>
+  <div
+    class="pe-chart-card "
+    data-testid="criterion-comparison-chart-card"
+  >
+    <div
+      class="pe-chart-header"
+    >
+      <div>
+        <h3
+          class="pe-chart-title"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-chart-column"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 3v16a2 2 0 0 0 2 2h16"
+            />
+            <path
+              d="M18 17V9"
+            />
+            <path
+              d="M13 17V5"
+            />
+            <path
+              d="M8 17v-3"
+            />
+          </svg>
+          <span>
+            Criterion Comparison: Self vs. Manager
+          </span>
+        </h3>
+        <p
+          class="pe-chart-subtitle"
+        >
+          Grouped rating alignment per evaluation criterion (1 to 5 scale).
+        </p>
+      </div>
+      <div
+        class="pe-chart-employee-selector"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-user pe-selector-icon"
+          fill="none"
+          height="14"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"
+          />
+          <circle
+            cx="12"
+            cy="7"
+            r="4"
+          />
+        </svg>
+        <select
+          aria-label="Select Employee for Criterion Comparison"
+          class="pe-form-select pe-input-sm"
+          data-testid="criterion-chart-employee-select"
+        >
+          <option
+            value="emp-alice"
+          >
+            Alice Courier
+             
+            (Courier)
+          </option>
+          <option
+            value="emp-bob"
+          >
+            Bob Dispatcher
+             
+            (Courier)
+          </option>
+        </select>
+      </div>
+    </div>
+    <div
+      class="pe-chart-body"
+      data-testid="criterion-comparison-body"
+    >
+      <div
+        class="recharts-responsive-container"
+        style="width: 100%; height: 320px;"
+      >
+        <div
+          class="recharts-wrapper"
+          style="position: relative; cursor: default;"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Performance Evaluation Step 11: Export Bar and Charts > RatingDistributionChart > matches snapshot for rating distribution chart in team scope 1`] = `
+<div>
+  <div
+    class="pe-chart-card "
+    data-testid="rating-distribution-chart-card"
+  >
+    <div
+      class="pe-chart-header"
+    >
+      <div>
+        <h3
+          class="pe-chart-title"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-chart-pie"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"
+            />
+            <path
+              d="M21.21 15.89A10 10 0 1 1 8 2.83"
+            />
+          </svg>
+          <span>
+            Rating Distribution
+          </span>
+        </h3>
+        <p
+          class="pe-chart-subtitle"
+        >
+          Team evaluation outcomes across rating bands.
+        </p>
+      </div>
+    </div>
+    <div
+      class="pe-chart-body"
+      data-testid="rating-dist-body"
+    >
+      <div
+        class="recharts-responsive-container"
+        style="width: 100%; height: 320px;"
+      >
+        <div
+          class="recharts-wrapper"
+          style="position: relative; cursor: default;"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Performance Evaluation Step 11: Export Bar and Charts > RatingDistributionChart > matches snapshot for rating distribution placeholder in individual scope 1`] = `
+<div>
+  <div
+    class="pe-chart-card "
+    data-testid="rating-distribution-chart-card"
+  >
+    <div
+      class="pe-chart-header"
+    >
+      <div>
+        <h3
+          class="pe-chart-title"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-chart-pie"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"
+            />
+            <path
+              d="M21.21 15.89A10 10 0 1 1 8 2.83"
+            />
+          </svg>
+          <span>
+            Rating Distribution
+          </span>
+        </h3>
+        <p
+          class="pe-chart-subtitle"
+        >
+          Team evaluation outcomes across rating bands.
+        </p>
+      </div>
+    </div>
+    <div
+      class="pe-chart-placeholder"
+      data-testid="rating-dist-placeholder"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-info pe-placeholder-icon"
+        fill="none"
+        height="28"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="28"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+        />
+        <path
+          d="M12 16v-4"
+        />
+        <path
+          d="M12 8h.01"
+        />
+      </svg>
+      <h4>
+        Team Scope Required
+      </h4>
+      <p>
+        Rating distribution is only available for Team or Department review scopes with multiple evaluated employees.
+      </p>
+      <span
+        class="pe-placeholder-badge"
+      >
+        Current Scope: 
+        Individual
+      </span>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Performance Evaluation Step 11: Export Bar and Charts > SectionBreakdownChart > matches snapshot for section breakdown chart structure 1`] = `
+<div>
+  <div
+    class="pe-chart-card "
+    data-testid="section-breakdown-chart-card"
+  >
+    <div
+      class="pe-chart-header"
+    >
+      <div>
+        <h3
+          class="pe-chart-title"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-layers"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"
+            />
+            <path
+              d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"
+            />
+            <path
+              d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"
+            />
+          </svg>
+          <span>
+            Section Breakdown
+          </span>
+        </h3>
+        <p
+          class="pe-chart-subtitle"
+        >
+          Section scores (0–100); KPI section highlighted in amber.
+        </p>
+      </div>
+      <div
+        class="pe-chart-employee-selector"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-user pe-selector-icon"
+          fill="none"
+          height="14"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"
+          />
+          <circle
+            cx="12"
+            cy="7"
+            r="4"
+          />
+        </svg>
+        <select
+          aria-label="Select Employee for Section Breakdown"
+          class="pe-form-select pe-input-sm"
+          data-testid="section-chart-employee-select"
+        >
+          <option
+            value="emp-alice"
+          >
+            Alice Courier
+             
+            (Courier)
+          </option>
+          <option
+            value="emp-bob"
+          >
+            Bob Dispatcher
+             
+            (Courier)
+          </option>
+        </select>
+      </div>
+    </div>
+    <div
+      class="pe-chart-custom-legend"
+    >
+      <div
+        class="pe-legend-item"
+      >
+        <span
+          class="pe-legend-color pe-color-teal"
+        />
+        <span>
+          Standard Section
+        </span>
+      </div>
+      <div
+        class="pe-legend-item"
+      >
+        <span
+          class="pe-legend-color pe-color-amber"
+        />
+        <span>
+          Operational KPI Section (Highlighted)
+        </span>
+      </div>
+    </div>
+    <div
+      class="pe-chart-body"
+      data-testid="section-breakdown-body"
+    >
+      <div
+        class="recharts-responsive-container"
+        style="width: 100%; height: 320px;"
+      >
+        <div
+          class="recharts-wrapper"
+          style="position: relative; cursor: default;"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;

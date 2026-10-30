@@ -22,6 +22,7 @@ using System.Text.Json.Serialization;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.FomsIntegration;
 using Backend.Modules.TaskManagement.Groq;
+using Backend.Modules.PerformanceEvaluation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -181,6 +182,11 @@ builder.Services.AddScoped<ISuitabilityService, SuitabilityService>();
 builder.Services.AddScoped<ISlaRiskPredictionService, SlaRiskPredictionService>();
 builder.Services.AddScoped<IKpiCalculationEngine, KpiCalculationEngine>();
 builder.Services.AddScoped<IKpiExportService, KpiExportService>();
+builder.Services.AddScoped<IPerformanceReviewScoringService, PerformanceReviewScoringService>();
+builder.Services.AddScoped<IReviewWorkflowService, ReviewWorkflowService>();
+builder.Services.AddScoped<IEvaluationTemplateService, EvaluationTemplateService>();
+builder.Services.AddScoped<IAiRecommendationGenerationService, AiRecommendationGenerationService>();
+builder.Services.AddScoped<IPerformanceReviewCsvExportService, PerformanceReviewCsvExportService>();
 builder.Services.AddSingleton<ISafeFormulaParser, SafeFormulaParser>();
 builder.Services.AddSingleton<IKpiVariableRegistry, KpiVariableRegistry>();
 builder.Services.AddSingleton<IExpertSystemConfigStore, JsonExpertSystemConfigStore>();
@@ -244,7 +250,7 @@ using (var scope = app.Services.CreateScope())
         try
         {
             await DatabaseStartupDdl.ApplyStartupDdlAsync(db);
-            Console.WriteLine("[STARTUP] FOMS Integration, KPI tables, thresholds, and multi-system user columns verified/created.");
+            Console.WriteLine("[STARTUP] FOMS Integration, KPI tables, thresholds, Performance Evaluation tables, and multi-system user columns verified/created.");
         }
         catch (Exception ddlEx)
         {

@@ -146,11 +146,156 @@ public static class DatabaseStartupDdl
         CREATE INDEX IF NOT EXISTS ""IX_KpiItems_MetricCode"" ON ""KpiItems"" (""MetricCode"");
 
         CREATE INDEX IF NOT EXISTS ""IX_AuditLogs_TargetEntity_TargetEntityId_ActionType_Timestamp"" ON ""AuditLogs"" (""TargetEntity"", ""TargetEntityId"", ""ActionType"", ""Timestamp"");
+        CREATE TABLE IF NOT EXISTS ""EvaluationTemplates"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""Title"" character varying(150) NOT NULL,
+            ""Description"" character varying(500) NULL,
+            ""TargetRole"" character varying(50) NULL,
+            ""DepartmentId"" uuid NULL REFERENCES ""Departments"" (""Id"") ON DELETE SET NULL,
+            ""IsActive"" boolean NOT NULL DEFAULT true,
+            ""IsAiEnabled"" boolean NOT NULL DEFAULT true,
+            ""CreatedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationTemplates_DepartmentId"" ON ""EvaluationTemplates"" (""DepartmentId"");
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationTemplates_CreatedById"" ON ""EvaluationTemplates"" (""CreatedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationTemplates_IsActive"" ON ""EvaluationTemplates"" (""IsActive"");
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationTemplates_TargetRole"" ON ""EvaluationTemplates"" (""TargetRole"");
+
+        CREATE TABLE IF NOT EXISTS ""EvaluationSections"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""TemplateId"" uuid NOT NULL REFERENCES ""EvaluationTemplates"" (""Id"") ON DELETE CASCADE,
+            ""Title"" character varying(150) NOT NULL,
+            ""Description"" character varying(500) NULL,
+            ""Weight"" double precision NOT NULL,
+            ""Order"" integer NOT NULL DEFAULT 1,
+            ""IsKpiSection"" boolean NOT NULL DEFAULT false
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationSections_TemplateId"" ON ""EvaluationSections"" (""TemplateId"");
+
+        CREATE TABLE IF NOT EXISTS ""RatingBands"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""TemplateId"" uuid NOT NULL REFERENCES ""EvaluationTemplates"" (""Id"") ON DELETE CASCADE,
+            ""Label"" character varying(100) NOT NULL,
+            ""MinScore"" double precision NOT NULL,
+            ""MaxScore"" double precision NOT NULL,
+            ""Color"" character varying(30) NULL,
+            ""Description"" character varying(500) NULL,
+            ""Order"" integer NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_RatingBands_TemplateId"" ON ""RatingBands"" (""TemplateId"");
+
+        CREATE TABLE IF NOT EXISTS ""EvaluationCriteria"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""SectionId"" uuid NOT NULL REFERENCES ""EvaluationSections"" (""Id"") ON DELETE CASCADE,
+            ""Title"" character varying(150) NOT NULL,
+            ""Description"" character varying(500) NULL,
+            ""Weight"" double precision NOT NULL,
+            ""CriterionType"" integer NOT NULL DEFAULT 0,
+            ""MetricCode"" character varying(50) NULL,
+            ""Order"" integer NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationCriteria_SectionId"" ON ""EvaluationCriteria"" (""SectionId"");
+        CREATE INDEX IF NOT EXISTS ""IX_EvaluationCriteria_MetricCode"" ON ""EvaluationCriteria"" (""MetricCode"");
+
+        CREATE TABLE IF NOT EXISTS ""PerformanceReviews"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""TemplateId"" uuid NOT NULL REFERENCES ""EvaluationTemplates"" (""Id"") ON DELETE RESTRICT,
+            ""Title"" character varying(150) NOT NULL,
+            ""Description"" character varying(500) NULL,
+            ""Scope"" integer NOT NULL DEFAULT 0,
+            ""Status"" integer NOT NULL DEFAULT 0,
+            ""PeriodStart"" timestamp with time zone NOT NULL,
+            ""PeriodEnd"" timestamp with time zone NOT NULL,
+            ""DepartmentId"" uuid NULL REFERENCES ""Departments"" (""Id"") ON DELETE SET NULL,
+            ""TeamId"" uuid NULL REFERENCES ""Teams"" (""Id"") ON DELETE SET NULL,
+            ""EmployeeId"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""ReviewerId"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""CreatedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""FinalizedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""FinalizedAt"" timestamp with time zone NULL,
+            ""FrozenScoresJson"" text NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_TemplateId"" ON ""PerformanceReviews"" (""TemplateId"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_DepartmentId"" ON ""PerformanceReviews"" (""DepartmentId"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_TeamId"" ON ""PerformanceReviews"" (""TeamId"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_EmployeeId"" ON ""PerformanceReviews"" (""EmployeeId"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_ReviewerId"" ON ""PerformanceReviews"" (""ReviewerId"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_CreatedById"" ON ""PerformanceReviews"" (""CreatedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_FinalizedById"" ON ""PerformanceReviews"" (""FinalizedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_Status"" ON ""PerformanceReviews"" (""Status"");
+        CREATE INDEX IF NOT EXISTS ""IX_PerformanceReviews_PeriodStart_PeriodEnd"" ON ""PerformanceReviews"" (""PeriodStart"", ""PeriodEnd"");
+
+        CREATE TABLE IF NOT EXISTS ""CriterionRatings"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""ReviewId"" uuid NOT NULL REFERENCES ""PerformanceReviews"" (""Id"") ON DELETE CASCADE,
+            ""EmployeeId"" uuid NOT NULL REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT,
+            ""CriterionId"" uuid NOT NULL REFERENCES ""EvaluationCriteria"" (""Id"") ON DELETE CASCADE,
+            ""SelfScore"" double precision NULL,
+            ""ManagerScore"" double precision NULL,
+            ""SelfComment"" character varying(1000) NULL,
+            ""ManagerComment"" character varying(1000) NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CriterionRatings_ReviewId_EmployeeId_CriterionId"" ON ""CriterionRatings"" (""ReviewId"", ""EmployeeId"", ""CriterionId"");
+        CREATE INDEX IF NOT EXISTS ""IX_CriterionRatings_EmployeeId"" ON ""CriterionRatings"" (""EmployeeId"");
+        CREATE INDEX IF NOT EXISTS ""IX_CriterionRatings_CriterionId"" ON ""CriterionRatings"" (""CriterionId"");
+
+        CREATE TABLE IF NOT EXISTS ""AiRecommendations"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""ReviewId"" uuid NOT NULL REFERENCES ""PerformanceReviews"" (""Id"") ON DELETE CASCADE,
+            ""EmployeeId"" uuid NOT NULL REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT,
+            ""Status"" integer NOT NULL DEFAULT 0,
+            ""Summary"" text NULL,
+            ""StrengthsJson"" text NULL,
+            ""ImprovementAreasJson"" text NULL,
+            ""ActionItemsJson"" text NULL,
+            ""TrainingTopicsJson"" text NULL,
+            ""RawResponseJson"" text NULL,
+            ""ManualNotes"" character varying(2000) NULL,
+            ""ReviewedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""ReviewedAt"" timestamp with time zone NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_AiRecommendations_ReviewId_EmployeeId"" ON ""AiRecommendations"" (""ReviewId"", ""EmployeeId"");
+        CREATE INDEX IF NOT EXISTS ""IX_AiRecommendations_EmployeeId"" ON ""AiRecommendations"" (""EmployeeId"");
+        CREATE INDEX IF NOT EXISTS ""IX_AiRecommendations_ReviewedById"" ON ""AiRecommendations"" (""ReviewedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_AiRecommendations_Status"" ON ""AiRecommendations"" (""Status"");
+
+        CREATE TABLE IF NOT EXISTS ""DevelopmentPlanItems"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""ReviewId"" uuid NOT NULL REFERENCES ""PerformanceReviews"" (""Id"") ON DELETE CASCADE,
+            ""EmployeeId"" uuid NOT NULL REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT,
+            ""Description"" character varying(500) NOT NULL,
+            ""SuccessMeasure"" character varying(500) NULL,
+            ""Timeframe"" character varying(100) NULL,
+            ""TargetCompletionDate"" timestamp with time zone NULL,
+            ""IsCompleted"" boolean NOT NULL DEFAULT false,
+            ""CompletedAt"" timestamp with time zone NULL,
+            ""CompletedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""CreatedById"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""ManagerNotes"" character varying(1000) NULL,
+            ""EmployeeNotes"" character varying(1000) NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_ReviewId"" ON ""DevelopmentPlanItems"" (""ReviewId"");
+        CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_EmployeeId"" ON ""DevelopmentPlanItems"" (""EmployeeId"");
+        CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_CompletedById"" ON ""DevelopmentPlanItems"" (""CompletedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_CreatedById"" ON ""DevelopmentPlanItems"" (""CreatedById"");
+        CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_IsCompleted"" ON ""DevelopmentPlanItems"" (""IsCompleted"");
+
 
         INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
         VALUES 
             ('20261029101146_AddKpiConfigurationAndItems', '9.0.0'),
-            ('20261029111153_AddOverallThresholdsToKpiConfiguration', '9.0.0')
+            ('20261029111153_AddOverallThresholdsToKpiConfiguration', '9.0.0'),
+            ('20261030052606_AddPerformanceEvaluation', '9.0.0')
         ON CONFLICT (""MigrationId"") DO NOTHING;
     ";
 

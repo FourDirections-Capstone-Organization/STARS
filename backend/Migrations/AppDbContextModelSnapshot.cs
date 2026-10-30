@@ -22,6 +22,68 @@ namespace Backend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Backend.Models.AiRecommendation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionItemsJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ImprovementAreasJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ManualNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("RawResponseJson")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StrengthsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrainingTopicsJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("ReviewedById");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ReviewId", "EmployeeId");
+
+                    b.ToTable("AiRecommendations");
+                });
+
             modelBuilder.Entity("Backend.Models.Announcement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -254,6 +316,53 @@ namespace Backend.Migrations
                     b.ToTable("BiomarkerAlerts");
                 });
 
+            modelBuilder.Entity("Backend.Models.CriterionRating", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CriterionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ManagerComment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<double?>("ManagerScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SelfComment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<double?>("SelfScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CriterionId");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("ReviewId", "EmployeeId", "CriterionId")
+                        .IsUnique();
+
+                    b.ToTable("CriterionRatings");
+                });
+
             modelBuilder.Entity("Backend.Models.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -281,6 +390,75 @@ namespace Backend.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Departments");
+                });
+
+            modelBuilder.Entity("Backend.Models.DevelopmentPlanItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CompletedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EmployeeNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ManagerNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SuccessMeasure")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("TargetCompletionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Timeframe")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedById");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("IsCompleted");
+
+                    b.HasIndex("ReviewId");
+
+                    b.ToTable("DevelopmentPlanItems");
                 });
 
             modelBuilder.Entity("Backend.Models.DmsDeliveryPerformance", b =>
@@ -323,6 +501,130 @@ namespace Backend.Migrations
                         .IsUnique();
 
                     b.ToTable("DmsDeliveryPerformances");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationCriterion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CriterionType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("MetricCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MetricCode");
+
+                    b.HasIndex("SectionId");
+
+                    b.ToTable("EvaluationCriteria");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationSection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsKpiSection")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("EvaluationSections");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAiEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TargetRole")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("TargetRole");
+
+                    b.ToTable("EvaluationTemplates");
                 });
 
             modelBuilder.Entity("Backend.Models.FomsClientFinancialStatus", b =>
@@ -608,6 +910,127 @@ namespace Backend.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("NotificationSettings");
+                });
+
+            modelBuilder.Entity("Backend.Models.PerformanceReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("FinalizedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FrozenScoresJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PeriodStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("FinalizedById");
+
+                    b.HasIndex("ReviewerId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.HasIndex("PeriodStart", "PeriodEnd");
+
+                    b.ToTable("PerformanceReviews");
+                });
+
+            modelBuilder.Entity("Backend.Models.RatingBand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<double>("MaxScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("MinScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("RatingBands");
                 });
 
             modelBuilder.Entity("Backend.Models.Recommendation", b =>
@@ -1449,6 +1872,32 @@ namespace Backend.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Backend.Models.AiRecommendation", b =>
+                {
+                    b.HasOne("Backend.Models.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Backend.Models.PerformanceReview", "Review")
+                        .WithMany("AiRecommendations")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Backend.Models.User", "ReviewedBy")
+                        .WithMany()
+                        .HasForeignKey("ReviewedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Review");
+
+                    b.Navigation("ReviewedBy");
+                });
+
             modelBuilder.Entity("Backend.Models.Announcement", b =>
                 {
                     b.HasOne("Backend.Models.User", "CreatedBy")
@@ -1508,6 +1957,105 @@ namespace Backend.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Backend.Models.CriterionRating", b =>
+                {
+                    b.HasOne("Backend.Models.EvaluationCriterion", "Criterion")
+                        .WithMany("Ratings")
+                        .HasForeignKey("CriterionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Backend.Models.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Backend.Models.PerformanceReview", "Review")
+                        .WithMany("Ratings")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Criterion");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Review");
+                });
+
+            modelBuilder.Entity("Backend.Models.DevelopmentPlanItem", b =>
+                {
+                    b.HasOne("Backend.Models.User", "CompletedBy")
+                        .WithMany()
+                        .HasForeignKey("CompletedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Backend.Models.PerformanceReview", "Review")
+                        .WithMany("DevelopmentPlanItems")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CompletedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Review");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationCriterion", b =>
+                {
+                    b.HasOne("Backend.Models.EvaluationSection", "Section")
+                        .WithMany("Criteria")
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationSection", b =>
+                {
+                    b.HasOne("Backend.Models.EvaluationTemplate", "Template")
+                        .WithMany("Sections")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationTemplate", b =>
+                {
+                    b.HasOne("Backend.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+                });
+
             modelBuilder.Entity("Backend.Models.JobPosition", b =>
                 {
                     b.HasOne("Backend.Models.Department", "Department")
@@ -1563,6 +2111,70 @@ namespace Backend.Migrations
                     b.Navigation("Recipient");
 
                     b.Navigation("RelatedTask");
+                });
+
+            modelBuilder.Entity("Backend.Models.PerformanceReview", b =>
+                {
+                    b.HasOne("Backend.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.User", "FinalizedBy")
+                        .WithMany()
+                        .HasForeignKey("FinalizedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.User", "Reviewer")
+                        .WithMany()
+                        .HasForeignKey("ReviewerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend.Models.EvaluationTemplate", "Template")
+                        .WithMany("Reviews")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("FinalizedBy");
+
+                    b.Navigation("Reviewer");
+
+                    b.Navigation("Team");
+
+                    b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("Backend.Models.RatingBand", b =>
+                {
+                    b.HasOne("Backend.Models.EvaluationTemplate", "Template")
+                        .WithMany("RatingBands")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("Backend.Models.Recommendation", b =>
@@ -1811,6 +2423,25 @@ namespace Backend.Migrations
                     b.Navigation("Users");
                 });
 
+            modelBuilder.Entity("Backend.Models.EvaluationCriterion", b =>
+                {
+                    b.Navigation("Ratings");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationSection", b =>
+                {
+                    b.Navigation("Criteria");
+                });
+
+            modelBuilder.Entity("Backend.Models.EvaluationTemplate", b =>
+                {
+                    b.Navigation("RatingBands");
+
+                    b.Navigation("Reviews");
+
+                    b.Navigation("Sections");
+                });
+
             modelBuilder.Entity("Backend.Models.JobPosition", b =>
                 {
                     b.Navigation("Users");
@@ -1819,6 +2450,15 @@ namespace Backend.Migrations
             modelBuilder.Entity("Backend.Models.KpiConfiguration", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Backend.Models.PerformanceReview", b =>
+                {
+                    b.Navigation("AiRecommendations");
+
+                    b.Navigation("DevelopmentPlanItems");
+
+                    b.Navigation("Ratings");
                 });
 
             modelBuilder.Entity("Backend.Models.Task", b =>
