@@ -1,0 +1,29 @@
+# Phase 2: Configuration & Weighting System with Traffic-Light Thresholds
+
+## Findings so far
+- backend/Models/KpiConfiguration.cs and KpiItem.cs define configuration schemas.
+- backend/Modules/Analytics/KpiCalculationEngine.cs calculates weighted scores and ratings.
+- backend/Controllers/KpiController.cs exposes evaluation but lacks configuration CRUD.
+- backend/Models/DTOs/EmployeeKpiEvaluationDTOs.cs lacks configuration request DTOs.
+- frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx lacks KPI configuration controls.
+- Baseline verification confirmed: 617 backend tests and 125 frontend tests passing.
+- Baseline entities confirmed ready for Phase 2 threshold additions.
+- Overall score thresholds (Green: 85.0, Amber: 70.0, Red: 60.0) added to KpiConfiguration with EF Core migration AddOverallThresholdsToKpiConfiguration.
+- Configuration DTOs (KpiConfigurationRequestDTO, KpiItemRequestDTO, response DTOs) and KpiConfigurationValidator implemented and verified with 26 unit tests covering 100% weight sum, threshold hierarchies, and prospective dates.
+- Manager CRUD endpoints (GetAll, GetById, Create, Update, Delete) implemented in KpiController with validation, role/department filtering, and cascade deletion handling; KpiCalculationEngine updated to evaluate custom overall thresholds from persisted configuration, verified with 657 passing backend tests.
+- Manager KPI configuration UI (KpiConfigurationTab, KpiConfigurationEditor) implemented with prospective dates, traffic-light threshold controls, 100% weight sum validation, auto-balance helper, and CRUD integration; verified with 9 new unit tests and 134 passing frontend tests.
+- Full regression verification confirmed: 657 backend tests and 134 frontend tests pass with zero failures.
+
+## Implementation Steps
+- [x] Step 1: Confirm starting codebase state, Phase 1 KPI models and test baselines
+  - Verify: 617 backend tests and 125 frontend tests pass and baseline entities confirmed
+- [x] Step 2: Add customizable overall thresholds to KpiConfiguration and apply migration
+  - Verify: Migration adds overall threshold fields and database migration applies cleanly
+- [x] Step 3: Implement configuration DTOs and validation for prospective weights and thresholds
+  - Verify: Unit tests confirm 100% weight sum, threshold validation, and prospective dates
+- [x] Step 4: Implement Manager CRUD endpoints in KpiController and update rating engine
+  - Verify: Controller persists prospective configs and engine uses custom overall thresholds
+- [x] Step 5: Build Manager KPI configuration UI with weight and threshold controls
+  - Verify: UI component validates 100% weight sum and submits prospective configurations
+- [x] Step 6: Run full backend and frontend test suites
+  - Verify: All dotnet test and npm test suites pass with zero failures

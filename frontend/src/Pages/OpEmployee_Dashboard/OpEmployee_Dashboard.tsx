@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import SpeedexLogo from '../../assets/SpeedexLogo.jpg';
 import {
     LayoutDashboard,
+    Award,
     ClipboardList,
     UserCircle2,
     CheckCircle2,
@@ -65,6 +66,7 @@ import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskCharts from '../../components/TaskCharts/TaskCharts';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
+import { EmployeeScorecardView } from '../../components/EmployeeScorecard/EmployeeScorecardView';
 import { BarChart2 } from 'lucide-react';
 
 // --- Helpers ------------------------------------------------------------------
@@ -86,7 +88,7 @@ const getAccountIdFromToken = (): string => {
 
 type Priority = 'high' | 'medium' | 'low';
 type TaskStatus = 'pending' | 'assigned' | 'in-progress' | 'pending-review' | 'done' | 'completed' | 'on-hold' | 'overdue' | 'cancelled';
-type NavTab = 'dashboard' | 'my-tasks' | 'task-progress-review' | 'profile' | 'activity_logs' | 'announcements' | 'notifications';
+type NavTab = 'dashboard' | 'my-tasks' | 'task-progress-review' | 'scorecard' | 'profile' | 'activity_logs' | 'announcements' | 'notifications';
 
 interface Task {
     id: string;
@@ -357,6 +359,7 @@ const NAV_GROUPS: { label: string; items: { tab: NavTab; icon: React.FC<any>; la
         label: 'WORKFLOW',
         items: [
             { tab: 'task-progress-review', icon: Eye, label: 'Task Progress Review' },
+            { tab: 'scorecard', icon: Award, label: 'My Scorecard' },
         ],
     },
     {
@@ -2292,6 +2295,7 @@ export default function EmployeeDashboard() {
         { label: 'Dashboard', onClick: () => setActiveTab('dashboard'), active: activeTab === 'dashboard' },
         { label: 'My Tasks', onClick: () => setActiveTab('my-tasks'), active: activeTab === 'my-tasks' },
         { label: 'Task Progress Review', onClick: () => setActiveTab('task-progress-review'), active: activeTab === 'task-progress-review' },
+        { label: 'My Scorecard', onClick: () => setActiveTab('scorecard'), active: activeTab === 'scorecard' },
         { label: 'Activity Logs', onClick: () => setActiveTab('activity_logs'), active: activeTab === 'activity_logs' },
         { label: 'Announcements', onClick: () => setActiveTab('announcements'), active: activeTab === 'announcements' },
         { label: 'Notifications', onClick: () => setActiveTab('notifications'), active: activeTab === 'notifications' },
@@ -2666,6 +2670,7 @@ export default function EmployeeDashboard() {
         dashboard: 'My Dashboard',
         'my-tasks': 'My Tasks',
         'task-progress-review': 'Task Progress Review',
+        scorecard: 'My KPI Scorecard',
         profile: 'My Profile',
         activity_logs: 'Activity Logs',
         announcements: 'Announcements',
@@ -2760,6 +2765,9 @@ export default function EmployeeDashboard() {
                         onView={setViewingId} onUpdate={setUpdatingId}
                         onRetry={fetchTasks}
                     />
+                )}
+                {activeTab === 'scorecard' && (
+                    <EmployeeScorecardView />
                 )}
                 {activeTab === 'profile' && (
                     <ProfileTab user={user} onUpdateUser={setUser} />

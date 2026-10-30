@@ -1,6 +1,6 @@
 ---
 name: implement-step
-description: Implements exactly one step from docs/PLAN.md, runs the appropriate tests, commits to a step branch, and merges into the active feature branch. Use when asked to do the next plan step.
+description: Implements exactly one step from docs/PLAN.md (with docs/ROADMAP.md context if present), runs the appropriate tests, commits to a step branch, and merges into the active feature branch. Use when asked to do the next plan step.
 ---
 
 # Implement Plan Step
@@ -16,7 +16,7 @@ This skill executes a single, disciplined step from [docs/PLAN.md](docs/PLAN.md)
 ## Workflow Procedure
 
 ### Step 1: Find the Next Unchecked Step
-1. Read docs/PLAN.md fully, including every context section above the steps (for example Goal, Out of scope, Findings, Root causes, Design notes, Decisions to confirm) and any notes under completed steps. If the current step links to a report in docs/, read the relevant section.
+1. Read docs/PLAN.md fully, including every context section above the steps (for example Goal, Out of scope, Findings, Root causes, Design notes, Decisions to confirm) and any notes under completed steps. If `docs/ROADMAP.md` exists, also read it for context (goal, design notes, decisions, current phase). Implement only steps listed in `docs/PLAN.md`. If the current step links to a report in docs/, read the relevant section.
 2. Identify the active feature branch name specified at the top of `docs/PLAN.md` (or identify the current feature branch from `git status`).
 3. Locate the very first unchecked step item:
    ```markdown
@@ -63,14 +63,20 @@ Execute the test suites corresponding to the files modified:
   2. The exact error or failing test assertion.
   3. The fixes attempted so far.
 
-### Step 5: Update `docs/PLAN.md`, Commit, and Merge
-1. **Update `docs/PLAN.md` first**: Check off the completed step before committing so it is part of the step commit and the working tree stays clean:
-   ```markdown
-   - [x] Step N: <Step title and description>
-   ```
+### Step 5: Update Planning Documents, Commit, and Merge
+1. **Update checkboxes and planning docs before committing** (so they are part of the step commit and the working tree stays clean):
+   - In `docs/PLAN.md`, check off the completed step:
+     ```markdown
+     - [x] Step N: <Step title and description>
+     ```
+   - **If the last step in `docs/PLAN.md` is checked and `docs/ROADMAP.md` exists**:
+     - Tick the phase in `docs/ROADMAP.md` (`- [x] Phase N: ...`).
+     - Add a summary of at most 3 lines under it in `docs/ROADMAP.md`.
+     - Move the finished plan `docs/PLAN.md` to `docs/archive/plans/phase-N.md` (create `docs/archive/plans/` if needed).
+     - If all phases in `docs/ROADMAP.md` are now ticked, set "Status: Complete" in `docs/ROADMAP.md`.
 2. Stage modified files and commit with a clear, conventional commit message:
    ```powershell
-   git add <files> docs/PLAN.md
+   git add <files> docs/
    git commit -m "feat(scope): [Step N] <short descriptive message>"
    ```
 3. Switch back to the parent feature branch:
@@ -95,7 +101,15 @@ Execute the test suites corresponding to the files modified:
 ### Step 6: Report Progress and Wait for Review
 1. Provide a concise summary of changes made, tests passed, and current plan status.
 2. Check if all steps in `docs/PLAN.md` are now checked off (`- [x]`):
-   - **If all steps are now complete (Milestone Reached)**:
+   - **If `docs/ROADMAP.md` exists (Phase complete, not the feature)**:
+     - Run the full verification test suites (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` and `npm --prefix frontend test`).
+     - If every phase in `docs/ROADMAP.md` is now ticked:
+       - Tell the user the feature is complete.
+       - Ask whether to open a Pull Request or merge into `refactoring/bug-fix` (and ask before archiving `docs/ROADMAP.md` to `docs/archive/`).
+     - Otherwise (later phases remain):
+       - Report to the user that the phase is complete with test results, and **STOP**.
+       - Do not write the next phase's plan and do not offer to merge into `refactoring/bug-fix`.
+   - **If there is no `docs/ROADMAP.md` (Standalone plan complete)**:
      - Run the full verification suite (`dotnet test` and `npm test`).
      - Alert the user that all plan steps are complete.
      - Ask the user if they would like to open a Pull Request or merge the completed feature branch into `refactoring/bug-fix` for production deployment.

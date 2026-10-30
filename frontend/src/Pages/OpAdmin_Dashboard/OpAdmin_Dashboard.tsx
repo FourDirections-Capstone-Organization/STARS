@@ -56,6 +56,7 @@ import {
     Maximize2,
     Minimize2,
     Zap,
+    Sliders,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
@@ -86,6 +87,8 @@ import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import AnnouncementsTab from '../../components/AnnouncementsTab/AnnouncementsTab';
 import AnnouncementBanner from '../../components/AnnouncementsTab/AnnouncementBanner';
 import TaskTemplatesTab from './TaskTemplates/TaskTemplatesTab';
+import { KpiConfigurationTab } from './KpiConfiguration';
+import { KpiDrillDownView } from './KpiDrillDown';
 import DmsDeliveryTab from '../../components/DmsDeliveryTab/DmsDeliveryTab';
 import PreDeliveryTab, { DmsPendingOrder } from '../../components/PreDeliveryTab/PreDeliveryTab';
 import NotificationsTab from '../../components/NotificationsTab/NotificationsTab';
@@ -5260,7 +5263,7 @@ const DateRangeEngineField: React.FC<{
 
 export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; employeeName: string; role?: string }> }> = ({ teamMembers }) => {
     const { success, error } = useToast();
-    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
+    const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'kpi-configuration' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
     // Shared filter options
     const [departments, setDepartments] = useState<ReportFilterOption[]>([]);
@@ -5442,6 +5445,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
     };
 
     // --- KPI Tracking State ---
+    const [kpiViewMode, setKpiViewMode] = useState<'drilldown' | 'legacy'>('drilldown');
     const initialKpiDates = useMemo(() => computeDateRange('Monthly'), []);
     const [kpiFilter, setKpiFilter] = useState<{ dateRangeStart: string; dateRangeEnd: string; employeeId: string }>({
         dateRangeStart: initialKpiDates.start,
@@ -6019,7 +6023,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
     // Auto-load initial report data on mount or tab change
     useEffect(() => {
-        if (reportSubTab === 'kpi-tracking' && !kpiData && !kpiLoading && !kpiError) {
+        if (reportSubTab === 'kpi-tracking' && kpiViewMode === 'legacy' && !kpiData && !kpiLoading && !kpiError) {
             handleKpiGenerate();
         } else if (reportSubTab === 'task-completion' && !tcReport && !tcLoading && !tcError) {
             handleTcGenerate();
@@ -6105,6 +6109,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
             <SubTabNav
                 tabs={[
                     { key: 'kpi-tracking', label: 'KPI Tracking', icon: <BarChart3 size={14} /> },
+                    { key: 'kpi-configuration', label: 'KPI Configuration', icon: <Sliders size={14} /> },
                     { key: 'task-completion', label: 'Task Completion', icon: <FileText size={14} /> },
                     { key: 'operational-summary', label: 'Operational Report', icon: <Activity size={14} /> },
                     { key: 'performance-report', label: 'Performance Report', icon: <TrendingUp size={14} /> },
@@ -6120,6 +6125,43 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
 
             {/* 1. KPI Tracking */}
             {reportSubTab === 'kpi-tracking' && (
+
+                <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+                        <div className="kpi-mode-toggle-bar" role="group" aria-label="KPI View Mode">
+                            <button
+                                type="button"
+                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'drilldown' ? 'active' : ''}`}
+                                onClick={() => setKpiViewMode('drilldown')}
+                                data-testid="kpi-view-mode-drilldown"
+                            >
+                                <BarChart3 size={14} />
+                                <span>Hierarchical Drill-Down</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`kpi-mode-toggle-btn ${kpiViewMode === 'legacy' ? 'active' : ''}`}
+                                onClick={() => {
+                                    setKpiViewMode('legacy');
+                                    if (!kpiData && !kpiLoading && !kpiError) {
+                                        handleKpiGenerate();
+                                    }
+                                }}
+                                data-testid="kpi-view-mode-legacy"
+                            >
+                                <FileText size={14} />
+                                <span>Legacy SLA Overview</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {kpiViewMode === 'drilldown' ? (
+                        <KpiDrillDownView
+                            departments={departments.map(d => ({ id: d.id, name: d.name }))}
+                            onNavigateToConfig={() => setReportSubTab('kpi-configuration')}
+                        />
+                    ) : (
+
                 <>
                     <div className="card report-filter-card">
                         <div style={{ marginBottom: 12 }}>
@@ -6167,6 +6209,7 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                                         </button>
                                     </div>
                                 )}
+                                <button type="button" className="btn btn-secondary" onClick={() => setReportSubTab('kpi-configuration')} title="Configure KPI weights and thresholds" style={{ height: 34, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sliders size={14} /> Configure KPIs</button>
                                 <button className="btn btn-teal" onClick={() => handleKpiGenerate()} disabled={kpiLoading} style={{ height: 34 }}>
                                     {kpiLoading ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Filter size={14} /> Generate Report</>}
                                 </button>
@@ -6424,7 +6467,16 @@ export const ReportsTab: React.FC<{ teamMembers: Array<{ accountId: string; empl
                             </div>
                         </>
                     )}
+                        </>
+                    )}
                 </>
+            )}
+
+            {/* 1b. KPI Configuration */}
+            {reportSubTab === 'kpi-configuration' && (
+                <KpiConfigurationTab
+                    departments={departments.map(d => ({ id: d.id, name: d.name }))}
+                />
             )}
 
             {/* 2. Task Completion Report */}
