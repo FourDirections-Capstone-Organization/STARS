@@ -13,8 +13,27 @@ public static class KpiDefaultSeeder
 
     public static async System.Threading.Tasks.Task SeedDefaultKpiConfigurationAsync(AppDbContext db)
     {
-        if (await db.KpiConfigurations.AnyAsync(c => c.Id == DefaultConfigurationId))
+        var existing = await db.KpiConfigurations
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.Id == DefaultConfigurationId);
+
+        if (existing != null)
         {
+            var updated = false;
+            // Ensure default threshold values are repaired if they were left at zero
+            if (existing.OverallGreenThreshold == 0.0 && existing.OverallAmberThreshold == 0.0 && existing.OverallRedThreshold == 0.0)
+            {
+                existing.OverallGreenThreshold = 85.0;
+                existing.OverallAmberThreshold = 70.0;
+                existing.OverallRedThreshold = 60.0;
+                updated = true;
+            }
+
+            if (updated)
+            {
+                existing.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+            }
             return;
         }
 
