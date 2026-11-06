@@ -5309,7 +5309,7 @@ export default function Dashboard() {
                     </>
                 )}
                 {activeTab === 'reports' && (
-                    <ReportsTab teamMembers={reportTeamMembers} />
+                    <ReportsTab teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
                 )}
 
                 {activeTab === 'delivery' && (

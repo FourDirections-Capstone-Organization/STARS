@@ -815,6 +815,49 @@ describe('Hierarchical KPI Drill-Down UI Components', () => {
             expect(screen.queryByTestId('kpi-config-view')).not.toBeInTheDocument();
         });
 
+        it('resolves Defect #49: passing onNavigateToTab switches activeTab to kpi_configuration when Configure KPIs is clicked (as fixed in SystemAdmin_Dashboard)', async () => {
+            const TestSystemAdminReportsContainer = () => {
+                const [activeTab, setActiveTab] = React.useState('reports');
+                const handleNavChange = (tab: any) => {
+                    setActiveTab(tab);
+                };
+
+                return (
+                    <div>
+                        <div data-testid="current-active-tab">{activeTab}</div>
+                        {activeTab === 'reports' && (
+                            <ReportsTab
+                                teamMembers={[{ accountId: 'emp-1', employeeName: 'Carlos Courier' }]}
+                                onNavigateToTab={handleNavChange}
+                            />
+                        )}
+                        {activeTab === 'kpi_configuration' && (
+                            <div data-testid="kpi-config-view">KPI Configuration View</div>
+                        )}
+                    </div>
+                );
+            };
+
+            render(
+                <ToastProvider>
+                    <TestSystemAdminReportsContainer />
+                </ToastProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByTestId('kpi-nav-to-config-btn')).toBeInTheDocument();
+            });
+
+            // Click Configure KPIs
+            fireEvent.click(screen.getByTestId('kpi-nav-to-config-btn'));
+
+            // Verify active tab switches to 'kpi_configuration'
+            await waitFor(() => {
+                expect(screen.getByTestId('current-active-tab')).toHaveTextContent('kpi_configuration');
+                expect(screen.getByTestId('kpi-config-view')).toBeInTheDocument();
+            });
+        });
+
         it('renders scope export PDF and Excel buttons and triggers scope export file download', async () => {
             (api.get as any).mockImplementation((url: string) => {
                 if (url === '/api/kpi/scope') {
