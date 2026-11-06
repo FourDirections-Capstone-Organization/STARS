@@ -42,11 +42,56 @@ exports[`Performance Evaluation Step 11: Export Bar and Charts > CriterionCompar
           <span>
             Criterion Comparison: Self vs. Manager
           </span>
+          <div
+            aria-label="Criterion comparison alignment and outlier guidance"
+            class="pe-chart-info-wrap"
+            data-testid="criterion-chart-info-icon"
+            role="button"
+            tabindex="0"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-info pe-chart-info-icon"
+              fill="none"
+              height="15"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="15"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+              />
+              <path
+                d="M12 16v-4"
+              />
+              <path
+                d="M12 8h.01"
+              />
+            </svg>
+            <div
+              class="pe-chart-info-tooltip"
+              data-testid="criterion-chart-info-tooltip"
+            >
+              <strong>
+                Alignment & Outlier Guidance
+              </strong>
+              <p>
+                Compares self-assessment vs. manager scores per criterion (1 to 5 scale) to reveal perception gaps. Criteria with a variance of |gap| ≥ 2.0 are highlighted as outliers requiring alignment discussion.
+              </p>
+            </div>
+          </div>
         </h3>
         <p
           class="pe-chart-subtitle"
+          data-testid="criterion-chart-subtitle"
         >
-          Grouped rating alignment per evaluation criterion (1 to 5 scale).
+          Grouped rating alignment per criterion (1 to 5 scale) to reveal perception gaps (|gap| ≥ 2.0 indicates an outlier).
         </p>
       </div>
       <div

@@ -81,6 +81,26 @@ export interface DepartmentOption {
     name: string;
 }
 
+export interface TeamOption {
+    id: string;
+    name: string;
+    departmentId?: string | null;
+    departmentName?: string | null;
+    memberCount?: number;
+    members?: Array<{ userId?: string; id?: string; fullName?: string; employeeName?: string; role?: string }>;
+    isActive?: boolean;
+}
+
+export interface EmployeeOption {
+    id: string;
+    fullName: string;
+    role?: string | null;
+    departmentId?: string | null;
+    departmentName?: string | null;
+    teamId?: string | null;
+    isActive?: boolean;
+}
+
 // --- Scoring & Review DTOs ---
 
 export interface CriterionScoreDTO {

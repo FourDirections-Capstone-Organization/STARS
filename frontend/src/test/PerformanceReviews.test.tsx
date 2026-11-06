@@ -9,7 +9,9 @@ import {
     ReviewResultDTO,
     PerformanceReviewSummaryDTO,
     EvaluationTemplate,
-    DepartmentOption
+    DepartmentOption,
+    TeamOption,
+    EmployeeOption
 } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/types';
 import { ToastProvider } from '../components/Toast/Toast';
 import api from '../api';
@@ -19,6 +21,52 @@ vi.mock('../api');
 const mockDepartments: DepartmentOption[] = [
     { id: 'dept-1', name: 'Logistics Operations' },
     { id: 'dept-2', name: 'Sorting Hub' }
+];
+
+const mockTeams: TeamOption[] = [
+    {
+        id: 'team-1',
+        name: 'Alpha Dispatch Squad',
+        departmentId: 'dept-1',
+        departmentName: 'Logistics Operations',
+        memberCount: 4,
+        members: [
+            { userId: 'emp-1', fullName: 'Alice Courier' },
+            { userId: 'emp-2', fullName: 'Bob Dispatcher' }
+        ]
+    },
+    {
+        id: 'team-empty',
+        name: 'Empty Logistics Unit',
+        departmentId: 'dept-1',
+        departmentName: 'Logistics Operations',
+        memberCount: 0,
+        members: []
+    }
+];
+
+const mockEmployees: EmployeeOption[] = [
+    {
+        id: 'emp-1',
+        fullName: 'Alice Courier',
+        role: 'Courier',
+        departmentId: 'dept-1',
+        teamId: 'team-1'
+    },
+    {
+        id: 'emp-2',
+        fullName: 'Bob Dispatcher',
+        role: 'Dispatcher',
+        departmentId: 'dept-1',
+        teamId: 'team-1'
+    },
+    {
+        id: 'emp-3',
+        fullName: 'Charlie Sorter',
+        role: 'Sorter',
+        departmentId: 'dept-2',
+        teamId: 'team-2'
+    }
 ];
 
 const mockTemplates: EvaluationTemplate[] = [
@@ -112,6 +160,23 @@ const mockSummaries: PerformanceReviewSummaryDTO[] = [
         isFinalized: false,
         createdAt: '2026-10-02T08:00:00Z',
         updatedAt: '2026-10-02T08:00:00Z'
+    },
+    {
+        id: 'rev-103',
+        templateId: 'tmpl-1',
+        templateTitle: 'Courier Performance Template',
+        title: 'Team Evaluation: Alpha Dispatch Squad',
+        description: 'Quarterly review for Alpha Dispatch team',
+        scope: 'Team',
+        status: 'Draft',
+        periodStart: '2026-10-01T00:00:00Z',
+        periodEnd: '2026-10-31T23:59:59Z',
+        teamId: 'team-1',
+        teamName: 'Alpha Dispatch Squad',
+        reviewerName: 'John Manager',
+        isFinalized: false,
+        createdAt: '2026-10-03T08:00:00Z',
+        updatedAt: '2026-10-03T08:00:00Z'
     }
 ];
 
@@ -242,6 +307,9 @@ describe('Performance Reviews & Rating Grid UI', () => {
             if (url.startsWith('/api/performance/reviews/')) {
                 return Promise.resolve({ data: { isSuccess: true, data: mockReviewDetail } });
             }
+            if (url.startsWith('/api/Team')) {
+                return Promise.resolve({ data: { isSuccess: true, data: { items: mockTeams } } });
+            }
             return Promise.resolve({ data: { isSuccess: true, data: [] } });
         });
 
@@ -338,6 +406,234 @@ describe('Performance Reviews & Rating Grid UI', () => {
                 expect.objectContaining({
                     title: 'New Test Review Cycle',
                     templateId: 'tmpl-1'
+                })
+            );
+        });
+    });
+
+    it('renders Team scope option and reveals team selector in create review modal (Defect #51b)', async () => {
+        renderWithToast(<PerformanceReviewTab departments={mockDepartments} teams={mockTeams} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        expect(screen.getByText('Create Performance Review Cycle')).toBeInTheDocument();
+
+        // Scope dropdown contains Team option
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        expect(scopeSelect).toBeInTheDocument();
+        const teamOption = screen.getByRole('option', { name: /Team \(All employees in team\)/i });
+        expect(teamOption).toBeInTheDocument();
+
+        // Team selector is not yet rendered
+        expect(screen.queryByLabelText(/target team/i)).not.toBeInTheDocument();
+
+        // Switch to Team scope
+        fireEvent.change(scopeSelect, { target: { value: 'Team' } });
+
+        // Target Team selector is revealed
+        const teamSelect = screen.getByLabelText(/target team/i);
+        expect(teamSelect).toBeInTheDocument();
+        expect(screen.getByText(/Alpha Dispatch Squad \(4 members\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/Empty Logistics Unit \(0 members\)/i)).toBeInTheDocument();
+    });
+
+    it('blocks creation with validation warning if selected team has 0 members (Defect #51b)', async () => {
+        renderWithToast(<PerformanceReviewTab departments={mockDepartments} teams={mockTeams} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Fill Title
+        const titleInput = screen.getByLabelText(/review cycle title/i);
+        fireEvent.change(titleInput, { target: { value: 'Zero Members Team Review' } });
+
+        // Switch to Team scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Team' } });
+
+        // Select team with 0 members
+        const teamSelect = screen.getByLabelText(/target team/i);
+        fireEvent.change(teamSelect, { target: { value: 'team-empty' } });
+
+        // Validation warning renders immediately
+        expect(screen.getByText(/Selected team has 0 members\. Team reviews require at least 1 member\./i)).toBeInTheDocument();
+
+        // Try submitting
+        const submitBtn = screen.getByRole('button', { name: /^create review cycle$/i });
+        fireEvent.click(submitBtn);
+
+        // Verify api.post was NOT called
+        expect(api.post).not.toHaveBeenCalled();
+
+        // Error message remains visible
+        expect(screen.getAllByText(/Selected team has 0 members\. Team reviews require at least 1 member\./i).length).toBeGreaterThan(0);
+    });
+
+    it('submits valid team review payload when a valid team is selected (Defect #51b)', async () => {
+        renderWithToast(<PerformanceReviewTab departments={mockDepartments} teams={mockTeams} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Fill Title
+        const titleInput = screen.getByLabelText(/review cycle title/i);
+        fireEvent.change(titleInput, { target: { value: 'Q4 Alpha Dispatch Review' } });
+
+        // Switch to Team scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Team' } });
+
+        // Select team with members
+        const teamSelect = screen.getByLabelText(/target team/i);
+        fireEvent.change(teamSelect, { target: { value: 'team-1' } });
+
+        // Submit form
+        const submitBtn = screen.getByRole('button', { name: /^create review cycle$/i });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(api.post).toHaveBeenCalledWith(
+                '/api/performance/reviews',
+                expect.objectContaining({
+                    title: 'Q4 Alpha Dispatch Review',
+                    templateId: 'tmpl-1',
+                    scope: 'Team',
+                    teamId: 'team-1',
+                    departmentId: 'dept-1'
+                })
+            );
+        });
+    });
+
+    it('renders permission-scoped employee dropdown with name and role instead of GUID text field in Individual scope (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // GUID text input is not rendered
+        expect(screen.queryByPlaceholderText(/enter target employee id/i)).not.toBeInTheDocument();
+
+        // Target Employee dropdown is rendered
+        const empSelect = screen.getByLabelText(/target employee/i);
+        expect(empSelect).toBeInTheDocument();
+
+        // Options show accessible staff formatted as Name (Role)
+        expect(screen.getByRole('option', { name: /Alice Courier \(Courier\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Bob Dispatcher \(Dispatcher\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Charlie Sorter \(Sorter\)/i })).toBeInTheDocument();
+    });
+
+    it('filters accessible employees by department and team in Individual scope (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // Select Department Filter: Logistics Operations (dept-1)
+        const deptFilter = screen.getByLabelText(/filter by department/i);
+        fireEvent.change(deptFilter, { target: { value: 'dept-1' } });
+
+        // Only dept-1 employees should appear in employee dropdown
+        expect(screen.getByRole('option', { name: /Alice Courier \(Courier\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Bob Dispatcher \(Dispatcher\)/i })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: /Charlie Sorter \(Sorter\)/i })).not.toBeInTheDocument();
+    });
+
+    it('validates employee selection and submits valid individual review payload (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Fill Title
+        const titleInput = screen.getByLabelText(/review cycle title/i);
+        fireEvent.change(titleInput, { target: { value: 'Annual Performance Review - Alice' } });
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // Try submitting without selecting employee
+        const submitBtn = screen.getByRole('button', { name: /^create review cycle$/i });
+        fireEvent.click(submitBtn);
+
+        // Validates required employee selection
+        expect(screen.getByText(/Employee selection is required for individual scope reviews\./i)).toBeInTheDocument();
+        expect(api.post).not.toHaveBeenCalled();
+
+        // Select Alice Courier
+        const empSelect = screen.getByLabelText(/target employee/i);
+        fireEvent.change(empSelect, { target: { value: 'emp-1' } });
+
+        // Submit form
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(api.post).toHaveBeenCalledWith(
+                '/api/performance/reviews',
+                expect.objectContaining({
+                    title: 'Annual Performance Review - Alice',
+                    templateId: 'tmpl-1',
+                    scope: 'Individual',
+                    employeeId: 'emp-1'
                 })
             );
         });
@@ -570,6 +866,63 @@ describe('Performance Reviews & Rating Grid UI', () => {
         await waitFor(() => {
             expect(screen.getByText('Workflow Progression')).toBeInTheDocument();
             expect(screen.getByText('Evaluation Ratings')).toBeInTheDocument();
+        });
+    });
+
+    it('resolves Defect #51a: renders Manage Templates button in header and calls onNavigateToTab with evaluation_templates when clicked', async () => {
+        const onNavigateToTab = vi.fn();
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                onNavigateToTab={onNavigateToTab}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pe-manage-templates-btn')).toBeInTheDocument();
+        });
+
+        const manageBtn = screen.getByTestId('pe-manage-templates-btn');
+        expect(manageBtn).toHaveTextContent(/manage templates/i);
+
+        fireEvent.click(manageBtn);
+        expect(onNavigateToTab).toHaveBeenCalledTimes(1);
+        expect(onNavigateToTab).toHaveBeenCalledWith('evaluation_templates');
+    });
+
+    it('resolves Defect #51a: switches activeTab to evaluation_templates when Manage Templates button is clicked in dashboard container', async () => {
+        const TestPerformanceContainer = () => {
+            const [activeTab, setActiveTab] = React.useState('performance_reviews');
+
+            return (
+                <div>
+                    <div data-testid="current-active-tab">{activeTab}</div>
+                    {activeTab === 'performance_reviews' && (
+                        <PerformanceReviewTab
+                            departments={mockDepartments}
+                            onNavigateToTab={(tab: string) => setActiveTab(tab)}
+                        />
+                    )}
+                    {activeTab === 'evaluation_templates' && (
+                        <div data-testid="evaluation-templates-view">Evaluation Templates View</div>
+                    )}
+                </div>
+            );
+        };
+
+        renderWithToast(<TestPerformanceContainer />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pe-manage-templates-btn')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('current-active-tab')).toHaveTextContent('performance_reviews');
+
+        fireEvent.click(screen.getByTestId('pe-manage-templates-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('current-active-tab')).toHaveTextContent('evaluation_templates');
+            expect(screen.getByTestId('evaluation-templates-view')).toBeInTheDocument();
         });
     });
 });

@@ -143,7 +143,7 @@ describe('Pre-Delivery Task Creation Reproduction Suite (Step 1)', () => {
             weight: '2.0 kg',
             priority: 'Medium',
             orderDate: '2026-10-25T14:00:00Z',
-            expectedDelivery: '2026-10-30T17:00:00Z',
+            expectedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             driverEmployeeId: 'EMP-001',
         },
     };
