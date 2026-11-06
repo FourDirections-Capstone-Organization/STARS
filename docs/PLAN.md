@@ -18,7 +18,7 @@ Target Feature Branch: fix/kpi-and-performance-review-defects
 - Confirmed target feature branch fix/kpi-and-performance-review-defects and plan archiving to docs/archive/plans/.
 
 ## Implementation Steps
-- [ ] Step 1: Reproduce "Configure KPI" button no-op in SystemAdmin_Dashboard and confirm missing navigation prop (Defect #49)
+- [x] Step 1: Reproduce "Configure KPI" button no-op in SystemAdmin_Dashboard and confirm missing navigation prop (Defect #49)
   - Verify: Test verifies clicking Configure KPIs fails to trigger tab change when onNavigateToTab is omitted
 - [ ] Step 2: Pass onNavigateToTab to ReportsTab in SystemAdmin_Dashboard and add passing regression test (Defect #49)
   - Verify: Regression test confirms clicking Configure KPIs switches activeTab to kpi_configuration
