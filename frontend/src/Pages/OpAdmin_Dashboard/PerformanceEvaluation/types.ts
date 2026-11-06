@@ -87,7 +87,17 @@ export interface TeamOption {
     departmentId?: string | null;
     departmentName?: string | null;
     memberCount?: number;
-    members?: Array<{ userId?: string; id?: string; fullName?: string; employeeName?: string }>;
+    members?: Array<{ userId?: string; id?: string; fullName?: string; employeeName?: string; role?: string }>;
+    isActive?: boolean;
+}
+
+export interface EmployeeOption {
+    id: string;
+    fullName: string;
+    role?: string | null;
+    departmentId?: string | null;
+    departmentName?: string | null;
+    teamId?: string | null;
     isActive?: boolean;
 }
 
