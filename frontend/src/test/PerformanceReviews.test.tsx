@@ -572,4 +572,61 @@ describe('Performance Reviews & Rating Grid UI', () => {
             expect(screen.getByText('Evaluation Ratings')).toBeInTheDocument();
         });
     });
+
+    it('resolves Defect #51a: renders Manage Templates button in header and calls onNavigateToTab with evaluation_templates when clicked', async () => {
+        const onNavigateToTab = vi.fn();
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                onNavigateToTab={onNavigateToTab}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pe-manage-templates-btn')).toBeInTheDocument();
+        });
+
+        const manageBtn = screen.getByTestId('pe-manage-templates-btn');
+        expect(manageBtn).toHaveTextContent(/manage templates/i);
+
+        fireEvent.click(manageBtn);
+        expect(onNavigateToTab).toHaveBeenCalledTimes(1);
+        expect(onNavigateToTab).toHaveBeenCalledWith('evaluation_templates');
+    });
+
+    it('resolves Defect #51a: switches activeTab to evaluation_templates when Manage Templates button is clicked in dashboard container', async () => {
+        const TestPerformanceContainer = () => {
+            const [activeTab, setActiveTab] = React.useState('performance_reviews');
+
+            return (
+                <div>
+                    <div data-testid="current-active-tab">{activeTab}</div>
+                    {activeTab === 'performance_reviews' && (
+                        <PerformanceReviewTab
+                            departments={mockDepartments}
+                            onNavigateToTab={(tab: string) => setActiveTab(tab)}
+                        />
+                    )}
+                    {activeTab === 'evaluation_templates' && (
+                        <div data-testid="evaluation-templates-view">Evaluation Templates View</div>
+                    )}
+                </div>
+            );
+        };
+
+        renderWithToast(<TestPerformanceContainer />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pe-manage-templates-btn')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('current-active-tab')).toHaveTextContent('performance_reviews');
+
+        fireEvent.click(screen.getByTestId('pe-manage-templates-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('current-active-tab')).toHaveTextContent('evaluation_templates');
+            expect(screen.getByTestId('evaluation-templates-view')).toBeInTheDocument();
+        });
+    });
 });

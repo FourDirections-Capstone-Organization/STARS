@@ -22,7 +22,7 @@ Target Feature Branch: fix/kpi-and-performance-review-defects
   - Verify: Test verifies clicking Configure KPIs fails to trigger tab change when onNavigateToTab is omitted
 - [x] Step 2: Pass onNavigateToTab to ReportsTab in SystemAdmin_Dashboard and add passing regression test (Defect #49)
   - Verify: Regression test confirms clicking Configure KPIs switches activeTab to kpi_configuration
-- [ ] Step 3: Add "Manage Templates" navigation action to Performance Reviews header to make template UI discoverable (Defect #51a)
+- [x] Step 3: Add "Manage Templates" navigation action to Performance Reviews header to make template UI discoverable (Defect #51a)
   - Verify: Manage Templates button renders in Performance Reviews and navigates to evaluation_templates tab
 - [ ] Step 4: Add Team scope option and team dropdown selector to Create Performance Review Cycle modal (Defect #51b)
   - Verify: Scope dropdown includes Team option, reveals team selector, and submits valid team review payload
