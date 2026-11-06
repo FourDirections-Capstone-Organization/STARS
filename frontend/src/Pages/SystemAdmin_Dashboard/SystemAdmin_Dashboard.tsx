@@ -5577,7 +5577,7 @@ export default function Dashboard() {
                 {activeTab === 'performance_reviews' && (
                     <div className="dashboard-content" style={{ padding: '24px 32px' }}>
                         <div style={{ width: '100%', margin: '0 auto' }}>
-                            <PerformanceReviewTab departments={departments} />
+                            <PerformanceReviewTab departments={departments} onNavigateToTab={handleNavChange} />
                         </div>
                     </div>
                 )}

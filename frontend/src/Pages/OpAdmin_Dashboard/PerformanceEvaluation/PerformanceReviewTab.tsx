@@ -18,7 +18,8 @@ import {
     Award,
     Eye,
     X,
-    FolderKanban
+    FolderKanban,
+    Sliders
 } from 'lucide-react';
 import { useToast } from '../../../components/Toast/Toast';
 import {
@@ -40,10 +41,12 @@ import './PerformanceEvaluation.css';
 
 interface PerformanceReviewTabProps {
     departments?: DepartmentOption[];
+    onNavigateToTab?: (tab: string) => void;
 }
 
 export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
-    departments = []
+    departments = [],
+    onNavigateToTab
 }) => {
     let toastMethods = { success: (_m: string) => {}, error: (_m: string) => {}, info: (_m: string) => {} };
     try {
@@ -291,6 +294,16 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                     >
                         <RotateCcw size={15} />
                         Refresh
+                    </button>
+                    <button
+                        type="button"
+                        className="pe-btn pe-btn-secondary"
+                        onClick={() => onNavigateToTab?.('evaluation_templates')}
+                        title="Manage Evaluation Templates"
+                        data-testid="pe-manage-templates-btn"
+                    >
+                        <Sliders size={15} />
+                        Manage Templates
                     </button>
                     <button
                         type="button"
