@@ -29,6 +29,7 @@ import {
     EvaluationTemplate,
     DepartmentOption,
     TeamOption,
+    EmployeeOption,
     ReviewScope,
     ReviewWorkflowStatus,
     CreatePerformanceReviewDTO
@@ -45,15 +46,18 @@ import './PerformanceEvaluation.css';
 interface PerformanceReviewTabProps {
     departments?: DepartmentOption[];
     teams?: TeamOption[];
+    employees?: EmployeeOption[];
     onNavigateToTab?: (tab: string) => void;
 }
 
 const EMPTY_DEPARTMENTS: DepartmentOption[] = [];
 const EMPTY_TEAMS: TeamOption[] = [];
+const EMPTY_EMPLOYEES: EmployeeOption[] = [];
 
 export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
     departments = EMPTY_DEPARTMENTS,
     teams: initialTeams = EMPTY_TEAMS,
+    employees: initialEmployees = EMPTY_EMPLOYEES,
     onNavigateToTab
 }) => {
     let toastMethods = { success: (_m: string) => {}, error: (_m: string) => {}, info: (_m: string) => {} };
@@ -71,6 +75,7 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
     const [reviews, setReviews] = useState<PerformanceReviewSummaryDTO[]>([]);
     const [templates, setTemplates] = useState<EvaluationTemplate[]>([]);
     const [teamsList, setTeamsList] = useState<TeamOption[]>(initialTeams);
+    const [employeesList, setEmployeesList] = useState<EmployeeOption[]>(initialEmployees);
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string>('');
 
@@ -138,6 +143,93 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
             isMounted = false;
         };
     }, [initialTeams]);
+
+    // Synchronize employees prop or fetch users if empty
+    useEffect(() => {
+        if (initialEmployees && initialEmployees.length > 0) {
+            setEmployeesList(initialEmployees);
+            return;
+        }
+
+        let isMounted = true;
+        api.get('/api/User?pageNumber=1&pageSize=200')
+            .then(res => {
+                if (!isMounted) return;
+                const items = res.data?.data?.items ?? (Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []));
+                if (Array.isArray(items) && items.length > 0) {
+                    const mapped: EmployeeOption[] = items
+                        .filter((u: any) => u.isActive !== false && !u.isDeactivated)
+                        .map((u: any) => {
+                            const name = (u.fullName ?? (u.firstName ? `${u.firstName} ${u.lastName}`.trim() : u.employeeName) ?? u.username ?? 'Staff').trim();
+                            const role = u.role ?? u.roleName ?? u.jobPositionName ?? 'Staff';
+                            return {
+                                id: u.id ?? u.userId,
+                                fullName: name,
+                                role: typeof role === 'number' ? (role === 1 ? 'Admin' : role === 2 ? 'Manager' : 'Staff') : String(role),
+                                departmentId: u.departmentId ?? u.department?.id ?? null,
+                                departmentName: u.departmentName ?? u.department?.name ?? null,
+                                teamId: u.teamId ?? null,
+                                isActive: u.isActive ?? true
+                            };
+                        });
+                    setEmployeesList(mapped);
+                } else if (teamsList.length > 0) {
+                    const extracted: EmployeeOption[] = [];
+                    const seen = new Set<string>();
+                    for (const tm of teamsList) {
+                        for (const mem of tm.members || []) {
+                            const uid = mem.userId || mem.id;
+                            if (uid && !seen.has(uid)) {
+                                seen.add(uid);
+                                extracted.push({
+                                    id: uid,
+                                    fullName: mem.fullName || mem.employeeName || 'Staff Member',
+                                    role: (mem as any).role || 'Team Member',
+                                    departmentId: tm.departmentId || null,
+                                    departmentName: tm.departmentName || null,
+                                    teamId: tm.id,
+                                    isActive: true
+                                });
+                            }
+                        }
+                    }
+                    if (extracted.length > 0) {
+                        setEmployeesList(extracted);
+                    }
+                }
+            })
+            .catch(() => {
+                if (!isMounted) return;
+                if (teamsList.length > 0) {
+                    const extracted: EmployeeOption[] = [];
+                    const seen = new Set<string>();
+                    for (const tm of teamsList) {
+                        for (const mem of tm.members || []) {
+                            const uid = mem.userId || mem.id;
+                            if (uid && !seen.has(uid)) {
+                                seen.add(uid);
+                                extracted.push({
+                                    id: uid,
+                                    fullName: mem.fullName || mem.employeeName || 'Staff Member',
+                                    role: (mem as any).role || 'Team Member',
+                                    departmentId: tm.departmentId || null,
+                                    departmentName: tm.departmentName || null,
+                                    teamId: tm.id,
+                                    isActive: true
+                                });
+                            }
+                        }
+                    }
+                    if (extracted.length > 0) {
+                        setEmployeesList(extracted);
+                    }
+                }
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [initialEmployees, teamsList]);
 
     // Load reviews and templates
     const loadData = useCallback(async () => {
@@ -243,6 +335,28 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
         setIsCreateModalOpen(true);
     };
 
+    // Filtered accessible employees for Individual scope review creation
+    const filteredEmployees = useMemo(() => {
+        return employeesList.filter(emp => {
+            if (createForm.departmentId) {
+                const empTeam = teamsList.find(t => t.id === emp.teamId || t.members?.some(m => (m.userId || m.id) === emp.id));
+                const empDeptId = emp.departmentId || empTeam?.departmentId;
+                if (empDeptId && empDeptId !== createForm.departmentId) {
+                    return false;
+                }
+            }
+
+            if (createForm.teamId) {
+                const team = teamsList.find(t => t.id === createForm.teamId);
+                const isMember = team?.members?.some(m => (m.userId || m.id) === emp.id) || emp.teamId === createForm.teamId;
+                if (!isMember) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }, [employeesList, createForm.departmentId, createForm.teamId, teamsList]);
+
     const validateCreateForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!createForm.title.trim()) {
@@ -274,7 +388,7 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
             }
         }
         if (createForm.scope === 'Individual' && !createForm.employeeId) {
-            errors.employeeId = 'Employee ID is required for individual scope reviews.';
+            errors.employeeId = 'Employee selection is required for individual scope reviews.';
         }
 
         setFormErrors(errors);
@@ -292,8 +406,8 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                 ...createForm,
                 departmentId: createForm.scope === 'Department'
                     ? createForm.departmentId
-                    : (createForm.scope === 'Team' ? (selectedTeam?.departmentId || undefined) : undefined),
-                teamId: createForm.scope === 'Team' ? createForm.teamId : undefined,
+                    : (createForm.scope === 'Team' ? (selectedTeam?.departmentId || undefined) : (createForm.departmentId || undefined)),
+                teamId: createForm.scope === 'Team' ? createForm.teamId : (createForm.scope === 'Individual' ? (createForm.teamId || undefined) : undefined),
                 employeeId: createForm.scope === 'Individual' ? createForm.employeeId : undefined
             });
             const createdTitle = created?.title || createForm.title || 'Review';
@@ -722,7 +836,9 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                         setCreateForm(prev => ({
                                             ...prev,
                                             scope: nextScope,
-                                            teamId: nextScope === 'Team' ? prev.teamId || '' : prev.teamId
+                                            departmentId: nextScope === 'Individual' ? '' : (prev.departmentId || (departments.length > 0 ? departments[0].id : '')),
+                                            teamId: nextScope === 'Team' ? prev.teamId || '' : (nextScope === 'Individual' ? '' : prev.teamId),
+                                            employeeId: undefined
                                         }));
                                         setFormErrors(prev => {
                                             const next = { ...prev };
@@ -817,21 +933,109 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                 </div>
                             )}
 
-                            {/* Employee ID (if Individual scope) */}
+                            {/* Individual Scope Filters & Employee Dropdown */}
                             {createForm.scope === 'Individual' && (
-                                <div className="pe-form-group">
-                                    <label htmlFor="new-rev-emp">
-                                        Employee GUID <span className="pe-req">*</span>
-                                    </label>
-                                    <input
-                                        id="new-rev-emp"
-                                        type="text"
-                                        placeholder="Enter target employee ID (GUID)"
-                                        value={createForm.employeeId || ''}
-                                        onChange={e => setCreateForm(prev => ({ ...prev, employeeId: e.target.value }))}
-                                    />
-                                    {formErrors.employeeId && <span className="pe-error-text">{formErrors.employeeId}</span>}
-                                </div>
+                                <>
+                                    <div className="pe-form-row">
+                                        <div className="pe-form-group">
+                                            <label htmlFor="new-rev-indiv-dept">
+                                                Filter by Department
+                                            </label>
+                                            <select
+                                                id="new-rev-indiv-dept"
+                                                value={createForm.departmentId || ''}
+                                                onChange={e => {
+                                                    const selectedDept = e.target.value;
+                                                    setCreateForm(prev => {
+                                                        const currentTeam = teamsList.find(t => t.id === prev.teamId);
+                                                        const teamStillValid = !selectedDept || currentTeam?.departmentId === selectedDept;
+                                                        return {
+                                                            ...prev,
+                                                            departmentId: selectedDept,
+                                                            teamId: teamStillValid ? prev.teamId : '',
+                                                            employeeId: ''
+                                                        };
+                                                    });
+                                                    setFormErrors(prev => {
+                                                        const next = { ...prev };
+                                                        delete next.employeeId;
+                                                        return next;
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">-- All Departments --</option>
+                                                {departments.map(d => (
+                                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="pe-form-group">
+                                            <label htmlFor="new-rev-indiv-team">
+                                                Filter by Team
+                                            </label>
+                                            <select
+                                                id="new-rev-indiv-team"
+                                                value={createForm.teamId || ''}
+                                                onChange={e => {
+                                                    const selectedTeamId = e.target.value;
+                                                    const teamObj = teamsList.find(t => t.id === selectedTeamId);
+                                                    setCreateForm(prev => ({
+                                                        ...prev,
+                                                        teamId: selectedTeamId,
+                                                        departmentId: teamObj?.departmentId || prev.departmentId,
+                                                        employeeId: ''
+                                                    }));
+                                                    setFormErrors(prev => {
+                                                        const next = { ...prev };
+                                                        delete next.employeeId;
+                                                        return next;
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">-- All Teams --</option>
+                                                {teamsList
+                                                    .filter(t => !createForm.departmentId || t.departmentId === createForm.departmentId)
+                                                    .map(t => (
+                                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                                    ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="pe-form-group">
+                                        <label htmlFor="new-rev-emp">
+                                            Target Employee <span className="pe-req">*</span>
+                                        </label>
+                                        <select
+                                            id="new-rev-emp"
+                                            value={createForm.employeeId || ''}
+                                            onChange={e => {
+                                                const selectedEmpId = e.target.value;
+                                                const empObj = employeesList.find(emp => emp.id === selectedEmpId);
+                                                setCreateForm(prev => ({
+                                                    ...prev,
+                                                    employeeId: selectedEmpId,
+                                                    departmentId: prev.departmentId || empObj?.departmentId || undefined,
+                                                    teamId: prev.teamId || empObj?.teamId || undefined
+                                                }));
+                                                setFormErrors(prev => {
+                                                    const next = { ...prev };
+                                                    delete next.employeeId;
+                                                    return next;
+                                                });
+                                            }}
+                                        >
+                                            <option value="">-- Select Employee --</option>
+                                            {filteredEmployees.map(emp => (
+                                                <option key={emp.id} value={emp.id}>
+                                                    {emp.fullName} ({emp.role || 'Staff'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {formErrors.employeeId && <span className="pe-error-text">{formErrors.employeeId}</span>}
+                                    </div>
+                                </>
                             )}
 
                             {/* Date Range: Start and End */}

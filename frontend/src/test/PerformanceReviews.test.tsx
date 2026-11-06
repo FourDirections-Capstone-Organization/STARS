@@ -10,7 +10,8 @@ import {
     PerformanceReviewSummaryDTO,
     EvaluationTemplate,
     DepartmentOption,
-    TeamOption
+    TeamOption,
+    EmployeeOption
 } from '../Pages/OpAdmin_Dashboard/PerformanceEvaluation/types';
 import { ToastProvider } from '../components/Toast/Toast';
 import api from '../api';
@@ -41,6 +42,30 @@ const mockTeams: TeamOption[] = [
         departmentName: 'Logistics Operations',
         memberCount: 0,
         members: []
+    }
+];
+
+const mockEmployees: EmployeeOption[] = [
+    {
+        id: 'emp-1',
+        fullName: 'Alice Courier',
+        role: 'Courier',
+        departmentId: 'dept-1',
+        teamId: 'team-1'
+    },
+    {
+        id: 'emp-2',
+        fullName: 'Bob Dispatcher',
+        role: 'Dispatcher',
+        departmentId: 'dept-1',
+        teamId: 'team-1'
+    },
+    {
+        id: 'emp-3',
+        fullName: 'Charlie Sorter',
+        role: 'Sorter',
+        departmentId: 'dept-2',
+        teamId: 'team-2'
     }
 ];
 
@@ -491,6 +516,124 @@ describe('Performance Reviews & Rating Grid UI', () => {
                     scope: 'Team',
                     teamId: 'team-1',
                     departmentId: 'dept-1'
+                })
+            );
+        });
+    });
+
+    it('renders permission-scoped employee dropdown with name and role instead of GUID text field in Individual scope (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // GUID text input is not rendered
+        expect(screen.queryByPlaceholderText(/enter target employee id/i)).not.toBeInTheDocument();
+
+        // Target Employee dropdown is rendered
+        const empSelect = screen.getByLabelText(/target employee/i);
+        expect(empSelect).toBeInTheDocument();
+
+        // Options show accessible staff formatted as Name (Role)
+        expect(screen.getByRole('option', { name: /Alice Courier \(Courier\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Bob Dispatcher \(Dispatcher\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Charlie Sorter \(Sorter\)/i })).toBeInTheDocument();
+    });
+
+    it('filters accessible employees by department and team in Individual scope (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // Select Department Filter: Logistics Operations (dept-1)
+        const deptFilter = screen.getByLabelText(/filter by department/i);
+        fireEvent.change(deptFilter, { target: { value: 'dept-1' } });
+
+        // Only dept-1 employees should appear in employee dropdown
+        expect(screen.getByRole('option', { name: /Alice Courier \(Courier\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /Bob Dispatcher \(Dispatcher\)/i })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: /Charlie Sorter \(Sorter\)/i })).not.toBeInTheDocument();
+    });
+
+    it('validates employee selection and submits valid individual review payload (Defect #51c)', async () => {
+        renderWithToast(
+            <PerformanceReviewTab
+                departments={mockDepartments}
+                teams={mockTeams}
+                employees={mockEmployees}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Q4 2026 Courier Performance Review')).toBeInTheDocument();
+        });
+
+        // Open Create modal
+        const createBtn = screen.getByRole('button', { name: /new review cycle/i });
+        fireEvent.click(createBtn);
+
+        // Fill Title
+        const titleInput = screen.getByLabelText(/review cycle title/i);
+        fireEvent.change(titleInput, { target: { value: 'Annual Performance Review - Alice' } });
+
+        // Switch to Individual scope
+        const scopeSelect = screen.getByLabelText(/evaluation scope/i);
+        fireEvent.change(scopeSelect, { target: { value: 'Individual' } });
+
+        // Try submitting without selecting employee
+        const submitBtn = screen.getByRole('button', { name: /^create review cycle$/i });
+        fireEvent.click(submitBtn);
+
+        // Validates required employee selection
+        expect(screen.getByText(/Employee selection is required for individual scope reviews\./i)).toBeInTheDocument();
+        expect(api.post).not.toHaveBeenCalled();
+
+        // Select Alice Courier
+        const empSelect = screen.getByLabelText(/target employee/i);
+        fireEvent.change(empSelect, { target: { value: 'emp-1' } });
+
+        // Submit form
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(api.post).toHaveBeenCalledWith(
+                '/api/performance/reviews',
+                expect.objectContaining({
+                    title: 'Annual Performance Review - Alice',
+                    templateId: 'tmpl-1',
+                    scope: 'Individual',
+                    employeeId: 'emp-1'
                 })
             );
         });
