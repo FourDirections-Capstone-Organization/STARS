@@ -315,6 +315,29 @@ describe('Performance Evaluation Step 11: Export Bar and Charts', () => {
             expect(onEmployeeChange).toHaveBeenCalledWith('emp-bob');
         });
 
+        it('renders explanatory subtitle and in-UI tooltip explaining alignment and outlier threshold (Defect #51d)', () => {
+            render(
+                <CriterionComparisonChart
+                    review={mockTeamReview}
+                    selectedEmployeeId="emp-alice"
+                />
+            );
+
+            // Subtitle explains alignment and outlier threshold
+            const subtitle = screen.getByTestId('criterion-chart-subtitle');
+            expect(subtitle).toBeInTheDocument();
+            expect(subtitle).toHaveTextContent(/perception gaps/i);
+            expect(subtitle).toHaveTextContent(/\|gap\| ≥ 2\.0 indicates an outlier/i);
+
+            // In-UI info tooltip renders alignment and outlier guidance
+            const infoIcon = screen.getByTestId('criterion-chart-info-icon');
+            expect(infoIcon).toBeInTheDocument();
+            const infoTooltip = screen.getByTestId('criterion-chart-info-tooltip');
+            expect(infoTooltip).toBeInTheDocument();
+            expect(infoTooltip).toHaveTextContent('Alignment & Outlier Guidance');
+            expect(infoTooltip).toHaveTextContent(/|gap| ≥ 2\.0/);
+        });
+
         it('renders empty placeholder if employee has no criteria recorded', () => {
             const emptyEmpReview: ReviewResultDTO = {
                 ...mockTeamReview,
