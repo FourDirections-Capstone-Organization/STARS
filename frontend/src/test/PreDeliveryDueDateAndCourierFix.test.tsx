@@ -227,9 +227,10 @@ describe('Pre-Delivery Due Date Unlocking & Courier Selection Fix (Step 4)', () 
         });
 
         it('locks datetime input and displays DMS pre-set badge when expectedDelivery is provided by DMS', async () => {
+            const futurePresetDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
             const orderWithPresetDate: DmsPendingOrder = {
                 ...baseOrder,
-                expectedDelivery: '2026-10-30T16:00:00Z',
+                expectedDelivery: futurePresetDate,
             };
 
             const taskInitial = buildPreDeliveryTaskInitialData(orderWithPresetDate);
@@ -266,7 +267,7 @@ describe('Pre-Delivery Due Date Unlocking & Courier Selection Fix (Step 4)', () 
         const orderWithUnmappedCourier: DmsPendingOrder = {
             ...baseOrder,
             driverEmployeeId: 'DMS-UNMAPPED-999',
-            expectedDelivery: '2026-10-30T16:00:00Z',
+            expectedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         };
 
         it('displays unmapped courier banner when DMS driver ID is not in STARS', async () => {
