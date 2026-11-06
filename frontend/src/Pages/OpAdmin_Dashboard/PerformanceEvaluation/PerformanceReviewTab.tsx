@@ -19,13 +19,16 @@ import {
     Eye,
     X,
     FolderKanban,
-    Sliders
+    Sliders,
+    Users
 } from 'lucide-react';
+import api from '../../../api';
 import { useToast } from '../../../components/Toast/Toast';
 import {
     PerformanceReviewSummaryDTO,
     EvaluationTemplate,
     DepartmentOption,
+    TeamOption,
     ReviewScope,
     ReviewWorkflowStatus,
     CreatePerformanceReviewDTO
@@ -41,11 +44,16 @@ import './PerformanceEvaluation.css';
 
 interface PerformanceReviewTabProps {
     departments?: DepartmentOption[];
+    teams?: TeamOption[];
     onNavigateToTab?: (tab: string) => void;
 }
 
+const EMPTY_DEPARTMENTS: DepartmentOption[] = [];
+const EMPTY_TEAMS: TeamOption[] = [];
+
 export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
-    departments = [],
+    departments = EMPTY_DEPARTMENTS,
+    teams: initialTeams = EMPTY_TEAMS,
     onNavigateToTab
 }) => {
     let toastMethods = { success: (_m: string) => {}, error: (_m: string) => {}, info: (_m: string) => {} };
@@ -62,6 +70,7 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
     // Review list state
     const [reviews, setReviews] = useState<PerformanceReviewSummaryDTO[]>([]);
     const [templates, setTemplates] = useState<EvaluationTemplate[]>([]);
+    const [teamsList, setTeamsList] = useState<TeamOption[]>(initialTeams);
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string>('');
 
@@ -92,8 +101,43 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
         periodStart: '',
         periodEnd: '',
         departmentId: '',
+        teamId: '',
         employeeId: undefined
     });
+
+    // Synchronize teams prop or fetch teams if empty
+    useEffect(() => {
+        if (initialTeams && initialTeams.length > 0) {
+            setTeamsList(initialTeams);
+            return;
+        }
+
+        let isMounted = true;
+        api.get('/api/Team?pageNumber=1&pageSize=100')
+            .then(res => {
+                if (!isMounted) return;
+                const items = res.data?.data?.items ?? (Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []));
+                if (Array.isArray(items)) {
+                    const mapped: TeamOption[] = items.map((t: any) => ({
+                        id: t.id ?? t.teamId,
+                        name: t.name ?? t.teamName,
+                        departmentId: t.departmentId ?? t.department?.id,
+                        departmentName: t.departmentName ?? t.department?.name,
+                        memberCount: t.memberCount ?? t.members?.length ?? 0,
+                        members: t.members ?? [],
+                        isActive: t.isActive ?? true
+                    }));
+                    setTeamsList(mapped);
+                }
+            })
+            .catch(() => {
+                // Silently ignore if endpoint is not accessible in this context
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [initialTeams]);
 
     // Load reviews and templates
     const loadData = useCallback(async () => {
@@ -147,7 +191,8 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                 const matchTemplate = rev.templateTitle?.toLowerCase().includes(q);
                 const matchDept = rev.departmentName?.toLowerCase().includes(q);
                 const matchEmp = rev.employeeName?.toLowerCase().includes(q);
-                if (!matchTitle && !matchTemplate && !matchDept && !matchEmp) {
+                const matchTeam = rev.teamName?.toLowerCase().includes(q);
+                if (!matchTitle && !matchTemplate && !matchDept && !matchEmp && !matchTeam) {
                     return false;
                 }
             }
@@ -191,6 +236,7 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
             periodStart: startOfMonth,
             periodEnd: endOfMonth,
             departmentId: departments.length > 0 ? departments[0].id : '',
+            teamId: '',
             employeeId: undefined
         });
         setFormErrors({});
@@ -216,6 +262,17 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
         if (createForm.scope === 'Department' && !createForm.departmentId) {
             errors.departmentId = 'Department selection is required for department scope.';
         }
+        if (createForm.scope === 'Team') {
+            if (!createForm.teamId) {
+                errors.teamId = 'Team selection is required for team scope.';
+            } else {
+                const selectedTeam = teamsList.find(t => t.id === createForm.teamId);
+                const memberCount = selectedTeam ? (selectedTeam.memberCount ?? selectedTeam.members?.length ?? 0) : 0;
+                if (selectedTeam && memberCount === 0) {
+                    errors.teamId = 'Selected team has 0 members. Team reviews require at least 1 member.';
+                }
+            }
+        }
         if (createForm.scope === 'Individual' && !createForm.employeeId) {
             errors.employeeId = 'Employee ID is required for individual scope reviews.';
         }
@@ -230,9 +287,13 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
 
         setIsCreating(true);
         try {
+            const selectedTeam = teamsList.find(t => t.id === createForm.teamId);
             const created = await createReview({
                 ...createForm,
-                departmentId: createForm.scope === 'Department' ? createForm.departmentId : undefined,
+                departmentId: createForm.scope === 'Department'
+                    ? createForm.departmentId
+                    : (createForm.scope === 'Team' ? (selectedTeam?.departmentId || undefined) : undefined),
+                teamId: createForm.scope === 'Team' ? createForm.teamId : undefined,
                 employeeId: createForm.scope === 'Individual' ? createForm.employeeId : undefined
             });
             const createdTitle = created?.title || createForm.title || 'Review';
@@ -493,6 +554,11 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                         <Building size={12} /> {rev.departmentName}
                                     </span>
                                 )}
+                                {rev.teamName && (
+                                    <span className="pe-badge pe-badge-team">
+                                        <Users size={12} /> {rev.teamName}
+                                    </span>
+                                )}
                                 {rev.employeeName && (
                                     <span className="pe-badge pe-badge-ai">
                                         <User size={12} /> {rev.employeeName}
@@ -651,9 +717,24 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                 <select
                                     id="new-rev-scope"
                                     value={createForm.scope}
-                                    onChange={e => setCreateForm(prev => ({ ...prev, scope: e.target.value as ReviewScope }))}
+                                    onChange={e => {
+                                        const nextScope = e.target.value as ReviewScope;
+                                        setCreateForm(prev => ({
+                                            ...prev,
+                                            scope: nextScope,
+                                            teamId: nextScope === 'Team' ? prev.teamId || '' : prev.teamId
+                                        }));
+                                        setFormErrors(prev => {
+                                            const next = { ...prev };
+                                            delete next.departmentId;
+                                            delete next.teamId;
+                                            delete next.employeeId;
+                                            return next;
+                                        });
+                                    }}
                                 >
                                     <option value="Department">Department (All employees in department)</option>
+                                    <option value="Team">Team (All employees in team)</option>
                                     <option value="Individual">Individual (Single employee)</option>
                                 </select>
                             </div>
@@ -667,7 +748,14 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                     <select
                                         id="new-rev-dept"
                                         value={createForm.departmentId || ''}
-                                        onChange={e => setCreateForm(prev => ({ ...prev, departmentId: e.target.value }))}
+                                        onChange={e => {
+                                            setCreateForm(prev => ({ ...prev, departmentId: e.target.value }));
+                                            setFormErrors(prev => {
+                                                const next = { ...prev };
+                                                delete next.departmentId;
+                                                return next;
+                                            });
+                                        }}
                                     >
                                         <option value="">-- Select Department --</option>
                                         {departments.map(d => (
@@ -675,6 +763,57 @@ export const PerformanceReviewTab: React.FC<PerformanceReviewTabProps> = ({
                                         ))}
                                     </select>
                                     {formErrors.departmentId && <span className="pe-error-text">{formErrors.departmentId}</span>}
+                                </div>
+                            )}
+
+                            {/* Team (if Team scope) */}
+                            {createForm.scope === 'Team' && (
+                                <div className="pe-form-group">
+                                    <label htmlFor="new-rev-team">
+                                        Target Team <span className="pe-req">*</span>
+                                    </label>
+                                    <select
+                                        id="new-rev-team"
+                                        value={createForm.teamId || ''}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            const found = teamsList.find(t => t.id === val);
+                                            setCreateForm(prev => ({
+                                                ...prev,
+                                                teamId: val,
+                                                departmentId: found?.departmentId || prev.departmentId
+                                            }));
+                                            setFormErrors(prev => {
+                                                const next = { ...prev };
+                                                delete next.teamId;
+                                                return next;
+                                            });
+                                        }}
+                                    >
+                                        <option value="">-- Select Team --</option>
+                                        {teamsList.map(t => {
+                                            const count = t.memberCount ?? t.members?.length ?? 0;
+                                            return (
+                                                <option key={t.id} value={t.id}>
+                                                    {t.name} ({count} {count === 1 ? 'member' : 'members'})
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                    {formErrors.teamId && <span className="pe-error-text">{formErrors.teamId}</span>}
+                                    {(() => {
+                                        const currentTeam = teamsList.find(t => t.id === createForm.teamId);
+                                        const count = currentTeam ? (currentTeam.memberCount ?? currentTeam.members?.length ?? 0) : null;
+                                        if (createForm.teamId && count === 0) {
+                                            return (
+                                                <div className="pe-alert pe-alert-warning" role="alert" style={{ marginTop: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <AlertCircle size={14} />
+                                                    <span>Selected team has 0 members. Team reviews require at least 1 member.</span>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                 </div>
                             )}
 
