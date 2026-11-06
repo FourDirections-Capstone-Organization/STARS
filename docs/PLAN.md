@@ -28,7 +28,7 @@ Target Feature Branch: fix/kpi-and-performance-review-defects
   - Verify: Scope dropdown includes Team option, reveals team selector, and submits valid team review payload
 - [x] Step 5: Replace Employee GUID text input with permission-scoped employee dropdown in review creation modal (Defect #51c)
   - Verify: Individual scope renders employee dropdown showing accessible staff with name and role instead of GUID text field
-- [ ] Step 6: Add in-UI explanatory subtitle and tooltip to Self vs. Manager criterion comparison chart (Defect #51d)
+- [x] Step 6: Add in-UI explanatory subtitle and tooltip to Self vs. Manager criterion comparison chart (Defect #51d)
   - Verify: Criterion comparison chart renders alignment explanation and outlier guidance in UI subtitle and tooltip
 - [ ] Step 7: Run full backend and frontend test suites and archive plan to docs/archive/plans/ (Defect #49 & #51)
   - Verify: dotnet test and npm test both pass with 0 failures; PLAN.md is archived to docs/archive/plans/
