@@ -45,7 +45,7 @@ Adding new priority levels not in the system, altering SLA hours/logic for non-u
   - Files: docs/PLAN.md, backend/Tests/TaskManagement/TaskPrioritySyncTests.cs, frontend/src/test/TaskPrioritySync.test.tsx
   - Description: Document root cause findings in docs/PLAN.md and add regression test suites reproducing priority loss on creation, assignment, update, and employee view mapping.
 
-- [ ] Step 2: Backend Priority Binding, DTO Harmonization, and Strict Null Defaults
+- [x] Step 2: Backend Priority Binding, DTO Harmonization, and Strict Null Defaults
   - Files: backend/Models/DTOs/CreateTaskDTO.cs, backend/Models/DTOs/UpdateTaskDTO.cs, backend/Models/DTOs/TaskResponseDTO.cs, backend/Models/DTOs/TeamTaskDTO.cs, backend/Modules/TaskManagement/TaskService.cs
   - Description: Make `CreateTaskDTO.PriorityLevel` nullable (`PriorityLevel?`) with fallback to `PriorityLevel.Medium` ONLY when null. Add `Priority` string property alias to `TaskResponseDTO` and `TeamTaskDTO` (`Priority => PriorityLevel.ToString()`). Support both `PriorityLevel` and `Priority` aliases in create/update payloads.
 

@@ -218,5 +218,64 @@ public class TaskPrioritySyncTests
         var deserialized = JsonSerializer.Deserialize<TaskResponseDTO>(json, options);
         Assert.NotNull(deserialized);
         Assert.Equal(PriorityLevel.Low, deserialized.PriorityLevel);
+        Assert.Equal("Low", deserialized.Priority);
+    }
+
+    [Fact]
+    public async Task CreateAsync_OmittedPriority_DefaultsToMedium()
+    {
+        using var db = CreateDbContext();
+        var service = CreateTaskService(db);
+        var coordinator = CreateTestUser(db, "COORD-004", UserRole.Coordinator);
+        var employee = CreateTestUser(db, "EMP-004", UserRole.Courier);
+
+        var dto = new CreateTaskDTO
+        {
+            Title = "Default Priority Test",
+            Description = "Priority omitted, should default to Medium",
+            // PriorityLevel and Priority are null
+            Classification = TaskClassification.RoutineDailyTask,
+            AssignmentScope = AssignmentScope.SingleEmployee,
+            Deadline = DateTime.UtcNow.AddDays(3),
+            AssignedUserIds = new List<Guid> { employee.Id }
+        };
+
+        var result = await service.CreateAsync(dto, coordinator.Id, "127.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PriorityLevel.Medium, result.Data.PriorityLevel);
+        Assert.Equal("Medium", result.Data.Priority);
+
+        var saved = await db.Tasks.FirstOrDefaultAsync(t => t.Id == result.Data.Id);
+        Assert.NotNull(saved);
+        Assert.Equal(PriorityLevel.Medium, saved.PriorityLevel);
+    }
+
+    [Fact]
+    public async Task CreateAsync_PriorityAlias_SetsSpecifiedPriority()
+    {
+        using var db = CreateDbContext();
+        var service = CreateTaskService(db);
+        var coordinator = CreateTestUser(db, "COORD-005", UserRole.Coordinator);
+        var employee = CreateTestUser(db, "EMP-005", UserRole.Courier);
+
+        var dto = new CreateTaskDTO
+        {
+            Title = "Priority Alias Test",
+            Description = "Using Priority alias instead of PriorityLevel",
+            Priority = PriorityLevel.Low,
+            Classification = TaskClassification.RoutineDailyTask,
+            AssignmentScope = AssignmentScope.SingleEmployee,
+            Deadline = DateTime.UtcNow.AddDays(3),
+            AssignedUserIds = new List<Guid> { employee.Id }
+        };
+
+        var result = await service.CreateAsync(dto, coordinator.Id, "127.0.0.1");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PriorityLevel.Low, result.Data.PriorityLevel);
+        Assert.Equal("Low", result.Data.Priority);
     }
 }
