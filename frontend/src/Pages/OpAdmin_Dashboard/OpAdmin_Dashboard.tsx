@@ -61,7 +61,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
 import { useNavigate } from 'react-router-dom';
-import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
+import TaskView, { TaskViewTask, formatDriverDisplay } from '../../components/TaskView/TaskView';
 import { useToast } from '../../components/Toast/Toast';
 import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
 import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
@@ -5382,6 +5382,8 @@ export const ReportsTab: React.FC<{
             waybillNo: string;
             starsTaskId?: string;
             driverId?: string;
+            driverName?: string;
+            driverIsActive?: boolean;
             completedAt: string;
             slaTargetAt: string;
             isOnTime: boolean;
@@ -5416,11 +5418,28 @@ export const ReportsTab: React.FC<{
 
     const dmsDriverBreakdown = useMemo(() => {
         if (!dmsPerfData?.records) return [];
-        const driverMap: Record<string, { driverId: string; total: number; onTime: number; late: number }> = {};
+        const driverMap: Record<string, {
+            driverId: string;
+            driverName?: string;
+            driverIsActive?: boolean;
+            total: number;
+            onTime: number;
+            late: number;
+        }> = {};
         for (const r of dmsPerfData.records) {
             const dId = r.driverId || 'Unassigned / Field';
             if (!driverMap[dId]) {
-                driverMap[dId] = { driverId: dId, total: 0, onTime: 0, late: 0 };
+                driverMap[dId] = {
+                    driverId: dId,
+                    driverName: r.driverName,
+                    driverIsActive: r.driverIsActive,
+                    total: 0,
+                    onTime: 0,
+                    late: 0,
+                };
+            } else if (!driverMap[dId].driverName && r.driverName) {
+                driverMap[dId].driverName = r.driverName;
+                driverMap[dId].driverIsActive = r.driverIsActive;
             }
             driverMap[dId].total += 1;
             if (r.isOnTime) driverMap[dId].onTime += 1;
@@ -5442,11 +5461,13 @@ export const ReportsTab: React.FC<{
                 const wb = (r.waybillNo || '').toLowerCase();
                 const wbClean = wb.replace(/[\s-_]/g, '');
                 const driver = (r.driverId || '').toLowerCase();
+                const driverName = (r.driverName || '').toLowerCase();
                 const task = (r.starsTaskId || '').toLowerCase();
                 return (
                     wb.includes(q) ||
                     (qClean.length > 2 && wbClean.includes(qClean)) ||
                     driver.includes(q) ||
+                    driverName.includes(q) ||
                     task.includes(q)
                 );
             });
@@ -5465,15 +5486,21 @@ export const ReportsTab: React.FC<{
             error('No DMS delivery performance records to export.');
             return;
         }
-        const headers = ['Waybill Number', 'Driver ID', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
-        const rows = dmsPerfData.records.map(r => [
-            `"${r.waybillNo || ''}"`,
-            `"${r.driverId || ''}"`,
-            `"${r.starsTaskId || ''}"`,
-            `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
-            `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
-            r.isOnTime ? 'On-Time (SLA Met)' : 'Late (SLA Missed)'
-        ]);
+        const headers = ['Waybill Number', 'Driver ID', 'Driver Name', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
+        const rows = dmsPerfData.records.map(r => {
+            const driverNameText = r.driverName
+                ? `${r.driverName}${r.driverIsActive === false ? ' [Inactive]' : ''}`
+                : (r.driverId || 'Unassigned');
+            return [
+                `"${r.waybillNo || ''}"`,
+                `"${r.driverId || ''}"`,
+                `"${driverNameText}"`,
+                `"${r.starsTaskId || ''}"`,
+                `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
+                `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
+                r.isOnTime ? 'On-Time (SLA Met)' : 'Late (SLA Missed)'
+            ];
+        });
         const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
         downloadBlob(
             csvContent,
@@ -7570,11 +7597,15 @@ export const ReportsTab: React.FC<{
                                         style={{ width: '100%', height: 34, fontSize: 12.5 }}
                                     >
                                         <option value="">All Drivers / Couriers</option>
-                                        {dmsDriverBreakdown.map(d => (
-                                            <option key={d.driverId} value={d.driverId}>
-                                                {d.driverId} ({d.total} deliveries • {d.onTimeRate}% on-time)
-                                            </option>
-                                        ))}
+                                        {dmsDriverBreakdown.map(d => {
+                                            const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                            const inactiveSuffix = driverInfo.isInactive ? ' [Inactive]' : '';
+                                            return (
+                                                <option key={d.driverId} value={d.driverId}>
+                                                    {driverInfo.displayText}{inactiveSuffix} ({d.total} deliveries • {d.onTimeRate}% on-time)
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                                 <div className="field" style={{ minWidth: 240 }}>
@@ -7586,7 +7617,7 @@ export const ReportsTab: React.FC<{
                                         <input
                                             type="text"
                                             className="report-input"
-                                            placeholder="Search Waybill, Driver, Task ID..."
+                                            placeholder="Search Waybill, Driver Name/ID, Task ID..."
                                             value={dmsPerfSearch}
                                             onChange={e => { setDmsPerfSearch(e.target.value); setDmsPerfPage(1); }}
                                             style={{ paddingLeft: 30, height: 34, fontSize: 12.5, width: '100%' }}
@@ -7702,11 +7733,15 @@ export const ReportsTab: React.FC<{
                                 <div className="report-chart-box">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
-                                            data={dmsDriverBreakdown.slice(0, 7).map(d => ({
-                                                name: d.driverId,
-                                                'On-Time': d.onTime,
-                                                'Late': d.late,
-                                            }))}
+                                            data={dmsDriverBreakdown.slice(0, 7).map(d => {
+                                                const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                                return {
+                                                    name: driverInfo.displayText.length > 18 ? driverInfo.displayText.substring(0, 16) + '..' : driverInfo.displayText,
+                                                    fullName: driverInfo.displayText,
+                                                    'On-Time': d.onTime,
+                                                    'Late': d.late,
+                                                };
+                                            })}
                                             margin={{ top: 10, right: 10, left: -15, bottom: 5 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -7739,7 +7774,7 @@ export const ReportsTab: React.FC<{
                                 <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 800 }}>
                                     <thead>
                                         <tr>
-                                            <th>Courier / Driver ID</th>
+                                            <th>Courier / Driver</th>
                                             <th style={{ textAlign: 'center' }}>Total Deliveries</th>
                                             <th style={{ textAlign: 'center' }}>On-Time (SLA Met)</th>
                                             <th style={{ textAlign: 'center' }}>Late (SLA Missed)</th>
@@ -7751,12 +7786,18 @@ export const ReportsTab: React.FC<{
                                         {dmsDriverBreakdown.map(d => {
                                             const isTop = d.onTimeRate >= 95;
                                             const isGood = d.onTimeRate >= 80 && d.onTimeRate < 95;
+                                            const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
                                             return (
                                                 <tr key={d.driverId} style={{ borderBottom: '1px solid var(--border)' }}>
                                                     <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                            <Truck size={14} style={{ color: '#4318ff' }} />
-                                                            {d.driverId}
+                                                            <Truck size={14} style={{ color: '#4318ff', flexShrink: 0 }} />
+                                                            <span data-testid={`dms-driver-breakdown-${d.driverId}`}>{driverInfo.displayText}</span>
+                                                            {driverInfo.isInactive && (
+                                                                <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
+                                                                    [Inactive]
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{d.total}</td>
@@ -7831,7 +7872,19 @@ export const ReportsTab: React.FC<{
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                        {r.driverId || '—'}
+                                                        {(() => {
+                                                            const driverInfo = formatDriverDisplay(r.driverName, r.driverId, r.driverIsActive);
+                                                            return (
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid={`dms-record-driver-${r.waybillNo}`}>
+                                                                    <span>{driverInfo.displayText}</span>
+                                                                    {driverInfo.isInactive && (
+                                                                        <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
+                                                                            [Inactive]
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
                                                         {r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000' ? (

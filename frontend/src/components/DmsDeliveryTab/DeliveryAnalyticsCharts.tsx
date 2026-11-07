@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { DmsDeliveryItem } from './DmsDeliveryTab';
 import { PerformanceSummary, DeliveryStats } from './DeliveryReportExport';
+import { formatDriverDisplay } from '../TaskView/TaskView';
 import './DeliveryAnalyticsCharts.css';
 
 interface DeliveryAnalyticsChartsProps {
@@ -69,7 +70,7 @@ const STATUS_COLORS: Record<string, string> = {
 const CustomChartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
     const item = payload[0];
-    const title = label || item.name;
+    const title = item.payload?.fullName || label || item.name;
     const value = item.value;
     const color = item.payload?.fill || item.color || COLORS.teal;
 
@@ -192,27 +193,46 @@ export const DeliveryAnalyticsCharts: React.FC<DeliveryAnalyticsChartsProps> = (
 
     // 4. Courier / Driver Workload Distribution
     const courierData = useMemo(() => {
-        const counts: Record<string, { total: number; completed: number; active: number }> = {};
+        const counts: Record<string, {
+            total: number;
+            completed: number;
+            active: number;
+            fullName: string;
+            displayName: string;
+            isInactive?: boolean;
+        }> = {};
 
         deliveries.forEach(d => {
-            const driver = (d.courierEmployeeId || 'Auto / Pool').trim();
-            if (!counts[driver]) {
-                counts[driver] = { total: 0, completed: 0, active: 0 };
+            const empId = (d.courierEmployeeId || '').trim();
+            const fullName = (d.courierFullName || '').trim();
+            const driverInfo = formatDriverDisplay(fullName, empId, d.courierIsActive);
+            const key = empId || fullName || 'Auto / Pool';
+            const label = driverInfo.displayText === 'Unassigned' && !empId ? 'Auto / Pool' : driverInfo.displayText;
+
+            if (!counts[key]) {
+                counts[key] = {
+                    total: 0,
+                    completed: 0,
+                    active: 0,
+                    fullName: label,
+                    displayName: label.length > 14 ? label.substring(0, 13) + '..' : label,
+                    isInactive: driverInfo.isInactive,
+                };
             }
-            counts[driver].total += 1;
+            counts[key].total += 1;
 
             const st = (d.dmsStatus || '').toLowerCase();
             if (st.includes('delivered') || st.includes('completed')) {
-                counts[driver].completed += 1;
+                counts[key].completed += 1;
             } else {
-                counts[driver].active += 1;
+                counts[key].active += 1;
             }
         });
 
-        return Object.entries(counts)
-            .map(([driver, data]) => ({
-                driver: driver.length > 12 ? driver.substring(0, 11) + '..' : driver,
-                fullName: driver,
+        return Object.values(counts)
+            .map(data => ({
+                driver: data.displayName,
+                fullName: data.fullName,
                 total: data.total,
                 completed: data.completed,
                 active: data.active,
