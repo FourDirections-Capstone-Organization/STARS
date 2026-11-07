@@ -47,7 +47,7 @@ Prior to implementing changes, the codebase was investigated across the UI (`Emp
   - Expose `RoleService.CanCreateTasks(UserRole role) => GetPermissionsForRole(role).Contains("CreateTasks")` leveraging existing `"CreateTasks"` permission.
   - Verify: `dotnet build backend/Backend.csproj` succeeds.
 
-- [ ] Step 2: Server-side RBAC enforcement for `createdByUserId`
+- [x] Step 2: Server-side RBAC enforcement for `createdByUserId`
   - Files: `backend/Modules/TaskManagement/TaskService.cs`, `backend/Modules/OrganizationalStructure/HierarchyService.cs`
   - In `TaskService.GetAllAsync`, when `createdByUserId.HasValue`, inspect the creator's role; if not permitted to create tasks (`!RoleService.CanCreateTasks`), return an empty result (`Items` empty, `TotalCount = 0`).
   - In `HierarchyService.GetEmployeeDashboardAsync`, set `totalCreatedTasks = 0` for non-creator operational roles.

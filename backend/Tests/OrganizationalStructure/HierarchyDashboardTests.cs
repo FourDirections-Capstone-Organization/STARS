@@ -581,4 +581,46 @@ public class HierarchyDashboardTests
         Assert.Equal(staff.Id, apiResponse.Data.EmployeeId);
         Assert.Equal("Dick Grayson", apiResponse.Data.FullName);
     }
+
+    [Theory]
+    [InlineData(UserRole.Dispatcher)]
+    [InlineData(UserRole.Encoder)]
+    [InlineData(UserRole.Courier)]
+    [InlineData(UserRole.Accountant)]
+    public async Task GetEmployeeDashboard_OperationalRole_AlwaysReturnsZeroTotalCreatedTasks(UserRole operationalRole)
+    {
+        using var db = CreateDbContext();
+        var service = CreateHierarchyService(db);
+
+        var operationalUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-OP-001",
+            Email = "op@speedex.com",
+            PasswordHash = "hash",
+            FirstName = "Operational",
+            LastName = "Employee",
+            Role = operationalRole,
+            IsActive = true
+        };
+        db.Users.Add(operationalUser);
+
+        // Even if bad/legacy task data has CreatedById matching this operational employee:
+        db.Tasks.Add(new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Orphaned or Legacy Task",
+            Description = "Desc",
+            CreatedById = operationalUser.Id,
+            CreatedBy = operationalUser,
+            Deadline = DateTime.UtcNow.AddDays(7)
+        });
+        await db.SaveChangesAsync();
+
+        var result = await service.GetEmployeeDashboardAsync(operationalUser.Id, Guid.NewGuid(), UserRole.Manager);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal(0, result.Data.TotalCreatedTasks);
+    }
 }
