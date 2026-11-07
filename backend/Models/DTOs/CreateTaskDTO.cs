@@ -13,8 +13,15 @@ public class CreateTaskDTO
     [MaxLength(2000)]
     public string Description { get; set; } = string.Empty;
 
-    [Required]
-    public PriorityLevel PriorityLevel { get; set; }
+    /// <summary>
+    /// Explicit priority level for the task. Defaults to Medium if omitted.
+    /// </summary>
+    public PriorityLevel? PriorityLevel { get; set; }
+
+    /// <summary>
+    /// Optional alias allowing callers to pass 'Priority' instead of 'PriorityLevel'.
+    /// </summary>
+    public PriorityLevel? Priority { get; set; }
 
     [Required]
     public TaskClassification Classification { get; set; }

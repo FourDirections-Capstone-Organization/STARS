@@ -12,6 +12,7 @@ public class UpdateTaskDTO
     public string? Description { get; set; }
 
     public PriorityLevel? PriorityLevel { get; set; }
+    public PriorityLevel? Priority { get; set; }
 
     public TaskClassification? Classification { get; set; }
 
