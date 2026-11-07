@@ -22,11 +22,18 @@ import employeeDashboardService, {
     EmployeeTaskItem,
     PaginatedTasksResponse
 } from '../../../../services/employeeDashboardService';
+import { canRoleCreateTasks } from '../../../../components/Auth/authRedirect';
 import './EmployeeTaskLists.css';
 
 // ── Types & Interfaces ────────────────────────────────────────────────────────
 
 export type TaskListTab = 'assigned' | 'created';
+
+export interface TabFilterState {
+    search: string;
+    status: string;
+    page: number;
+}
 
 export interface EmployeeTaskListsProps {
     employeeId: string;
@@ -171,9 +178,18 @@ export default function EmployeeTaskLists({
 }: EmployeeTaskListsProps) {
     // ── Internal States ────────────────────────────────────────────────────────
     const [internalTab, setInternalTab] = useState<TaskListTab>(defaultTab);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('All');
-    const [page, setPage] = useState(1);
+
+    // Independent filter states per tab
+    const [assignedFilterState, setAssignedFilterState] = useState<TabFilterState>({
+        search: '',
+        status: 'All',
+        page: 1,
+    });
+    const [createdFilterState, setCreatedFilterState] = useState<TabFilterState>({
+        search: '',
+        status: 'All',
+        page: 1,
+    });
     const [pageSize, setPageSize] = useState(10);
 
     const [internalAssignedData, setInternalAssignedData] = useState<PaginatedTasksResponse | null>(null);
@@ -181,19 +197,39 @@ export default function EmployeeTaskLists({
     const [fetchLoading, setFetchLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
-    // Active tab resolution (controlled vs uncontrolled)
+    // Permission guard: Operational roles cannot create tasks -> omit created tab
+    // If employeeRole is not provided (e.g. uncontrolled mock testing), default to allowing created tab
+    const canCreate = useMemo(() => {
+        if (!employeeRole) return true;
+        return canRoleCreateTasks(employeeRole);
+    }, [employeeRole]);
+
+    // Active tab resolution: If role cannot create tasks, force activeTab = 'assigned'
     const currentTab = controlledTab ?? internalTab;
+    const effectiveTab: TaskListTab = canCreate ? currentTab : 'assigned';
+
+    useEffect(() => {
+        if (!canCreate && internalTab !== 'assigned') {
+            setInternalTab('assigned');
+        }
+        if (!canCreate && controlledTab === 'created') {
+            onTabChange?.('assigned');
+        }
+    }, [canCreate, internalTab, controlledTab, onTabChange]);
 
     const handleTabChange = useCallback((tab: TaskListTab) => {
-        if (tab === currentTab) return;
+        if (!canCreate && tab === 'created') return;
+        if (tab === effectiveTab) return;
         setInternalTab(tab);
-        setPage(1);
         onTabChange?.(tab);
-    }, [currentTab, onTabChange]);
+    }, [canCreate, effectiveTab, onTabChange]);
+
+    // Active filter state based on active tab
+    const activeFilter = effectiveTab === 'assigned' ? assignedFilterState : createdFilterState;
 
     // ── Data Fetching Effect (when not controlled by external props) ───────────
     const isExternallyControlled =
-        currentTab === 'assigned'
+        effectiveTab === 'assigned'
             ? assignedTasksData !== undefined
             : createdTasksData !== undefined;
 
@@ -207,13 +243,13 @@ export default function EmployeeTaskLists({
 
         const fetchData = async () => {
             try {
-                if (currentTab === 'assigned') {
+                if (effectiveTab === 'assigned') {
                     const result = await employeeDashboardService.getEmployeeAssignedTasks(
                         employeeId,
-                        page,
+                        assignedFilterState.page,
                         pageSize,
-                        searchQuery,
-                        statusFilter
+                        assignedFilterState.search,
+                        assignedFilterState.status
                     );
                     if (!isCancelled) {
                         setInternalAssignedData(result);
@@ -221,10 +257,10 @@ export default function EmployeeTaskLists({
                 } else {
                     const result = await employeeDashboardService.getEmployeeCreatedTasks(
                         employeeId,
-                        page,
+                        createdFilterState.page,
                         pageSize,
-                        searchQuery,
-                        statusFilter
+                        createdFilterState.search,
+                        createdFilterState.status
                     );
                     if (!isCancelled) {
                         setInternalCreatedData(result);
@@ -248,22 +284,25 @@ export default function EmployeeTaskLists({
         };
     }, [
         employeeId,
-        currentTab,
-        page,
+        effectiveTab,
+        assignedFilterState.page,
+        assignedFilterState.search,
+        assignedFilterState.status,
+        createdFilterState.page,
+        createdFilterState.search,
+        createdFilterState.status,
         pageSize,
-        searchQuery,
-        statusFilter,
         isExternallyControlled,
     ]);
 
     // ── Active Data & Counts Resolution ─────────────────────────────────────────
     const activeData = useMemo(() => {
-        if (currentTab === 'assigned') {
+        if (effectiveTab === 'assigned') {
             return assignedTasksData !== undefined ? assignedTasksData : internalAssignedData;
         } else {
             return createdTasksData !== undefined ? createdTasksData : internalCreatedData;
         }
-    }, [currentTab, assignedTasksData, internalAssignedData, createdTasksData, internalCreatedData]);
+    }, [effectiveTab, assignedTasksData, internalAssignedData, createdTasksData, internalCreatedData]);
 
     const isLoading = externalLoading ?? fetchLoading;
     const errorMessage = externalError ?? fetchError;
@@ -279,8 +318,8 @@ export default function EmployeeTaskLists({
         }
 
         let filtered = rawItems;
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase().trim();
+        if (activeFilter.search.trim()) {
+            const q = activeFilter.search.toLowerCase().trim();
             filtered = filtered.filter(item =>
                 (item.title && item.title.toLowerCase().includes(q)) ||
                 (item.description && item.description.toLowerCase().includes(q)) ||
@@ -289,56 +328,79 @@ export default function EmployeeTaskLists({
             );
         }
 
-        if (statusFilter && statusFilter !== 'All') {
-            const sf = statusFilter.toLowerCase();
+        if (activeFilter.status && activeFilter.status !== 'All') {
+            const sf = activeFilter.status.toLowerCase();
             filtered = filtered.filter(item => {
                 const overdue = isTaskOverdue(item);
                 if (sf === 'overdue') return overdue;
                 const statusStr = formatStatus(item.status).toLowerCase();
+                if (sf === 'pending') {
+                    return statusStr === 'pending' || statusStr === 'not started';
+                }
+                if (sf === 'cancelled' || sf === 'canceled') {
+                    return statusStr === 'cancelled' || statusStr === 'canceled';
+                }
                 return statusStr === sf;
             });
         }
 
         return filtered;
-    }, [rawItems, searchQuery, statusFilter, isExternallyControlled]);
+    }, [rawItems, activeFilter.search, activeFilter.status, isExternallyControlled]);
 
-    const activeTotalCount = isExternallyControlled && (searchQuery || statusFilter !== 'All')
+    const activeTotalCount = isExternallyControlled && (activeFilter.search || activeFilter.status !== 'All')
         ? displayItems.length
         : totalCount;
 
     const activeTotalPages = pageSize > 0 ? Math.ceil(activeTotalCount / pageSize) : totalPages;
-    const fromIndex = activeTotalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-    const toIndex = Math.min(page * pageSize, activeTotalCount);
+    const fromIndex = activeTotalCount === 0 ? 0 : (activeFilter.page - 1) * pageSize + 1;
+    const toIndex = Math.min(activeFilter.page * pageSize, activeTotalCount);
 
     // ── Handlers ───────────────────────────────────────────────────────────────
+    // Changing filter resets page to 1 on the active tab
     const handleSearchChange = (val: string) => {
-        setSearchQuery(val);
-        setPage(1);
+        if (effectiveTab === 'assigned') {
+            setAssignedFilterState(prev => ({ ...prev, search: val, page: 1 }));
+        } else {
+            setCreatedFilterState(prev => ({ ...prev, search: val, page: 1 }));
+        }
         onSearchChange?.(val);
     };
 
     const handleStatusChange = (val: string) => {
-        setStatusFilter(val);
-        setPage(1);
+        if (effectiveTab === 'assigned') {
+            setAssignedFilterState(prev => ({ ...prev, status: val, page: 1 }));
+        } else {
+            setCreatedFilterState(prev => ({ ...prev, status: val, page: 1 }));
+        }
         onStatusChange?.(val);
     };
 
     const handleResetFilters = () => {
-        setSearchQuery('');
-        setStatusFilter('All');
-        setPage(1);
+        if (effectiveTab === 'assigned') {
+            setAssignedFilterState(prev => ({ ...prev, search: '', status: 'All', page: 1 }));
+        } else {
+            setCreatedFilterState(prev => ({ ...prev, search: '', status: 'All', page: 1 }));
+        }
         onSearchChange?.('');
         onStatusChange?.('All');
     };
 
     const handlePageChange = (newPage: number) => {
-        setPage(newPage);
+        if (effectiveTab === 'assigned') {
+            setAssignedFilterState(prev => ({ ...prev, page: newPage }));
+        } else {
+            setCreatedFilterState(prev => ({ ...prev, page: newPage }));
+        }
         onPageChange?.(newPage);
     };
 
     const handlePageSizeChange = (newSize: number) => {
         setPageSize(newSize);
-        setPage(1);
+        if (effectiveTab === 'assigned') {
+            setAssignedFilterState(prev => ({ ...prev, page: 1 }));
+        } else {
+            setCreatedFilterState(prev => ({ ...prev, page: 1 }));
+        }
         onPageSizeChange?.(newSize);
     };
 
@@ -347,7 +409,11 @@ export default function EmployeeTaskLists({
             onRefresh();
         } else {
             // Re-trigger internal fetch by re-setting page
-            setPage(p => p);
+            if (effectiveTab === 'assigned') {
+                setAssignedFilterState(prev => ({ ...prev, page: prev.page }));
+            } else {
+                setCreatedFilterState(prev => ({ ...prev, page: prev.page }));
+            }
         }
     };
 
@@ -551,20 +617,20 @@ export default function EmployeeTaskLists({
 
     // ── Edge Case Empty Messages ───────────────────────────────────────────────
     const emptyMessage = useMemo(() => {
-        if (currentTab === 'assigned') {
-            if (activeTotalCount === 0 && !searchQuery && statusFilter === 'All') {
+        if (effectiveTab === 'assigned') {
+            if (activeTotalCount === 0 && !activeFilter.search && activeFilter.status === 'All') {
                 return 'No tasks assigned to this employee';
             }
             return 'No tasks assigned to this employee matching your filter';
         } else {
-            if (activeTotalCount === 0 && !searchQuery && statusFilter === 'All') {
+            if (activeTotalCount === 0 && !activeFilter.search && activeFilter.status === 'All') {
                 return 'No tasks created by this employee';
             }
             return 'No tasks created by this employee matching your filter';
         }
-    }, [currentTab, activeTotalCount, searchQuery, statusFilter]);
+    }, [effectiveTab, activeTotalCount, activeFilter.search, activeFilter.status]);
 
-    const emptyIcon = currentTab === 'assigned'
+    const emptyIcon = effectiveTab === 'assigned'
         ? <Inbox size={32} className="empty-state-icon" />
         : <UserCheck size={32} className="empty-state-icon" />;
 
@@ -581,10 +647,10 @@ export default function EmployeeTaskLists({
                         type="button"
                         role="tab"
                         id="tab-assigned"
-                        aria-selected={currentTab === 'assigned'}
+                        aria-selected={effectiveTab === 'assigned'}
                         aria-controls="panel-task-table"
                         data-testid="tab-assigned"
-                        className={`task-tab-btn ${currentTab === 'assigned' ? 'active' : ''}`}
+                        className={`task-tab-btn ${effectiveTab === 'assigned' ? 'active' : ''}`}
                         onClick={() => handleTabChange('assigned')}
                     >
                         <ClipboardList size={16} />
@@ -596,24 +662,26 @@ export default function EmployeeTaskLists({
                         )}
                     </button>
 
-                    <button
-                        type="button"
-                        role="tab"
-                        id="tab-created"
-                        aria-selected={currentTab === 'created'}
-                        aria-controls="panel-task-table"
-                        data-testid="tab-created"
-                        className={`task-tab-btn ${currentTab === 'created' ? 'active' : ''}`}
-                        onClick={() => handleTabChange('created')}
-                    >
-                        <UserCheck size={16} />
-                        <span>Tasks Created</span>
-                        {createdBadgeCount !== undefined && (
-                            <span className="task-tab-badge" data-testid="created-count-badge">
-                                {createdBadgeCount}
-                            </span>
-                        )}
-                    </button>
+                    {canCreate && (
+                        <button
+                            type="button"
+                            role="tab"
+                            id="tab-created"
+                            aria-selected={effectiveTab === 'created'}
+                            aria-controls="panel-task-table"
+                            data-testid="tab-created"
+                            className={`task-tab-btn ${effectiveTab === 'created' ? 'active' : ''}`}
+                            onClick={() => handleTabChange('created')}
+                        >
+                            <UserCheck size={16} />
+                            <span>Tasks Created</span>
+                            {createdBadgeCount !== undefined && (
+                                <span className="task-tab-badge" data-testid="created-count-badge">
+                                    {createdBadgeCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
                 </div>
 
                 {onRefresh && (
@@ -632,7 +700,7 @@ export default function EmployeeTaskLists({
             </div>
 
             {/* ── Informational banner for execution staff on Created Tab ── */}
-            {currentTab === 'created' && activeTotalCount === 0 && !isLoading && (
+            {canCreate && effectiveTab === 'created' && activeTotalCount === 0 && !isLoading && (
                 <div className="task-lists-info-banner" data-testid="staff-created-note">
                     <CheckCircle2 size={15} />
                     <span>
@@ -653,15 +721,15 @@ export default function EmployeeTaskLists({
             )}
 
             {/* ── Sub-Filter Bar & DataTable ── */}
-            <div id="panel-task-table" role="tabpanel" aria-labelledby={`tab-${currentTab}`}>
+            <div id="panel-task-table" role="tabpanel" aria-labelledby={`tab-${effectiveTab}`}>
                 <DataTable<EmployeeTaskItem>
-                    columns={currentTab === 'assigned' ? assignedColumns : createdColumns}
+                    columns={effectiveTab === 'assigned' ? assignedColumns : createdColumns}
                     data={displayItems}
                     loading={isLoading}
                     emptyMessage={emptyMessage}
                     emptyIcon={emptyIcon}
                     onRowClick={onTaskClick}
-                    searchQuery={searchQuery}
+                    searchQuery={activeFilter.search}
                     onSearchChange={handleSearchChange}
                     searchPlaceholder="Search by title or description..."
                     filterElements={
@@ -673,19 +741,20 @@ export default function EmployeeTaskLists({
                                     data-testid="task-status-filter"
                                     aria-label="Filter by task status"
                                     className="dt-filter-select task-status-select"
-                                    value={statusFilter}
+                                    value={activeFilter.status}
                                     onChange={e => handleStatusChange(e.target.value)}
                                 >
                                     <option value="All">All Statuses</option>
                                     <option value="In Progress">In Progress</option>
                                     <option value="Completed">Completed</option>
+                                    <option value="Cancelled">Cancelled</option>
                                     <option value="Overdue">Overdue</option>
                                     <option value="On Hold">On Hold</option>
                                     <option value="Pending">Pending / Not Started</option>
                                 </select>
                             </div>
 
-                            {(searchQuery || (statusFilter && statusFilter !== 'All')) && (
+                            {(activeFilter.search || (activeFilter.status && activeFilter.status !== 'All')) && (
                                 <button
                                     type="button"
                                     data-testid="reset-filters-btn"
@@ -729,7 +798,7 @@ export default function EmployeeTaskLists({
                         </div>
 
                         <Pagination
-                            currentPage={page}
+                            currentPage={activeFilter.page}
                             totalPages={activeTotalPages}
                             onPageChange={handlePageChange}
                             className="task-lists-pagination"

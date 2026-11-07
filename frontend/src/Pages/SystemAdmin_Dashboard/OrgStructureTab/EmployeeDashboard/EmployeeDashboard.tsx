@@ -12,6 +12,7 @@ import employeeDashboardService, {
     EmployeeDashboardData,
     EmployeeTaskItem
 } from '../../../../services/employeeDashboardService';
+import { canRoleCreateTasks } from '../../../../components/Auth/authRedirect';
 import EmployeeHeader from './EmployeeHeader';
 import EmployeeCharts from './EmployeeCharts';
 import EmployeeTaskLists, { TaskListTab } from './EmployeeTaskLists';
@@ -145,6 +146,13 @@ export default function EmployeeDashboard({
     const [isInvalidId, setIsInvalidId] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<TaskListTab>(initialTab);
     const [refreshIndex, setRefreshIndex] = useState<number>(0);
+
+    // If inspected employee is in an operational role that cannot create tasks, force activeTab to 'assigned'
+    useEffect(() => {
+        if (data?.role && !canRoleCreateTasks(data.role) && activeTab !== 'assigned') {
+            setActiveTab('assigned');
+        }
+    }, [data?.role, activeTab]);
 
     // ── Data Fetching Lifecycle ───────────────────────────────────────────────
     const fetchDashboard = useCallback(async (id: string) => {

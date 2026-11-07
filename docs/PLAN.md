@@ -60,7 +60,7 @@ Prior to implementing changes, the codebase was investigated across the UI (`Emp
   - Clean up created tab empty message to neutral "No tasks created by this employee".
   - Verify: Updated label assertions pass in `EmployeeCharts.test.tsx` and `EmployeeDashboard.test.tsx`.
 
-- [ ] Step 4: Dropdown filter fix, Cancelled status, independent tab filter states, and RBAC tab hiding
+- [x] Step 4: Dropdown filter fix, Cancelled status, independent tab filter states, and RBAC tab hiding
   - Files: `frontend/src/components/Auth/authRedirect.ts`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `EmployeeDashboard.tsx`
   - Implement `canRoleCreateTasks(role)` helper in `authRedirect.ts`.
   - Add "Cancelled" option to `<select id="task-status-filter">` on both tabs.

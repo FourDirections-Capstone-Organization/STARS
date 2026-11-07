@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import EmployeeTaskLists, {
     formatStatus,
     formatPriority,
@@ -13,6 +13,7 @@ import employeeDashboardService, {
     EmployeeTaskItem,
     PaginatedTasksResponse,
 } from '../services/employeeDashboardService';
+import { canRoleCreateTasks } from '../components/Auth/authRedirect';
 
 // Mock the employeeDashboardService
 vi.mock('../services/employeeDashboardService', async (importOriginal) => {
@@ -666,6 +667,202 @@ describe('EmployeeTaskLists Component', () => {
             await waitFor(() => {
                 expect(screen.getByTestId('task-lists-error')).toBeInTheDocument();
                 expect(screen.getByText('Network timeout')).toBeInTheDocument();
+            });
+        });
+    });
+
+    // ── 9. Step 4: Role-Based Tab Visibility, Cancelled Status, & Independent Filter States ─
+
+    describe('Step 4: Role-Based Tab Visibility, Cancelled Status, & Independent Filter States', () => {
+        describe('canRoleCreateTasks helper', () => {
+            it('returns true for Manager and Coordinator roles', () => {
+                expect(canRoleCreateTasks('Manager')).toBe(true);
+                expect(canRoleCreateTasks('Coordinator')).toBe(true);
+                expect(canRoleCreateTasks('manager')).toBe(true);
+                expect(canRoleCreateTasks('coordinator')).toBe(true);
+                expect(canRoleCreateTasks('admin')).toBe(true);
+                expect(canRoleCreateTasks('opadmin')).toBe(true);
+            });
+
+            it('returns false for operational roles and empty inputs', () => {
+                expect(canRoleCreateTasks('Dispatcher')).toBe(false);
+                expect(canRoleCreateTasks('Encoder')).toBe(false);
+                expect(canRoleCreateTasks('Courier')).toBe(false);
+                expect(canRoleCreateTasks('Driver')).toBe(false);
+                expect(canRoleCreateTasks('Accountant')).toBe(false);
+                expect(canRoleCreateTasks('')).toBe(false);
+                expect(canRoleCreateTasks(null)).toBe(false);
+                expect(canRoleCreateTasks(undefined)).toBe(false);
+            });
+        });
+
+        describe('Role-Based Tab Visibility', () => {
+            it('hides the "Tasks Created" tab button for operational roles and forces assigned tab', () => {
+                const operationalRoles = ['Dispatcher', 'Encoder', 'Courier', 'Accountant'];
+
+                for (const role of operationalRoles) {
+                    const { unmount } = render(
+                        <EmployeeTaskLists
+                            employeeId="emp-101"
+                            employeeRole={role}
+                            defaultTab="created"
+                            assignedTasksData={mockAssignedData}
+                            createdTasksData={mockCreatedData}
+                        />
+                    );
+
+                    expect(screen.getByTestId('tab-assigned')).toBeInTheDocument();
+                    expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
+                    expect(screen.getByTestId('tab-assigned')).toHaveClass('active');
+                    expect(screen.getByText('Audit Cold Chain Temperature Logs')).toBeInTheDocument();
+
+                    unmount();
+                }
+            });
+
+            it('shows the "Tasks Created" tab button for Manager and Coordinator roles', () => {
+                const creatorRoles = ['Manager', 'Coordinator'];
+
+                for (const role of creatorRoles) {
+                    const { unmount } = render(
+                        <EmployeeTaskLists
+                            employeeId="emp-101"
+                            employeeRole={role}
+                            assignedTasksData={mockAssignedData}
+                            createdTasksData={mockCreatedData}
+                        />
+                    );
+
+                    expect(screen.getByTestId('tab-assigned')).toBeInTheDocument();
+                    expect(screen.getByTestId('tab-created')).toBeInTheDocument();
+
+                    unmount();
+                }
+            });
+        });
+
+        describe('Cancelled Status Option & Filtering', () => {
+            const mockAssignedWithCancelled: PaginatedTasksResponse = {
+                items: [
+                    ...mockAssignedTasks,
+                    {
+                        id: 'task-004',
+                        taskNumber: 'TSK-1004',
+                        title: 'Cancelled Maintenance Protocol',
+                        description: 'Aborted routine maintenance.',
+                        priorityLevel: 1,
+                        status: 5, // Cancelled
+                        deadline: '2026-11-30T10:00:00Z',
+                        createdAt: '2026-10-18T10:00:00Z',
+                    },
+                ],
+                totalCount: 4,
+                pageNumber: 1,
+                pageSize: 10,
+                totalPages: 1,
+                hasPreviousPage: false,
+                hasNextPage: false,
+            };
+
+            it('renders Cancelled option in status filter dropdown and filters cancelled tasks', () => {
+                const handleStatusChange = vi.fn();
+                render(
+                    <EmployeeTaskLists
+                        employeeId="emp-101"
+                        assignedTasksData={mockAssignedWithCancelled}
+                        onStatusChange={handleStatusChange}
+                    />
+                );
+
+                const statusSelect = screen.getByTestId('task-status-filter') as HTMLSelectElement;
+                const cancelledOption = within(statusSelect).getByRole('option', { name: 'Cancelled' });
+                expect(cancelledOption).toBeInTheDocument();
+                expect(cancelledOption).toHaveValue('Cancelled');
+
+                fireEvent.change(statusSelect, { target: { value: 'Cancelled' } });
+                expect(handleStatusChange).toHaveBeenCalledWith('Cancelled');
+
+                // Only cancelled task is displayed
+                expect(screen.getByText('Cancelled Maintenance Protocol')).toBeInTheDocument();
+                expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
+                expect(screen.queryByText('Emergency Medical Supply Dispatch')).not.toBeInTheDocument();
+                expect(screen.queryByText('Warehouse Standard Safety Review')).not.toBeInTheDocument();
+            });
+        });
+
+        describe('Independent Tab Filter States', () => {
+            it('maintains independent search, status, and page per tab', () => {
+                render(
+                    <EmployeeTaskLists
+                        employeeId="emp-101"
+                        employeeRole="Coordinator"
+                        assignedTasksData={mockAssignedData}
+                        createdTasksData={mockCreatedData}
+                    />
+                );
+
+                // 1. On Assigned tab: filter by search "Emergency"
+                const searchInput = screen.getByPlaceholderText('Search by title or description...');
+                fireEvent.change(searchInput, { target: { value: 'Emergency' } });
+                expect(screen.getByText('Emergency Medical Supply Dispatch')).toBeInTheDocument();
+                expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
+
+                // 2. Switch to Created tab
+                const createdTab = screen.getByTestId('tab-created');
+                fireEvent.click(createdTab);
+
+                // Created tab should have clean/independent filter (search empty, all created tasks visible)
+                const searchInputCreated = screen.getByPlaceholderText('Search by title or description...');
+                expect(searchInputCreated).toHaveValue('');
+                expect(screen.getByText('Schedule Zone 4 Maintenance')).toBeInTheDocument();
+                expect(screen.getByText('Inter-department Forwarding Memo')).toBeInTheDocument();
+
+                // 3. Search on Created tab for "Zone 4"
+                fireEvent.change(searchInputCreated, { target: { value: 'Zone 4' } });
+                expect(screen.getByText('Schedule Zone 4 Maintenance')).toBeInTheDocument();
+                expect(screen.queryByText('Inter-department Forwarding Memo')).not.toBeInTheDocument();
+
+                // 4. Switch back to Assigned tab: previous search "Emergency" is preserved
+                const assignedTab = screen.getByTestId('tab-assigned');
+                fireEvent.click(assignedTab);
+
+                const searchInputAssignedAgain = screen.getByPlaceholderText('Search by title or description...');
+                expect(searchInputAssignedAgain).toHaveValue('Emergency');
+                expect(screen.getByText('Emergency Medical Supply Dispatch')).toBeInTheDocument();
+                expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
+            });
+
+            it('resets page to 1 when changing search or status filter', () => {
+                const multiPageData: PaginatedTasksResponse = {
+                    items: mockAssignedTasks,
+                    totalCount: 30,
+                    pageNumber: 1,
+                    pageSize: 10,
+                    totalPages: 3,
+                    hasPreviousPage: false,
+                    hasNextPage: true,
+                };
+
+                const handlePageChange = vi.fn();
+                render(
+                    <EmployeeTaskLists
+                        employeeId="emp-101"
+                        assignedTasksData={multiPageData}
+                        onPageChange={handlePageChange}
+                    />
+                );
+
+                // Navigate to page 2
+                const page2Btn = screen.getByRole('button', { name: '2' });
+                fireEvent.click(page2Btn);
+                expect(handlePageChange).toHaveBeenCalledWith(2);
+
+                // Changing filter resets page to 1
+                const searchInput = screen.getByPlaceholderText('Search by title or description...');
+                fireEvent.change(searchInput, { target: { value: 'Audit' } });
+
+                // Footer showing 1-based index or page 1 info
+                expect(screen.getByTestId('task-lists-count-info')).toHaveTextContent(/Showing 1–/i);
             });
         });
     });
