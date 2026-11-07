@@ -496,6 +496,11 @@ body {
     flex-shrink: 0;
 }
 
+    .prio-dot.urgent,
+    .prio-dot.prio-urgent {
+        background: var(--urgent, #FF6D00);
+    }
+
     .prio-dot.high {
         background: var(--status-failed);
     }
@@ -669,6 +674,10 @@ body {
     flex-shrink: 0;
     margin-top: 2px;
 }
+
+    .prio-strip.prio-urgent {
+        background: var(--urgent, #FF6D00);
+    }
 
     .prio-strip.prio-high {
         background: var(--status-failed);

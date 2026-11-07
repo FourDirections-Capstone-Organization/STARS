@@ -182,7 +182,24 @@ interface ApiResponse<T> {
 
 // --- Types --------------------------------------------------------------------
 
-type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';  // match backend casing
+export type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';  // match backend casing
+
+export const normalizeCoordinatorPriority = (val: any): Priority => {
+    if (val !== undefined && val !== null && val !== '') {
+        if (typeof val === 'number') {
+            const labels: Record<number, Priority> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
+            if (val in labels) return labels[val];
+        }
+        if (typeof val === 'string' && val.trim()) {
+            const s = val.trim().toLowerCase();
+            if (s === 'low') return 'Low';
+            if (s === 'medium') return 'Medium';
+            if (s === 'high') return 'High';
+            if (s === 'urgent') return 'Urgent';
+        }
+    }
+    return 'Medium';
+};
 type TaskStatus = 'Draft' | 'Assigned' | 'Pending' | 'In Progress' | 'Pending Admin Review' | 'Done' | 'Completed' | 'Overdue';
 type NavTab =
     | 'dashboard'
@@ -935,22 +952,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const hasDmsDeadline = Boolean(initial.dueAt && initial.dueAt.trim());
     const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline && !isHistoricalDeadline;
 
+    const initialPriority = normalizeCoordinatorPriority(initial.priority ?? (initial as any).priorityLevel);
+
     const initialDueAt = useMemo(() => {
         if (!initial.dueAt) return '';
         const d = new Date(initial.dueAt);
         if (isNaN(d.getTime())) return '';
         if (isPreDelivery && d.getTime() <= Date.now()) {
-            const adjusted = getAdjustedSlaDeadline((initial.priority ?? 'Medium') as Priority);
+            const adjusted = getAdjustedSlaDeadline(initialPriority);
             return formatDateForInput(adjusted);
         }
         return initial.dueAt.slice(0, 16);
-    }, [initial.dueAt, initial.priority, isPreDelivery]);
+    }, [initial.dueAt, initialPriority, isPreDelivery]);
 
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
         taskCategory: initial.taskCategory ?? '',
-        priority: (initial.priority ?? 'Medium') as Priority,
+        priority: initialPriority,
         dueAt: initialDueAt,
         isConfidential: initial.isConfidential ?? false,
         assignmentScope: (initial.assignees && initial.assignees.length > 1 ? 'Team' : 'SingleEmployee') as 'SingleEmployee' | 'Team' | 'Department',
@@ -9542,7 +9561,7 @@ export default function OpsAdminDashboard() {
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification ?? t.Classification ?? 0,
-                    priority: (PRIORITY_LABELS[t.priorityLevel] || t.priority || 'Medium') as Priority,
+                    priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
                     dueAt: deadlineStr,
                     taskStatus: STATUS_LABELS[statusNum] ?? t.taskStatus ?? '',
                     taskRemarks: t.progressNotes ?? t.taskRemarks ?? '',
@@ -9892,9 +9911,7 @@ export default function OpsAdminDashboard() {
                 } else {
                     statusStr = t.taskStatus || 'Assigned';
                 }
-                const priorityStr = typeof t.priorityLevel === 'number'
-                    ? (PRIORITY_LABELS[t.priorityLevel] || 'Medium')
-                    : (t.priority || 'Medium');
+                const priorityStr = normalizeCoordinatorPriority(t.priorityLevel ?? t.priority);
                 return {
                     taskId: t.id ?? t.taskId,
                     taskTitle: t.title ?? t.taskTitle ?? '',
@@ -10194,8 +10211,7 @@ export default function OpsAdminDashboard() {
 
             const assigneeId = data.assignedUserIds?.[0] || (data as any).assignedTo;
             const assigneeObj = teamMembers.find(m => m.accountId === assigneeId || (m as any).id === assigneeId || (m as any).employeeId === assigneeId);
-            const priorityLabels = ['Low', 'Medium', 'High', 'Urgent'];
-            const priorityStr = typeof data.priorityLevel === 'number' ? priorityLabels[data.priorityLevel] || 'Medium' : 'Medium';
+            const priorityStr = normalizeCoordinatorPriority(data.priorityLevel ?? (data as any).priority);
 
             setCreatedTaskSuccess({
                 taskId,
@@ -10264,7 +10280,7 @@ export default function OpsAdminDashboard() {
                 referenceNumber: dto.taskNumber ?? dto.taskReferenceNumber ?? dto.referenceNumber ?? '',
                 description: dto.description ?? '',
                 deadline: dto.deadline ?? null,
-                priority: (PRIORITY_LABELS[dto.priorityLevel] ?? dto.priority ?? '') as string,
+                priority: normalizeCoordinatorPriority(dto.priorityLevel ?? dto.priority),
                 assignee: dto.assignees?.length > 0 ? (dto.assignees[0].fullName ?? '') : '',
                 loading: false,
                 error: false,
@@ -10299,7 +10315,7 @@ export default function OpsAdminDashboard() {
             taskId: dto.id ?? '',
             taskTitle: dto.title ?? '',
             taskDescription: dto.description ?? '',
-            priority: PRIORITY_LABELS[dto.priorityLevel] ?? ((dto.priority as TaskViewTask['priority']) || 'Medium'),
+            priority: normalizeCoordinatorPriority(dto.priorityLevel ?? dto.priority),
             dueAt: dto.deadline ?? null,
             taskStatus,
             taskRemarks: dto.progressNotes ?? '',
