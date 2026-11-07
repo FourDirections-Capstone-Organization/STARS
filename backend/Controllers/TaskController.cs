@@ -80,9 +80,7 @@ public class TaskController : ControllerBase
             var parts = excludeStatuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var part in parts)
             {
-                if (int.TryParse(part, out var intVal) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), intVal))
-                    excludedList.Add((Models.Enums.TaskStatus)intVal);
-                else if (Enum.TryParse<Models.Enums.TaskStatus>(part, true, out var enumVal))
+                if (TryParseTaskStatus(part, out var enumVal))
                     excludedList.Add(enumVal);
             }
         }
@@ -95,13 +93,9 @@ public class TaskController : ControllerBase
             {
                 isOverdue = true;
             }
-            else if (int.TryParse(firstStatus, out var sInt) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), sInt))
+            else if (TryParseTaskStatus(firstStatus, out var resolvedStatus))
             {
-                parsedStatus = (Models.Enums.TaskStatus)sInt;
-            }
-            else if (Enum.TryParse<Models.Enums.TaskStatus>(firstStatus, true, out var sEnum))
-            {
-                parsedStatus = sEnum;
+                parsedStatus = resolvedStatus;
             }
         }
 
@@ -356,6 +350,42 @@ public class TaskController : ControllerBase
             status: Models.Enums.TaskStatus.Cancelled);
 
         return Ok(result);
+    }
+
+    private static bool TryParseTaskStatus(string? rawStatus, out Models.Enums.TaskStatus parsedStatus)
+    {
+        parsedStatus = default;
+        if (string.IsNullOrWhiteSpace(rawStatus))
+            return false;
+
+        var trimmed = rawStatus.Trim();
+        if (int.TryParse(trimmed, out var sInt) && Enum.IsDefined(typeof(Models.Enums.TaskStatus), sInt))
+        {
+            parsedStatus = (Models.Enums.TaskStatus)sInt;
+            return true;
+        }
+
+        var normalized = trimmed.Replace(" ", "").Replace("-", "").Replace("_", "");
+        if (normalized.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedStatus = Models.Enums.TaskStatus.NotStarted;
+            return true;
+        }
+
+        if (normalized.Equals("Done", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedStatus = Models.Enums.TaskStatus.Completed;
+            return true;
+        }
+
+        if (normalized.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedStatus = Models.Enums.TaskStatus.Cancelled;
+            return true;
+        }
+
+        return Enum.TryParse(normalized, true, out parsedStatus);
     }
 
     private string? GetIpAddress()
