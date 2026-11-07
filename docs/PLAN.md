@@ -49,7 +49,7 @@ Adding new priority levels not in the system, altering SLA hours/logic for non-u
   - Files: backend/Models/DTOs/CreateTaskDTO.cs, backend/Models/DTOs/UpdateTaskDTO.cs, backend/Models/DTOs/TaskResponseDTO.cs, backend/Models/DTOs/TeamTaskDTO.cs, backend/Modules/TaskManagement/TaskService.cs
   - Description: Make `CreateTaskDTO.PriorityLevel` nullable (`PriorityLevel?`) with fallback to `PriorityLevel.Medium` ONLY when null. Add `Priority` string property alias to `TaskResponseDTO` and `TeamTaskDTO` (`Priority => PriorityLevel.ToString()`). Support both `PriorityLevel` and `Priority` aliases in create/update payloads.
 
-- [ ] Step 3: Frontend Priority Normalizer & OpEmployee_Dashboard Fix
+- [x] Step 3: Frontend Priority Normalizer & OpEmployee_Dashboard Fix
   - Files: frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.tsx, frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.css
   - Description: Add robust priority normalization helper handling PascalCase strings ("Low", "Medium", "High", "Urgent"), lowercase strings, and enum numbers. Update `dtoToTask` to accurately map `dto.priorityLevel` and `dto.priority`. Expand `Priority` union to include `'urgent'`, update `priorityMeta`, add Urgent filter option, and ensure filters/sorting respect actual priority.
 
