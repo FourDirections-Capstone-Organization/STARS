@@ -5,6 +5,7 @@ using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Backend.Modules.Notifications;
+using Backend.Modules.RoleBasedAccessControl;
 using Task = System.Threading.Tasks.Task;
 using BackendTask = Backend.Models.Task;
 
@@ -266,7 +267,27 @@ public class TaskService : ITaskService
             query = query.Where(t => t.AssignedDepartmentId == departmentId.Value);
 
         if (createdByUserId.HasValue)
+        {
+            var creator = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == createdByUserId.Value);
+            if (creator == null || !RoleService.CanCreateTasks(creator.Role))
+            {
+                return ApiResponseDTO<TaskListResponseDTO>.Success(new TaskListResponseDTO
+                {
+                    Items = new List<TaskResponseDTO>(),
+                    TotalCount = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    ActiveCount = 0,
+                    InProgressCount = 0,
+                    CompletedCount = 0,
+                    OverdueCount = 0,
+                    CancelledCount = 0,
+                    OnHoldCount = 0
+                });
+            }
+
             query = query.Where(t => t.CreatedById == createdByUserId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

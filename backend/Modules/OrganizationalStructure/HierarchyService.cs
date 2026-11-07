@@ -3,6 +3,7 @@ using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
+using Backend.Modules.RoleBasedAccessControl;
 using Backend.Modules.TaskManagement;
 
 namespace Backend.Modules.OrganizationalStructure;
@@ -264,8 +265,9 @@ public class HierarchyService : IHierarchyService
             })
             .ToListAsync();
 
-        var totalCreatedTasks = await _db.Tasks
-            .CountAsync(t => t.CreatedById == employeeId);
+        var totalCreatedTasks = RoleService.CanCreateTasks(emp.Role)
+            ? await _db.Tasks.CountAsync(t => t.CreatedById == employeeId)
+            : 0;
 
         var now = DateTime.UtcNow;
         var totalAssigned = assignedTasks.Count;

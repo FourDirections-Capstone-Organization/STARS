@@ -301,4 +301,71 @@ public class TaskServiceCreatedByFilterTests
         Assert.Equal(2, result.Data!.TotalCount);
         Assert.Equal(2, result.Data.Items.Count);
     }
+
+    [Theory]
+    [InlineData(UserRole.Dispatcher)]
+    [InlineData(UserRole.Encoder)]
+    [InlineData(UserRole.Courier)]
+    [InlineData(UserRole.Accountant)]
+    public async Task GetAllAsync_WithCreatedByUserId_NonCreatorOperationalRoles_ReturnsEmptyEvenIfTasksExist(UserRole operationalRole)
+    {
+        using var db = CreateDbContext();
+        var service = CreateTaskService(db);
+
+        var operationalUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-OPERATIONAL-01",
+            Email = "operational@speedex.com",
+            PasswordHash = "hash",
+            FirstName = "Op",
+            LastName = "Worker",
+            Role = operationalRole,
+            IsActive = true
+        };
+        db.Users.Add(operationalUser);
+
+        // Even if bad/legacy data has tasks created by this user:
+        db.Tasks.Add(new BackendTask
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task with operational creator",
+            Description = "Should not be returned under Created Tasks",
+            CreatedById = operationalUser.Id,
+            CreatedBy = operationalUser,
+            Deadline = DateTime.UtcNow.AddDays(7),
+            Status = Backend.Models.Enums.TaskStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var result = await service.GetAllAsync(
+            requestUserId: operationalUser.Id,
+            requestUserRole: UserRole.Manager,
+            requestUserDepartmentId: null,
+            createdByUserId: operationalUser.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.Data!.TotalCount);
+        Assert.Empty(result.Data.Items);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithCreatedByUserId_NonExistentCreator_ReturnsEmpty()
+    {
+        using var db = CreateDbContext();
+        var service = CreateTaskService(db);
+
+        var nonExistentUserId = Guid.NewGuid();
+
+        var result = await service.GetAllAsync(
+            requestUserId: Guid.NewGuid(),
+            requestUserRole: UserRole.Manager,
+            requestUserDepartmentId: null,
+            createdByUserId: nonExistentUserId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.Data!.TotalCount);
+        Assert.Empty(result.Data.Items);
+    }
 }
