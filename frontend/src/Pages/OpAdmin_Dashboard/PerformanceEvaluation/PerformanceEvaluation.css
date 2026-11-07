@@ -196,6 +196,11 @@
     color: #d97706;
 }
 
+.pe-badge-team {
+    background: rgba(14, 165, 233, 0.12);
+    color: #0284c7;
+}
+
 .pe-card-meta {
     display: flex;
     justify-content: space-between;
@@ -2975,6 +2980,62 @@
     gap: 8px;
 }
 
+.pe-chart-info-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: help;
+}
+
+.pe-chart-info-icon {
+    color: #94a3b8;
+    transition: color 0.15s ease;
+}
+
+.pe-chart-info-wrap:hover .pe-chart-info-icon,
+.pe-chart-info-wrap:focus .pe-chart-info-icon {
+    color: #475569;
+}
+
+.pe-chart-info-tooltip {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 8px 12px;
+    border-radius: 6px;
+    white-space: normal;
+    width: 270px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.pe-chart-info-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.775rem;
+    color: #38bdf8;
+}
+
+.pe-chart-info-tooltip p {
+    margin: 0;
+    color: #cbd5e1;
+}
+
+.pe-chart-info-wrap:hover .pe-chart-info-tooltip,
+.pe-chart-info-wrap:focus-within .pe-chart-info-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
 .pe-chart-subtitle {
     margin: 4px 0 0 0;
     font-size: 0.8rem;
@@ -3174,6 +3235,18 @@
     color: #f87171;
     font-size: 0.725rem;
     font-weight: 600;
+}
+
+.pe-chart-tooltip-aligned {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #34d399;
+    font-size: 0.725rem;
+    font-weight: 500;
 }
 
 .pe-dot {

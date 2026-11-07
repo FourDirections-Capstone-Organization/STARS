@@ -11098,7 +11098,10 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'performance_reviews' && (
                     <div className="dashboard-content" style={{ padding: '24px 32px' }}>
                         <div style={{ width: '100%', margin: '0 auto' }}>
-                            <PerformanceReviewTab departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))} />
+                            <PerformanceReviewTab
+                                departments={dashboardDepartments.map(d => ({ id: d.departmentId, name: d.departmentName }))}
+                                onNavigateToTab={handleNavChange}
+                            />
                         </div>
                     </div>
                 )}

@@ -9,7 +9,7 @@ import {
     Tooltip,
     Legend
 } from 'recharts';
-import { User, AlertCircle, BarChart3 } from 'lucide-react';
+import { User, AlertCircle, BarChart3, Info } from 'lucide-react';
 import { ReviewResultDTO, EmployeeReviewScoreDTO, CriterionScoreDTO } from '../types';
 
 export interface CriterionComparisonChartProps {
@@ -58,10 +58,14 @@ const CustomComparisonTooltip = ({ active, payload }: any) => {
                         {item.gap > 0 ? `+${item.gap.toFixed(1)}` : item.gap.toFixed(1)}
                     </strong>
                 </div>
-                {item.isOutlier && (
+                {item.isOutlier ? (
                     <div className="pe-chart-tooltip-outlier">
                         <AlertCircle size={12} />
-                        <span>High Variance Outlier (|gap| ≥ 2.0)</span>
+                        <span>High Variance Outlier (|gap| ≥ 2.0) — Significant perception gap; alignment discussion recommended.</span>
+                    </div>
+                ) : (
+                    <div className="pe-chart-tooltip-aligned">
+                        <span>Aligned ratings (|gap| &lt; 2.0)</span>
                     </div>
                 )}
             </div>
@@ -130,9 +134,24 @@ export const CriterionComparisonChart: React.FC<CriterionComparisonChartProps> =
                     <h3 className="pe-chart-title">
                         <BarChart3 size={18} />
                         <span>Criterion Comparison: Self vs. Manager</span>
+                        <div
+                            className="pe-chart-info-wrap"
+                            tabIndex={0}
+                            role="button"
+                            aria-label="Criterion comparison alignment and outlier guidance"
+                            data-testid="criterion-chart-info-icon"
+                        >
+                            <Info size={15} className="pe-chart-info-icon" />
+                            <div className="pe-chart-info-tooltip" data-testid="criterion-chart-info-tooltip">
+                                <strong>Alignment &amp; Outlier Guidance</strong>
+                                <p>
+                                    Compares self-assessment vs. manager scores per criterion (1 to 5 scale) to reveal perception gaps. Criteria with a variance of |gap| ≥ 2.0 are highlighted as outliers requiring alignment discussion.
+                                </p>
+                            </div>
+                        </div>
                     </h3>
-                    <p className="pe-chart-subtitle">
-                        Grouped rating alignment per evaluation criterion (1 to 5 scale).
+                    <p className="pe-chart-subtitle" data-testid="criterion-chart-subtitle">
+                        Grouped rating alignment per criterion (1 to 5 scale) to reveal perception gaps (|gap| ≥ 2.0 indicates an outlier).
                     </p>
                 </div>
 

@@ -145,17 +145,19 @@ describe('Pre-Delivery Past Delivery Deadline & SLA Adjustment Fix (Step 5)', ()
         });
 
         it('preserves valid future expectedDelivery dates as DMS pre-set deadlines without adjustment', () => {
+            const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+            const futureDateStr = futureDate.toISOString();
             const futureOrder: DmsPendingOrder = {
                 ...pastOrderBase,
                 orderId: 205,
                 waybillNo: 'WB-2026-000205',
-                expectedDelivery: '2026-10-31T08:00:00Z',
+                expectedDelivery: futureDateStr,
             };
 
             const taskInitial = buildPreDeliveryTaskInitialData(futureOrder);
 
             expect(taskInitial.isHistoricalDeadline).toBe(false);
-            expect(taskInitial.dueAt).toContain('2026-10-31');
+            expect(taskInitial.dueAt).toContain(futureDateStr.slice(0, 10));
             expect(taskInitial.deliveryDetails.isHistoricalDeadline).toBe(false);
         });
     });
