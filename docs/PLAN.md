@@ -57,9 +57,9 @@ Adding new priority levels not in the system, altering SLA hours/logic for non-u
   - Files: frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx, frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx
   - Description: Replace fragile `typeof priorityLevel === 'number'` checks in `fetchTasks`, `fetchAwaitingReview`, `mapTaskDetailToTaskView`, `fetchDuplicateDetails`, and SystemAdmin list views with the robust priority normalizer. Prevent edit modals from loading false 'Medium' defaults on existing tasks.
 
-- [ ] Step 5: Regression & Verification Testing
+- [x] Step 5: Regression & Verification Testing
   - Files: backend/Tests/TaskManagement/TaskPrioritySyncTests.cs, frontend/src/test/TaskPrioritySync.test.tsx
-  - Description: Run full backend and frontend test suites (`dotnet test` and `npm test`). Verify that tasks with Low, Medium, High, and Urgent maintain their set priority across create, assign, reassign, edit, lists, filters, and detail views.
+  - Description: Run full backend and frontend test suites (`dotnet test` and `npm test`). Verify that tasks with Low, Medium, High, and Urgent maintain their set priority across create, assign, reassign, edit, lists, filters, and detail views. All 1,000 backend tests and 359 frontend tests passing.
 
 ## Open questions / assumptions
 - Existing Database Records: We assume existing tasks in the database should NOT be automatically bulk-updated now. We will present the audit query to the user and request explicit confirmation before running any data remediation script.
