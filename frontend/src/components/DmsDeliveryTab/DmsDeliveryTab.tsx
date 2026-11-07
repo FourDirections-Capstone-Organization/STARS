@@ -33,6 +33,7 @@ import {
     downloadDeliveryPdfReport,
     downloadDeliveryCsvReport,
 } from './DeliveryReportExport';
+import { formatDriverDisplay } from '../TaskView/TaskView';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -48,6 +49,10 @@ export interface DmsDeliveryItem {
     senderAddress?: string;
     specialInstructions?: string;
     courierEmployeeId?: string;
+    courierFullName?: string;
+    courierIsActive?: boolean;
+    podUrl?: string;
+    podUploadedAt?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
     dmsStatus: string;
@@ -72,7 +77,9 @@ interface DmsDeliveryTabProps {
     onViewTask: (taskId: string) => void;
 }
 
-export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onViewTask }) => {
+const EMPTY_TASKS: any[] = [];
+
+export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TASKS, onViewTask }) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [performance, setPerformance] = useState<PerformanceSummary>({
@@ -187,6 +194,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 senderAddress: d.senderAddress,
                                 specialInstructions: d.specialInstructions,
                                 courierEmployeeId: d.courierEmployeeId || '',
+                                courierFullName: d.courierFullName,
+                                courierIsActive: d.courierIsActive,
+                                podUrl: d.podUrl,
+                                podUploadedAt: d.podUploadedAt,
                                 dmsWaybillNo: d.dmsWaybillNo,
                                 dmsOrderId: d.dmsOrderId,
                                 dmsStatus: d.dmsStatus || 'Pending',
@@ -323,6 +334,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                 (d.deliveryAddress && d.deliveryAddress.toLowerCase().includes(q)) ||
                 (d.area && d.area.toLowerCase().includes(q)) ||
                 (d.courierEmployeeId && d.courierEmployeeId.toLowerCase().includes(q)) ||
+                (d.courierFullName && d.courierFullName.toLowerCase().includes(q)) ||
                 (d.dmsStatus && d.dmsStatus.toLowerCase().includes(q))
             );
         });
@@ -624,11 +636,22 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Assigned Courier</span>
                                 <span className="dms-detail-val">
-                                    {selectedDelivery.courierEmployeeId ? (
-                                        <span className="dms-detail-driver-badge">{selectedDelivery.courierEmployeeId}</span>
-                                    ) : (
-                                        <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>
-                                    )}
+                                    {(() => {
+                                        const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
+                                        if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
+                                            return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
+                                        }
+                                        return (
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="dms-detail-driver-badge">{driverInfo.displayText}</span>
+                                                {driverInfo.isInactive && (
+                                                    <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>
+                                                        [Inactive]
+                                                    </span>
+                                                )}
+                                            </span>
+                                        );
+                                    })()}
                                 </span>
                             </div>
                             <div className="dms-detail-row">
@@ -912,7 +935,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                     <Search size={15} className="dms-search-icon" />
                     <input
                         type="text"
-                        placeholder="Search by Waybill, Recipient, Task, Address, Driver ID..."
+                        placeholder="Search by Waybill, Recipient, Task, Address, Driver Name/ID..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="dms-search-input"
@@ -967,7 +990,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 <th>Waybill No</th>
                                 <th>STARS Task</th>
                                 <th>Recipient & Address</th>
-                                <th>Driver ID</th>
+                                <th>Courier / Driver</th>
                                 <th>DMS Status</th>
                                 <th>GPS Location</th>
                                 <th>Last Ping</th>
@@ -1024,11 +1047,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                     </td>
 
                                     <td>
-                                        {item.courierEmployeeId ? (
-                                            <span className="dms-driver-badge">{item.courierEmployeeId}</span>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>
-                                        )}
+                                        {(() => {
+                                            const driverInfo = formatDriverDisplay(item.courierFullName, item.courierEmployeeId, item.courierIsActive);
+                                            if (driverInfo.displayText === 'Unassigned' && !item.courierEmployeeId) {
+                                                return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>;
+                                            }
+                                            return (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                    <span className="dms-driver-badge" data-testid="dms-courier-name">
+                                                        {driverInfo.displayText}
+                                                    </span>
+                                                    {driverInfo.isInactive && (
+                                                        <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>
+                                                            [Inactive]
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
 
                                     <td>
