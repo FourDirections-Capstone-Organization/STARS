@@ -157,7 +157,8 @@ describe('Pre-Delivery Past Delivery Deadline & SLA Adjustment Fix (Step 5)', ()
             const taskInitial = buildPreDeliveryTaskInitialData(futureOrder);
 
             expect(taskInitial.isHistoricalDeadline).toBe(false);
-            expect(taskInitial.dueAt).toContain(futureDateStr.slice(0, 10));
+            const expectedLocalDay = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, '0')}-${String(futureDate.getDate()).padStart(2, '0')}`;
+            expect(taskInitial.dueAt).toContain(expectedLocalDay);
             expect(taskInitial.deliveryDetails.isHistoricalDeadline).toBe(false);
         });
     });
