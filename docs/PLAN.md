@@ -89,7 +89,7 @@ Make DMS-uploaded Proof of Delivery (POD) files visible in STARS on matching tas
 
 ## Steps
 
-- [ ] Step 1: Backend DTO Harmonization, Driver Lookup & Authenticated POD Proxy
+- [x] Step 1: Backend DTO Harmonization, Driver Lookup & Authenticated POD Proxy
   - Files: `backend/Models/DTOs/DmsIntegrationDTOs.cs`, `backend/Modules/DmsIntegration/IDmsIntegrationService.cs`, `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Controllers/DmsIntegrationController.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Description: Add `PodUrl`, `CourierFullName`, and `CourierIsActive` to DTOs. Implement batch driver name resolution in `GetPerformanceSummaryAsync` and `GetDeliveryDetailAsync`. Implement authenticated POD retrieval and proxy download endpoint with task RBAC enforcement. Add unit and integration tests.
 

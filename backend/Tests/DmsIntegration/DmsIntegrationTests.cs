@@ -448,4 +448,370 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("DRV-HERO-01", record.DriverId);
         Assert.True(record.IsOnTime);
     }
+
+    [Fact]
+    public async Task GetPerformanceSummary_ResolvesDriverNamesFromUsersTable()
+    {
+        var activeDriver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-101",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            Email = "jdelacruz@example.com",
+            IsActive = true,
+            IsDeactivated = false,
+            Username = "jdelacruz",
+            PasswordHash = "hash",
+            Role = UserRole.Courier
+        };
+        var inactiveDriver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-102",
+            FirstName = "Pedro",
+            LastName = "Penduko",
+            Email = "ppenduko@example.com",
+            IsActive = false,
+            IsDeactivated = true,
+            Username = "ppenduko",
+            PasswordHash = "hash",
+            Role = UserRole.Courier
+        };
+        _db.Users.AddRange(activeDriver, inactiveDriver);
+
+        _db.DmsDeliveryPerformances.AddRange(
+            new DmsDeliveryPerformance
+            {
+                WaybillNo = "WB-PERF-01",
+                DriverId = "DRV-101",
+                CompletedAt = DateTime.UtcNow.AddMinutes(-10),
+                SlaTargetAt = DateTime.UtcNow.AddMinutes(30),
+                IsOnTime = true,
+                ReceivedAt = DateTime.UtcNow
+            },
+            new DmsDeliveryPerformance
+            {
+                WaybillNo = "WB-PERF-02",
+                DriverId = "DRV-102",
+                CompletedAt = DateTime.UtcNow.AddMinutes(-5),
+                SlaTargetAt = DateTime.UtcNow.AddMinutes(30),
+                IsOnTime = true,
+                ReceivedAt = DateTime.UtcNow
+            },
+            new DmsDeliveryPerformance
+            {
+                WaybillNo = "WB-PERF-03",
+                DriverId = "UNKNOWN-999",
+                CompletedAt = DateTime.UtcNow.AddMinutes(-2),
+                SlaTargetAt = DateTime.UtcNow.AddMinutes(30),
+                IsOnTime = true,
+                ReceivedAt = DateTime.UtcNow
+            }
+        );
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetPerformanceSummaryAsync();
+
+        Assert.True(result.IsSuccess);
+        var rec1 = result.Data!.Records.First(r => r.WaybillNo == "WB-PERF-01");
+        Assert.Equal("Juan Dela Cruz", rec1.DriverName);
+        Assert.True(rec1.DriverIsActive);
+
+        var rec2 = result.Data.Records.First(r => r.WaybillNo == "WB-PERF-02");
+        Assert.Equal("Pedro Penduko", rec2.DriverName);
+        Assert.False(rec2.DriverIsActive);
+
+        var rec3 = result.Data.Records.First(r => r.WaybillNo == "WB-PERF-03");
+        Assert.Equal("UNKNOWN-999", rec3.DriverName);
+        Assert.Null(rec3.DriverIsActive);
+    }
+
+    [Fact]
+    public async Task GetDeliveryDetail_ResolvesCourierFullNameAndPodMetadata()
+    {
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-COUR-01",
+            FirstName = "Maria",
+            LastName = "Clara",
+            IsActive = true,
+            IsDeactivated = false,
+            Username = "mclara",
+            PasswordHash = "hash",
+            Role = UserRole.Courier,
+            Email = "mclara@example.com"
+        };
+        _db.Users.Add(driver);
+
+        var taskId = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = taskId,
+            Title = "Delivery Task with POD",
+            Description = "VIP Shipment",
+            PriorityLevel = PriorityLevel.High,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Crisostomo Ibarra",
+            RecipientContact = "09181112233",
+            DeliveryAddress = "Intramuros, Manila",
+            CourierEmployeeId = "DRV-COUR-01",
+            DmsWaybillNo = "WB-POD-001",
+            DmsStatus = "Delivered"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+
+        var podAttachment = new TaskAttachment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            FileName = "POD_WB-POD-001.jpg",
+            FilePath = "https://dms.test.local/uploads/pod-001.jpg",
+            FileSize = 1024,
+            FileType = ".jpg",
+            Description = "Proof of Delivery (POD) from DMS",
+            UploadedById = driver.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TaskAttachments.Add(podAttachment);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetDeliveryDetailAsync(taskId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Maria Clara", result.Data!.CourierFullName);
+        Assert.True(result.Data.CourierIsActive);
+        Assert.Equal("POD_WB-POD-001.jpg", result.Data.PodFileName);
+        Assert.Equal($"/api/dms-integration/tasks/{taskId}/pod/download?inline=true", result.Data.PodUrl);
+        Assert.Equal("Maria Clara", result.Data.PodUploadedBy);
+    }
+
+    [Fact]
+    public async Task ProcessStatusUpdate_PersistsPodAttachmentAndUpdatesStatus()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = taskId,
+            Title = "Status Update Task",
+            Description = "Testing POD extraction",
+            PriorityLevel = PriorityLevel.Medium,
+            Deadline = DateTime.UtcNow.AddDays(1),
+            Status = Backend.Models.Enums.TaskStatus.InProgress
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Test Recipient",
+            RecipientContact = "09990001111",
+            DeliveryAddress = "Quezon City",
+            DmsWaybillNo = "WB-WEBHOOK-99",
+            DmsStatus = "In Transit"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var webhook = new DmsStatusWebhookDTO
+        {
+            WaybillNo = "WB-WEBHOOK-99",
+            StarsTaskId = taskId,
+            Status = "Delivered",
+            DriverId = "DRV-NEW-99",
+            PodUrl = "https://dms.test.local/uploads/signed-receipt.png",
+            Timestamp = DateTime.UtcNow
+        };
+
+        var response = await service.ProcessStatusUpdateAsync(webhook);
+        Assert.True(response.IsSuccess);
+
+        var updatedTask = await _db.Tasks.FirstAsync(t => t.Id == taskId);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, updatedTask.Status);
+
+        var updatedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("Delivered", updatedDetail.DmsStatus);
+        Assert.Equal("DRV-NEW-99", updatedDetail.CourierEmployeeId);
+
+        var attachment = await _db.TaskAttachments.FirstOrDefaultAsync(a => a.TaskId == taskId);
+        Assert.NotNull(attachment);
+        Assert.Contains("Proof of Delivery", attachment.Description);
+        Assert.Equal("https://dms.test.local/uploads/signed-receipt.png", attachment.FilePath);
+        Assert.Equal("signed-receipt.png", attachment.FileName);
+    }
+
+    [Fact]
+    public async Task GetTaskPod_EnforcesRbacPermissionsCorrectly()
+    {
+        var managerId = Guid.NewGuid();
+        var assignedCourierId = Guid.NewGuid();
+        var unassignedCourierId = Guid.NewGuid();
+
+        var managerUser = new User
+        {
+            Id = managerId,
+            EmployeeNumber = "MGR-001",
+            FirstName = "Manager",
+            LastName = "User",
+            Email = "mgr@example.com",
+            Role = UserRole.Manager
+        };
+        var assignedCourierUser = new User
+        {
+            Id = assignedCourierId,
+            EmployeeNumber = "DRV-ASSIGNED",
+            FirstName = "Assigned",
+            LastName = "Courier",
+            Email = "assigned@example.com",
+            Role = UserRole.Courier
+        };
+        var unassignedCourierUser = new User
+        {
+            Id = unassignedCourierId,
+            EmployeeNumber = "DRV-UNASSIGNED",
+            FirstName = "Unassigned",
+            LastName = "Courier",
+            Email = "unassigned@example.com",
+            Role = UserRole.Courier
+        };
+        _db.Users.AddRange(managerUser, assignedCourierUser, unassignedCourierUser);
+
+        var taskId = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = taskId,
+            Title = "RBAC POD Task",
+            Description = "Confidential customer details",
+            PriorityLevel = PriorityLevel.High,
+            Deadline = DateTime.UtcNow.AddDays(1),
+            IsConfidential = false,
+            Assignments = new List<TaskAssignment>
+            {
+                new() { TaskId = taskId, AssignedUserId = assignedCourierId }
+            }
+        };
+        _db.Tasks.Add(task);
+
+        var podAttachment = new TaskAttachment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            FileName = "POD_Proof.jpg",
+            FilePath = "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+            Description = "Proof of Delivery (POD) from DMS",
+            UploadedById = assignedCourierId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TaskAttachments.Add(podAttachment);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+
+        // 1. Manager has access
+        var mgrResult = await service.GetTaskPodAsync(taskId, managerId, UserRole.Manager);
+        Assert.True(mgrResult.IsSuccess);
+        Assert.True(mgrResult.Data!.HasPod);
+        Assert.Equal("POD_Proof.jpg", mgrResult.Data.FileName);
+
+        // 2. Assigned Courier has access
+        var assignedResult = await service.GetTaskPodAsync(taskId, assignedCourierId, UserRole.Courier);
+        Assert.True(assignedResult.IsSuccess);
+        Assert.True(assignedResult.Data!.HasPod);
+
+        // 3. Unassigned Courier is Denied (403)
+        var unassignedResult = await service.GetTaskPodAsync(taskId, unassignedCourierId, UserRole.Courier);
+        Assert.False(unassignedResult.IsSuccess);
+        Assert.Contains("Access denied", unassignedResult.Message);
+
+        // 4. Confidential task: Courier is denied even if assigned
+        task.IsConfidential = true;
+        await _db.SaveChangesAsync();
+
+        var confResult = await service.GetTaskPodAsync(taskId, assignedCourierId, UserRole.Courier);
+        Assert.False(confResult.IsSuccess);
+        Assert.Contains("Access denied: task is confidential", confResult.Message);
+
+        // Manager still has access to confidential tasks
+        var mgrConfResult = await service.GetTaskPodAsync(taskId, managerId, UserRole.Manager);
+        Assert.True(mgrConfResult.IsSuccess);
+    }
+
+    [Fact]
+    public async Task DownloadTaskPod_ReturnsBytesForBase64AndEnforcesRbac()
+    {
+        var managerId = Guid.NewGuid();
+        var unauthorizedUserId = Guid.NewGuid();
+
+        var managerUser = new User
+        {
+            Id = managerId,
+            EmployeeNumber = "MGR-002",
+            FirstName = "Manager",
+            LastName = "Download",
+            Email = "mgrdown@example.com",
+            Role = UserRole.Manager
+        };
+        var unauthorizedUser = new User
+        {
+            Id = unauthorizedUserId,
+            EmployeeNumber = "DSP-001",
+            FirstName = "Dispatcher",
+            LastName = "User",
+            Email = "dsp@example.com",
+            Role = UserRole.Dispatcher
+        };
+        _db.Users.AddRange(managerUser, unauthorizedUser);
+
+        var taskId = Guid.NewGuid();
+        var dummyBytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+        var base64Str = $"data:image/png;base64,{Convert.ToBase64String(dummyBytes)}";
+
+        var task = new Backend.Models.Task
+        {
+            Id = taskId,
+            Title = "Download POD Task",
+            Description = "Test download",
+            PriorityLevel = PriorityLevel.Medium,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var pod = new TaskAttachment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            FileName = "delivery_receipt.png",
+            FilePath = base64Str,
+            Description = "Proof of Delivery (POD) from DMS",
+            UploadedById = managerId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TaskAttachments.Add(pod);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+
+        // Unauthorized user (unassigned dispatcher)
+        var unauthResult = await service.DownloadTaskPodAsync(taskId, unauthorizedUserId, UserRole.Dispatcher);
+        Assert.Null(unauthResult);
+
+        // Authorized Manager
+        var authResult = await service.DownloadTaskPodAsync(taskId, managerId, UserRole.Manager);
+        Assert.NotNull(authResult);
+        Assert.Equal("delivery_receipt.png", authResult.Value.FileName);
+        Assert.Equal("image/png", authResult.Value.ContentType);
+        Assert.Equal(dummyBytes, authResult.Value.FileBytes);
+    }
 }
