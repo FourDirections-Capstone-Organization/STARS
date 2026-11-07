@@ -1,65 +1,87 @@
-# Performance Evaluation & Employee AI Improvement Recommendations – Plan
+# Organizational Structure Employee Dashboard – Filters, Cancelled Status, & Role-Based Tabs (RBAC)
 
-**Feature branch:** `feature/employee-performance-ai` | **Step branches:** `step-N-<short-name>`
-Never push directly to `refactoring/bug-fix`. Commit each step on a step branch and merge to feature branch.
+**Feature branch:** `fix/employee-dashboard-filters-and-rbac` | **Step branches:** `step-N-<short-name>`
+Never push directly to `refactoring/bug-fix`. Commit each step on a step branch and merge to the working feature branch.
 
-## Out of scope
-Redesigning unrelated employee dashboard tabs, modifying FOMS reports, or altering task execution workflows.
+> [!IMPORTANT]
+> **Scope Confirmation**: This fix applies **strictly and exclusively** to the Employee Dashboard accessed within the **Organizational Structure tab** (`OrgStructureTab.tsx` $\rightarrow$ `EmployeeDashboard/`), which appears when clicking an employee node in the hierarchy tree. It does NOT touch the personal operational employee portal (`OpEmployee_Dashboard.tsx`) or other dashboards.
 
-## Findings so far
-- Models, DbSets, scoring, workflow, Groq LLM, & CSV export exist in backend/Modules/PerformanceEvaluation & Controllers.
-- Configurable KPI engine IKpiCalculationEngine.CalculateEmployeeKpiAsync(employeeId, start, end) is callable per employee/period.
-- Existing Groq LLM integration (GroqSuitabilityService, GroqSettings) is reusable; no new tables or fields needed.
-- Recharts ^3.8.1 installed; ClosedXML & plain-text CSV export exist with formula-injection guard.
-- Employee tab exists as "My Scorecard" in OpEmployee_Dashboard.tsx & EmployeeScorecardView.tsx; needs rename & AI advice.
+## 1. Root Cause Analysis (Broken Dropdown Filter)
 
-## Steps
+Prior to implementing changes, the codebase was investigated across the UI (`EmployeeTaskLists.tsx`), the request query builder (`employeeDashboardService.ts`), and the server (`TaskController.cs`, `TaskService.cs`).
 
-- [ ] Step 1: Verify and configure evaluation domain models, relationships, and EF Core migration
-  - Files: backend/Models/EvaluationTemplate.cs, PerformanceReview.cs, CriterionRating.cs, AiRecommendation.cs, DevelopmentPlanItem.cs, backend/Data/AppDbContext.cs
-  - Verify: dotnet build backend/Backend.csproj succeeds and EF schema matches existing startup DDL migrations
+### Findings:
+1. **Server-Side Enum Parsing Failure (`backend/Controllers/TaskController.cs`)**:
+   - `TaskController.GetAll` receives `[FromQuery] string? status`.
+   - It parses via `Enum.TryParse<Models.Enums.TaskStatus>(firstStatus, true, out var sEnum)`.
+   - In C#, `Enum.TryParse` strictly requires enum identifier names without spaces (e.g., `InProgress`, `OnHold`, `NotStarted`).
+   - The UI `<select>` sends human-readable strings with spaces or aliases:
+     - `"In Progress"`: `Enum.TryParse` fails because the enum identifier is `InProgress`.
+     - `"On Hold"`: `Enum.TryParse` fails because the enum identifier is `OnHold`.
+     - `"Pending"`: `Enum.TryParse` fails because `Pending` does not exist in `TaskStatus` (canonical value is `NotStarted`).
+   - **Result**: `parsedStatus` remains `null`. The backend executes `_taskService.GetAllAsync` with `status = null`, returning ALL tasks completely unfiltered.
+2. **Client-Side Filter Mismatch (`EmployeeTaskLists.tsx`)**:
+   - In `displayItems` (used in static/controlled mode or when filtering client-side), the filter compared `formatStatus(item.status).toLowerCase()` against `statusFilter.toLowerCase()`.
+   - For `status = 0`, `formatStatus` produces `"Not Started"`. Selecting `"Pending"` resulted in `"not started" === "pending"` (false), hiding all tasks.
+3. **Missing "Cancelled" Status**:
+   - The dropdown lacked `<option value="Cancelled">Cancelled</option>` entirely, despite `TaskStatus.Cancelled = 5` existing in the domain model.
+4. **Shared Tab Filter State**:
+   - `EmployeeTaskLists.tsx` maintained a single shared `statusFilter`, `searchQuery`, and `page` across both tabs, causing filters on the Assigned tab to inadvertently mutate the Created tab context.
+5. **Lack of Server-Side Enforcement for Created Tasks (`TaskService.cs`)**:
+   - `TaskService.GetAllAsync` filtered solely by `query.Where(t => t.CreatedById == createdByUserId.Value)` without verifying whether the queried user has task creation privileges under RBAC.
 
-- [ ] Step 2: Implement review scoring engine with KPI linkage, bands, and outlier detection (extensibility: new criterion type is one enum value plus one scorer case)
-  - Files: backend/Modules/PerformanceEvaluation/IPerformanceReviewScoringService.cs, PerformanceReviewScoringService.cs, backend/Models/DTOs/PerformanceEvaluationDTOs.cs
-  - Verify: Unit tests in backend/Tests/Analytics/PerformanceReviewScoringTests.cs pass (normalized scores, KPI passthrough, outlier flag, frozen bypass)
+---
 
-- [ ] Step 3: Implement review workflow and controller endpoints (security: server-side workflow enforcement, manager permission limits on review and export)
-  - Files: backend/Modules/PerformanceEvaluation/ReviewWorkflowService.cs, EvaluationTemplateService.cs, backend/Controllers/PerformanceEvaluationController.cs
-  - Verify: Unit tests in backend/Tests/Analytics/ReviewWorkflowServiceTests.cs and integration tests in PerformanceEvaluationControllerTests.cs pass
+## 2. Out of Scope
+- Personal operational employee portal (`OpEmployee_Dashboard.tsx`) and general task board tabs in `OpAdmin_Dashboard.tsx` or `TaskManager.tsx`.
+- Modifying database migrations (all enum values `NotStarted = 0`, `InProgress = 1`, `DonePendingReview = 2`, `Completed = 3`, `OnHold = 4`, `Cancelled = 5` already exist).
+- Changing role hierarchy levels or updating user account permissions outside the task filtering scope.
 
-- [ ] Step 4: Implement AI recommendation service using Groq LLM (security: de-identified AI payload, validated LLM JSON; extensibility: new AI output section is one response field plus one prompt line)
-  - Files: backend/Modules/PerformanceEvaluation/AiRecommendationGenerationService.cs, AiRecommendationModels.cs, backend/Controllers/PerformanceEvaluationController.cs
-  - Verify: Unit tests in backend/Tests/Analytics/AiRecommendationServiceTests.cs pass (PII exclusion, 500-char comment trim, JSON validation, fallback handling)
+---
 
-- [ ] Step 5: Implement development plan endpoints and CSV export (security: manager permission limits on review and export, CSV formula-injection protection)
-  - Files: backend/Modules/PerformanceEvaluation/PerformanceReviewCsvExportService.cs, backend/Controllers/PerformanceEvaluationController.cs
-  - Verify: Unit tests in backend/Tests/Analytics/PerformanceReviewCsvExportAndDevelopmentPlanTests.cs pass (=+-@ prefix escaping, RFC 4180 quoting)
+## 3. Implementation Steps
 
-- [ ] Step 6: Build manager template editor, review cycle manager, and criteria rating grid
-  - Files: frontend/src/services/performanceEvaluationService.ts, frontend/src/Pages/OpAdmin_Dashboard/PerformanceEvaluation/EvaluationTemplateEditor.tsx, RatingGrid.tsx, PerformanceReviewTab.tsx
-  - Verify: Vitest suites in frontend/src/test/EvaluationTemplates.test.tsx and frontend/src/test/PerformanceReviews.test.tsx pass
+- [ ] Step 1: Backend status parsing normalization and RBAC helper
+  - Files: `backend/Controllers/TaskController.cs`, `backend/Modules/RoleBasedAccessControl/RoleService.cs`
+  - Normalize `status` in `TaskController.GetAll` (strip spaces, map `"Pending"` -> `NotStarted`, `"Done"` -> `Completed`, `"Cancelled"`/`"Canceled"` -> `Cancelled`, handle integer codes `"0"`-`"5"` and `"Overdue"`).
+  - Expose `RoleService.CanCreateTasks(UserRole role) => GetPermissionsForRole(role).Contains("CreateTasks")` leveraging existing `"CreateTasks"` permission.
+  - Verify: `dotnet build backend/Backend.csproj` succeeds.
 
-- [ ] Step 7: Build manager AI recommendation review panel and development plan assignment interface
-  - Files: frontend/src/Pages/OpAdmin_Dashboard/PerformanceEvaluation/AiRecommendationPanel.tsx, DevelopmentPlanPanel.tsx, ReviewDetailView.tsx
-  - Verify: Vitest suite in frontend/src/test/AiRecommendationAndDevPlan.test.tsx passes (approval flow, manual overrides, plan item creation)
+- [ ] Step 2: Server-side RBAC enforcement for `createdByUserId`
+  - Files: `backend/Modules/TaskManagement/TaskService.cs`, `backend/Modules/OrganizationalStructure/HierarchyService.cs`
+  - In `TaskService.GetAllAsync`, when `createdByUserId.HasValue`, inspect the creator's role; if not permitted to create tasks (`!RoleService.CanCreateTasks`), return an empty result (`Items` empty, `TotalCount = 0`).
+  - In `HierarchyService.GetEmployeeDashboardAsync`, set `totalCreatedTasks = 0` for non-creator operational roles.
+  - Verify: Backend unit tests in `TaskServiceCreatedByFilterTests.cs` and `HierarchyDashboardTests.cs` pass.
 
-- [ ] Step 8: Rename MyScoreBoard tab to "My Performance" and display employee evaluation overview with self-assessment submission
-  - Files: frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.tsx, frontend/src/components/EmployeeScorecard/EmployeeScorecardView.tsx, EmployeeScorecardView.css
-  - Verify: Vitest tests for employee dashboard navigation and self-assessment rating submission in SelfAssessment workflow stage pass
+- [ ] Step 3: Tab renaming across UI, charts, empty states, and tests
+  - Files: `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `EmployeeDashboard.tsx`, `EmployeeCharts.tsx`, test files
+  - Rename tab buttons: "Tasks assigned to them" -> "Assigned Tasks", "Tasks created by them" -> "Tasks Created".
+  - Rename chart workload breakdown labels and legends: "Assigned Tasks" and "Tasks Created".
+  - Clean up created tab empty message to neutral "No tasks created by this employee".
+  - Verify: Updated label assertions pass in `EmployeeCharts.test.tsx` and `EmployeeDashboard.test.tsx`.
 
-- [ ] Step 9: Add employee AI improvement recommendation card, development checklist, and Recharts performance comparison
-  - Files: frontend/src/components/EmployeeScorecard/EmployeeScorecardView.tsx, frontend/src/Pages/OpAdmin_Dashboard/PerformanceEvaluation/charts/CriterionComparisonChart.tsx
-  - Verify: Vitest tests for employee viewing approved improvement aspects, action items, training topics, toggling checklist, and Recharts rendering pass
+- [ ] Step 4: Dropdown filter fix, Cancelled status, independent tab filter states, and RBAC tab hiding
+  - Files: `frontend/src/components/Auth/authRedirect.ts`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `EmployeeDashboard.tsx`
+  - Implement `canRoleCreateTasks(role)` helper in `authRedirect.ts`.
+  - Add "Cancelled" option to `<select id="task-status-filter">` on both tabs.
+  - Separate filter states per tab (`assignedFilterState` vs `createdFilterState` for search, status, and page).
+  - Changing filter resets page to 1.
+  - For operational roles (Dispatcher, Encoder, Courier, Accountant), completely hide/omit the "Tasks Created" tab button and force `activeTab = 'assigned'`.
+  - Verify: Vitest tests in `EmployeeTaskLists.test.tsx` pass.
 
-- [ ] Step 10: Run full backend and frontend test suites and production build verification
-  - Files: backend/Tests/Backend.Tests.csproj, frontend/package.json
-  - Verify: dotnet test backend/Tests/Backend.Tests.csproj --configuration Release and npm --prefix frontend test pass with 0 failures
+- [ ] Step 5: Full verification & automated test coverage
+  - Files: `backend/Tests/TaskManagement/TaskServiceCreatedByFilterTests.cs`, `frontend/src/test/EmployeeTaskLists.test.tsx`, `frontend/src/test/EmployeeDashboard.test.tsx`, `frontend/src/test/EmployeeDashboardEdgeCases.test.tsx`
+  - Add backend tests for operational role `createdByUserId` returning 0 tasks, and status filter variations ("Cancelled", "In Progress", "On Hold", "All").
+  - Add frontend tests for tab visibility (Manager, Coordinator vs Operational roles), Cancelled status filter, and independent filter states.
+  - Run full backend and frontend test suites (`dotnet test`, `npm test`).
 
-## Open questions / assumptions
-- LLM provider & data policy: Groq llama-3.3-70b-versatile with de-identified payload (roles, scores, comments; no names/IDs).
-- Approved AI text in CSV: Omit AI columns from CSV export by default; include only if product owner specifies format.
-- Charting library: Recharts ^3.8.1 is already installed and utilized; no new charting library needed.
-- Template/band changes on open vs finalized: Open reviews re-compute live; finalized reviews freeze immutable scores.
-- Employee AI recommendation visibility: Employees view AI improvement recommendations only after manager approval.
-- Role access: ManagerOnly policy enforces admin actions; non-manager employees access only their own records.
-- Self-assessment workflow: Employees can submit self-ratings only while review status is SelfAssessment.
+---
+
+## 4. Open Questions / Assumptions
+1. **"All Statuses" inclusion of Cancelled tasks**:
+   - *Finding*: `TaskService.GetAllAsync` does NOT exclude cancelled tasks unless `excludeStatus` or `excludeStatuses` is explicitly provided.
+   - *Decision*: In the Employee Dashboard, "All Statuses" includes all tasks (including Cancelled) to preserve a complete historical audit trail for managers viewing personnel records. Selecting "Cancelled" filters specifically to cancelled tasks.
+2. **Server-side response for operational user on `createdByUserId`**:
+   - *Decision*: Follows the existing API convention by returning `ApiResponseDTO<TaskListResponseDTO>.Success` with an empty collection (`Items = []`, `TotalCount = 0`). This safely prevents data leaks without causing unexpected client-side network error crashes.
+3. **Role determination**:
+   - *Decision*: Strictly evaluated based on the role of the employee being inspected (`data.role`), not the session role of the viewing administrator.
