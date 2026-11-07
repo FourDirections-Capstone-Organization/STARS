@@ -293,6 +293,17 @@ export function normalizeRole(role: string): NormalizedUserRole | '' {
 }
 
 /**
+ * Determines whether a given user role has privileges to create tasks.
+ * In STARS, only Manager and Coordinator roles can create tasks.
+ * Operational roles (Dispatcher, Encoder, Courier, Accountant) cannot create tasks.
+ */
+export function canRoleCreateTasks(role?: string | null): boolean {
+    if (!role) return false;
+    const normalized = normalizeRole(role);
+    return normalized === 'Manager' || normalized === 'Coordinator';
+}
+
+/**
  * Role-to-dashboard routes for STARS
  */
 export const dashboardRoutes: Record<string, string> = {
