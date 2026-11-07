@@ -53,7 +53,7 @@ Adding new priority levels not in the system, altering SLA hours/logic for non-u
   - Files: frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.tsx, frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.css
   - Description: Add robust priority normalization helper handling PascalCase strings ("Low", "Medium", "High", "Urgent"), lowercase strings, and enum numbers. Update `dtoToTask` to accurately map `dto.priorityLevel` and `dto.priority`. Expand `Priority` union to include `'urgent'`, update `priorityMeta`, add Urgent filter option, and ensure filters/sorting respect actual priority.
 
-- [ ] Step 4: Coordinator & Admin Dashboards Priority Normalization (`OpAdmin` & `SystemAdmin`)
+- [x] Step 4: Coordinator & Admin Dashboards Priority Normalization (`OpAdmin` & `SystemAdmin`)
   - Files: frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx, frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx
   - Description: Replace fragile `typeof priorityLevel === 'number'` checks in `fetchTasks`, `fetchAwaitingReview`, `mapTaskDetailToTaskView`, `fetchDuplicateDetails`, and SystemAdmin list views with the robust priority normalizer. Prevent edit modals from loading false 'Medium' defaults on existing tasks.
 

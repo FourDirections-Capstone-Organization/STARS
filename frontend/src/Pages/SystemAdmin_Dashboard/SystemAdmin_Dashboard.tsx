@@ -72,7 +72,7 @@ import DataTable, { ActionsDropdown } from '../../components/ui/DataTable';
 import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
-import { ReportsTab, TeamTab, TeamMember } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
+import { ReportsTab, TeamTab, TeamMember, normalizeCoordinatorPriority } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import { EvaluationTemplateTab, PerformanceReviewTab } from '../OpAdmin_Dashboard/PerformanceEvaluation';
 import { KpiConfigurationTab } from '../OpAdmin_Dashboard/KpiConfiguration';
 import TaskManager from '../../components/TaskManager/TaskManager';
@@ -3845,7 +3845,7 @@ export default function Dashboard() {
             taskId: t.id ?? t.taskId ?? '',
             taskTitle: t.title ?? t.taskTitle ?? t.name ?? '',
             taskDescription: t.description ?? t.taskDescription ?? '',
-            priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) ?? 'Medium',
+            priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
             dueAt: t.deadline ?? t.dueAt ?? t.dueDate ?? null,
             taskStatus: mappedStatus,
             taskRemarks: t.remarks ?? t.taskRemarks ?? '',
@@ -3932,7 +3932,7 @@ export default function Dashboard() {
                     project: t.taskCategory ?? (t.classification === 1 ? 'SpecialTask' : ''),
                     assignee: firstAssignee,
                     assignees: rawAssignees,
-                    priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) || 'Medium',
+                    priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
                     status: statusVal,
                     dueDate: t.deadline ?? t.dueAt ?? undefined,
                     progress: statusVal === 'Done' ? 100 : statusVal === 'In progress' ? 50 : statusVal === 'In review' ? 80 : statusVal === 'To do' ? 10 : 0,

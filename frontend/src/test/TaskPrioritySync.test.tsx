@@ -6,29 +6,10 @@ import {
     priorityMeta,
     Priority
 } from '../Pages/OpEmployee_Dashboard/OpEmployee_Dashboard';
+import { normalizeCoordinatorPriority } from '../Pages/OpAdmin_Dashboard/OpAdmin_Dashboard';
 
 // PRIORITY_LABELS as used across dashboards
 const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
-
-// Coordinator priority normalizer (PascalCase)
-export const normalizeCoordinatorPriority = (val: any): 'Low' | 'Medium' | 'High' | 'Urgent' => {
-    if (val !== undefined && val !== null) {
-        if (typeof val === 'number') {
-            const labels: Record<number, 'Low' | 'Medium' | 'High' | 'Urgent'> = {
-                0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent'
-            };
-            if (val in labels) return labels[val];
-        }
-        if (typeof val === 'string' && val.trim()) {
-            const s = val.trim().toLowerCase();
-            if (s === 'low') return 'Low';
-            if (s === 'medium') return 'Medium';
-            if (s === 'high') return 'High';
-            if (s === 'urgent') return 'Urgent';
-        }
-    }
-    return 'Medium';
-};
 
 describe('Task Priority Synchronization & Mapping Tests', () => {
     describe('Bug Reproduction: Legacy Buggy Mapping vs Fixed Mapping', () => {
