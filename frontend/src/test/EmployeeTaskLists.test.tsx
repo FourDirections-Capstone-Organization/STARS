@@ -832,6 +832,44 @@ describe('EmployeeTaskLists Component', () => {
                 expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
             });
 
+            it('maintains independent status filter selection across Assigned and Created tabs', () => {
+                const handleStatusChange = vi.fn();
+                render(
+                    <EmployeeTaskLists
+                        employeeId="emp-101"
+                        employeeRole="Coordinator"
+                        assignedTasksData={mockAssignedData}
+                        createdTasksData={mockCreatedData}
+                        onStatusChange={handleStatusChange}
+                    />
+                );
+
+                // 1. On Assigned tab, select "In Progress"
+                const assignedStatusSelect = screen.getByTestId('task-status-filter') as HTMLSelectElement;
+                fireEvent.change(assignedStatusSelect, { target: { value: 'In Progress' } });
+                expect(assignedStatusSelect).toHaveValue('In Progress');
+                expect(handleStatusChange).toHaveBeenCalledWith('In Progress');
+
+                // 2. Switch to Created tab
+                const createdTab = screen.getByTestId('tab-created');
+                fireEvent.click(createdTab);
+
+                // Created tab should default to "All"
+                const createdStatusSelect = screen.getByTestId('task-status-filter') as HTMLSelectElement;
+                expect(createdStatusSelect).toHaveValue('All');
+
+                // Select "Cancelled" on Created tab
+                fireEvent.change(createdStatusSelect, { target: { value: 'Cancelled' } });
+                expect(createdStatusSelect).toHaveValue('Cancelled');
+
+                // 3. Switch back to Assigned tab - status "In Progress" remains preserved
+                const assignedTab = screen.getByTestId('tab-assigned');
+                fireEvent.click(assignedTab);
+
+                const assignedStatusAgain = screen.getByTestId('task-status-filter') as HTMLSelectElement;
+                expect(assignedStatusAgain).toHaveValue('In Progress');
+            });
+
             it('resets page to 1 when changing search or status filter', () => {
                 const multiPageData: PaginatedTasksResponse = {
                     items: mockAssignedTasks,

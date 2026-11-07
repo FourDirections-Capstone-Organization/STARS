@@ -69,7 +69,7 @@ Prior to implementing changes, the codebase was investigated across the UI (`Emp
   - For operational roles (Dispatcher, Encoder, Courier, Accountant), completely hide/omit the "Tasks Created" tab button and force `activeTab = 'assigned'`.
   - Verify: Vitest tests in `EmployeeTaskLists.test.tsx` pass.
 
-- [ ] Step 5: Full verification & automated test coverage
+- [x] Step 5: Full verification & automated test coverage
   - Files: `backend/Tests/TaskManagement/TaskServiceCreatedByFilterTests.cs`, `frontend/src/test/EmployeeTaskLists.test.tsx`, `frontend/src/test/EmployeeDashboard.test.tsx`, `frontend/src/test/EmployeeDashboardEdgeCases.test.tsx`
   - Add backend tests for operational role `createdByUserId` returning 0 tasks, and status filter variations ("Cancelled", "In Progress", "On Hold", "All").
   - Add frontend tests for tab visibility (Manager, Coordinator vs Operational roles), Cancelled status filter, and independent filter states.
