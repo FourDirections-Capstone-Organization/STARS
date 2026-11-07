@@ -173,6 +173,9 @@ public class KpiCalculationEngine : IKpiCalculationEngine
             TotalHandlingHours = Math.Round(totalHandlingHours, 2),
             OverallScore = overallScore,
             OverallRating = overallRating,
+            OverallGreenThreshold = config.OverallGreenThreshold,
+            OverallAmberThreshold = config.OverallAmberThreshold,
+            OverallRedThreshold = config.OverallRedThreshold,
             Metrics = metrics
         };
     }

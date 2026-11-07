@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Award,
-    Download,
     FileText,
     FileSpreadsheet,
     Calendar,
@@ -9,9 +8,11 @@ import {
     AlertCircle,
     CheckCircle2,
     Clock,
-    Shield,
-    TrendingUp,
     Info,
+    HelpCircle,
+    ChevronDown,
+    ChevronUp,
+    X,
     Loader2
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
@@ -56,16 +57,42 @@ export const getRatingBadgeClass = (rating: TrafficLightRating | string): string
     }
 };
 
-export const getRatingIcon = (rating: TrafficLightRating | string) => {
+export const getRatingLabel = (rating: TrafficLightRating | string): string => {
     switch (rating) {
         case 'Green':
-            return <CheckCircle2 size={14} className="text-success" />;
+            return 'On Target';
         case 'Amber':
-            return <Clock size={14} className="text-warning" />;
+            return 'Needs Attention';
         case 'Red':
-            return <AlertCircle size={14} className="text-danger" />;
+            return 'Below Target';
         default:
-            return <Info size={14} />;
+            return 'In Evaluation';
+    }
+};
+
+export const getRatingDescription = (rating: TrafficLightRating | string): string => {
+    switch (rating) {
+        case 'Green':
+            return 'Good Performance — Meeting or exceeding operational targets across assigned tasks';
+        case 'Amber':
+            return 'Warning Zone — Approaching threshold limits; requires attention to prevent slipping';
+        case 'Red':
+            return 'Critical Red Zone — Performance breached minimum threshold standards; corrective action required';
+        default:
+            return 'Performance Evaluation';
+    }
+};
+
+export const getRatingIcon = (rating: TrafficLightRating | string, size: number = 14) => {
+    switch (rating) {
+        case 'Green':
+            return <CheckCircle2 size={size} className="rating-icon rating-icon-green" aria-hidden="true" />;
+        case 'Amber':
+            return <Clock size={size} className="rating-icon rating-icon-amber" aria-hidden="true" />;
+        case 'Red':
+            return <AlertCircle size={size} className="rating-icon rating-icon-red" aria-hidden="true" />;
+        default:
+            return <Info size={size} className="rating-icon" aria-hidden="true" />;
     }
 };
 
@@ -93,6 +120,10 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string | null>(null);
     const [exportingFormat, setExportingFormat] = useState<'pdf' | 'excel' | null>(null);
+
+    // Guide section & threshold tooltip interactive state
+    const [isGuideOpen, setIsGuideOpen] = useState<boolean>(true);
+    const [showThresholdTooltip, setShowThresholdTooltip] = useState<boolean>(false);
 
     // Fetch scorecard
     const loadScorecard = useCallback(async (start: string, end: string) => {
@@ -164,19 +195,9 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
         }
     };
 
-    const ratingDescription = useMemo(() => {
-        if (!data) return '';
-        switch (data.overallRating) {
-            case 'Green':
-                return 'Good Performance — Meeting or exceeding operational targets';
-            case 'Amber':
-                return 'Warning Zone — Approaching threshold limits; needs attention';
-            case 'Red':
-                return 'Critical Red Zone — Performance breached minimum threshold standards';
-            default:
-                return 'Performance Evaluation';
-        }
-    }, [data]);
+    // Threshold values derived dynamically from KPI config (single source of truth)
+    const greenThreshold = data?.overallGreenThreshold ?? 85.0;
+    const amberThreshold = data?.overallAmberThreshold ?? 70.0;
 
     return (
         <div className="employee-scorecard-container" data-testid="employee-scorecard-view">
@@ -188,7 +209,7 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                         <h2 className="scorecard-main-title">{title}</h2>
                     </div>
                     <p className="scorecard-subtitle">
-                        Weighted performance scorecard and traffic-light evaluation derived from task execution and audit records.
+                        Operational performance scorecard and traffic-light evaluation derived from task execution and audit records.
                     </p>
                 </div>
 
@@ -324,11 +345,80 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                             </div>
 
                             <div className="scorecard-status-box">
-                                <div className={`scorecard-rating-pill ${getRatingBadgeClass(data.overallRating)}`} data-testid="scorecard-overall-rating">
-                                    {getRatingIcon(data.overallRating)}
-                                    <span>{data.overallRating} Status</span>
+                                <div className="scorecard-status-pill-group">
+                                    <div
+                                        className={`scorecard-rating-pill ${getRatingBadgeClass(data.overallRating)}`}
+                                        data-testid="scorecard-overall-rating"
+                                        aria-label={`Overall Status: ${getRatingLabel(data.overallRating)}`}
+                                    >
+                                        {getRatingIcon(data.overallRating, 16)}
+                                        <span className="rating-pill-text">{getRatingLabel(data.overallRating)}</span>
+                                        <span className="rating-pill-sub">({data.overallRating})</span>
+                                    </div>
+
+                                    {/* Tooltip trigger for short explanation */}
+                                    <div className="scorecard-tooltip-container">
+                                        <button
+                                            type="button"
+                                            className="scorecard-info-btn"
+                                            onClick={() => setShowThresholdTooltip((prev) => !prev)}
+                                            title="View status threshold details"
+                                            aria-label="View status threshold details"
+                                            data-testid="scorecard-threshold-info-btn"
+                                        >
+                                            <Info size={15} />
+                                        </button>
+                                        {showThresholdTooltip && (
+                                            <div
+                                                className="scorecard-tooltip-popup"
+                                                role="tooltip"
+                                                data-testid="scorecard-threshold-tooltip"
+                                            >
+                                                <div className="tooltip-header">
+                                                    <strong>Threshold Scale</strong>
+                                                    <button
+                                                        type="button"
+                                                        className="tooltip-close-btn"
+                                                        onClick={() => setShowThresholdTooltip(false)}
+                                                        aria-label="Close tooltip"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                                <ul className="tooltip-scale-list">
+                                                    <li>
+                                                        <CheckCircle2 size={13} className="rating-icon-green" />
+                                                        <span><strong>On Target (Green):</strong> &ge; {greenThreshold}% overall score</span>
+                                                    </li>
+                                                    <li>
+                                                        <Clock size={13} className="rating-icon-amber" />
+                                                        <span><strong>Needs Attention (Amber):</strong> {amberThreshold}% to {(greenThreshold - 0.1).toFixed(1)}% score</span>
+                                                    </li>
+                                                    <li>
+                                                        <AlertCircle size={13} className="rating-icon-red" />
+                                                        <span><strong>Below Target (Red):</strong> &lt; {amberThreshold}% score or critical breach</span>
+                                                    </li>
+                                                </ul>
+                                                <div className="tooltip-footer">
+                                                    Source: {data.configurationTitle || 'Active KPI Rule'}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <p className="scorecard-rating-desc">{ratingDescription}</p>
+
+                                {/* Metric value and target basis */}
+                                <div className="scorecard-status-basis" data-testid="scorecard-status-basis">
+                                    <span className="basis-item">
+                                        Score: <strong>{data.overallScore.toFixed(1)}%</strong>
+                                    </span>
+                                    <span className="basis-sep">&bull;</span>
+                                    <span className="basis-item">
+                                        Target: <strong>&ge; {greenThreshold}%</strong>
+                                    </span>
+                                </div>
+
+                                <p className="scorecard-rating-desc">{getRatingDescription(data.overallRating)}</p>
                             </div>
                         </div>
 
@@ -360,6 +450,104 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    {/* Empty State Banner when employee has no tasks assigned */}
+                    {data.totalAssignedTasks === 0 && (
+                        <div className="scorecard-empty-banner" data-testid="scorecard-empty-state">
+                            <div className="empty-banner-icon">
+                                <Info size={24} className="text-info" />
+                            </div>
+                            <div className="empty-banner-content">
+                                <h4 className="empty-banner-title">No Task Activity Recorded in this Period</h4>
+                                <p className="empty-banner-text">
+                                    No tasks were assigned to you between <strong>{startDate}</strong> and <strong>{endDate}</strong>.
+                                    Your performance score and status will calculate automatically once assigned tasks are processed.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Traffic Light Thresholds Guide & Scale (Full Explanation) */}
+                    <div className="scorecard-guide-card" data-testid="scorecard-guide-card">
+                        <button
+                            type="button"
+                            className="scorecard-guide-header"
+                            onClick={() => setIsGuideOpen((prev) => !prev)}
+                            aria-expanded={isGuideOpen}
+                            data-testid="scorecard-guide-toggle"
+                        >
+                            <div className="guide-header-title">
+                                <HelpCircle size={18} className="guide-title-icon" />
+                                <div className="guide-title-text">
+                                    <h3 className="scorecard-section-title">How is your Scorecard calculated?</h3>
+                                    <span className="guide-subtitle">
+                                        Traffic-light scale and operational performance standards
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="guide-header-toggle">
+                                <span className="guide-toggle-text">{isGuideOpen ? 'Hide Guide' : 'Show Guide'}</span>
+                                {isGuideOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
+                        </button>
+
+                        {isGuideOpen && (
+                            <div className="scorecard-guide-body" data-testid="scorecard-guide-body">
+                                <p className="guide-intro">
+                                    Your scorecard measures execution quality and delivery speed across all tasks assigned to you during the selected period.
+                                    Each task metric is weighted according to company rules (<strong>{data.configurationTitle || 'Active KPI Configuration'}</strong>).
+                                </p>
+
+                                <div className="guide-scale-grid">
+                                    {/* Green Tier Card */}
+                                    <div className="guide-tier-card tier-green" data-testid="guide-tier-green">
+                                        <div className="tier-header">
+                                            <CheckCircle2 size={18} className="rating-icon-green" />
+                                            <h4 className="tier-name">On Target (Green)</h4>
+                                        </div>
+                                        <div className="tier-range">
+                                            Overall Score: <strong>&ge; {greenThreshold}%</strong>
+                                        </div>
+                                        <p className="tier-desc">
+                                            Meeting or exceeding operational targets. All assigned tasks meet SLA deadlines and quality checks with no critical errors.
+                                        </p>
+                                    </div>
+
+                                    {/* Amber Tier Card */}
+                                    <div className="guide-tier-card tier-amber" data-testid="guide-tier-amber">
+                                        <div className="tier-header">
+                                            <Clock size={18} className="rating-icon-amber" />
+                                            <h4 className="tier-name">Needs Attention (Amber)</h4>
+                                        </div>
+                                        <div className="tier-range">
+                                            Overall Score: <strong>{amberThreshold}% – {(greenThreshold - 0.1).toFixed(1)}%</strong>
+                                        </div>
+                                        <p className="tier-desc">
+                                            Approaching threshold limits. One or more metrics are slightly below goal. Review the metrics breakdown below to get back on target.
+                                        </p>
+                                    </div>
+
+                                    {/* Red Tier Card */}
+                                    <div className="guide-tier-card tier-red" data-testid="guide-tier-red">
+                                        <div className="tier-header">
+                                            <AlertCircle size={18} className="rating-icon-red" />
+                                            <h4 className="tier-name">Below Target (Red)</h4>
+                                        </div>
+                                        <div className="tier-range">
+                                            Overall Score: <strong>&lt; {amberThreshold}%</strong> (or critical metric breach)
+                                        </div>
+                                        <p className="tier-desc">
+                                            Performance is below minimum operational requirements. Work closely with your coordinator or lead to address task delays or quality reworks.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="guide-footer-note">
+                                    <span className="font-semibold">Scale rule:</span> For percentage metrics (OTIF, Order Accuracy, Completion Rate), a higher percentage is better (&ge; Green threshold). For duration metrics (Average Handling Time), faster/lower hours is better (&le; Green threshold). Values exactly on the threshold qualify for that tier.
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Task Quality & Volume Snapshot */}
@@ -397,10 +585,15 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                     {/* Metric Breakdown Table */}
                     <div className="scorecard-table-card" data-testid="scorecard-metrics-card">
                         <div className="scorecard-table-heading">
-                            <h3 className="scorecard-section-title">Weighted KPI Metrics Breakdown</h3>
-                            <span className="scorecard-metric-count">
-                                {data.metrics?.length || 0} active evaluation metrics
-                            </span>
+                            <div className="scorecard-table-title-group">
+                                <h3 className="scorecard-section-title">Weighted KPI Metrics Breakdown</h3>
+                                <span className="scorecard-metric-count">
+                                    {data.metrics?.length || 0} active evaluation metrics
+                                </span>
+                            </div>
+                            <div className="scorecard-table-legend-hint text-xs text-muted">
+                                <span>Thresholds reflect management KPI rules</span>
+                            </div>
                         </div>
 
                         <div className="scorecard-table-wrapper">
@@ -413,7 +606,7 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                                         <th className="text-center">Actual Value</th>
                                         <th className="text-center">Weighted Score</th>
                                         <th className="text-center">Status</th>
-                                        <th className="text-center">Traffic-Light Thresholds</th>
+                                        <th className="text-center">Threshold Scale</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -441,25 +634,49 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
                                                 {m.weightedScore.toFixed(1)} pts
                                             </td>
                                             <td className="text-center">
-                                                <span className={`kpi-rating-badge ${getRatingBadgeClass(m.rating)}`}>
-                                                    {getRatingIcon(m.rating)}
-                                                    <span>{m.rating}</span>
-                                                </span>
+                                                <div className="metric-status-cell">
+                                                    <span
+                                                        className={`kpi-rating-badge ${getRatingBadgeClass(m.rating)}`}
+                                                        data-testid={`metric-rating-badge-${m.metricCode.toLowerCase()}`}
+                                                    >
+                                                        {getRatingIcon(m.rating, 14)}
+                                                        <span>{getRatingLabel(m.rating)}</span>
+                                                    </span>
+                                                    <span className="metric-status-subtext text-xs text-muted">
+                                                        {m.actualValue.toFixed(1)} / {m.targetValue} {m.unit}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="text-center">
                                                 <div className="thresholds-cell text-xs">
                                                     {m.isLowerBetter ? (
-                                                        <span>
-                                                            <span className="text-success">&le; {m.greenThreshold}</span> |{' '}
-                                                            <span className="text-warning">&le; {m.amberThreshold}</span> |{' '}
-                                                            <span className="text-danger">&gt; {m.redThreshold}</span>
-                                                        </span>
+                                                        <div className="threshold-pill-list">
+                                                            <span className="thresh-chip chip-green" title="On Target">
+                                                                &le; {m.greenThreshold} {m.unit}
+                                                            </span>
+                                                            <span className="thresh-sep">|</span>
+                                                            <span className="thresh-chip chip-amber" title="Needs Attention">
+                                                                &le; {m.amberThreshold} {m.unit}
+                                                            </span>
+                                                            <span className="thresh-sep">|</span>
+                                                            <span className="thresh-chip chip-red" title="Below Target">
+                                                                &gt; {m.amberThreshold} {m.unit}
+                                                            </span>
+                                                        </div>
                                                     ) : (
-                                                        <span>
-                                                            <span className="text-success">&ge; {m.greenThreshold}</span> |{' '}
-                                                            <span className="text-warning">&ge; {m.amberThreshold}</span> |{' '}
-                                                            <span className="text-danger">&lt; {m.redThreshold}</span>
-                                                        </span>
+                                                        <div className="threshold-pill-list">
+                                                            <span className="thresh-chip chip-green" title="On Target">
+                                                                &ge; {m.greenThreshold} {m.unit}
+                                                            </span>
+                                                            <span className="thresh-sep">|</span>
+                                                            <span className="thresh-chip chip-amber" title="Needs Attention">
+                                                                &ge; {m.amberThreshold} {m.unit}
+                                                            </span>
+                                                            <span className="thresh-sep">|</span>
+                                                            <span className="thresh-chip chip-red" title="Below Target">
+                                                                &lt; {m.amberThreshold} {m.unit}
+                                                            </span>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </td>
@@ -474,4 +691,3 @@ export const EmployeeScorecardView: React.FC<EmployeeScorecardViewProps> = ({
         </div>
     );
 };
-
