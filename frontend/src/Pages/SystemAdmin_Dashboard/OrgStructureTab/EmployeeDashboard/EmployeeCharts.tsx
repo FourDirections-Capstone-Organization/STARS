@@ -185,12 +185,12 @@ export const EmployeeCharts: React.FC<EmployeeChartsProps> = ({
     const workloadChartData = useMemo(() => {
         return [
             {
-                name: 'Assigned to Them',
+                name: 'Assigned Tasks',
                 tasks: totalAssigned,
                 fill: ROLE_COLORS.assigned,
             },
             {
-                name: 'Created by Them',
+                name: 'Tasks Created',
                 tasks: totalCreated,
                 fill: ROLE_COLORS.created,
             },
@@ -346,11 +346,11 @@ export const EmployeeCharts: React.FC<EmployeeChartsProps> = ({
                         <>
                             <div className="ec-metric-row">
                                 <div className="ec-metric-pill ec-metric-assigned">
-                                    <span className="ec-metric-label">Assigned to Them</span>
+                                    <span className="ec-metric-label">Assigned Tasks</span>
                                     <strong className="ec-metric-val">{totalAssigned}</strong>
                                 </div>
                                 <div className="ec-metric-pill ec-metric-created">
-                                    <span className="ec-metric-label">Created by Them</span>
+                                    <span className="ec-metric-label">Tasks Created</span>
                                     <strong className="ec-metric-val">{totalCreated}</strong>
                                 </div>
                             </div>

@@ -590,7 +590,7 @@ describe('EmployeeTaskLists Component', () => {
 
             // Exact message from docs/PLAN.md
             expect(
-                screen.getByText('No tasks created by this employee (Staff members typically execute assigned tasks)')
+                screen.getByText('No tasks created by this employee')
             ).toBeInTheDocument();
 
             // Staff note banner

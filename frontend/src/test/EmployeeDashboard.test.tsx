@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import EmployeeDashboard, {
     EmployeeDashboardSkeleton,
 } from '../Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeDashboard';
@@ -204,9 +204,10 @@ describe('EmployeeDashboard Master Component', () => {
         expect(screen.getByText('Completion Trend Over Time')).toBeInTheDocument();
 
         // 3. Task Registry Section & Initial Assigned Tab
-        expect(screen.getByTestId('employee-dashboard-tasks-section')).toBeInTheDocument();
-        expect(screen.getByText('Tasks Assigned to Them')).toBeInTheDocument();
-        expect(screen.getByText('Tasks Created by Them')).toBeInTheDocument();
+        const tasksSection = screen.getByTestId('employee-dashboard-tasks-section');
+        expect(tasksSection).toBeInTheDocument();
+        expect(within(tasksSection).getByText('Assigned Tasks')).toBeInTheDocument();
+        expect(within(tasksSection).getByText('Tasks Created')).toBeInTheDocument();
 
         // Assigned task item appears in DataTable
         await waitFor(() => {
@@ -215,7 +216,7 @@ describe('EmployeeDashboard Master Component', () => {
     });
 
     // ── 3. Tab Switching Between Assigned and Created Tasks ────────────────────
-    it('supports tab switching between "Tasks Assigned to Them" and "Tasks Created by Them"', async () => {
+    it('supports tab switching between "Assigned Tasks" and "Tasks Created"', async () => {
         vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(mockDashboardData);
         vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
         vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue(mockCreatedTasksResponse);
@@ -226,8 +227,8 @@ describe('EmployeeDashboard Master Component', () => {
             expect(screen.getByText('Cold Chain Delivery Route 4')).toBeInTheDocument();
         });
 
-        // Switch to "Tasks Created by Them"
-        const createdTabBtn = screen.getByRole('tab', { name: /tasks created by them/i });
+        // Switch to "Tasks Created"
+        const createdTabBtn = screen.getByRole('tab', { name: /tasks created/i });
         fireEvent.click(createdTabBtn);
 
         // Created task item should appear

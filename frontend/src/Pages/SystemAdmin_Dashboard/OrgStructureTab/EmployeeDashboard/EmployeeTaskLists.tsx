@@ -558,7 +558,7 @@ export default function EmployeeTaskLists({
             return 'No tasks assigned to this employee matching your filter';
         } else {
             if (activeTotalCount === 0 && !searchQuery && statusFilter === 'All') {
-                return 'No tasks created by this employee (Staff members typically execute assigned tasks)';
+                return 'No tasks created by this employee';
             }
             return 'No tasks created by this employee matching your filter';
         }
@@ -588,7 +588,7 @@ export default function EmployeeTaskLists({
                         onClick={() => handleTabChange('assigned')}
                     >
                         <ClipboardList size={16} />
-                        <span>Tasks Assigned to Them</span>
+                        <span>Assigned Tasks</span>
                         {assignedBadgeCount !== undefined && (
                             <span className="task-tab-badge" data-testid="assigned-count-badge">
                                 {assignedBadgeCount}
@@ -607,7 +607,7 @@ export default function EmployeeTaskLists({
                         onClick={() => handleTabChange('created')}
                     >
                         <UserCheck size={16} />
-                        <span>Tasks Created by Them</span>
+                        <span>Tasks Created</span>
                         {createdBadgeCount !== undefined && (
                             <span className="task-tab-badge" data-testid="created-count-badge">
                                 {createdBadgeCount}
