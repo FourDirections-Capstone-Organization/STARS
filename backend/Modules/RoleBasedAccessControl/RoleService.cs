@@ -136,7 +136,9 @@ public class RoleService : IRoleService
     }
 
 
-    private List<string> GetPermissionsForRole(UserRole role)
+    public static bool CanCreateTasks(UserRole role) => GetPermissionsForRole(role).Contains("CreateTasks");
+
+    public static List<string> GetPermissionsForRole(UserRole role)
     {
         var permissions = new List<string>();
 

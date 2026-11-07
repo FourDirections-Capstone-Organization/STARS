@@ -41,7 +41,7 @@ Prior to implementing changes, the codebase was investigated across the UI (`Emp
 
 ## 3. Implementation Steps
 
-- [ ] Step 1: Backend status parsing normalization and RBAC helper
+- [x] Step 1: Backend status parsing normalization and RBAC helper
   - Files: `backend/Controllers/TaskController.cs`, `backend/Modules/RoleBasedAccessControl/RoleService.cs`
   - Normalize `status` in `TaskController.GetAll` (strip spaces, map `"Pending"` -> `NotStarted`, `"Done"` -> `Completed`, `"Cancelled"`/`"Canceled"` -> `Cancelled`, handle integer codes `"0"`-`"5"` and `"Overdue"`).
   - Expose `RoleService.CanCreateTasks(UserRole role) => GetPermissionsForRole(role).Contains("CreateTasks")` leveraging existing `"CreateTasks"` permission.
