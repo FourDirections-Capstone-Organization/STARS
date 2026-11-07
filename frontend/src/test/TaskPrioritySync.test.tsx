@@ -1,33 +1,14 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-
-// ── Types Matching Frontend Dashboard ──
-type Priority = 'urgent' | 'high' | 'medium' | 'low';
+import {
+    normalizeEmployeePriority,
+    dtoToTask,
+    priorityMeta,
+    Priority
+} from '../Pages/OpEmployee_Dashboard/OpEmployee_Dashboard';
 
 // PRIORITY_LABELS as used across dashboards
 const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
-
-// Priority normalizer function that handles numbers, PascalCase strings, lowercase strings, and null defaults
-export const normalizeEmployeePriority = (priorityLevel: any, priority?: any): Priority => {
-    const raw = (priorityLevel !== undefined && priorityLevel !== null && priorityLevel !== '')
-        ? priorityLevel
-        : priority;
-
-    if (raw !== undefined && raw !== null) {
-        if (typeof raw === 'number') {
-            const labels: Record<number, Priority> = { 0: 'low', 1: 'medium', 2: 'high', 3: 'urgent' };
-            if (raw in labels) return labels[raw];
-        }
-        if (typeof raw === 'string' && raw.trim()) {
-            const s = raw.trim().toLowerCase();
-            if (s === 'low') return 'low';
-            if (s === 'medium') return 'medium';
-            if (s === 'high') return 'high';
-            if (s === 'urgent') return 'urgent';
-        }
-    }
-    return 'medium';
-};
 
 // Coordinator priority normalizer (PascalCase)
 export const normalizeCoordinatorPriority = (val: any): 'Low' | 'Medium' | 'High' | 'Urgent' => {
@@ -86,6 +67,30 @@ describe('Task Priority Synchronization & Mapping Tests', () => {
 
             const fixedResult = normalizeEmployeePriority(backendResponseDto.priorityLevel, (backendResponseDto as any).priority);
             expect(fixedResult).toBe('low');
+
+            // Also test full dtoToTask conversion
+            const mappedTask = dtoToTask(backendResponseDto as any);
+            expect(mappedTask.priority).toBe('low');
+        });
+
+        it('dtoToTask accurately maps all priority tiers from backend DTOs', () => {
+            expect(dtoToTask({ id: '1', title: 'T1', priorityLevel: 'Low' } as any).priority).toBe('low');
+            expect(dtoToTask({ id: '2', title: 'T2', priorityLevel: 'Medium' } as any).priority).toBe('medium');
+            expect(dtoToTask({ id: '3', title: 'T3', priorityLevel: 'High' } as any).priority).toBe('high');
+            expect(dtoToTask({ id: '4', title: 'T4', priorityLevel: 'Urgent' } as any).priority).toBe('urgent');
+
+            // Numeric representations
+            expect(dtoToTask({ id: '5', title: 'T5', priorityLevel: 0 } as any).priority).toBe('low');
+            expect(dtoToTask({ id: '6', title: 'T6', priorityLevel: 1 } as any).priority).toBe('medium');
+            expect(dtoToTask({ id: '7', title: 'T7', priorityLevel: 2 } as any).priority).toBe('high');
+            expect(dtoToTask({ id: '8', title: 'T8', priorityLevel: 3 } as any).priority).toBe('urgent');
+        });
+
+        it('priorityMeta includes correct styling classes for all 4 priority tiers', () => {
+            expect(priorityMeta.urgent).toEqual({ cls: 'prio-urgent', bar: 'bar-red' });
+            expect(priorityMeta.high).toEqual({ cls: 'prio-high', bar: 'bar-red' });
+            expect(priorityMeta.medium).toEqual({ cls: 'prio-medium', bar: 'bar-amber' });
+            expect(priorityMeta.low).toEqual({ cls: 'prio-low', bar: 'bar-green' });
         });
     });
 
