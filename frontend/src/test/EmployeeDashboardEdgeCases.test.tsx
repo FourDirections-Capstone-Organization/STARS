@@ -143,7 +143,8 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
             expect(screen.getByText('No completion history recorded yet')).toBeInTheDocument();
         });
 
-        it('shows appropriate empty states and advisory note for staff on the created tasks tab', async () => {
+        it('hides created tasks tab for operational staff and shows clean empty states for creator roles', async () => {
+            // 1. For operational staff (Courier): "Tasks Created" tab button is omitted
             vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(baseEmployee);
             vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue({
                 items: [],
@@ -154,6 +155,24 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
                 hasPreviousPage: false,
                 hasNextPage: false,
             });
+
+            const { unmount } = render(<EmployeeDashboard employeeId={baseEmployee.employeeId} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('No tasks assigned to this employee')).toBeInTheDocument();
+            });
+
+            // "Tasks Created" tab button is omitted under RBAC rules
+            expect(screen.queryByRole('tab', { name: /tasks created/i })).not.toBeInTheDocument();
+            unmount();
+
+            // 2. For creator roles (Coordinator) with 0 created tasks: tab is visible and displays neutral empty message
+            const coordinatorEmployee: EmployeeDashboardData = {
+                ...baseEmployee,
+                role: 'Coordinator',
+                jobPositionName: 'Operations Coordinator',
+            };
+            vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(coordinatorEmployee);
             vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue({
                 items: [],
                 totalCount: 0,
@@ -164,23 +183,21 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
                 hasNextPage: false,
             });
 
-            render(<EmployeeDashboard employeeId={baseEmployee.employeeId} />);
+            render(<EmployeeDashboard employeeId={coordinatorEmployee.employeeId} />);
 
             await waitFor(() => {
-                expect(screen.getByText('No tasks assigned to this employee')).toBeInTheDocument();
+                expect(screen.getByRole('tab', { name: /tasks created/i })).toBeInTheDocument();
             });
 
             // Switch to "Tasks Created"
             const createdTab = screen.getByRole('tab', { name: /tasks created/i });
             fireEvent.click(createdTab);
 
-            // Verify staff advisory note
+            // Verify neutral empty state and informative banner on created tasks tab
             await waitFor(() => {
-                expect(screen.getByTestId('staff-created-note')).toBeInTheDocument();
+                expect(screen.getByText('No tasks created by this employee')).toBeInTheDocument();
             });
-            expect(
-                screen.getByText(/staff members typically execute assigned tasks rather than create them/i)
-            ).toBeInTheDocument();
+            expect(screen.getByTestId('staff-created-note')).toBeInTheDocument();
         });
     });
 

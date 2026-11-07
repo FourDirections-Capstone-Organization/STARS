@@ -46,7 +46,7 @@ describe('EmployeeDashboard Master Component', () => {
         employeeNumber: 'EMP-00101',
         fullName: 'Jane Doe',
         email: 'jane.doe@speedex.com',
-        role: 'Dispatcher',
+        role: 'Coordinator',
         departmentName: 'Dispatch Logistics',
         jobPositionName: 'Senior Logistics Specialist',
         availabilityStatus: 'Available',
@@ -181,7 +181,7 @@ describe('EmployeeDashboard Master Component', () => {
         // 1. Employee Header assertions
         expect(screen.getByText('Jane Doe')).toBeInTheDocument();
         expect(screen.getByText('EMP-00101')).toBeInTheDocument();
-        expect(screen.getByText('Dispatcher')).toBeInTheDocument();
+        expect(screen.getAllByText('Coordinator').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Dispatch Logistics')).toBeInTheDocument();
         expect(screen.getByText('Senior Logistics Specialist')).toBeInTheDocument();
 
@@ -388,5 +388,140 @@ describe('EmployeeDashboard Master Component', () => {
                 })
             );
         }
+    });
+
+    // ── 9. Step 5: Role-Based Tab Visibility, Cancelled Status, & Independent Filter States ──
+    describe('Step 5: Role-Based Tab Visibility, Cancelled Status, & Independent Filter States', () => {
+        it('completely hides "Tasks Created" tab button for operational roles and defaults to assigned tasks', async () => {
+            const operationalRoles = ['Dispatcher', 'Encoder', 'Courier', 'Accountant'];
+
+            for (const role of operationalRoles) {
+                vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue({
+                    ...mockDashboardData,
+                    role,
+                });
+                vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
+
+                const { unmount } = render(<EmployeeDashboard employeeId="emp-101" />);
+
+                await waitFor(() => {
+                    expect(screen.getByTestId('employee-dashboard')).toBeInTheDocument();
+                });
+
+                // Assigned tab should be visible
+                expect(screen.getByRole('tab', { name: /assigned tasks/i })).toBeInTheDocument();
+
+                // "Tasks Created" tab button must NOT be present
+                expect(screen.queryByRole('tab', { name: /tasks created/i })).not.toBeInTheDocument();
+
+                unmount();
+            }
+        });
+
+        it('shows both "Assigned Tasks" and "Tasks Created" tabs for Manager and Coordinator roles', async () => {
+            const creatorRoles = ['Manager', 'Coordinator'];
+
+            for (const role of creatorRoles) {
+                vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue({
+                    ...mockDashboardData,
+                    role,
+                });
+                vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
+                vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue(mockCreatedTasksResponse);
+
+                const { unmount } = render(<EmployeeDashboard employeeId="emp-101" />);
+
+                await waitFor(() => {
+                    expect(screen.getByTestId('employee-dashboard')).toBeInTheDocument();
+                });
+
+                expect(screen.getByRole('tab', { name: /assigned tasks/i })).toBeInTheDocument();
+                expect(screen.getByRole('tab', { name: /tasks created/i })).toBeInTheDocument();
+
+                unmount();
+            }
+        });
+
+        it('supports filtering assigned tasks by "Cancelled" status in EmployeeDashboard', async () => {
+            vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(mockDashboardData);
+            vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue({
+                items: [
+                    {
+                        id: 'task-cancelled-01',
+                        taskNumber: 'TSK-9999',
+                        title: 'Cancelled Cargo Dispatch',
+                        description: 'Shipment halted.',
+                        priorityLevel: 1,
+                        status: 5, // Cancelled
+                        deadline: '2026-11-20T10:00:00Z',
+                        createdAt: '2026-10-18T10:00:00Z',
+                    },
+                ],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 10,
+                totalPages: 1,
+                hasPreviousPage: false,
+                hasNextPage: false,
+            });
+
+            render(<EmployeeDashboard employeeId="emp-101" />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('employee-dashboard')).toBeInTheDocument();
+            });
+
+            const statusSelect = screen.getByTestId('task-status-filter') as HTMLSelectElement;
+            const cancelledOption = within(statusSelect).getByRole('option', { name: 'Cancelled' });
+            expect(cancelledOption).toBeInTheDocument();
+
+            fireEvent.change(statusSelect, { target: { value: 'Cancelled' } });
+
+            await waitFor(() => {
+                expect(employeeDashboardService.getEmployeeAssignedTasks).toHaveBeenCalledWith(
+                    'emp-101',
+                    1,
+                    10,
+                    '',
+                    'Cancelled'
+                );
+            });
+        });
+
+        it('maintains independent search and status filter state between Assigned and Created tabs in EmployeeDashboard', async () => {
+            vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(mockDashboardData);
+            vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
+            vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue(mockCreatedTasksResponse);
+
+            render(<EmployeeDashboard employeeId="emp-101" />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('employee-dashboard')).toBeInTheDocument();
+            });
+
+            // 1. Search "Cold Chain" on Assigned tab
+            const searchInput = screen.getByPlaceholderText('Search by title or description...');
+            fireEvent.change(searchInput, { target: { value: 'Cold Chain' } });
+            expect(searchInput).toHaveValue('Cold Chain');
+
+            // 2. Switch to Created tab
+            const createdTabBtn = screen.getByRole('tab', { name: /tasks created/i });
+            fireEvent.click(createdTabBtn);
+
+            // Created tab has clean search input
+            const createdSearchInput = screen.getByPlaceholderText('Search by title or description...');
+            expect(createdSearchInput).toHaveValue('');
+
+            // Search "Fleet" on Created tab
+            fireEvent.change(createdSearchInput, { target: { value: 'Fleet' } });
+            expect(createdSearchInput).toHaveValue('Fleet');
+
+            // 3. Switch back to Assigned tab - search remains "Cold Chain"
+            const assignedTabBtn = screen.getByRole('tab', { name: /assigned tasks/i });
+            fireEvent.click(assignedTabBtn);
+
+            const assignedSearchAgain = screen.getByPlaceholderText('Search by title or description...');
+            expect(assignedSearchAgain).toHaveValue('Cold Chain');
+        });
     });
 });
