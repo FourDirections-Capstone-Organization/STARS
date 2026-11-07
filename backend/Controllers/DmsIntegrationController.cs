@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.DmsIntegration;
 using Backend.Modules.RoleBasedAccessControl;
 
@@ -122,6 +123,57 @@ public class DmsIntegrationController : ControllerBase
         var userId = GetUserId();
         var result = await _dmsService.SyncDeliveryStatusForTaskAsync(taskId, userId);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Retrieve Proof of Delivery (POD) details and preview metadata for a task with RBAC enforcement.
+    /// </summary>
+    [HttpGet("api/dms-integration/tasks/{taskId:guid}/pod")]
+    [Authorize]
+    public async Task<IActionResult> GetTaskPod(Guid taskId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var userRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        var result = await _dmsService.GetTaskPodAsync(taskId, userId.Value, userRole);
+        if (!result.IsSuccess)
+        {
+            if (result.Message.Contains("Access denied"))
+                return StatusCode(403, result);
+            return NotFound(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Download or preview Proof of Delivery (POD) file with RBAC enforcement.
+    /// </summary>
+    [HttpGet("api/dms-integration/tasks/{taskId:guid}/pod/download")]
+    [Authorize]
+    public async Task<IActionResult> DownloadTaskPod(Guid taskId, [FromQuery] bool inline = false)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (!Enum.TryParse<UserRole>(userRoleStr, true, out var userRole))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid role"));
+
+        var fileResult = await _dmsService.DownloadTaskPodAsync(taskId, userId.Value, userRole);
+        if (fileResult == null || fileResult.Value.FileBytes == null)
+            return NotFound(ApiResponseDTO<object>.Failure("Proof of Delivery file not found or access denied"));
+
+        if (inline)
+        {
+            return File(fileResult.Value.FileBytes, fileResult.Value.ContentType);
+        }
+
+        return File(fileResult.Value.FileBytes, fileResult.Value.ContentType, fileResult.Value.FileName);
     }
 
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────

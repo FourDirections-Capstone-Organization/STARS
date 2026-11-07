@@ -1,5 +1,6 @@
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 
 namespace Backend.Modules.DmsIntegration;
 
@@ -77,4 +78,14 @@ public interface IDmsIntegrationService
     /// Checks whether an employee ID already exists in DMS.
     /// </summary>
     Task<ApiResponseDTO<bool>> CheckEmployeeExistsInDmsAsync(string employeeId);
+
+    /// <summary>
+    /// Retrieve Proof of Delivery (POD) details and preview metadata for a task with RBAC enforcement.
+    /// </summary>
+    Task<ApiResponseDTO<TaskPodResponseDTO>> GetTaskPodAsync(Guid taskId, Guid requestUserId, UserRole requestUserRole);
+
+    /// <summary>
+    /// Download or proxy the Proof of Delivery (POD) file with RBAC enforcement.
+    /// </summary>
+    Task<(byte[]? FileBytes, string ContentType, string FileName)?> DownloadTaskPodAsync(Guid taskId, Guid requestUserId, UserRole requestUserRole);
 }
