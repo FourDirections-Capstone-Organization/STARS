@@ -41,7 +41,7 @@ Adding new priority levels not in the system, altering SLA hours/logic for non-u
 
 ## Steps
 
-- [ ] Step 1: Investigation Documentation & Test Fixtures Setup
+- [x] Step 1: Investigation Documentation & Test Fixtures Setup
   - Files: docs/PLAN.md, backend/Tests/TaskManagement/TaskPrioritySyncTests.cs, frontend/src/test/TaskPrioritySync.test.tsx
   - Description: Document root cause findings in docs/PLAN.md and add regression test suites reproducing priority loss on creation, assignment, update, and employee view mapping.
 
