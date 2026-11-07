@@ -427,7 +427,7 @@ export default function EmployeeDashboard({
                 <EmployeeCharts data={data} />
             </section>
 
-            {/* 3. Tabbed Task Lists ("Assigned to Them" & "Created by Them") */}
+            {/* 3. Tabbed Task Lists ("Assigned Tasks" & "Tasks Created") */}
             <section
                 className="ed-tasks-section"
                 aria-label="Employee Task Registry"

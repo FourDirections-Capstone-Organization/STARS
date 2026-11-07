@@ -66,9 +66,9 @@ describe('EmployeeCharts Component', () => {
         expect(screen.getByText('Created vs. Assigned')).toBeInTheDocument();
         expect(screen.getByText('Task delegation and execution balance')).toBeInTheDocument();
         expect(screen.getByText('20 Tasks Total')).toBeInTheDocument();
-        expect(screen.getByText('Assigned to Them')).toBeInTheDocument();
+        expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
         expect(screen.getByText('16')).toBeInTheDocument();
-        expect(screen.getByText('Created by Them')).toBeInTheDocument();
+        expect(screen.getByText('Tasks Created')).toBeInTheDocument();
         expect(screen.getByText('4')).toBeInTheDocument();
 
         // 3. Priority Distribution

@@ -170,8 +170,8 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
                 expect(screen.getByText('No tasks assigned to this employee')).toBeInTheDocument();
             });
 
-            // Switch to "Tasks Created by Them"
-            const createdTab = screen.getByRole('tab', { name: /tasks created by them/i });
+            // Switch to "Tasks Created"
+            const createdTab = screen.getByRole('tab', { name: /tasks created/i });
             fireEvent.click(createdTab);
 
             // Verify staff advisory note

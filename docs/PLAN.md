@@ -53,7 +53,7 @@ Prior to implementing changes, the codebase was investigated across the UI (`Emp
   - In `HierarchyService.GetEmployeeDashboardAsync`, set `totalCreatedTasks = 0` for non-creator operational roles.
   - Verify: Backend unit tests in `TaskServiceCreatedByFilterTests.cs` and `HierarchyDashboardTests.cs` pass.
 
-- [ ] Step 3: Tab renaming across UI, charts, empty states, and tests
+- [x] Step 3: Tab renaming across UI, charts, empty states, and tests
   - Files: `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `EmployeeDashboard.tsx`, `EmployeeCharts.tsx`, test files
   - Rename tab buttons: "Tasks assigned to them" -> "Assigned Tasks", "Tasks created by them" -> "Tasks Created".
   - Rename chart workload breakdown labels and legends: "Assigned Tasks" and "Tasks Created".
