@@ -93,7 +93,7 @@ Make DMS-uploaded Proof of Delivery (POD) files visible in STARS on matching tas
   - Files: `backend/Models/DTOs/DmsIntegrationDTOs.cs`, `backend/Modules/DmsIntegration/IDmsIntegrationService.cs`, `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Controllers/DmsIntegrationController.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Description: Add `PodUrl`, `CourierFullName`, and `CourierIsActive` to DTOs. Implement batch driver name resolution in `GetPerformanceSummaryAsync` and `GetDeliveryDetailAsync`. Implement authenticated POD retrieval and proxy download endpoint with task RBAC enforcement. Add unit and integration tests.
 
-- [ ] Step 2: Task Details Dedicated POD Viewer & Driver Name Display
+- [x] Step 2: Task Details Dedicated POD Viewer & Driver Name Display
   - Files: `frontend/src/components/TaskView/TaskView.tsx`, `frontend/src/components/TaskView/TaskView.css`, `frontend/src/test/TaskViewDmsPod.test.tsx`
   - Description: Update `TaskView` to render the assigned driver's full name and employee number with inactive handling. Add a dedicated "Proof of Delivery (POD)" section supporting image thumbnails, interactive preview modal, PDF viewing, download link, metadata (upload date/time, courier name), empty state, and graceful error handling for broken/unsupported files.
 
