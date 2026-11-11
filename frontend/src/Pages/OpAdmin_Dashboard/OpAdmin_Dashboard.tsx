@@ -60,7 +60,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import TaskView, { TaskViewTask, formatDriverDisplay } from '../../components/TaskView/TaskView';
 import { useToast } from '../../components/Toast/Toast';
 import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
@@ -5298,7 +5298,8 @@ export const ReportsTab: React.FC<{
     teamMembers: Array<{ accountId: string; employeeName: string; role?: string }>;
     onNavigateToTab?: (tab: NavTab) => void;
     onNavigateToConfig?: () => void;
-}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig }) => {
+    onViewTask?: (taskId: string) => void;
+}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
     const { success, error } = useToast();
     const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
@@ -5454,6 +5455,9 @@ export const ReportsTab: React.FC<{
     const dmsFilteredRecords = useMemo(() => {
         if (!dmsPerfData?.records) return [];
         let list = dmsPerfData.records;
+        if (dmsDriverFilter) {
+            list = list.filter(r => r.driverId === dmsDriverFilter);
+        }
         if (dmsPerfSearch.trim()) {
             const q = dmsPerfSearch.toLowerCase().trim();
             const qClean = q.replace(/[\s-_]/g, '');
@@ -5473,7 +5477,7 @@ export const ReportsTab: React.FC<{
             });
         }
         return list;
-    }, [dmsPerfData?.records, dmsPerfSearch]);
+    }, [dmsPerfData?.records, dmsDriverFilter, dmsPerfSearch]);
 
     const pagedDmsRecords = useMemo(() => {
         const start = (dmsPerfPage - 1) * REPORT_PAGE_SIZE;
@@ -7765,10 +7769,22 @@ export const ReportsTab: React.FC<{
                                 <div>
                                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Courier / Driver SLA Compliance Breakdown</h4>
                                     <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Per-driver delivery completion rate, on-time SLA adherence, and performance ranking.
+                                        Per-driver delivery completion rate, on-time SLA adherence, and performance ranking. Click a driver row to filter records.
                                     </p>
                                 </div>
-                                <span className="report-pill blue">{dmsDriverBreakdown.length} Couriers</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {dmsDriverFilter && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-secondary"
+                                            onClick={() => { setDmsDriverFilter(''); setDmsPerfPage(1); }}
+                                            style={{ fontSize: 11, padding: '3px 8px', height: 26 }}
+                                        >
+                                            Clear Driver Filter
+                                        </button>
+                                    )}
+                                    <span className="report-pill blue">{dmsDriverBreakdown.length} Couriers</span>
+                                </div>
                             </div>
                             <div className="report-table-scroll-wrapper">
                                 <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 800 }}>
@@ -7787,15 +7803,45 @@ export const ReportsTab: React.FC<{
                                             const isTop = d.onTimeRate >= 95;
                                             const isGood = d.onTimeRate >= 80 && d.onTimeRate < 95;
                                             const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                            const isSelected = dmsDriverFilter === d.driverId;
                                             return (
-                                                <tr key={d.driverId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                <tr
+                                                    key={d.driverId}
+                                                    tabIndex={0}
+                                                    role="button"
+                                                    aria-label={`Filter by driver ${driverInfo.displayText}`}
+                                                    onClick={() => {
+                                                        setDmsDriverFilter(prev => prev === d.driverId ? '' : d.driverId);
+                                                        setDmsPerfPage(1);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            setDmsDriverFilter(prev => prev === d.driverId ? '' : d.driverId);
+                                                            setDmsPerfPage(1);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        borderBottom: '1px solid var(--border)',
+                                                        cursor: 'pointer',
+                                                        backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.08)' : undefined,
+                                                        outline: isSelected ? '1px solid #4318ff' : undefined,
+                                                        transition: 'background-color 0.15s ease',
+                                                    }}
+                                                    className={`dms-driver-row ${isSelected ? 'selected' : ''}`}
+                                                >
                                                     <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                            <Truck size={14} style={{ color: '#4318ff', flexShrink: 0 }} />
+                                                            <Truck size={14} style={{ color: isSelected ? '#00A99D' : '#4318ff', flexShrink: 0 }} />
                                                             <span data-testid={`dms-driver-breakdown-${d.driverId}`}>{driverInfo.displayText}</span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
                                                                     [Inactive]
+                                                                </span>
+                                                            )}
+                                                            {isSelected && (
+                                                                <span className="report-pill teal" style={{ fontSize: 10, padding: '1px 6px', fontWeight: 600, marginLeft: 4 }}>
+                                                                    Active Filter
                                                                 </span>
                                                             )}
                                                         </div>
@@ -7826,7 +7872,7 @@ export const ReportsTab: React.FC<{
                             <div>
                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>DMS Batch Delivery Completion Records</h4>
                                 <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    Live stream of delivery completion records exported from DMS with timestamps and SLA verdicts.
+                                    Live stream of delivery completion records exported from DMS with timestamps and SLA verdicts. Click a record to open task details.
                                 </p>
                             </div>
                             <span className="report-pill teal">{dmsFilteredRecords.length} Records</span>
@@ -7844,82 +7890,167 @@ export const ReportsTab: React.FC<{
                                                 <th>Completion Timestamp</th>
                                                 <th>SLA Target Timestamp</th>
                                                 <th style={{ textAlign: 'center' }}>SLA Result</th>
+                                                <th style={{ textAlign: 'right' }}>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {pagedDmsRecords.map(r => (
-                                                <tr key={r.waybillNo} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '8px 10px' }}>
-                                                        <span
-                                                            onClick={() => handleCopyWaybill(r.waybillNo)}
-                                                            title="Click to copy Waybill"
-                                                            style={{
-                                                                fontFamily: 'monospace',
-                                                                fontWeight: 700,
-                                                                fontSize: 12,
-                                                                color: '#4318ff',
-                                                                background: '#eff6ff',
-                                                                padding: '3px 8px',
-                                                                borderRadius: 4,
-                                                                cursor: 'pointer',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: 4
-                                                            }}
-                                                        >
-                                                            {dmsCopiedWb === r.waybillNo ? <Check size={11} style={{ color: 'var(--status-active)' }} /> : <Copy size={11} />}
-                                                            {r.waybillNo}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                        {(() => {
-                                                            const driverInfo = formatDriverDisplay(r.driverName, r.driverId, r.driverIsActive);
-                                                            return (
-                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid={`dms-record-driver-${r.waybillNo}`}>
-                                                                    <span>{driverInfo.displayText}</span>
-                                                                    {driverInfo.isInactive && (
-                                                                        <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
-                                                                            [Inactive]
-                                                                        </span>
-                                                                    )}
-                                                                </span>
-                                                            );
-                                                        })()}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                                                        {r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000' ? (
-                                                            <span style={{ background: '#f8fafc', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>
-                                                                #{r.starsTaskId.slice(0, 8)}…
+                                            {pagedDmsRecords.map(r => {
+                                                const hasTaskId = Boolean(r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000');
+                                                return (
+                                                    <tr
+                                                        key={r.waybillNo}
+                                                        tabIndex={hasTaskId ? 0 : undefined}
+                                                        role={hasTaskId ? 'button' : undefined}
+                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : undefined}
+                                                        onClick={() => {
+                                                            if (hasTaskId && onViewTask) {
+                                                                onViewTask(r.starsTaskId!);
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if ((e.key === 'Enter' || e.key === ' ') && hasTaskId && onViewTask) {
+                                                                e.preventDefault();
+                                                                onViewTask(r.starsTaskId!);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            borderBottom: '1px solid var(--border)',
+                                                            cursor: hasTaskId ? 'pointer' : 'default',
+                                                        }}
+                                                        className={`dms-completion-row ${hasTaskId ? 'clickable-row' : ''}`}
+                                                        data-testid={`dms-record-row-${r.waybillNo}`}
+                                                    >
+                                                        <td style={{ padding: '8px 10px' }}>
+                                                            <span
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleCopyWaybill(r.waybillNo);
+                                                                }}
+                                                                title="Click to copy Waybill"
+                                                                style={{
+                                                                    fontFamily: 'monospace',
+                                                                    fontWeight: 700,
+                                                                    fontSize: 12,
+                                                                    color: '#4318ff',
+                                                                    background: '#eff6ff',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: 4,
+                                                                    cursor: 'pointer',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 4
+                                                                }}
+                                                            >
+                                                                {dmsCopiedWb === r.waybillNo ? <Check size={11} style={{ color: 'var(--status-active)' }} /> : <Copy size={11} />}
+                                                                {r.waybillNo}
                                                             </span>
-                                                        ) : (
-                                                            '—'
-                                                        )}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                                        {r.completedAt ? new Date(r.completedAt).toLocaleString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                        }) : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                                        {r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                        }) : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                        <span className={`report-pill ${r.isOnTime ? 'success' : 'danger'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                            {r.isOnTime ? <><CheckCircle2 size={11} /> On-Time (SLA Met)</> : <><AlertCircle size={11} /> Late (SLA Missed)</>}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                            {(() => {
+                                                                const driverInfo = formatDriverDisplay(r.driverName, r.driverId, r.driverIsActive);
+                                                                return (
+                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid={`dms-record-driver-${r.waybillNo}`}>
+                                                                        <span>{driverInfo.displayText}</span>
+                                                                        {driverInfo.isInactive && (
+                                                                            <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
+                                                                                [Inactive]
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                                                            {hasTaskId ? (
+                                                                <a
+                                                                    href={`/OpAdmin_Dashboard?taskId=${r.starsTaskId}`}
+                                                                    className="dms-task-link"
+                                                                    data-testid={`dms-task-link-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            onViewTask?.(r.starsTaskId!);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        background: '#f8fafc',
+                                                                        padding: '2px 6px',
+                                                                        borderRadius: 4,
+                                                                        border: '1px solid var(--border)',
+                                                                        color: '#4318ff',
+                                                                        textDecoration: 'none',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                        fontWeight: 600,
+                                                                    }}
+                                                                    title="Open STARS Task Details (middle-click or right-click to open in new tab)"
+                                                                >
+                                                                    <span>#{r.starsTaskId!.slice(0, 8)}…</span>
+                                                                    <ExternalLink size={10} style={{ opacity: 0.7 }} />
+                                                                </a>
+                                                            ) : (
+                                                                '—'
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                                            {r.completedAt ? new Date(r.completedAt).toLocaleString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                            }) : '—'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                                            {r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                            }) : '—'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                            <span className={`report-pill ${r.isOnTime ? 'success' : 'danger'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                                {r.isOnTime ? <><CheckCircle2 size={11} /> On-Time (SLA Met)</> : <><AlertCircle size={11} /> Late (SLA Missed)</>}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                                                            {hasTaskId ? (
+                                                                <a
+                                                                    href={`/OpAdmin_Dashboard?taskId=${r.starsTaskId}`}
+                                                                    className="btn btn-sm btn-secondary"
+                                                                    data-testid={`dms-view-task-btn-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            onViewTask?.(r.starsTaskId!);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        fontSize: 11,
+                                                                        padding: '3px 8px',
+                                                                        height: 26,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                        textDecoration: 'none'
+                                                                    }}
+                                                                    title="Open Task Details"
+                                                                >
+                                                                    <span>View Task</span>
+                                                                    <ChevronRight size={12} />
+                                                                </a>
+                                                            ) : (
+                                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No Task</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -9278,6 +9409,7 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
 
 export default function OpsAdminDashboard() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     usePreventBackNav();
 
     const employeeId = localStorage.getItem('employeeId') ?? '';
@@ -10410,26 +10542,48 @@ export default function OpsAdminDashboard() {
         }
     };
 
-    // -- Open a task in coordinator TaskView by ID --
-    const openCoordinatorTaskById = async (taskId: string) => {
-        if (!taskId) return;
-        setActiveTab('tasks');
-        setTaskSubTab('list');
-        const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-        if (found) {
-            setDetailTask(found as any);
-            return;
-        }
+    // -- Open a task in coordinator TaskView by ID with RBAC Enforcement --
+    const handleOpenTaskById = useCallback(async (taskId: string) => {
+        if (!taskId || taskId === '00000000-0000-0000-0000-000000000000') return;
         try {
+            const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+            if (found) {
+                setActiveTab('tasks');
+                setTaskSubTab('list');
+                setDetailTask(found as any);
+                return;
+            }
             const res = await api.get(`/api/Task/${taskId}`);
             const data = res.data?.data ?? res.data;
             if (data) {
+                setActiveTab('tasks');
+                setTaskSubTab('list');
                 setDetailTask(mapTaskDetailToTaskView(data));
+            } else {
+                error('Task not found.');
             }
-        } catch (err) {
-            console.error('Failed to load task details for notification:', err);
+        } catch (err: any) {
+            const status = err?.response?.status;
+            if (status === 403 || status === 401) {
+                const message = err?.response?.data?.message || 'Access Denied: You do not have permission to view this task.';
+                error(message);
+            } else if (status === 404) {
+                error('Task not found.');
+            } else {
+                error(err?.response?.data?.message || err?.message || 'Failed to load task details.');
+            }
         }
-    };
+    }, [tasks, allTasks, error]);
+
+    const openCoordinatorTaskById = handleOpenTaskById;
+
+    // -- URL Deep-Linking: open task if ?taskId=... query param is present on mount --
+    useEffect(() => {
+        const taskIdParam = searchParams.get('taskId');
+        if (taskIdParam) {
+            handleOpenTaskById(taskIdParam);
+        }
+    }, [searchParams, handleOpenTaskById]);
 
     // -- Update Task --
     const handleEditTask = async (taskId: string, data: UpdateTaskDTO) => {
@@ -10911,7 +11065,13 @@ export default function OpsAdminDashboard() {
                 )}
                 {activeTab === 'templates' && <TemplateTab teamMembers={teamMembers} />}
                 {activeTab === 'approvals' && <ApprovalsWrapper />}
-                {activeTab === 'reports' && <ReportsTab teamMembers={teamMembers} onNavigateToTab={handleNavChange} />}
+                {activeTab === 'reports' && (
+                    <ReportsTab
+                        teamMembers={teamMembers}
+                        onNavigateToTab={handleNavChange}
+                        onViewTask={handleOpenTaskById}
+                    />
+                )}
                 {activeTab === 'profile' && <ProfileTab />}
                 {activeTab === 'reopen' && (
                     <ReopenTab
@@ -11067,13 +11227,7 @@ export default function OpsAdminDashboard() {
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tasks}
-                            onViewTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                }
-                            }}
+                            onViewTask={handleOpenTaskById}
                         />
                     </div>
                 )}
@@ -11083,13 +11237,7 @@ export default function OpsAdminDashboard() {
                         <PreDeliveryTab
                             tasks={tasks}
                             onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
-                            onViewTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                }
-                            }}
+                            onViewTask={handleOpenTaskById}
                         />
                     </div>
                 )}

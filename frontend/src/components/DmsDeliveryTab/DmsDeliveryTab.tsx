@@ -453,14 +453,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                             <RefreshCw size={13} className={syncingId === selectedDelivery.taskId ? 'spin' : ''} />
                             <span>{syncingId === selectedDelivery.taskId ? 'Syncing...' : 'Sync with DMS'}</span>
                         </button>
-                        <button
-                            type="button"
+                        <a
+                            href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                             className="dms-detail-primary-btn"
-                            onClick={() => onViewTask(selectedDelivery.taskId)}
+                            onClick={(e) => {
+                                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                    e.preventDefault();
+                                    onViewTask(selectedDelivery.taskId);
+                                }
+                            }}
+                            style={{ textDecoration: 'none' }}
                         >
                             <span>Open STARS Task Details</span>
                             <ArrowRight size={14} />
-                        </button>
+                        </a>
                     </div>
                 </div>
 
@@ -657,14 +663,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Linked STARS Task</span>
                                 <span className="dms-detail-val">
-                                    <button
-                                        type="button"
+                                    <a
+                                        href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                                         className="dms-detail-inline-task-btn"
-                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                        onClick={(e) => {
+                                            if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                e.preventDefault();
+                                                onViewTask(selectedDelivery.taskId);
+                                            }
+                                        }}
+                                        style={{ textDecoration: 'none' }}
                                     >
                                         <span>{selectedDelivery.taskTitle}</span>
                                         <ExternalLink size={11} />
-                                    </button>
+                                    </a>
                                 </span>
                             </div>
                             {selectedDelivery.senderAddress && (
@@ -756,14 +768,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                         <ArrowLeft size={14} />
                         <span>Return to Deliveries List</span>
                     </button>
-                    <button
-                        type="button"
+                    <a
+                        href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                         className="dms-detail-footer-btn-primary"
-                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                        onClick={(e) => {
+                            if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                e.preventDefault();
+                                onViewTask(selectedDelivery.taskId);
+                            }
+                        }}
+                        style={{ textDecoration: 'none' }}
                     >
                         <span>Open STARS Task Details</span>
                         <ArrowRight size={14} />
-                    </button>
+                    </a>
                 </div>
             </div>
         );
@@ -1002,7 +1020,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                 <tr
                                     key={item.taskId}
                                     className="dms-table-row"
+                                    tabIndex={0}
+                                    role="button"
+                                    aria-label={`View delivery shipment ${item.dmsWaybillNo || item.taskId}`}
                                     onClick={() => setSelectedDelivery(item)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedDelivery(item);
+                                        }
+                                    }}
+                                    style={{ cursor: 'pointer' }}
                                 >
                                     <td>
                                         {item.dmsWaybillNo ? (
@@ -1028,9 +1056,33 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
 
                                     <td>
                                         <div className="dms-task-cell">
-                                            <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
-                                            {(item.taskNumber || item.taskReferenceNumber) && (
-                                                <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                            {item.taskId ? (
+                                                <a
+                                                    href={`/OpAdmin_Dashboard?taskId=${item.taskId}`}
+                                                    className="dms-task-cell-link"
+                                                    data-testid={`dms-tab-task-link-${item.taskId}`}
+                                                    onClick={(e) => {
+                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            onViewTask(item.taskId);
+                                                        }
+                                                    }}
+                                                    title="Open STARS Task Details (middle-click or right-click to open in new tab)"
+                                                    style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}
+                                                >
+                                                    <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
+                                                    {(item.taskNumber || item.taskReferenceNumber) && (
+                                                        <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                                    )}
+                                                </a>
+                                            ) : (
+                                                <>
+                                                    <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
+                                                    {(item.taskNumber || item.taskReferenceNumber) && (
+                                                        <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -1110,18 +1162,23 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                                 <Truck size={12} />
                                                 <span>Track</span>
                                             </button>
-                                            <button
-                                                type="button"
+                                            <a
+                                                href={`/OpAdmin_Dashboard?taskId=${item.taskId}`}
                                                 className="dms-table-btn"
+                                                data-testid={`dms-tab-details-btn-${item.taskId}`}
                                                 onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onViewTask(item.taskId);
+                                                    if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        onViewTask(item.taskId);
+                                                    }
                                                 }}
                                                 title="Open Task Details"
+                                                style={{ textDecoration: 'none' }}
                                             >
                                                 <span>Details</span>
                                                 <ChevronRight size={12} />
-                                            </button>
+                                            </a>
                                         </div>
                                     </td>
                                 </tr>

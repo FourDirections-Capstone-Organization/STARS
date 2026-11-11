@@ -101,7 +101,7 @@ Make DMS-uploaded Proof of Delivery (POD) files visible in STARS on matching tas
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/DmsDeliveryTab/DeliveryAnalyticsCharts.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
   - Description: Display driver full names alongside employee numbers in Table 1 (Driver Breakdown) and Table 2 (Completion Records), driver filter dropdown, and charts. Update table search to support searching by driver full name as well as employee number and waybill. Update CSV export headers and rows to include driver name.
 
-- [ ] Step 4: Click-Through Navigation & Deep Linking with RBAC Access Enforcement
+- [x] Step 4: Click-Through Navigation & Deep Linking with RBAC Access Enforcement
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsClickThrough.test.tsx`
   - Description: Enable row click-through on Table 2 records to open task details modal (`handleOpenTaskById`) with keyboard focus (Enter key), cursor pointer, and real anchor link supporting right-click/middle-click open in new tab (`/OpAdmin_Dashboard?taskId=...`). Table 1 rows filter by driver. Handle URL deep-linking on mount and display clear permission error toast if an unauthorized user attempts access.
 
