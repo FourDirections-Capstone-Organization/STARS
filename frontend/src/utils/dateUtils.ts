@@ -5,21 +5,125 @@ export interface FormatDeadlineOptions {
 
 /**
  * Safely parses a date string into a local Date object.
- * Prevents UTC day-shift for YYYY-MM-DD date-only strings.
+ * Prevents UTC day-shift for YYYY-MM-DD date-only strings and UTC midnight ISO timestamps.
  */
 export function parseLocalDate(d?: string | null): Date | null {
     if (!d) return null;
     const trimmed = String(d).trim();
     if (!trimmed) return null;
 
-    // Check if it's a date-only format like YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-        const [year, month, day] = trimmed.split('-').map(Number);
+    // Fast path: date-only format or UTC/local midnight timestamp (e.g. 2026-11-13 or 2026-11-13T00:00:00Z)
+    const midnightMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s]00:00(?::00(?:\.000)?)?(?:Z|[+-]00:?00)?)?$/);
+    if (midnightMatch) {
+        const [, year, month, day] = midnightMatch.map(Number);
         return new Date(year, month - 1, day);
     }
 
     const dt = new Date(trimmed);
     return isNaN(dt.getTime()) ? null : dt;
+}
+
+/**
+ * Formats a date string or Date object into the standard DD/MM/YYYY format (e.g. "13/11/2026").
+ * Prevents UTC midnight shifts across timezones (e.g., UTC midnight '2026-11-13T00:00:00Z'
+ * remaining '13/11/2026' regardless of browser timezone).
+ *
+ * Returns '—' if input is null, undefined, empty, or invalid.
+ */
+export function formatDateOnly(d?: string | Date | null): string {
+    if (!d) return '—';
+
+    if (d instanceof Date) {
+        if (isNaN(d.getTime())) return '—';
+        // If constructed from UTC midnight and local isn't midnight, preserve UTC calendar date
+        if (
+            d.getUTCHours() === 0 &&
+            d.getUTCMinutes() === 0 &&
+            d.getUTCSeconds() === 0 &&
+            (d.getHours() !== 0 || d.getMinutes() !== 0)
+        ) {
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const year = d.getUTCFullYear();
+            return `${day}/${month}/${year}`;
+        }
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    }
+
+    const trimmed = String(d).trim();
+    if (!trimmed || trimmed === '—') return '—';
+
+    // Fast path: ISO or YYYY-MM-DD string
+    const isoMatch = trimmed.match(
+        /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,7})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
+    );
+    if (isoMatch) {
+        const [, yStr, mStr, dStr] = isoMatch;
+        const year = Number(yStr);
+        const month = Number(mStr);
+        const day = Number(dStr);
+
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            // Guard against invalid calendar dates (e.g. 2026-02-30)
+            const check = new Date(year, month - 1, day);
+            if (
+                check.getFullYear() === year &&
+                check.getMonth() === month - 1 &&
+                check.getDate() === day
+            ) {
+                return `${dStr}/${mStr}/${yStr}`;
+            }
+        }
+        return '—';
+    }
+
+    const dt = new Date(trimmed);
+    if (isNaN(dt.getTime())) return '—';
+
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const year = dt.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
+/**
+ * Formats a date into YYYY-MM-DD for date inputs (<input type="date">).
+ * Prevents UTC timezone day-shift.
+ */
+export function formatDateToIsoDate(d?: string | Date | null): string {
+    if (!d) return '';
+    if (d instanceof Date) {
+        if (isNaN(d.getTime())) return '';
+        if (
+            d.getUTCHours() === 0 &&
+            d.getUTCMinutes() === 0 &&
+            (d.getHours() !== 0 || d.getMinutes() !== 0)
+        ) {
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    const trimmed = String(d).trim();
+    if (!trimmed) return '';
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+    const dt = new Date(trimmed);
+    if (isNaN(dt.getTime())) return '';
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 /**
