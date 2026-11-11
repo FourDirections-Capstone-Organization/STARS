@@ -11,6 +11,7 @@ import {
     downloadDeliveryCsvReport,
     downloadDeliveryPdfReport,
 } from '../components/DmsDeliveryTab/DeliveryReportExport';
+import TaskView, { TaskViewTask } from '../components/TaskView/TaskView';
 import api from '../api';
 
 vi.mock('../api', () => ({
@@ -153,6 +154,10 @@ describe('Step 3: DMS Date-Only Deadlines and Paired Driver Labels', () => {
             const dateOnlyNotice = screen.getByTestId('dms-dateonly-display');
             expect(dateOnlyNotice).toBeInTheDocument();
             expect(dateOnlyNotice).toHaveTextContent(expectedDateFormatted);
+
+            // Assert that obsolete date-only helper text is absent
+            expect(screen.queryByText(/Date-only: time defaults to end-of-day/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/\(Date-only/i)).not.toBeInTheDocument();
 
             // Paired driver label in delivery section
             await waitFor(() => {
@@ -327,6 +332,100 @@ describe('Step 3: DMS Date-Only Deadlines and Paired Driver Labels', () => {
             expect(() => {
                 downloadDeliveryPdfReport(deliveries, perf, stats, 'All');
             }).not.toThrow();
+        });
+    });
+
+    describe('5. TaskView Paired Driver Presentation & Absence of Date-Only Helper Text', () => {
+        const mockTask: TaskViewTask = {
+            taskId: 'task-e2e-01',
+            taskTitle: 'Deliver Urgent Packages',
+            taskDescription: 'Verification task',
+            priority: 'High',
+            dueAt: new Date(Date.now() + 86400000).toISOString(),
+            taskStatus: 'In Progress',
+            assignedEmployee: 'Jane Coordinator',
+            createdByEmployee: 'Admin',
+            assignedTo: 'user-coord-01',
+            createdAt: new Date().toISOString(),
+            taskNumber: 'TSK-9901',
+            taskReferenceNumber: 'WB-2026-8801',
+        };
+
+        it('renders paired driver name and employee ID in TaskView and omits date-only helper text', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/delivery-details')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: mockTask.taskId,
+                                recipientName: 'Alice Guo',
+                                recipientContact: '09181112222',
+                                deliveryAddress: 'Ortigas, Pasig',
+                                dmsWaybillNo: 'WB-2026-8801',
+                                dmsStatus: 'Out for Delivery',
+                                syncStatus: 'Synced',
+                                courierEmployeeId: 'EMP-008',
+                                courierFullName: 'Ricardo Bautista',
+                                courierIsActive: true,
+                                expectedDelivery: '2026-11-20T00:00:00Z',
+                            },
+                        },
+                    });
+                }
+                if (url.includes('/pod')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: { hasPod: false } } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<TaskView task={mockTask} />);
+
+            await waitFor(() => {
+                const pairedDriver = screen.getByTestId('tv-dms-paired-driver');
+                expect(pairedDriver).toBeInTheDocument();
+                expect(pairedDriver).toHaveTextContent('EMP-008 · Ricardo Bautista');
+            });
+
+            // Confirm date-only helper text is absent from the rendered TaskView
+            expect(screen.queryByText(/Date-only: time defaults to end-of-day/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/\(Date-only/i)).not.toBeInTheDocument();
+        });
+
+        it('falls back to courier employee ID when courierFullName is absent in TaskView', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/delivery-details')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: mockTask.taskId,
+                                recipientName: 'Alice Guo',
+                                recipientContact: '09181112222',
+                                deliveryAddress: 'Ortigas, Pasig',
+                                dmsWaybillNo: 'WB-2026-8801',
+                                dmsStatus: 'In Transit',
+                                syncStatus: 'Synced',
+                                courierEmployeeId: 'EMP-008',
+                                courierFullName: null,
+                                courierIsActive: true,
+                            },
+                        },
+                    });
+                }
+                if (url.includes('/pod')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: { hasPod: false } } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<TaskView task={mockTask} />);
+
+            await waitFor(() => {
+                const pairedDriver = screen.getByTestId('tv-dms-paired-driver');
+                expect(pairedDriver).toBeInTheDocument();
+                expect(pairedDriver).toHaveTextContent('EMP-008');
+            });
         });
     });
 });
