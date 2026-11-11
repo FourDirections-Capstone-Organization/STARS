@@ -24,7 +24,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/components/PreDeliveryTab/PreDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DeliveryReportExport.ts`
   - Verify: Component tests and UI check verifying read-only date-only deadline with locked badge, plus driver label format in tables and forms.
 
-- [ ] Step 4: Run full backend and frontend test suites and verify DMS sync against both QA defect scenarios
+- [x] Step 4: Run full backend and frontend test suites and verify DMS sync against both QA defect scenarios
   - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/PreDeliveryDueDateAndCourierFix.test.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
   - Verify: Execute `dotnet test` and `npm --prefix frontend test`, confirming zero regressions across all backend and frontend tests.
 

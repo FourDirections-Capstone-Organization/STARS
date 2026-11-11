@@ -410,5 +410,87 @@ describe('Delivery Analytics - Driver Full Names, Search/Filter, Charts & CSV Ex
             vi.restoreAllMocks();
         });
     });
+
+    describe('5. QA Defect Scenarios: Paired Driver Display & Midnight Date Formatting', () => {
+        it('Scenario 1: formats midnight expected delivery dates as date-only DD/MM/YYYY in delivery detail views', async () => {
+            const midnightDeliveries: DmsDeliveryItem[] = [
+                {
+                    taskId: 'task-qa-01',
+                    taskTitle: 'Midnight QA Delivery',
+                    recipientName: 'Test Recipient',
+                    recipientContact: '09170001234',
+                    deliveryAddress: '123 QA Lane, Makati',
+                    area: 'Makati',
+                    courierEmployeeId: 'EMP-008',
+                    courierFullName: 'Ricardo Bautista',
+                    courierIsActive: true,
+                    dmsWaybillNo: 'WB-QA-999',
+                    dmsStatus: 'Out for Delivery',
+                    syncStatus: 'Synced',
+                    expectedDelivery: '2026-11-25T00:00:00Z',
+                    expectedDeliveryDate: '2026-11-25',
+                    createdAt: '2026-11-20T08:00:00Z',
+                },
+            ];
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: midnightDeliveries } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('EMP-008 · Ricardo Bautista')).toBeInTheDocument();
+            });
+
+            // Open detail drawer
+            const row = screen.getByText('EMP-008 · Ricardo Bautista').closest('tr');
+            expect(row).not.toBeNull();
+            fireEvent.click(row!);
+
+            // Verify expected delivery date formatted as date-only (25/11/2026)
+            await waitFor(() => {
+                const expectedDetail = screen.getByTestId('dms-detail-expected-delivery');
+                expect(expectedDetail).toBeInTheDocument();
+                expect(expectedDetail).toHaveTextContent('25/11/2026');
+            });
+        });
+
+        it('Scenario 2: formats driver label using ID · Name pairing in delivery tables', async () => {
+            const pairedDeliveries: DmsDeliveryItem[] = [
+                {
+                    taskId: 'task-qa-02',
+                    taskTitle: 'Paired Driver QA Delivery',
+                    recipientName: 'Carlos Mendoza',
+                    recipientContact: '09170005678',
+                    deliveryAddress: '456 Business Ave, Pasig',
+                    area: 'Pasig',
+                    courierEmployeeId: 'DRV-001',
+                    courierFullName: 'Juan Dela Cruz',
+                    courierIsActive: true,
+                    dmsWaybillNo: 'WB-QA-888',
+                    dmsStatus: 'In Transit',
+                    syncStatus: 'Synced',
+                    createdAt: '2026-11-20T08:00:00Z',
+                },
+            ];
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: pairedDeliveries } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('DRV-001 · Juan Dela Cruz')).toBeInTheDocument();
+            });
+        });
+    });
 });
 
