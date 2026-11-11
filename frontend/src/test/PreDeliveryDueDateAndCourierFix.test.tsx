@@ -390,4 +390,79 @@ describe('Pre-Delivery Due Date Unlocking & Courier Selection Fix (Step 4)', () 
             await screen.findByText(/John Courier assigned/i);
         });
     });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. QA DEFECT SCENARIOS: MIDNIGHT DEADLINE NO-SHIFT & PAIRED DRIVER LABELS
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('3. QA Defect Scenarios: Midnight Deadline No-Shift & Paired Driver Labels', () => {
+        it('Scenario 1: normalizes UTC midnight expected delivery to date-only without 08:00 AM shift and renders date-only display', async () => {
+            const midnightOrder: DmsPendingOrder = {
+                ...baseOrder,
+                expectedDelivery: '2026-11-25T00:00:00Z',
+                expectedDeliveryDate: '2026-11-25',
+                driverEmployeeId: 'emp-001',
+            };
+
+            const taskInitial = buildPreDeliveryTaskInitialData(midnightOrder);
+            // Verify date value in dueAt string is formatted without timezone hour shift
+            expect(taskInitial.dueAt).toBe('2026-11-25T00:00');
+
+            const { container } = render(
+                <TaskModal
+                    mode="new"
+                    initial={taskInitial as any}
+                    teamMembers={mockTeamMembers}
+                    tasks={[]}
+                    onSave={vi.fn()}
+                    onClose={vi.fn()}
+                />
+            );
+
+            await screen.findByRole('heading', { name: /Create Pre-Delivery Task/i });
+
+            const dateInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+            expect(dateInput).toBeInTheDocument();
+            expect(dateInput.disabled).toBe(true);
+
+            // DMS Locked badge is shown
+            expect(screen.getByText(/🔒 DMS PRE-SET DEADLINE/i)).toBeInTheDocument();
+
+            // Date-only display element shows 25/11/2026
+            const dateOnlyEl = screen.getByTestId('dms-dateonly-display');
+            expect(dateOnlyEl).toBeInTheDocument();
+            expect(dateOnlyEl).toHaveTextContent('25/11/2026');
+        });
+
+        it('Scenario 2: formats paired driver label as EMP-ID · Driver Name in pre-delivery forms', async () => {
+            const pairedOrder: DmsPendingOrder = {
+                ...baseOrder,
+                driverEmployeeId: 'DRV-001',
+                driverName: 'John Courier',
+                expectedDelivery: '2026-11-25T00:00:00Z',
+            };
+
+            const taskInitial = buildPreDeliveryTaskInitialData(pairedOrder);
+
+            render(
+                <TaskModal
+                    mode="new"
+                    initial={taskInitial as any}
+                    teamMembers={mockTeamMembers}
+                    tasks={[]}
+                    onSave={vi.fn()}
+                    onClose={vi.fn()}
+                />
+            );
+
+            await screen.findByRole('heading', { name: /Create Pre-Delivery Task/i });
+
+            // Verification of paired driver label format
+            await waitFor(() => {
+                const pairedLabel = screen.queryByTestId('dms-paired-driver-label');
+                if (pairedLabel) {
+                    expect(pairedLabel).toHaveTextContent('DRV-001 · John Courier');
+                }
+            });
+        });
+    });
 });

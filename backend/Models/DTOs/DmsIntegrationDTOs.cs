@@ -22,8 +22,36 @@ public class UpsertTaskDeliveryDetailDTO
     [MaxLength(500)]
     public string? PackageDescription { get; set; }
 
+    private string? _courierEmployeeId;
+
     [MaxLength(50)]
-    public string? CourierEmployeeId { get; set; }
+    public string? CourierEmployeeId
+    {
+        get => _courierEmployeeId;
+        set => _courierEmployeeId = value?.Trim();
+    }
+
+    [MaxLength(50)]
+    public string? DriverId
+    {
+        get => _courierEmployeeId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_courierEmployeeId))
+                _courierEmployeeId = value?.Trim();
+        }
+    }
+
+    [MaxLength(50)]
+    public string? DriverEmployeeId
+    {
+        get => _courierEmployeeId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_courierEmployeeId))
+                _courierEmployeeId = value?.Trim();
+        }
+    }
 
     [MaxLength(500)]
     public string? SenderAddress { get; set; }
@@ -62,8 +90,89 @@ public class DmsPendingOrderDTO
     public string Priority { get; set; } = string.Empty;
     public string? SpecialInstructions { get; set; }
     public DateTime OrderDate { get; set; }
-    public DateTime ExpectedDelivery { get; set; }
-    public string? DriverEmployeeId { get; set; }
+
+    private DateTime _expectedDelivery;
+    public DateTime ExpectedDelivery
+    {
+        get => _expectedDelivery;
+        set
+        {
+            _expectedDelivery = NormalizeDateOnly(value);
+            if (string.IsNullOrWhiteSpace(_expectedDeliveryDate) && value != default)
+            {
+                _expectedDeliveryDate = _expectedDelivery.ToString("yyyy-MM-dd");
+            }
+        }
+    }
+
+    private string? _expectedDeliveryDate;
+    public string? ExpectedDeliveryDate
+    {
+        get => _expectedDeliveryDate ?? (_expectedDelivery != default ? _expectedDelivery.ToString("yyyy-MM-dd") : null);
+        set
+        {
+            _expectedDeliveryDate = value?.Trim();
+            if (_expectedDelivery == default && !string.IsNullOrWhiteSpace(value) && DateTime.TryParse(value, out var d))
+            {
+                _expectedDelivery = DateTime.SpecifyKind(d.Date, DateTimeKind.Utc);
+            }
+        }
+    }
+
+    private string? _driverEmployeeId;
+    public string? DriverEmployeeId
+    {
+        get => _driverEmployeeId;
+        set => _driverEmployeeId = value?.Trim();
+    }
+
+    public string? DriverId
+    {
+        get => _driverEmployeeId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_driverEmployeeId))
+                _driverEmployeeId = value?.Trim();
+        }
+    }
+
+    public string? CourierEmployeeId
+    {
+        get => _driverEmployeeId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_driverEmployeeId))
+                _driverEmployeeId = value?.Trim();
+        }
+    }
+
+    public string? DriverName { get; set; }
+    public string? CourierFullName
+    {
+        get => DriverName;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(DriverName))
+                DriverName = value?.Trim();
+        }
+    }
+
+    public bool? DriverIsActive { get; set; }
+    public bool? CourierIsActive
+    {
+        get => DriverIsActive;
+        set
+        {
+            if (!DriverIsActive.HasValue)
+                DriverIsActive = value;
+        }
+    }
+
+    public static DateTime NormalizeDateOnly(DateTime dt)
+    {
+        if (dt == default) return dt;
+        return DateTime.SpecifyKind(dt.Date, DateTimeKind.Utc);
+    }
 }
 
 public class TriggerDispatchDTO
@@ -83,8 +192,12 @@ public class TaskDeliveryDetailResponseDTO
     public string? SenderAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? CourierEmployeeId { get; set; }
+    public string? DriverId => CourierEmployeeId;
+    public string? DriverEmployeeId => CourierEmployeeId;
     public string? CourierFullName { get; set; }
+    public string? DriverName => CourierFullName;
     public bool? CourierIsActive { get; set; }
+    public bool? DriverIsActive => CourierIsActive;
     public string? PodUrl { get; set; }
     public string? PodFileName { get; set; }
     public DateTime? PodUploadedAt { get; set; }
@@ -101,6 +214,8 @@ public class TaskDeliveryDetailResponseDTO
     public string? SyncError { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public DateTime? ExpectedDelivery { get; set; }
+    public string? ExpectedDeliveryDate { get; set; }
 }
 
 public class DmsStatusWebhookDTO
@@ -118,7 +233,32 @@ public class DmsStatusWebhookDTO
 
     public DateTime Timestamp { get; set; }
 
-    public string? DriverId { get; set; }
+    private string? _driverId;
+    public string? DriverId
+    {
+        get => _driverId;
+        set => _driverId = value?.Trim();
+    }
+
+    public string? CourierEmployeeId
+    {
+        get => _driverId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_driverId))
+                _driverId = value?.Trim();
+        }
+    }
+
+    public string? DriverEmployeeId
+    {
+        get => _driverId;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_driverId))
+                _driverId = value?.Trim();
+        }
+    }
 
     public string? FailureReason { get; set; }
 
@@ -142,8 +282,12 @@ public class DmsStatusWebhookDTO
 public class DmsPerformanceRecordDTO
 {
     public string? DriverId { get; set; }
+    public string? DriverEmployeeId => DriverId;
+    public string? CourierEmployeeId => DriverId;
     public string? DriverName { get; set; }
+    public string? CourierFullName => DriverName;
     public bool? DriverIsActive { get; set; }
+    public bool? CourierIsActive => DriverIsActive;
     public string WaybillNo { get; set; } = string.Empty;
     public Guid StarsTaskId { get; set; }
     public DateTime CompletedAt { get; set; }
@@ -181,8 +325,12 @@ public class DmsDeliveryItemDTO
     public string? SenderAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? CourierEmployeeId { get; set; }
+    public string? DriverId => CourierEmployeeId;
+    public string? DriverEmployeeId => CourierEmployeeId;
     public string? CourierFullName { get; set; }
+    public string? DriverName => CourierFullName;
     public bool? CourierIsActive { get; set; }
+    public bool? DriverIsActive => CourierIsActive;
     public string? PodUrl { get; set; }
     public DateTime? PodUploadedAt { get; set; }
     public string? DmsWaybillNo { get; set; }
@@ -196,6 +344,8 @@ public class DmsDeliveryItemDTO
     public string SyncStatus { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public DateTime? ExpectedDelivery { get; set; }
+    public string? ExpectedDeliveryDate { get; set; }
 }
 
 public class TaskPodResponseDTO

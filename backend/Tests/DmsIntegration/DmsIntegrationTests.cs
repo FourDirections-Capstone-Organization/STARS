@@ -814,4 +814,390 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("image/png", authResult.Value.ContentType);
         Assert.Equal(dummyBytes, authResult.Value.FileBytes);
     }
+
+    [Fact]
+    public async Task GetPendingOrders_NormalizesDateOnlyDeadlinesAndResolvesDriverName()
+    {
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-008",
+            FirstName = "Ricardo",
+            LastName = "Bautista",
+            IsActive = true,
+            IsDeactivated = false,
+            Username = "rbautista",
+            PasswordHash = "hash",
+            Role = UserRole.Courier,
+            Email = "rbautista@example.com"
+        };
+        _db.Users.Add(driver);
+        await _db.SaveChangesAsync();
+
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 101,
+                ""waybillNo"": ""WB-PENDING-001"",
+                ""clientName"": ""Apex Logistics"",
+                ""recipientName"": ""Juan Perez"",
+                ""recipientContact"": ""09171234567"",
+                ""recipientAddress"": ""123 Main St"",
+                ""area"": ""Makati"",
+                ""packageDescription"": ""Documents"",
+                ""orderDate"": ""2026-11-10T02:00:00Z"",
+                ""expectedDelivery"": ""2026-11-13T08:30:00Z"",
+                ""driverEmployeeId"": ""DRV-008"",
+                ""status"": ""Pending""
+            },
+            {
+                ""orderId"": 102,
+                ""waybillNo"": ""WB-PENDING-002"",
+                ""clientName"": ""Global Supplies"",
+                ""recipientName"": ""Maria Reyes"",
+                ""recipientContact"": ""09187654321"",
+                ""recipientAddress"": ""456 High St"",
+                ""area"": ""Taguig"",
+                ""packageDescription"": ""Hardware"",
+                ""orderDate"": ""2026-11-10T03:00:00Z"",
+                ""expectedDelivery"": ""2026-11-14T00:00:00"",
+                ""driverId"": ""EMP-UNMAPPED"",
+                ""status"": ""Pending""
+            },
+            {
+                ""orderId"": 103,
+                ""waybillNo"": ""WB-PENDING-003"",
+                ""clientName"": ""Zenith Corp"",
+                ""recipientName"": ""Carlos Tan"",
+                ""recipientContact"": ""09191112222"",
+                ""recipientAddress"": ""789 Bay St"",
+                ""area"": ""Pasay"",
+                ""packageDescription"": ""Electronics"",
+                ""orderDate"": ""2026-11-10T04:00:00Z"",
+                ""expectedDelivery"": ""2026-11-15T14:15:00Z"",
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetPendingOrdersAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal(3, result.Data.Count);
+
+        // Order 101: mapped driver DRV-008 -> Ricardo Bautista
+        var order101 = result.Data.First(o => o.OrderId == 101);
+        Assert.Equal("DRV-008", order101.DriverEmployeeId);
+        Assert.Equal("DRV-008", order101.DriverId);
+        Assert.Equal("Ricardo Bautista", order101.DriverName);
+        Assert.Equal("Ricardo Bautista", order101.CourierFullName);
+        Assert.True(order101.DriverIsActive);
+        Assert.Equal("2026-11-13", order101.ExpectedDeliveryDate);
+        Assert.Equal(new DateTime(2026, 11, 13, 0, 0, 0, DateTimeKind.Utc), order101.ExpectedDelivery);
+
+        // Order 102: unmapped driver EMP-UNMAPPED -> fallback to ID
+        var order102 = result.Data.First(o => o.OrderId == 102);
+        Assert.Equal("EMP-UNMAPPED", order102.DriverEmployeeId);
+        Assert.Equal("EMP-UNMAPPED", order102.DriverId);
+        Assert.Equal("EMP-UNMAPPED", order102.DriverName);
+        Assert.Null(order102.DriverIsActive);
+        Assert.Equal("2026-11-14", order102.ExpectedDeliveryDate);
+        Assert.Equal(new DateTime(2026, 11, 14, 0, 0, 0, DateTimeKind.Utc), order102.ExpectedDelivery);
+
+        // Order 103: unassigned driver
+        var order103 = result.Data.First(o => o.OrderId == 103);
+        Assert.Null(order103.DriverEmployeeId);
+        Assert.Null(order103.DriverId);
+        Assert.Equal("Unassigned", order103.DriverName);
+        Assert.Equal("2026-11-15", order103.ExpectedDeliveryDate);
+        Assert.Equal(new DateTime(2026, 11, 15, 0, 0, 0, DateTimeKind.Utc), order103.ExpectedDelivery);
+    }
+
+    [Fact]
+    public async Task CreateDeliveryOrderForTask_PayloadIncludesDateOnlyDeadlineAndDriverKeys()
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-002",
+            FirstName = "Coordinator",
+            LastName = "User",
+            Email = "coord2@example.com",
+            PasswordHash = "hash"
+        };
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-008",
+            FirstName = "Ricardo",
+            LastName = "Bautista",
+            Email = "rbautista2@example.com",
+            PasswordHash = "hash"
+        };
+        _db.Users.AddRange(user, driver);
+
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Ship Spare Parts",
+            Description = "Machine parts",
+            PriorityLevel = PriorityLevel.High,
+            Deadline = new DateTime(2026, 11, 20, 15, 45, 0, DateTimeKind.Utc),
+            CreatedById = user.Id,
+            CreatedBy = user
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Beta Logistics",
+            RecipientContact = "09201234567",
+            DeliveryAddress = "Taguig City",
+            Area = "Taguig",
+            PackageDescription = "Spare Gears",
+            CourierEmployeeId = "DRV-008"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        string capturedPayload = string.Empty;
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Post && req.RequestUri!.ToString().Contains("/api/integration/stars/delivery-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                capturedPayload = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            })
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.Created,
+                Content = JsonContent.Create(new
+                {
+                    waybillNo = "WB-2026-999999",
+                    orderId = 999,
+                    status = "Pending",
+                    starsTaskId = taskId,
+                    alreadyExisted = false
+                })
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.CreateDeliveryOrderForTaskAsync(taskId);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEmpty(capturedPayload);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(capturedPayload);
+        var root = doc.RootElement;
+
+        Assert.Equal("2026-11-20", root.GetProperty("expectedDelivery").GetString());
+        Assert.Equal("2026-11-20", root.GetProperty("expectedDeliveryDate").GetString());
+        Assert.Equal("2026-11-20", root.GetProperty("deadline").GetString());
+        Assert.Equal("DRV-008", root.GetProperty("courierEmployeeId").GetString());
+        Assert.Equal("DRV-008", root.GetProperty("driverEmployeeId").GetString());
+        Assert.Equal("DRV-008", root.GetProperty("driverId").GetString());
+        Assert.Equal("Ricardo Bautista", root.GetProperty("driverName").GetString());
+    }
+
+    [Fact]
+    public async Task GetDeliveryDetail_IncludesDateOnlyDeadlineAndDriverAliases()
+    {
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "DRV-008",
+            FirstName = "Ricardo",
+            LastName = "Bautista",
+            IsActive = true,
+            IsDeactivated = false,
+            Username = "rbautista3",
+            PasswordHash = "hash",
+            Role = UserRole.Courier,
+            Email = "rbautista3@example.com"
+        };
+        _db.Users.Add(driver);
+
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Deliver Sensitive File",
+            Description = "Confidential",
+            PriorityLevel = PriorityLevel.Medium,
+            Deadline = new DateTime(2026, 11, 25, 17, 0, 0, DateTimeKind.Utc)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Gamma Corp",
+            RecipientContact = "09120001111",
+            DeliveryAddress = "Makati Ave",
+            CourierEmployeeId = "DRV-008",
+            DmsWaybillNo = "WB-DATE-001"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetDeliveryDetailAsync(taskId);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal("2026-11-25", result.Data.ExpectedDeliveryDate);
+        Assert.Equal("DRV-008", result.Data.CourierEmployeeId);
+        Assert.Equal("DRV-008", result.Data.DriverId);
+        Assert.Equal("DRV-008", result.Data.DriverEmployeeId);
+        Assert.Equal("Ricardo Bautista", result.Data.CourierFullName);
+        Assert.Equal("Ricardo Bautista", result.Data.DriverName);
+        Assert.True(result.Data.DriverIsActive);
+    }
+
+    [Fact]
+    public async Task SyncDeliveryStatus_ParsesDriverEmployeeIdOrDriverId()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Ongoing Delivery",
+            Description = "Package in transit",
+            PriorityLevel = PriorityLevel.Medium,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Recipient A",
+            RecipientContact = "09170002222",
+            DeliveryAddress = "Pasig",
+            DmsWaybillNo = "WB-SYNC-DRIVER-01",
+            DmsStatus = "Pending"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Get && req.RequestUri!.ToString().Contains("/api/integration/stars/delivery-orders/")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = JsonContent.Create(new
+                {
+                    waybillNo = "WB-SYNC-DRIVER-01",
+                    orderId = 555,
+                    status = "In Transit",
+                    driverEmployeeId = "DRV-008"
+                })
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.SyncDeliveryStatusForTaskAsync(taskId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DRV-008", result.Data!.CourierEmployeeId);
+        Assert.Equal("DRV-008", result.Data.DriverId);
+
+        var savedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("DRV-008", savedDetail.CourierEmployeeId);
+    }
+
+    [Fact]
+    public async Task QaDefectScenarios_VerifyDmsSync_MidnightDeadlineNormalization_And_DriverIdKeyResolution()
+    {
+        // Scenario 1: Midnight deadline normalization
+        // DMS passes ExpectedDelivery at UTC midnight (00:00:00Z) or date-only string.
+        // STARS backend normalizes it to date-only string YYYY-MM-DD and UTC midnight DateTime without offset shifts.
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-008",
+            FirstName = "Ricardo",
+            LastName = "Bautista",
+            Role = UserRole.Courier,
+            Username = "rbautista_qa",
+            Email = "rbautista_qa@example.com"
+        };
+        _db.Users.Add(driver);
+        await _db.SaveChangesAsync();
+
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 801,
+                ""waybillNo"": ""WB-QA-001"",
+                ""clientName"": ""QA Logistics"",
+                ""recipientName"": ""Juan Dela Cruz"",
+                ""recipientContact"": ""09170009999"",
+                ""recipientAddress"": ""100 Ayala Ave, Makati"",
+                ""area"": ""Makati"",
+                ""packageDescription"": ""Sensitive Legal Docs"",
+                ""orderDate"": ""2026-11-10T01:00:00Z"",
+                ""expectedDelivery"": ""2026-11-25T00:00:00Z"",
+                ""driverEmployeeId"": ""EMP-008"",
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetPendingOrdersAsync();
+
+        Assert.True(result.IsSuccess);
+        var order = Assert.Single(result.Data);
+
+        // Verification of Scenario 1 (Date-only normalization, no timezone shift)
+        Assert.Equal("2026-11-25", order.ExpectedDeliveryDate);
+        Assert.Equal(new DateTime(2026, 11, 25, 0, 0, 0, DateTimeKind.Utc), order.ExpectedDelivery);
+
+        // Verification of Scenario 2 (Driver ID as key and paired name resolution)
+        Assert.Equal("EMP-008", order.DriverEmployeeId);
+        Assert.Equal("EMP-008", order.DriverId);
+        Assert.Equal("Ricardo Bautista", order.DriverName);
+        Assert.Equal("Ricardo Bautista", order.CourierFullName);
+    }
 }
