@@ -335,7 +335,7 @@
 
 .tc-btn-primary:hover:not(:disabled) {
     opacity: 0.88;
-    background: #008B8B;
+    background: var(--teal-hover, #009189);
 }
 
 .tc-btn-sm {

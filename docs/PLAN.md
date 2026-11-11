@@ -24,7 +24,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/global.css`, `frontend/src/components/ui/DataTable.css`, `frontend/src/components/FormModal/FormModal.css`, `frontend/src/components/ConfirmationModal/ConfirmationModal.css`, `frontend/src/components/ConfirmModal/ConfirmModal.css`, `frontend/src/components/TaskView/TaskView.css`
   - Verify: Visual and DOM inspection verifying uppercase 0.75rem #64748B headers and 8px border-radius on modal buttons.
 
-- [ ] Step 4: Replace hard-coded old teal instances with tokens across components and stylesheets
+- [x] Step 4: Replace hard-coded old teal instances with tokens across components and stylesheets
   - Files: `frontend/src/components/Sidebar/Sidebar.css`, `frontend/src/components/GlobalHeader/GlobalHeader.css`, `frontend/src/components/TaskView/TaskView.css`, `frontend/src/components/TaskComments/TaskComments.css`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeCharts.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeCharts.css`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.css`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`
   - Verify: Run `git grep -i "008b8b" frontend/src/` to confirm zero hard-coded old teal references.
 

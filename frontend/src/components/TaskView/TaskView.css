@@ -1803,7 +1803,7 @@
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, #1A2238 0%, #008B8B 100%);
+    background: linear-gradient(90deg, var(--navy, #1A2238) 0%, var(--teal, #00A99D) 100%);
 }
 
 .tv-foms-header {
@@ -2294,7 +2294,7 @@
 }
 
 .tv-floating-panel-toggle:hover {
-    background: #008B8B;
+    background: var(--teal-hover, #009189);
     padding-left: 14px;
 }
 
