@@ -20,7 +20,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to verify ID and name mapping.
 
-- [ ] Step 3: Remove "(Date-only: ...)" helper text and present paired courier labels in task modals and task details
+- [x] Step 3: Remove "(Date-only: ...)" helper text and present paired courier labels in task modals and task details
   - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/TaskView/TaskView.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "DmsDeadlineDriverUI|PreDelivery"` to confirm clean layout and paired driver display.
 

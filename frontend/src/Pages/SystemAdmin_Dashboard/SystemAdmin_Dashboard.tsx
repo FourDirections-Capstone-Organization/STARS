@@ -28,6 +28,7 @@ import {
     Eye,
     EyeOff,
     Clock,
+    Calendar,
     Filter,
     Copy,
     LogOut,
@@ -3720,6 +3721,7 @@ export default function Dashboard() {
         senderAddress: string;
         packageDescription: string;
         courierEmployeeId: string;
+        courierFullName?: string;
         specialInstructions: string;
         dmsOrderId?: number;
         dmsWaybillNo?: string;
@@ -3731,6 +3733,7 @@ export default function Dashboard() {
         senderAddress: '',
         packageDescription: '',
         courierEmployeeId: '',
+        courierFullName: '',
         specialInstructions: '',
         dmsOrderId: undefined,
         dmsWaybillNo: undefined,
@@ -4328,6 +4331,7 @@ export default function Dashboard() {
             senderAddress: order.senderAddress || 'STARS Operations Office',
             packageDescription: order.packageDescription || '',
             courierEmployeeId: order.driverEmployeeId || '',
+            courierFullName: (order as any).driverName || (order as any).courierFullName || '',
             specialInstructions: order.specialInstructions || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
@@ -4461,6 +4465,7 @@ export default function Dashboard() {
                         packageDescription: newDeliveryForm.packageDescription?.trim() || t,
                         specialInstructions: newDeliveryForm.specialInstructions?.trim() || null,
                         courierEmployeeId: newDeliveryForm.courierEmployeeId?.trim() || null,
+                        courierFullName: (newDeliveryForm as any).courierFullName?.trim() || null,
                         dmsOrderId: (newDeliveryForm as any).dmsOrderId,
                         dmsWaybillNo: (newDeliveryForm as any).dmsWaybillNo || null,
                         dmsStatus: (newDeliveryForm as any).dmsStatus || null,
@@ -5793,9 +5798,15 @@ export default function Dashboard() {
                                                 style={(newTaskForm.priority === 'Urgent' || newEnableDelivery) ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8, marginTop: 4 } : { marginTop: 4 }}
                                             />
                                             {newEnableDelivery && newTaskForm.deadline && (
-                                                <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
-                                                    Deadline is synchronized and pre-set from DMS (Date-only: {formatDateOnly(newTaskForm.deadline)}).
-                                                </span>
+                                                <div>
+                                                    <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                        Deadline is synchronized and pre-set from DMS.
+                                                    </span>
+                                                    <div className="dms-deadline-dateonly-display" data-testid="dms-dateonly-display" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
+                                                        <Calendar size={13} />
+                                                        <span>DMS Delivery Deadline: {formatDateOnly(newTaskForm.deadline)}</span>
+                                                    </div>
+                                                </div>
                                             )}
                                             {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && !newEnableDelivery && (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -6217,9 +6228,10 @@ export default function Dashboard() {
                                                     (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId) ||
                                                     (e.id && e.id.toLowerCase() === courierId)
                                                 );
-                                                const driverDisplay = formatDriverDisplay(emp?.employeeName, newDeliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
+                                                const driverName = emp?.employeeName || (newDeliveryForm as any).courierFullName;
+                                                const driverDisplay = formatDriverDisplay(driverName, newDeliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
                                                 return (
-                                                    <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }}>
+                                                    <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
                                                         {driverDisplay.displayText}
                                                     </span>
                                                 );

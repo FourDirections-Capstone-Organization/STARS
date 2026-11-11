@@ -980,6 +980,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         senderAddress: (initial as any)?.deliveryDetails?.senderAddress ?? 'STARS Operations Office',
         specialInstructions: (initial as any)?.deliveryDetails?.specialInstructions ?? '',
         courierEmployeeId: (initial as any)?.deliveryDetails?.courierEmployeeId ?? '',
+        courierFullName: (initial as any)?.deliveryDetails?.courierFullName ?? (initial as any)?.driverName ?? '',
         dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
         dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
         dmsStatus: (initial as any)?.deliveryDetails?.dmsStatus ?? '',
@@ -1411,6 +1412,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 packageDescription: deliveryForm.packageDescription?.trim() || form.taskTitle.trim(),
                 specialInstructions: deliveryForm.specialInstructions?.trim() || '',
                 courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || '',
+                courierFullName: (deliveryForm as any).courierFullName?.trim() || undefined,
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
@@ -1589,7 +1591,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                 </span>
                                                 <div className="dms-deadline-dateonly-display" data-testid="dms-dateonly-display" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
                                                     <Calendar size={13} />
-                                                    <span>DMS Delivery Deadline: {formatDateOnly(form.dueAt)} (Date-only)</span>
+                                                    <span>DMS Delivery Deadline: {formatDateOnly(form.dueAt)}</span>
                                                 </div>
                                             </div>
                                         ) : isPreDelivery && isHistoricalDeadline ? (
@@ -2263,7 +2265,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             e.accountId.toLowerCase() === courierId ||
                                                             (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
                                                         );
-                                                        const driverDisplay = formatDriverDisplayShared(emp?.employeeName, deliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
+                                                        const driverDisplay = formatDriverDisplayShared(
+                                                            emp?.employeeName || (deliveryForm as any).courierFullName,
+                                                            deliveryForm.courierEmployeeId,
+                                                            undefined,
+                                                            { layout: 'id-first' }
+                                                        );
                                                         return (
                                                             <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
                                                                 {driverDisplay.displayText}
@@ -9424,6 +9431,7 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             senderAddress: order.senderAddress || 'STARS Operations Office',
             specialInstructions: order.specialInstructions || '',
             courierEmployeeId: order.driverEmployeeId || '',
+            courierFullName: (order as any).driverName || (order as any).courierFullName || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
