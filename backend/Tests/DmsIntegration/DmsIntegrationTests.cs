@@ -1200,4 +1200,278 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("Ricardo Bautista", order.DriverName);
         Assert.Equal("Ricardo Bautista", order.CourierFullName);
     }
+
+    [Fact]
+    public async Task UpsertDeliveryDetail_CapturesAndPersistsCourierFullName_AndResolvesFromUsers()
+    {
+        // Scenario A: Persists explicit CourierFullName even if user unmapped in Users table
+        var taskA = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task A",
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(taskA);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var dtoA = new UpsertTaskDeliveryDetailDTO
+        {
+            RecipientName = "Recipient A",
+            RecipientContact = "09170001111",
+            DeliveryAddress = "Taguig",
+            CourierEmployeeId = "UNMAPPED-01",
+            CourierFullName = "Explicit Driver Name"
+        };
+
+        var resultA = await service.UpsertDeliveryDetailAsync(taskA.Id, dtoA, Guid.NewGuid());
+        Assert.True(resultA.IsSuccess);
+        Assert.Equal("Explicit Driver Name", resultA.Data!.CourierFullName);
+        Assert.Equal("Explicit Driver Name", resultA.Data.DriverName);
+
+        var savedDetailA = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskA.Id);
+        Assert.Equal("Explicit Driver Name", savedDetailA.CourierFullName);
+
+        // Scenario B: Resolves CourierFullName from Users table when omitted in DTO
+        var mappedUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-KNOWN-99",
+            FirstName = "Andres",
+            LastName = "Bonifacio",
+            Role = UserRole.Courier,
+            Username = "abonifacio",
+            Email = "abonifacio@example.com"
+        };
+        _db.Users.Add(mappedUser);
+
+        var taskB = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task B",
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(taskB);
+        await _db.SaveChangesAsync();
+
+        var dtoB = new UpsertTaskDeliveryDetailDTO
+        {
+            RecipientName = "Recipient B",
+            RecipientContact = "09170002222",
+            DeliveryAddress = "Caloocan",
+            CourierEmployeeId = "EMP-KNOWN-99"
+        };
+
+        var resultB = await service.UpsertDeliveryDetailAsync(taskB.Id, dtoB, Guid.NewGuid());
+        Assert.True(resultB.IsSuccess);
+        Assert.Equal("Andres Bonifacio", resultB.Data!.CourierFullName);
+
+        var savedDetailB = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskB.Id);
+        Assert.Equal("Andres Bonifacio", savedDetailB.CourierFullName);
+    }
+
+    [Fact]
+    public async Task SyncDeliveryStatus_CapturesAndPersistsDriverNameFromDmsPayload_EvenWhenUnmappedInUsers()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "DMS Status Sync Courier Name",
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Recipient C",
+            RecipientContact = "09170003333",
+            DeliveryAddress = "Quezon City",
+            DmsWaybillNo = "WB-SYNC-COURIER-NAME-01",
+            DmsStatus = "Pending"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Get && req.RequestUri!.ToString().Contains("/api/integration/stars/delivery-orders/")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = JsonContent.Create(new
+                {
+                    waybillNo = "WB-SYNC-COURIER-NAME-01",
+                    orderId = 777,
+                    status = "In Transit",
+                    driverEmployeeId = "EMP-UNMAPPED-55",
+                    driverName = "Ricardo Bautista"
+                })
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.SyncDeliveryStatusForTaskAsync(taskId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("EMP-UNMAPPED-55", result.Data!.CourierEmployeeId);
+        Assert.Equal("Ricardo Bautista", result.Data.CourierFullName);
+        Assert.Equal("Ricardo Bautista", result.Data.DriverName);
+
+        var savedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("EMP-UNMAPPED-55", savedDetail.CourierEmployeeId);
+        Assert.Equal("Ricardo Bautista", savedDetail.CourierFullName);
+    }
+
+    [Fact]
+    public async Task ProcessStatusUpdate_CapturesAndPersistsDriverNameFromWebhook()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Webhook Driver Name Task",
+            CreatedById = Guid.NewGuid()
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Webhook Recipient",
+            RecipientContact = "09123456789",
+            DeliveryAddress = "Mandaluyong",
+            DmsWaybillNo = "WB-WEBHOOK-DRIVER-01",
+            SyncStatus = "Synced"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var updateDto = new DmsStatusWebhookDTO
+        {
+            WaybillNo = "WB-WEBHOOK-DRIVER-01",
+            StarsTaskId = taskId,
+            Status = "In Transit",
+            DriverId = "EMP-UNMAPPED-88",
+            DriverName = "Emilio Aguinaldo",
+            Timestamp = DateTime.UtcNow
+        };
+
+        var result = await service.ProcessStatusUpdateAsync(updateDto);
+        Assert.True(result.IsSuccess);
+
+        var savedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("EMP-UNMAPPED-88", savedDetail.CourierEmployeeId);
+        Assert.Equal("Emilio Aguinaldo", savedDetail.CourierFullName);
+    }
+
+    [Fact]
+    public async Task GetPendingOrders_PreservesDmsDriverNameWhenUnmappedInUsers_AndFallsBackToIdWhenEmpty()
+    {
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 901,
+                ""waybillNo"": ""WB-PRESERVE-01"",
+                ""clientName"": ""Preserve Logistics"",
+                ""recipientName"": ""Juan Recipient"",
+                ""recipientContact"": ""09170001234"",
+                ""recipientAddress"": ""Makati"",
+                ""area"": ""Makati"",
+                ""orderDate"": ""2026-11-10T00:00:00Z"",
+                ""expectedDelivery"": ""2026-11-20T00:00:00Z"",
+                ""driverEmployeeId"": ""EMP-UNMAPPED-100"",
+                ""driverName"": ""Ricardo Bautista"",
+                ""status"": ""Pending""
+            },
+            {
+                ""orderId"": 902,
+                ""waybillNo"": ""WB-FALLBACK-02"",
+                ""clientName"": ""Fallback Logistics"",
+                ""recipientName"": ""Pedro Recipient"",
+                ""recipientContact"": ""09170005678"",
+                ""recipientAddress"": ""Pasay"",
+                ""area"": ""Pasay"",
+                ""orderDate"": ""2026-11-10T00:00:00Z"",
+                ""expectedDelivery"": ""2026-11-20T00:00:00Z"",
+                ""driverEmployeeId"": ""EMP-UNMAPPED-200"",
+                ""driverName"": null,
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetPendingOrdersAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal(2, result.Data.Count);
+
+        var order1 = result.Data.First(o => o.OrderId == 901);
+        Assert.Equal("EMP-UNMAPPED-100", order1.DriverEmployeeId);
+        Assert.Equal("Ricardo Bautista", order1.DriverName);
+
+        var order2 = result.Data.First(o => o.OrderId == 902);
+        Assert.Equal("EMP-UNMAPPED-200", order2.DriverEmployeeId);
+        Assert.Equal("EMP-UNMAPPED-200", order2.DriverName);
+    }
+
+    [Fact]
+    public async Task GetAllDeliveries_ReturnsPersistedCourierFullName_WhenDriverUnmappedInUsers()
+    {
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Task with Persisted Courier Name",
+            TaskNumber = "TSK-PERSIST-01"
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Recipient X",
+            RecipientContact = "09170009999",
+            DeliveryAddress = "Taguig",
+            CourierEmployeeId = "EMP-UNMAPPED-777",
+            CourierFullName = "Apolinario Mabini",
+            DmsWaybillNo = "WB-PERSIST-01",
+            DmsStatus = "Delivered"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetAllDeliveriesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+
+        var item = Assert.Single(result.Data, d => d.TaskId == taskId);
+        Assert.Equal("EMP-UNMAPPED-777", item.CourierEmployeeId);
+        Assert.Equal("Apolinario Mabini", item.CourierFullName);
+        Assert.Equal("Apolinario Mabini", item.DriverName);
+    }
 }
