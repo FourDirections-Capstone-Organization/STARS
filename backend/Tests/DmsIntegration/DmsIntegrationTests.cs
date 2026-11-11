@@ -1474,4 +1474,137 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("Apolinario Mabini", item.CourierFullName);
         Assert.Equal("Apolinario Mabini", item.DriverName);
     }
+
+    [Fact]
+    public async Task GetAllDeliveries_AugmentsWithPendingOrders_WhenTaskDeliveryDetailsIsEmpty()
+    {
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 901,
+                ""waybillNo"": ""WB-DMS-AUTO-01"",
+                ""clientName"": ""Apex Deliveries"",
+                ""recipientName"": ""Elena Roxas"",
+                ""recipientContact"": ""09170001234"",
+                ""recipientAddress"": ""BGC Taguig"",
+                ""area"": ""Taguig"",
+                ""packageDescription"": ""Corporate Legal Dossier"",
+                ""orderDate"": ""2026-11-11T09:00:00Z"",
+                ""expectedDelivery"": ""2026-11-12T15:00:00Z"",
+                ""driverEmployeeId"": ""EMP-008"",
+                ""driverName"": ""Ricardo Bautista"",
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetAllDeliveriesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        var delivery = Assert.Single(result.Data);
+        Assert.Equal("WB-DMS-AUTO-01", delivery.DmsWaybillNo);
+        Assert.Equal("Elena Roxas", delivery.RecipientName);
+        Assert.Equal("Taguig", delivery.Area);
+        Assert.Equal("EMP-008", delivery.CourierEmployeeId);
+        Assert.Equal("Ricardo Bautista", delivery.CourierFullName);
+        Assert.Equal("Pending", delivery.DmsStatus);
+    }
+
+    [Fact]
+    public async Task GetAllDeliveries_HandlesDuplicateEmployeeNumbersSafely()
+    {
+        var taskId = Guid.NewGuid();
+        _db.Tasks.Add(new Models.Task
+        {
+            Id = taskId,
+            Title = "Task Duplicate Driver Check",
+            TaskNumber = "TSK-DUP-01"
+        });
+
+        _db.Users.AddRange(
+            new User
+            {
+                Id = Guid.NewGuid(),
+                EmployeeNumber = "EMP-DUP-01",
+                FirstName = "First",
+                LastName = "Driver",
+                Username = "driver1",
+                Email = "driver1@example.com",
+                PasswordHash = "hash",
+                IsActive = true
+            },
+            new User
+            {
+                Id = Guid.NewGuid(),
+                EmployeeNumber = "EMP-DUP-01",
+                FirstName = "Duplicate",
+                LastName = "Driver",
+                Username = "driver2",
+                Email = "driver2@example.com",
+                PasswordHash = "hash",
+                IsActive = true
+            });
+
+        _db.TaskDeliveryDetails.Add(new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            RecipientName = "Client Alpha",
+            RecipientContact = "09171110000",
+            DeliveryAddress = "Makati Ave",
+            CourierEmployeeId = "EMP-DUP-01",
+            DmsWaybillNo = "WB-DUP-01",
+            DmsStatus = "In Transit"
+        });
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetAllDeliveriesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        var item = Assert.Single(result.Data, d => d.TaskId == taskId);
+        Assert.Equal("EMP-DUP-01", item.CourierEmployeeId);
+        Assert.False(string.IsNullOrWhiteSpace(item.CourierFullName));
+    }
+
+    [Fact]
+    public async Task GetAllDeliveries_AugmentsPreDeliveryOperationalTasksWithoutDeliveryDetails()
+    {
+        var taskId = Guid.NewGuid();
+        _db.Tasks.Add(new Models.Task
+        {
+            Id = taskId,
+            Title = "[Pre-Delivery] Delivery to Marco Polo - Waybill WB-TASK-ONLY-01",
+            Description = "Pre-delivery operational validation for DMS Waybill WB-TASK-ONLY-01",
+            TaskNumber = "TSK-PD-99",
+            Status = Backend.Models.Enums.TaskStatus.InProgress,
+            Deadline = DateTime.UtcNow.AddDays(2)
+        });
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+        var result = await service.GetAllDeliveriesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        var item = Assert.Single(result.Data, d => d.TaskId == taskId);
+        Assert.Equal("WB-TASK-ONLY-01", item.DmsWaybillNo);
+        Assert.Equal("Marco Polo", item.RecipientName);
+        Assert.Equal("In Transit", item.DmsStatus);
+    }
 }

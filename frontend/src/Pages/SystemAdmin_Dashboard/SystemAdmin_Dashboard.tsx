@@ -4284,6 +4284,7 @@ export default function Dashboard() {
                 senderAddress: '',
                 packageDescription: '',
                 courierEmployeeId: '',
+                courierFullName: '',
                 specialInstructions: '',
                 dmsOrderId: undefined,
                 dmsWaybillNo: undefined,
@@ -4316,12 +4317,22 @@ export default function Dashboard() {
                 }
             } catch { }
         }
+        const courierIdVal = (order.driverEmployeeId || '').trim();
+        const matchedCourierEmp = courierIdVal
+            ? employees.find(e =>
+                (e.employeeNumber && e.employeeNumber.toLowerCase() === courierIdVal.toLowerCase()) ||
+                (e.id && e.id.toLowerCase() === courierIdVal.toLowerCase())
+            )
+            : undefined;
+        const resolvedCourierName = (order as any).driverName || (order as any).courierFullName || matchedCourierEmp?.employeeName || '';
+
         setNewTaskForm(prev => ({
             ...prev,
             title: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
             description: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
             priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
             deadline: dmsDeadline,
+            assignedTo: prev.assignedTo || matchedCourierEmp?.id || '',
         }));
         setNewDeliveryForm({
             recipientName: order.recipientName,
@@ -4330,8 +4341,8 @@ export default function Dashboard() {
             area: order.area || '',
             senderAddress: order.senderAddress || 'STARS Operations Office',
             packageDescription: order.packageDescription || '',
-            courierEmployeeId: order.driverEmployeeId || '',
-            courierFullName: (order as any).driverName || (order as any).courierFullName || '',
+            courierEmployeeId: courierIdVal,
+            courierFullName: resolvedCourierName,
             specialInstructions: order.specialInstructions || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
@@ -4527,6 +4538,7 @@ export default function Dashboard() {
                 senderAddress: '',
                 packageDescription: '',
                 courierEmployeeId: '',
+                courierFullName: '',
                 specialInstructions: '',
             });
             fetchManagerTasks();
@@ -6208,17 +6220,17 @@ export default function Dashboard() {
                                         <span style={{ fontSize: 10, color: '#ee5d50', marginTop: 2, display: 'block' }}>{newTaskErrors.deliveryAddress}</span>
                                     )}
                                 </div>
+                                <div className="fm-field" style={{ margin: 0 }}>
+                                    <label className="fm-label" style={{ fontSize: 11 }}>Package Description</label>
+                                    <input
+                                        className="fm-input"
+                                        value={newDeliveryForm.packageDescription}
+                                        onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                        placeholder="e.g. Confidential Project Dossier"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                    <div className="fm-field" style={{ margin: 0 }}>
-                                        <label className="fm-label" style={{ fontSize: 11 }}>Package Description</label>
-                                        <input
-                                            className="fm-input"
-                                            value={newDeliveryForm.packageDescription}
-                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
-                                            placeholder="e.g. Confidential Project Dossier"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
                                     <div className="fm-field" style={{ margin: 0 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
@@ -6228,7 +6240,7 @@ export default function Dashboard() {
                                                     (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId) ||
                                                     (e.id && e.id.toLowerCase() === courierId)
                                                 );
-                                                const driverName = emp?.employeeName || (newDeliveryForm as any).courierFullName;
+                                                const driverName = (newDeliveryForm as any).courierFullName || emp?.employeeName;
                                                 const driverDisplay = formatDriverDisplay(driverName, newDeliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
                                                 return (
                                                     <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
@@ -6240,9 +6252,38 @@ export default function Dashboard() {
                                         <input
                                             className="fm-input"
                                             value={newDeliveryForm.courierEmployeeId}
-                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                const matched = employees.find(emp =>
+                                                    (emp.employeeNumber && emp.employeeNumber.toLowerCase() === val.trim().toLowerCase()) ||
+                                                    (emp.id && emp.id.toLowerCase() === val.trim().toLowerCase())
+                                                );
+                                                setNewDeliveryForm(prev => {
+                                                    const next = { ...prev, courierEmployeeId: val };
+                                                    if (matched && !prev.courierFullName) {
+                                                        next.courierFullName = matched.employeeName;
+                                                    }
+                                                    return next;
+                                                });
+                                                if (matched) {
+                                                    setNewTaskForm(prev => ({ ...prev, assignedTo: matched.id }));
+                                                    setNewTaskErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                }
+                                            }}
                                             placeholder="e.g. DRV-001"
                                             style={{ fontSize: 12 }}
+                                            data-testid="pre-delivery-courier-id-input"
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Courier Name (Optional)</label>
+                                        <input
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).courierFullName || ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, courierFullName: e.target.value }))}
+                                            placeholder="e.g. Ricardo Bautista"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="pre-delivery-courier-name-input"
                                         />
                                     </div>
                                 </div>

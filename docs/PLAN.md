@@ -1,36 +1,36 @@
-# Plan: Pre-Delivery Helper Text Removal and DMS Courier Name Presentation
+# Plan: Delivery Summary Data Presentation and Courier Name Form Field
 
-**Feature branch:** `fix/dms-courier-name-and-pre-delivery-helper-text` | **Step branches:** `step-N-<short-name>`
+**Feature branch:** `fix/delivery-summary-data-and-courier-name-field` | **Step branches:** `step-N-<short-name>`
 Never push directly to `refactoring/bug-fix`. Commit each step on a step branch and merge to feature branch.
 
-## Findings so far
-- Task form: `SystemAdmin_Dashboard.tsx` and `OpAdmin_Dashboard.tsx` render the "(Date-only: ...)" helper text below locked DMS deadlines.
-- DMS sync handler: `DmsIntegrationService.cs` drops driver names from DMS payloads when employee numbers are unmapped in STARS `_db.Users`.
-- Waybill model & DTOs: `TaskDeliveryDetail.cs`, `DmsIntegrationDTOs.cs`, and `UpsertTaskDeliveryDetailDTO` lack a dedicated `CourierFullName` field.
-- Task details view: `TaskView.tsx` renders courier info using `formatDriverDisplay`, but receives employee ID alone if the name is not persisted.
-- Courier label: `frontend/src/utils/driverUtils.ts` already provides the standard `EMP-008 · Ricardo Bautista` formatter with clean ID-only fallback.
+## Findings & Root Cause Analysis
+1. **Delivery Summary Tab Empty Data**:
+   - In `DmsDeliveryTab.tsx`, `fetchDeliveries` calls `api.get('/api/dms-integration/deliveries')`. If the backend returns an empty array `[]` (because `TaskDeliveryDetails` has 0 rows or hasn't linked DMS shipments yet), the frontend immediately sets `deliveries = []` and returns without evaluating candidate tasks or pending DMS shipments.
+   - In `DmsIntegrationService.cs`, `GetAllDeliveriesAsync()` only queries `_db.TaskDeliveryDetails`. If no STARS task has an attached `TaskDeliveryDetail` row yet, it returns an empty list, completely ignoring active DMS shipments and pre-delivery orders awaiting validation. Additionally, `driverUsers.ToDictionary` could throw if duplicate employee numbers exist.
+   - When pending DMS orders are retrieved or pre-delivery tasks exist in `Tasks`, they should be unified into `GetAllDeliveriesAsync()` so all shipments, metrics, and KPI charts are fully populated.
+2. **Missing Courier Name Field in Pre-Delivery Modal**:
+   - In `SystemAdmin_Dashboard.tsx` and `OpAdmin_Dashboard.tsx`, when creating a task from pre-delivery validation ("Create Pre-Delivery Operational Task"), the modal displays input fields for Recipient, Contact, Address, Area, Sender, Package Description, and `Courier Employee ID (Optional)`, but has **no input field for Courier Name / Full Name**.
+   - Although `courierFullName` exists in DTOs and state, operators cannot see, edit, or enter the courier's name directly in the form.
 
 ## Steps
 
-- [x] Step 1: Add CourierFullName to delivery detail model and integration DTOs to support courier name persistence
-  - Files: `backend/Models/TaskDeliveryDetail.cs`, `backend/Models/DTOs/DmsIntegrationDTOs.cs`
-  - Verify: Run `dotnet build backend/Backend.csproj --configuration Release` to confirm model and DTO schema compilation.
-
-- [x] Step 2: Update DMS sync handlers to capture, persist, and resolve courier names from DMS payloads and STARS user records
+- [x] Step 1: Backend: Enhance `GetAllDeliveriesAsync` to safely resolve driver mappings and merge unlinked DMS shipments
   - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
-  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to verify ID and name mapping.
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests`
 
-- [x] Step 3: Remove "(Date-only: ...)" helper text and present paired courier labels in task modals and task details
-  - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/TaskView/TaskView.tsx`
-  - Verify: Run `npm --prefix frontend test -- -t "DmsDeadlineDriverUI|PreDelivery"` to confirm clean layout and paired driver display.
+- [x] Step 2: Frontend: Update `DmsDeliveryTab.tsx` fallback logic and row keys to guarantee delivery data presentation
+  - Files: `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
+  - Verify: Run `npm --prefix frontend test -- -t "DmsDeliveryTab|DeliveryAnalytics"`
 
-- [x] Step 4: Run full backend and frontend regression suites and perform manual end-to-end verification
-  - Files: `frontend/src/test/DmsDeadlineDriverUI.test.tsx`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
-  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj && npm --prefix frontend test`, then verify helper text removal and waybill courier name in UI.
+- [x] Step 3: Frontend: Add dedicated Courier Name input field in Create Pre-Delivery Operational Task modals
+  - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`
+  - Verify: Run `npm --prefix frontend test -- -t "PreDelivery"`
+
+- [x] Step 4: Regression tests & full suite verification
+  - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/PreDeliveryTab.test.tsx`, `frontend/src/test/DmsDeadlineDriverUI.test.tsx`
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` and `npm --prefix frontend test`
 
 ## Open questions / assumptions
-- DMS courier payload: Assumes DMS sends courier name under `driverName` or `courierName`; STARS preserves it or resolves from `_db.Users`.
-- STARS employee lookup: If DMS sends ID only, STARS looks up `_db.Users` by `EmployeeNumber`; if unmapped in both, ID alone is displayed.
-- Existing waybills: Existing waybills without a name display the ID alone cleanly ("EMP-008") with no data backfill or schema break required.
-- Date-only text locations: "(Date-only)" appeared in `SystemAdmin_Dashboard.tsx` helper text and `OpAdmin_Dashboard.tsx` deadline badge.
-- Proposed courier layout: Middle dot convention `EMP-008 · Ricardo Bautista` via `formatDriverDisplay` with clean fallback to `EMP-008`.
+- Driver field layout: In the delivery details section, `Courier Employee ID` and `Courier Name` sit side-by-side in a responsive 2-column grid (`1fr 1fr`), consistent with Recipient / Contact and Area / Sender rows.
+- Unlinked DMS shipments: In `DmsDeliveryTab`, shipments not yet attached to a STARS task display "[DMS Pre-Delivery] <Recipient>" as title and "Pending Creation" for Waybill / Task Link.
+- Auto-fill driver name: If the operator enters a valid STARS courier employee number (e.g. `EMP-008`), the Courier Name field automatically populates with the employee's name if currently blank.
