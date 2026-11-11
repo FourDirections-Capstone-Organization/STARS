@@ -12,7 +12,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
 
 ## Steps
 
-- [ ] Step 1: Update global palette, button radius, table header tokens, and remove sidebar bg overrides
+- [x] Step 1: Update global palette, button radius, table header tokens, and remove sidebar bg overrides
   - Files: `frontend/src/global.css`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.css`, `frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.css`
   - Verify: Build frontend with `npm run build` and inspect CSS variables in root.
 
