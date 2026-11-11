@@ -509,6 +509,34 @@
     align-items: center;
   }
 
+  /* ── Shared Table Header Styles ── */
+  th,
+  .table th,
+  .table-header,
+  .table-th,
+  .data-table th,
+  .th {
+    color: var(--th-color, #64748B);
+    background: var(--th-bg, #F7F9FF);
+    font-size: var(--th-font-size, 0.75rem);
+    font-weight: var(--th-font-weight, 700);
+    letter-spacing: var(--th-letter-spacing, 0.05em);
+    text-transform: var(--th-text-transform, uppercase);
+  }
+
+  /* ── Standardized Form & Modal Button Radius ── */
+  .modal-btn,
+  .modal-actions button,
+  .modal-actions .btn,
+  .fm-btn,
+  .cm-btn,
+  .dt-dialog-actions button,
+  .dt-dialog-actions .btn,
+  .tv-modal-actions button,
+  .tv-modal-actions .tv-btn {
+    border-radius: var(--btn-radius, 8px);
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;

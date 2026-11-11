@@ -129,6 +129,11 @@
   margin-top: 24px;
 }
 
+.dt-dialog-actions button,
+.dt-dialog-actions .btn {
+  border-radius: var(--btn-radius, 8px);
+}
+
 .dt-dialog--form .dt-dialog-actions {
   justify-content: flex-end;
 }

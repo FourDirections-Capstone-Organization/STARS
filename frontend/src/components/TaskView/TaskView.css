@@ -55,7 +55,7 @@
     font-size: 13px;
     font-weight: 600;
     padding: 6px 14px;
-    border-radius: 8px;
+    border-radius: var(--btn-radius, 8px);
     cursor: pointer;
     transition: all 0.15s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -258,7 +258,7 @@
     align-items: center;
     gap: 6px;
     padding: 7px 15px;
-    border-radius: 8px;
+    border-radius: var(--btn-radius, 8px);
     font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
@@ -329,7 +329,7 @@
     border: 1px solid var(--border);
     padding: 5px 12px;
     font-size: 11.5px;
-    border-radius: 7px;
+    border-radius: var(--btn-radius, 8px);
 }
 
 .tv-btn-ghost-sm:hover {
@@ -343,7 +343,7 @@
     border: 1px solid #fcc;
     padding: 5px 12px;
     font-size: 11.5px;
-    border-radius: 7px;
+    border-radius: var(--btn-radius, 8px);
 }
 
 .tv-btn-outline-sm:hover {
@@ -1110,7 +1110,7 @@
     padding: 4px 8px;
     font-size: 10.5px;
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: var(--btn-radius, 8px);
     border: none;
     background: var(--status-failed, #ee5d50);
     color: #fff;
@@ -1232,6 +1232,11 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+.tv-modal-actions button,
+.tv-modal-actions .tv-btn {
+    border-radius: var(--btn-radius, 8px);
 }
 
 /* -- Scrollbar -- */
@@ -2110,7 +2115,7 @@
 .tv-btn-primary-sm {
     padding: 4px 10px;
     font-size: 11.5px;
-    border-radius: 6px;
+    border-radius: var(--btn-radius, 8px);
     font-weight: 600;
     background: var(--primary, #00A99D);
     color: #ffffff;
@@ -2736,4 +2741,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.tv-pod-modal-btn-row button,
+.tv-pod-modal-btn-row .tv-btn {
+    border-radius: var(--btn-radius, 8px);
 }
