@@ -16,7 +16,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `backend/Models/TaskDeliveryDetail.cs`, `backend/Models/DTOs/DmsIntegrationDTOs.cs`
   - Verify: Run `dotnet build backend/Backend.csproj --configuration Release` to confirm model and DTO schema compilation.
 
-- [ ] Step 2: Update DMS sync handlers to capture, persist, and resolve courier names from DMS payloads and STARS user records
+- [x] Step 2: Update DMS sync handlers to capture, persist, and resolve courier names from DMS payloads and STARS user records
   - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to verify ID and name mapping.
 
