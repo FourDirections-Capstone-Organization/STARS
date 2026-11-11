@@ -33,6 +33,7 @@ import {
     downloadDeliveryPdfReport,
     downloadDeliveryCsvReport,
 } from './DeliveryReportExport';
+import { formatDriverDisplay } from '../TaskView/TaskView';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -48,6 +49,10 @@ export interface DmsDeliveryItem {
     senderAddress?: string;
     specialInstructions?: string;
     courierEmployeeId?: string;
+    courierFullName?: string;
+    courierIsActive?: boolean;
+    podUrl?: string;
+    podUploadedAt?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
     dmsStatus: string;
@@ -72,7 +77,9 @@ interface DmsDeliveryTabProps {
     onViewTask: (taskId: string) => void;
 }
 
-export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onViewTask }) => {
+const EMPTY_TASKS: any[] = [];
+
+export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TASKS, onViewTask }) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [performance, setPerformance] = useState<PerformanceSummary>({
@@ -187,6 +194,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 senderAddress: d.senderAddress,
                                 specialInstructions: d.specialInstructions,
                                 courierEmployeeId: d.courierEmployeeId || '',
+                                courierFullName: d.courierFullName,
+                                courierIsActive: d.courierIsActive,
+                                podUrl: d.podUrl,
+                                podUploadedAt: d.podUploadedAt,
                                 dmsWaybillNo: d.dmsWaybillNo,
                                 dmsOrderId: d.dmsOrderId,
                                 dmsStatus: d.dmsStatus || 'Pending',
@@ -323,6 +334,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                 (d.deliveryAddress && d.deliveryAddress.toLowerCase().includes(q)) ||
                 (d.area && d.area.toLowerCase().includes(q)) ||
                 (d.courierEmployeeId && d.courierEmployeeId.toLowerCase().includes(q)) ||
+                (d.courierFullName && d.courierFullName.toLowerCase().includes(q)) ||
                 (d.dmsStatus && d.dmsStatus.toLowerCase().includes(q))
             );
         });
@@ -441,14 +453,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             <RefreshCw size={13} className={syncingId === selectedDelivery.taskId ? 'spin' : ''} />
                             <span>{syncingId === selectedDelivery.taskId ? 'Syncing...' : 'Sync with DMS'}</span>
                         </button>
-                        <button
-                            type="button"
+                        <a
+                            href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                             className="dms-detail-primary-btn"
-                            onClick={() => onViewTask(selectedDelivery.taskId)}
+                            onClick={(e) => {
+                                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                    e.preventDefault();
+                                    onViewTask(selectedDelivery.taskId);
+                                }
+                            }}
+                            style={{ textDecoration: 'none' }}
                         >
                             <span>Open STARS Task Details</span>
                             <ArrowRight size={14} />
-                        </button>
+                        </a>
                     </div>
                 </div>
 
@@ -624,24 +642,41 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Assigned Courier</span>
                                 <span className="dms-detail-val">
-                                    {selectedDelivery.courierEmployeeId ? (
-                                        <span className="dms-detail-driver-badge">{selectedDelivery.courierEmployeeId}</span>
-                                    ) : (
-                                        <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>
-                                    )}
+                                    {(() => {
+                                        const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
+                                        if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
+                                            return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
+                                        }
+                                        return (
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="dms-detail-driver-badge">{driverInfo.displayText}</span>
+                                                {driverInfo.isInactive && (
+                                                    <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>
+                                                        [Inactive]
+                                                    </span>
+                                                )}
+                                            </span>
+                                        );
+                                    })()}
                                 </span>
                             </div>
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Linked STARS Task</span>
                                 <span className="dms-detail-val">
-                                    <button
-                                        type="button"
+                                    <a
+                                        href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                                         className="dms-detail-inline-task-btn"
-                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                        onClick={(e) => {
+                                            if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                e.preventDefault();
+                                                onViewTask(selectedDelivery.taskId);
+                                            }
+                                        }}
+                                        style={{ textDecoration: 'none' }}
                                     >
                                         <span>{selectedDelivery.taskTitle}</span>
                                         <ExternalLink size={11} />
-                                    </button>
+                                    </a>
                                 </span>
                             </div>
                             {selectedDelivery.senderAddress && (
@@ -733,14 +768,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                         <ArrowLeft size={14} />
                         <span>Return to Deliveries List</span>
                     </button>
-                    <button
-                        type="button"
+                    <a
+                        href={`/OpAdmin_Dashboard?taskId=${selectedDelivery.taskId}`}
                         className="dms-detail-footer-btn-primary"
-                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                        onClick={(e) => {
+                            if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                e.preventDefault();
+                                onViewTask(selectedDelivery.taskId);
+                            }
+                        }}
+                        style={{ textDecoration: 'none' }}
                     >
                         <span>Open STARS Task Details</span>
                         <ArrowRight size={14} />
-                    </button>
+                    </a>
                 </div>
             </div>
         );
@@ -912,7 +953,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                     <Search size={15} className="dms-search-icon" />
                     <input
                         type="text"
-                        placeholder="Search by Waybill, Recipient, Task, Address, Driver ID..."
+                        placeholder="Search by Waybill, Recipient, Task, Address, Driver Name/ID..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="dms-search-input"
@@ -967,7 +1008,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 <th>Waybill No</th>
                                 <th>STARS Task</th>
                                 <th>Recipient & Address</th>
-                                <th>Driver ID</th>
+                                <th>Courier / Driver</th>
                                 <th>DMS Status</th>
                                 <th>GPS Location</th>
                                 <th>Last Ping</th>
@@ -979,7 +1020,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                 <tr
                                     key={item.taskId}
                                     className="dms-table-row"
+                                    tabIndex={0}
+                                    role="button"
+                                    aria-label={`View delivery shipment ${item.dmsWaybillNo || item.taskId}`}
                                     onClick={() => setSelectedDelivery(item)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedDelivery(item);
+                                        }
+                                    }}
+                                    style={{ cursor: 'pointer' }}
                                 >
                                     <td>
                                         {item.dmsWaybillNo ? (
@@ -1005,9 +1056,33 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
 
                                     <td>
                                         <div className="dms-task-cell">
-                                            <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
-                                            {(item.taskNumber || item.taskReferenceNumber) && (
-                                                <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                            {item.taskId ? (
+                                                <a
+                                                    href={`/OpAdmin_Dashboard?taskId=${item.taskId}`}
+                                                    className="dms-task-cell-link"
+                                                    data-testid={`dms-tab-task-link-${item.taskId}`}
+                                                    onClick={(e) => {
+                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            onViewTask(item.taskId);
+                                                        }
+                                                    }}
+                                                    title="Open STARS Task Details (middle-click or right-click to open in new tab)"
+                                                    style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}
+                                                >
+                                                    <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
+                                                    {(item.taskNumber || item.taskReferenceNumber) && (
+                                                        <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                                    )}
+                                                </a>
+                                            ) : (
+                                                <>
+                                                    <span className="dms-task-title" title={item.taskTitle}>{item.taskTitle}</span>
+                                                    {(item.taskNumber || item.taskReferenceNumber) && (
+                                                        <span className="dms-task-ref">#{item.taskNumber || item.taskReferenceNumber}</span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -1024,11 +1099,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                     </td>
 
                                     <td>
-                                        {item.courierEmployeeId ? (
-                                            <span className="dms-driver-badge">{item.courierEmployeeId}</span>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>
-                                        )}
+                                        {(() => {
+                                            const driverInfo = formatDriverDisplay(item.courierFullName, item.courierEmployeeId, item.courierIsActive);
+                                            if (driverInfo.displayText === 'Unassigned' && !item.courierEmployeeId) {
+                                                return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>;
+                                            }
+                                            return (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                    <span className="dms-driver-badge" data-testid="dms-courier-name">
+                                                        {driverInfo.displayText}
+                                                    </span>
+                                                    {driverInfo.isInactive && (
+                                                        <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>
+                                                            [Inactive]
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
 
                                     <td>
@@ -1074,18 +1162,23 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = [], onVi
                                                 <Truck size={12} />
                                                 <span>Track</span>
                                             </button>
-                                            <button
-                                                type="button"
+                                            <a
+                                                href={`/OpAdmin_Dashboard?taskId=${item.taskId}`}
                                                 className="dms-table-btn"
+                                                data-testid={`dms-tab-details-btn-${item.taskId}`}
                                                 onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onViewTask(item.taskId);
+                                                    if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        onViewTask(item.taskId);
+                                                    }
                                                 }}
                                                 title="Open Task Details"
+                                                style={{ textDecoration: 'none' }}
                                             >
                                                 <span>Details</span>
                                                 <ChevronRight size={12} />
-                                            </button>
+                                            </a>
                                         </div>
                                     </td>
                                 </tr>

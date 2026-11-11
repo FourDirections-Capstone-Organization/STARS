@@ -83,6 +83,12 @@ public class TaskDeliveryDetailResponseDTO
     public string? SenderAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? CourierEmployeeId { get; set; }
+    public string? CourierFullName { get; set; }
+    public bool? CourierIsActive { get; set; }
+    public string? PodUrl { get; set; }
+    public string? PodFileName { get; set; }
+    public DateTime? PodUploadedAt { get; set; }
+    public string? PodUploadedBy { get; set; }
     public string? DmsWaybillNo { get; set; }
     public int? DmsOrderId { get; set; }
     public string? DmsStatus { get; set; }
@@ -127,11 +133,17 @@ public class DmsStatusWebhookDTO
     public string? DeliveryAddress { get; set; }
     public string? Area { get; set; }
     public string? PackageDescription { get; set; }
+
+    public string? PodUrl { get; set; }
+    public string? PodImage { get; set; }
+    public string? PotImage { get; set; }
 }
 
 public class DmsPerformanceRecordDTO
 {
     public string? DriverId { get; set; }
+    public string? DriverName { get; set; }
+    public bool? DriverIsActive { get; set; }
     public string WaybillNo { get; set; } = string.Empty;
     public Guid StarsTaskId { get; set; }
     public DateTime CompletedAt { get; set; }
@@ -169,6 +181,10 @@ public class DmsDeliveryItemDTO
     public string? SenderAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? CourierEmployeeId { get; set; }
+    public string? CourierFullName { get; set; }
+    public bool? CourierIsActive { get; set; }
+    public string? PodUrl { get; set; }
+    public DateTime? PodUploadedAt { get; set; }
     public string? DmsWaybillNo { get; set; }
     public int? DmsOrderId { get; set; }
     public string DmsStatus { get; set; } = string.Empty;
@@ -180,4 +196,18 @@ public class DmsDeliveryItemDTO
     public string SyncStatus { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+}
+
+public class TaskPodResponseDTO
+{
+    public Guid TaskId { get; set; }
+    public string? WaybillNo { get; set; }
+    public string? PodUrl { get; set; }
+    public string? FileName { get; set; }
+    public string? FileType { get; set; }
+    public long? FileSize { get; set; }
+    public DateTime? UploadedAt { get; set; }
+    public string? UploadedByName { get; set; }
+    public string? DownloadUrl { get; set; }
+    public bool HasPod => !string.IsNullOrWhiteSpace(PodUrl) || !string.IsNullOrWhiteSpace(DownloadUrl);
 }

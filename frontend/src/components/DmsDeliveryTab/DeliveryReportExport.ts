@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { DmsDeliveryItem } from './DmsDeliveryTab';
+import { formatDriverDisplay } from '../TaskView/TaskView';
 
 export interface PerformanceSummary {
     totalDeliveries: number;
@@ -53,6 +54,7 @@ export const downloadDeliveryCsvReport = (
         'Delivery Address',
         'Area / Region',
         'Assigned Driver ID',
+        'Assigned Driver Name',
         'DMS Status',
         'Sync Status',
         'Latitude',
@@ -62,23 +64,29 @@ export const downloadDeliveryCsvReport = (
         'Failure Reason'
     ];
 
-    const dataRows = deliveries.map(d => [
-        d.dmsWaybillNo || 'Pending Creation',
-        d.taskNumber || d.taskReferenceNumber || d.taskId,
-        d.taskTitle || 'Delivery Task',
-        d.recipientName || '',
-        d.recipientContact || '',
-        d.deliveryAddress || '',
-        d.area || '',
-        d.courierEmployeeId || 'Auto / Pool',
-        d.dmsStatus || 'Pending',
-        d.syncStatus || 'Synced',
-        d.dmsLatitude !== undefined ? d.dmsLatitude.toString() : '',
-        d.dmsLongitude !== undefined ? d.dmsLongitude.toString() : '',
-        d.dmsLastSyncedAt ? new Date(d.dmsLastSyncedAt).toLocaleString() : '',
-        d.createdAt ? new Date(d.createdAt).toLocaleString() : '',
-        d.dmsFailureReason || ''
-    ]);
+    const dataRows = deliveries.map(d => {
+        const driverNameText = d.courierFullName
+            ? `${d.courierFullName}${d.courierIsActive === false ? ' [Inactive]' : ''}`
+            : (d.courierEmployeeId ? d.courierEmployeeId : 'Auto / Pool');
+        return [
+            d.dmsWaybillNo || 'Pending Creation',
+            d.taskNumber || d.taskReferenceNumber || d.taskId,
+            d.taskTitle || 'Delivery Task',
+            d.recipientName || '',
+            d.recipientContact || '',
+            d.deliveryAddress || '',
+            d.area || '',
+            d.courierEmployeeId || 'Auto / Pool',
+            driverNameText,
+            d.dmsStatus || 'Pending',
+            d.syncStatus || 'Synced',
+            d.dmsLatitude !== undefined ? d.dmsLatitude.toString() : '',
+            d.dmsLongitude !== undefined ? d.dmsLongitude.toString() : '',
+            d.dmsLastSyncedAt ? new Date(d.dmsLastSyncedAt).toLocaleString() : '',
+            d.createdAt ? new Date(d.createdAt).toLocaleString() : '',
+            d.dmsFailureReason || ''
+        ];
+    });
 
     const formatCsvRow = (row: string[]) =>
         row.map(field => `"${String(field ?? '').replace(/"/g, '""')}"`).join(',');
@@ -457,7 +465,8 @@ export const downloadDeliveryPdfReport = (
 
         // Driver
         cx += colArea;
-        const driver = d.courierEmployeeId || 'Auto/Pool';
+        const driverInfo = formatDriverDisplay(d.courierFullName, d.courierEmployeeId, d.courierIsActive);
+        const driver = driverInfo.displayText === 'Unassigned' && !d.courierEmployeeId ? 'Auto/Pool' : driverInfo.displayText;
         doc.text(driver.length > 14 ? driver.substring(0, 13) + '..' : driver, cx, currentY + 4.5);
 
         // Status

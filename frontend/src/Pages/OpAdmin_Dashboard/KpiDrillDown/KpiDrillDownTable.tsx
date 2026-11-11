@@ -627,7 +627,7 @@ export const KpiDrillDownTable: React.FC<KpiDrillDownTableProps> = ({
                     </div>
                     <div className="kpi-task-stat-item">
                         <span className="kpi-stat-label">Total Handling Hours</span>
-                        <span className="kpi-stat-val">{data.totalHandlingHours.toFixed(1)} hrs</span>
+                        <span className="kpi-stat-val">{(data.totalHandlingHours ?? 0).toFixed(1)} hrs</span>
                     </div>
                 </div>
             </div>
