@@ -28,6 +28,7 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
+import { formatStatus } from '../../utils/statusUtils';
 import DeliveryAnalyticsCharts from './DeliveryAnalyticsCharts';
 import {
     downloadDeliveryPdfReport,
@@ -528,7 +529,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                     <div className="dms-detail-stepper-header">
                         <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
                         <span className="dms-detail-stepper-summary">
-                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{selectedDelivery.dmsStatus}</strong>
+                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
                         </span>
                     </div>
 
@@ -708,7 +709,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Current Status</span>
                                 <span className="dms-detail-val">
-                                    <strong>{selectedDelivery.dmsStatus}</strong>
+                                    <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
                                     {selectedDelivery.dmsRawStatus && selectedDelivery.dmsRawStatus !== selectedDelivery.dmsStatus && (
                                         <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>
                                             ({selectedDelivery.dmsRawStatus})

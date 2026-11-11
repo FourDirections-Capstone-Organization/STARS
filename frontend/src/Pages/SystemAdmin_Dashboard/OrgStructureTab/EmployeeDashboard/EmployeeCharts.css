@@ -172,8 +172,8 @@
 }
 
 .ec-metric-assigned {
-    background: rgba(0, 139, 139, 0.08);
-    border: 1px solid rgba(0, 139, 139, 0.18);
+    background: rgba(0, 169, 157, 0.08);
+    border: 1px solid rgba(0, 169, 157, 0.18);
 }
 
 .ec-metric-created {

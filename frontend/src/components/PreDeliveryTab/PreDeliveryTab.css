@@ -337,8 +337,8 @@
 }
 
 .priority-medium {
-    background: rgba(0, 139, 139, 0.12);
-    color: var(--teal, #008B8B);
+    background: rgba(0, 169, 157, 0.12);
+    color: var(--teal, #00A99D);
 }
 
 .priority-low {

@@ -9303,13 +9303,13 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                     <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)', width: 130 }}>Similarity</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Existing Task</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Status</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Priority</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Deadline</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Assignee</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Description</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700, width: 130 }}>Similarity</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Existing Task</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Status</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Priority</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Deadline</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Assignee</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Description</th>
                         <th style={{ padding: '8px 8px' }}></th>
                     </tr>
                 </thead>

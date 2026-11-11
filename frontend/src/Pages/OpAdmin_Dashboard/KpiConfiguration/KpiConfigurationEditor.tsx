@@ -242,7 +242,7 @@ export const KpiConfigurationEditor: React.FC<KpiConfigurationEditorProps> = ({
     };
 
     // Color bar segments for visual weight breakdown
-    const segmentColors = ['#008B8B', '#4f46e5', '#059669', '#d97706', '#ec4899', '#8b5cf6', '#0284c7', '#10b981'];
+    const segmentColors = ['#00A99D', '#4f46e5', '#059669', '#d97706', '#ec4899', '#8b5cf6', '#0284c7', '#10b981'];
 
     return (
         <form className="kpi-editor-card" onSubmit={handleSubmit} data-testid="kpi-configuration-editor">

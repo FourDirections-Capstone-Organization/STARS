@@ -565,7 +565,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                 <div className="table-card-header">
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <FileText size={18} style={{ color: 'var(--teal, #008B8B)' }} />
+                            <FileText size={18} style={{ color: 'var(--teal, #00A99D)' }} />
                             <h3 className="table-card-title">
                                 {activeSubTab === 'pending'
                                     ? 'Invoices Awaiting STARS Task Assignment'
