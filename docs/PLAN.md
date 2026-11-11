@@ -105,7 +105,7 @@ Make DMS-uploaded Proof of Delivery (POD) files visible in STARS on matching tas
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsClickThrough.test.tsx`
   - Description: Enable row click-through on Table 2 records to open task details modal (`handleOpenTaskById`) with keyboard focus (Enter key), cursor pointer, and real anchor link supporting right-click/middle-click open in new tab (`/OpAdmin_Dashboard?taskId=...`). Table 1 rows filter by driver. Handle URL deep-linking on mount and display clear permission error toast if an unauthorized user attempts access.
 
-- [ ] Step 5: Regression & Verification Testing
+- [x] Step 5: Regression & Verification Testing
   - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/DeliveryAnalyticsClickThrough.test.tsx`, `frontend/src/test/TaskViewDmsPod.test.tsx`
   - Description: Run full backend and frontend test suites (`dotnet test` and `npm test`). Verify POD preview/download, unassigned and inactive driver handling, name search/filtering, and permission checks.
 
