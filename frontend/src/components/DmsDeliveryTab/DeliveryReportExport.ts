@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf';
 import { DmsDeliveryItem } from './DmsDeliveryTab';
 import { formatDriverDisplay } from '../TaskView/TaskView';
+import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
+import { formatDateOnly } from '../../utils/dateUtils';
 
 export interface PerformanceSummary {
     totalDeliveries: number;
@@ -55,6 +57,8 @@ export const downloadDeliveryCsvReport = (
         'Area / Region',
         'Assigned Driver ID',
         'Assigned Driver Name',
+        'Assigned Driver Label',
+        'Expected Delivery Date',
         'DMS Status',
         'Sync Status',
         'Latitude',
@@ -68,6 +72,9 @@ export const downloadDeliveryCsvReport = (
         const driverNameText = d.courierFullName
             ? `${d.courierFullName}${d.courierIsActive === false ? ' [Inactive]' : ''}`
             : (d.courierEmployeeId ? d.courierEmployeeId : 'Auto / Pool');
+        const pairedInfo = formatDriverDisplayShared(d.courierFullName, d.courierEmployeeId, d.courierIsActive, { layout: 'id-first' });
+        const pairedLabel = pairedInfo.displayText === 'Unassigned' && !d.courierEmployeeId ? 'Auto / Pool' : pairedInfo.displayText;
+        const expectedDateText = (d.expectedDeliveryDate || d.expectedDelivery) ? formatDateOnly(d.expectedDeliveryDate || d.expectedDelivery) : '';
         return [
             d.dmsWaybillNo || 'Pending Creation',
             d.taskNumber || d.taskReferenceNumber || d.taskId,
@@ -78,6 +85,8 @@ export const downloadDeliveryCsvReport = (
             d.area || '',
             d.courierEmployeeId || 'Auto / Pool',
             driverNameText,
+            pairedLabel,
+            expectedDateText,
             d.dmsStatus || 'Pending',
             d.syncStatus || 'Synced',
             d.dmsLatitude !== undefined ? d.dmsLatitude.toString() : '',
@@ -465,9 +474,9 @@ export const downloadDeliveryPdfReport = (
 
         // Driver
         cx += colArea;
-        const driverInfo = formatDriverDisplay(d.courierFullName, d.courierEmployeeId, d.courierIsActive);
+        const driverInfo = formatDriverDisplayShared(d.courierFullName, d.courierEmployeeId, d.courierIsActive, { layout: 'id-first' });
         const driver = driverInfo.displayText === 'Unassigned' && !d.courierEmployeeId ? 'Auto/Pool' : driverInfo.displayText;
-        doc.text(driver.length > 14 ? driver.substring(0, 13) + '..' : driver, cx, currentY + 4.5);
+        doc.text(driver.length > 18 ? driver.substring(0, 17) + '..' : driver, cx, currentY + 4.5);
 
         // Status
         cx += colDriver;

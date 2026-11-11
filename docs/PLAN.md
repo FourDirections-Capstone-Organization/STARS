@@ -20,7 +20,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/utils/dateUtils.ts`, `frontend/src/utils/driverUtils.ts`, `frontend/src/components/TaskView/TaskView.tsx`
   - Verify: Vitest tests for `formatDateOnly` near midnight and `formatDriverDisplay` returning `EMP-008 · Ricardo Bautista` or ID fallback.
 
-- [ ] Step 3: Update task modals, detail views, tables, and exports to render date-only DMS deadlines and paired driver labels
+- [x] Step 3: Update task modals, detail views, tables, and exports to render date-only DMS deadlines and paired driver labels
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/components/PreDeliveryTab/PreDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DeliveryReportExport.ts`
   - Verify: Component tests and UI check verifying read-only date-only deadline with locked badge, plus driver label format in tables and forms.
 
