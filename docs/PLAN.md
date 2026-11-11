@@ -24,7 +24,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/TaskView/TaskView.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "DmsDeadlineDriverUI|PreDelivery"` to confirm clean layout and paired driver display.
 
-- [ ] Step 4: Run full backend and frontend regression suites and perform manual end-to-end verification
+- [x] Step 4: Run full backend and frontend regression suites and perform manual end-to-end verification
   - Files: `frontend/src/test/DmsDeadlineDriverUI.test.tsx`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj && npm --prefix frontend test`, then verify helper text removal and waybill courier name in UI.
 
