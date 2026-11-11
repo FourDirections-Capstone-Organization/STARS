@@ -1133,4 +1133,71 @@ public class DmsIntegrationTests : IDisposable
         var savedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
         Assert.Equal("DRV-008", savedDetail.CourierEmployeeId);
     }
+
+    [Fact]
+    public async Task QaDefectScenarios_VerifyDmsSync_MidnightDeadlineNormalization_And_DriverIdKeyResolution()
+    {
+        // Scenario 1: Midnight deadline normalization
+        // DMS passes ExpectedDelivery at UTC midnight (00:00:00Z) or date-only string.
+        // STARS backend normalizes it to date-only string YYYY-MM-DD and UTC midnight DateTime without offset shifts.
+        var driver = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-008",
+            FirstName = "Ricardo",
+            LastName = "Bautista",
+            Role = UserRole.Courier,
+            Username = "rbautista_qa",
+            Email = "rbautista_qa@example.com"
+        };
+        _db.Users.Add(driver);
+        await _db.SaveChangesAsync();
+
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 801,
+                ""waybillNo"": ""WB-QA-001"",
+                ""clientName"": ""QA Logistics"",
+                ""recipientName"": ""Juan Dela Cruz"",
+                ""recipientContact"": ""09170009999"",
+                ""recipientAddress"": ""100 Ayala Ave, Makati"",
+                ""area"": ""Makati"",
+                ""packageDescription"": ""Sensitive Legal Docs"",
+                ""orderDate"": ""2026-11-10T01:00:00Z"",
+                ""expectedDelivery"": ""2026-11-25T00:00:00Z"",
+                ""driverEmployeeId"": ""EMP-008"",
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetPendingOrdersAsync();
+
+        Assert.True(result.IsSuccess);
+        var order = Assert.Single(result.Data);
+
+        // Verification of Scenario 1 (Date-only normalization, no timezone shift)
+        Assert.Equal("2026-11-25", order.ExpectedDeliveryDate);
+        Assert.Equal(new DateTime(2026, 11, 25, 0, 0, 0, DateTimeKind.Utc), order.ExpectedDelivery);
+
+        // Verification of Scenario 2 (Driver ID as key and paired name resolution)
+        Assert.Equal("EMP-008", order.DriverEmployeeId);
+        Assert.Equal("EMP-008", order.DriverId);
+        Assert.Equal("Ricardo Bautista", order.DriverName);
+        Assert.Equal("Ricardo Bautista", order.CourierFullName);
+    }
 }
