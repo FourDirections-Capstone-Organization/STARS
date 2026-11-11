@@ -12,7 +12,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
 
 ## Steps
 
-- [ ] Step 1: Add CourierFullName to delivery detail model and integration DTOs to support courier name persistence
+- [x] Step 1: Add CourierFullName to delivery detail model and integration DTOs to support courier name persistence
   - Files: `backend/Models/TaskDeliveryDetail.cs`, `backend/Models/DTOs/DmsIntegrationDTOs.cs`
   - Verify: Run `dotnet build backend/Backend.csproj --configuration Release` to confirm model and DTO schema compilation.
 
