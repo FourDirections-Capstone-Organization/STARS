@@ -75,6 +75,7 @@ export interface UpsertDeliveryDetailPayload {
     senderAddress?: string;
     specialInstructions?: string;
     courierEmployeeId?: string;
+    courierFullName?: string;
 }
 
 type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';
@@ -457,6 +458,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         senderAddress: 'STARS Operations Office',
         specialInstructions: '',
         courierEmployeeId: '',
+        courierFullName: '',
     });
     const [savingDelivery, setSavingDelivery] = useState(false);
     const [resendingDms, setResendingDms] = useState(false);
@@ -593,6 +595,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                         senderAddress: data.senderAddress || 'STARS Operations Office',
                         specialInstructions: data.specialInstructions || '',
                         courierEmployeeId: data.courierEmployeeId || '',
+                        courierFullName: data.courierFullName || '',
                     });
                 }
             } else if (!silent) {
@@ -1893,9 +1896,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         deliveryDetail.courierEmployeeId,
                                                         deliveryDetail.courierIsActive
                                                     );
+                                                    const pairedInfo = formatDriverDisplayShared(
+                                                        deliveryDetail.courierFullName,
+                                                        deliveryDetail.courierEmployeeId,
+                                                        deliveryDetail.courierIsActive,
+                                                        { layout: 'id-first' }
+                                                    );
                                                     return (
                                                         <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                            <span className="tv-dms-driver-name">{driverInfo.displayText}</span>
+                                                            <span className="tv-dms-driver-name tv-dms-paired-driver" data-testid="tv-dms-paired-driver">{pairedInfo.displayText}</span>
+                                                            <span className="tv-dms-legacy-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
                                                                     [Inactive]
@@ -2047,9 +2057,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                             deliveryDetail.courierEmployeeId,
                                                             deliveryDetail.courierIsActive
                                                         );
+                                                        const pairedInfo = formatDriverDisplayShared(
+                                                            deliveryDetail.courierFullName,
+                                                            deliveryDetail.courierEmployeeId,
+                                                            deliveryDetail.courierIsActive,
+                                                            { layout: 'id-first' }
+                                                        );
                                                         return (
                                                             <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                                <span className="tv-dms-driver-name">{driverInfo.displayText}</span>
+                                                                <span className="tv-dms-driver-name tv-dms-paired-driver" data-testid="tv-dms-pending-paired-driver">{pairedInfo.displayText}</span>
+                                                                <span className="tv-dms-legacy-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                                 {driverInfo.isInactive && (
                                                                     <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
                                                                         [Inactive]
@@ -2731,13 +2748,35 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     />
                                 </div>
                                 <div className="tv-form-group">
-                                    <label className="tv-form-label">Courier Employee ID <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>(Optional DMS Driver)</span></label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label className="tv-form-label">Courier Employee ID <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>(Optional DMS Driver)</span></label>
+                                        {editingDelivery.courierEmployeeId && (() => {
+                                            const paired = formatDriverDisplayShared(
+                                                editingDelivery.courierFullName || (deliveryDetail?.courierEmployeeId === editingDelivery.courierEmployeeId ? deliveryDetail?.courierFullName : null),
+                                                editingDelivery.courierEmployeeId,
+                                                deliveryDetail?.courierIsActive,
+                                                { layout: 'id-first' }
+                                            );
+                                            return (
+                                                <span style={{ fontSize: 10, color: 'var(--primary, #0284c7)', fontWeight: 600 }} data-testid="dms-paired-driver-label">
+                                                    {paired.displayText}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
                                     <input
                                         type="text"
                                         className="tv-form-input"
                                         placeholder="e.g. DRV-001"
                                         value={editingDelivery.courierEmployeeId || ''}
-                                        onChange={e => setEditingDelivery(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setEditingDelivery(prev => ({
+                                                ...prev,
+                                                courierEmployeeId: val,
+                                                courierFullName: (deliveryDetail?.courierEmployeeId === val ? deliveryDetail?.courierFullName : prev.courierFullName) || ''
+                                            }));
+                                        }}
                                     />
                                 </div>
                             </div>
