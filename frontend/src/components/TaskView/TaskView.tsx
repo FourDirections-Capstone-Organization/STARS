@@ -9,6 +9,7 @@ import {
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
 import StatusBadge from '../ui/StatusBadge';
+import { formatStatus } from '../../utils/statusUtils';
 import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import { useToast } from '../Toast/Toast';
 import api from '../../api';
@@ -1782,7 +1783,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             </button>
                                             {deliveryDetail.dmsStatus && (
                                                 <span className="tv-dms-status-tag">
-                                                    Status: <strong>{deliveryDetail.dmsStatus}</strong>
+                                                    Status: <strong>{formatStatus(deliveryDetail.dmsStatus)}</strong>
                                                 </span>
                                             )}
                                         </div>

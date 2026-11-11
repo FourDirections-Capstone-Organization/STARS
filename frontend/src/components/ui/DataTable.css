@@ -66,6 +66,7 @@
 .dt-filter-chips .btn,
 .dt-empty-action {
   height: 36px !important;
+  border-radius: var(--btn-radius, 8px);
 }
 
 .dt-toolbar .btn.btn--icon-only,
@@ -81,7 +82,7 @@
     width: 36px;
     height: 36px;
     border: 1.5px solid var(--border);
-    border-radius: var(--r-sm, 8px);
+    border-radius: var(--btn-radius, var(--r-sm, 8px));
     background: var(--bg-card);
     color: var(--text-secondary);
     cursor: pointer;
@@ -615,14 +616,14 @@
 
 .dt-th {
   padding: 10px 14px;
-  background: var(--s1, #F7F9FF);
-  color: var(--tt, #6B7280);
-  font-size: 11px;
-  font-weight: 700;
+  background: var(--th-bg, var(--s1, #F7F9FF));
+  color: var(--th-color, #64748B);
+  font-size: var(--th-font-size, 0.75rem);
+  font-weight: var(--th-font-weight, 700);
   text-align: left;
   white-space: nowrap;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  text-transform: var(--th-text-transform, uppercase);
+  letter-spacing: var(--th-letter-spacing, 0.05em);
   border-bottom: 1px solid var(--border, #E2E8F0);
   position: sticky;
   top: 0;
@@ -1151,12 +1152,12 @@
 
 .table-card-data-table th {
     padding: 10px 14px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--tt, #6B7280);
-    letter-spacing: 0.6px;
+    font-size: var(--th-font-size, 0.75rem);
+    font-weight: var(--th-font-weight, 700);
+    color: var(--th-color, #64748B);
+    letter-spacing: var(--th-letter-spacing, 0.05em);
     border: none;
-    text-transform: uppercase;
+    text-transform: var(--th-text-transform, uppercase);
 }
 
 .table-card-data-table th:first-child {
@@ -1545,13 +1546,13 @@
 }
 
 .table-card .btn-primary {
-    background: var(--teal, #008B8B);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border-color: var(--teal, #008B8B);
+    border-color: var(--teal, #00A99D);
 }
 .table-card .btn-primary:hover:not(:disabled) {
-    background: var(--teal-hover, #007676);
-    border-color: var(--teal-hover, #007676);
+    background: var(--teal-hover, #009189);
+    border-color: var(--teal-hover, #009189);
 }
 
 @media (max-width: 768px) {

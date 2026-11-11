@@ -24,6 +24,7 @@ import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
 import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
+import { formatStatus } from '../../utils/statusUtils';
 import './PreDeliveryTab.css';
 
 export interface DmsPendingOrder {
@@ -531,7 +532,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                 </td>
                                                 <td>
                                                     <span className="status-badge-active">
-                                                        {t.status || 'Active'}
+                                                        {formatStatus(t.status || 'Active')}
                                                     </span>
                                                 </td>
                                                 <td style={{ fontSize: '0.8125rem' }}>

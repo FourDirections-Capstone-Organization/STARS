@@ -1295,8 +1295,8 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                             onClick={handleConfirmRegister}
                             disabled={gateLoading || !gatePassword}
                             style={{
-                                background: 'var(--teal, #008B8B)',
-                                borderColor: 'var(--teal, #008B8B)',
+                                background: 'var(--teal, #00A99D)',
+                                borderColor: 'var(--teal, #00A99D)',
                                 color: '#ffffff',
                                 cursor: (gateLoading || !gatePassword) ? 'not-allowed' : 'pointer',
                                 opacity: (gateLoading || !gatePassword) ? 0.6 : 1,
@@ -2212,7 +2212,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
         Unknown: '#94A3B8',
     };
 
-    const BAR_COLORS = ['#008B8B', '#0284C7', '#4F46E5', '#D97706', '#DC2626', '#FF7B42', '#8B5CF6'];
+    const BAR_COLORS = ['#00A99D', '#0284C7', '#4F46E5', '#D97706', '#DC2626', '#FF7B42', '#8B5CF6'];
 
     const avgWorkloadByRole = Object.entries(
         employees.reduce<Record<string, { count: number; tasks: number }>>((acc, emp) => {
@@ -2301,8 +2301,8 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                             justifyContent: 'space-between',
                             padding: '9px 16px',
                             marginBottom: 16,
-                            background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 139, 139, 0.07) 100%)',
-                            border: '1px solid rgba(0, 139, 139, 0.22)',
+                            background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 169, 157, 0.07) 100%)',
+                            border: '1px solid rgba(0, 169, 157, 0.22)',
                             borderRadius: 10,
                             fontSize: 12,
                             flexWrap: 'wrap',
@@ -2310,7 +2310,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                         }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #008B8B)' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #00A99D)' }}>
                                 <Activity size={14} /> FOMS Real-Time Stream
                             </span>
                             <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -2325,7 +2325,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                                 style={{
                                     background: 'transparent',
                                     border: 'none',
-                                    color: 'var(--teal, #008B8B)',
+                                    color: 'var(--teal, #00A99D)',
                                     fontWeight: 600,
                                     cursor: 'pointer',
                                     fontSize: 12,

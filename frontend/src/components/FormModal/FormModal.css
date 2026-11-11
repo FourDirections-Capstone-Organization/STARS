@@ -342,7 +342,7 @@
     padding: 7px 14px;
     font-size: 0.8rem;
     font-weight: 500;
-    border-radius: var(--r-sm, 8px);
+    border-radius: var(--btn-radius, var(--r-sm, 8px));
     border: 1px solid var(--border);
     background: var(--bg-card);
     color: var(--text-primary);
@@ -352,6 +352,11 @@
     white-space: nowrap;
     outline: none;
     user-select: none;
+}
+
+.fm-footer button,
+.fm-footer .btn {
+    border-radius: var(--btn-radius, 8px);
 }
 
 .fm-btn:hover:not(:disabled) {

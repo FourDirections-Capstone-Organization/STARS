@@ -50,7 +50,7 @@
 
 .eh-back-btn:hover {
     background: var(--s1, #F1F5F9);
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
     border-color: var(--border, #E2E8F0);
 }
 
@@ -112,7 +112,7 @@
 
 .eh-refresh-btn:hover:not(:disabled) {
     background: var(--s1, #F8FAFC);
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
     border-color: var(--border-h, #CBD5E1);
 }
 
@@ -171,7 +171,7 @@
     width: 68px;
     height: 68px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #008B8B 0%, #293652 100%);
+    background: linear-gradient(135deg, #00A99D 0%, #293652 100%);
     color: #FFFFFF;
     font-weight: 700;
     font-size: 1.35rem;
@@ -179,7 +179,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 14px rgba(0, 139, 139, 0.25);
+    box-shadow: 0 4px 14px rgba(0, 169, 157, 0.25);
     border: 3px solid #FFFFFF;
 }
 
@@ -290,7 +290,7 @@
 }
 
 .eh-meta-icon {
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
     flex-shrink: 0;
     margin-top: 2px;
 }
@@ -319,18 +319,18 @@
 }
 
 .eh-meta-link {
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
     text-decoration: none;
     transition: color 0.15s ease;
 }
 
 .eh-meta-link:hover {
     text-decoration: underline;
-    color: #007070;
+    color: var(--teal-dark, #007A72);
 }
 
 .eh-avail-tag {
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
 }
 
 /* ── 3. Dedicated "Reports To" Supervisor Card ───────────────── */
@@ -363,8 +363,8 @@
     width: 34px;
     height: 34px;
     border-radius: 8px;
-    background: rgba(0, 139, 139, 0.1);
-    color: var(--primary, #008B8B);
+    background: rgba(0, 169, 157, 0.1);
+    color: var(--primary, #00A99D);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -393,9 +393,9 @@
     margin-left: auto;
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--primary, #008B8B);
-    background: rgba(0, 139, 139, 0.08);
-    border: 1px solid rgba(0, 139, 139, 0.2);
+    color: var(--primary, #00A99D);
+    background: rgba(0, 169, 157, 0.08);
+    border: 1px solid rgba(0, 169, 157, 0.2);
     padding: 3px 9px;
     border-radius: 6px;
     white-space: nowrap;
@@ -413,7 +413,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background: linear-gradient(135deg, rgba(41, 54, 82, 0.05) 0%, rgba(0, 139, 139, 0.05) 100%);
+    background: linear-gradient(135deg, rgba(41, 54, 82, 0.05) 0%, rgba(0, 169, 157, 0.05) 100%);
     border: 1px solid var(--border, #E2E8F0);
     border-radius: 10px;
     padding: 14px 16px;
@@ -491,7 +491,7 @@
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #00A99D 0%, #008B8B 100%);
+    background: linear-gradient(135deg, #00A99D 0%, #007A72 100%);
     color: #FFFFFF;
     font-weight: 700;
     font-size: 0.95rem;
