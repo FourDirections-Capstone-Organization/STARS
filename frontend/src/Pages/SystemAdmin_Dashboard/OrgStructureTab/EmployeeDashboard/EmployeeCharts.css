@@ -85,7 +85,7 @@
 
 .ec-badge-teal {
     background: rgba(0, 169, 157, 0.1);
-    color: #008B8B;
+    color: var(--teal, #00A99D);
     border: 1px solid rgba(0, 169, 157, 0.25);
 }
 
@@ -202,12 +202,12 @@
     font-size: 0.73rem;
     color: var(--text-secondary, #374151);
     line-height: 1.4;
-    border-left: 3px solid var(--primary, #008B8B);
+    border-left: 3px solid var(--primary, #00A99D);
 }
 
 .ec-insight-label {
     font-weight: 600;
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
 }
 
 .ec-insight-desc {
@@ -246,7 +246,7 @@
 
 .ec-tooltip-pct {
     font-weight: 600;
-    color: var(--primary, #008B8B);
+    color: var(--primary, #00A99D);
 }
 
 /* ── Empty State ──────────────────────────────────────────────── */
