@@ -16,7 +16,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/global.css`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.css`, `frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.css`
   - Verify: Build frontend with `npm run build` and inspect CSS variables in root.
 
-- [ ] Step 2: Create centralized status label mapping and update StatusBadge
+- [x] Step 2: Create centralized status label mapping and update StatusBadge
   - Files: `frontend/src/utils/statusUtils.ts`, `frontend/src/components/ui/StatusBadge.tsx`
   - Verify: Unit test verifying Title Case display outputs ("To Do", "In Progress", "On Hold", "Pending Review", "Completed") for all raw inputs.
 
