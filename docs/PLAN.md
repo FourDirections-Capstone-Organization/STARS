@@ -16,7 +16,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `backend/Models/DTOs/DmsIntegrationDTOs.cs`, `backend/Modules/DmsIntegration/DmsIntegrationService.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to confirm driver ID matching and date parsing.
 
-- [ ] Step 2: Implement shared date-only and driver-label formatters with regression guards for midnight dates and missing names
+- [x] Step 2: Implement shared date-only and driver-label formatters with regression guards for midnight dates and missing names
   - Files: `frontend/src/utils/dateUtils.ts`, `frontend/src/utils/driverUtils.ts`, `frontend/src/components/TaskView/TaskView.tsx`
   - Verify: Vitest tests for `formatDateOnly` near midnight and `formatDriverDisplay` returning `EMP-008 · Ricardo Bautista` or ID fallback.
 

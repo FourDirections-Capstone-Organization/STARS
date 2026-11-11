@@ -14,7 +14,8 @@ import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import { useToast } from '../Toast/Toast';
 import api from '../../api';
 import axios from 'axios';
-import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
+import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
+import { formatDriverDisplay as formatDriverDisplayShared, FormatDriverOptions } from '../../utils/driverUtils';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export interface TaskDeliveryDetailData {
     syncError?: string;
     createdAt?: string;
     updatedAt?: string;
+    expectedDelivery?: string;
+    expectedDeliveryDate?: string;
 }
 
 export interface TaskPodData {
@@ -149,33 +152,19 @@ interface TaskViewProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Formats driver display label. Delegates to shared formatDriverDisplay.
+ * Defaults to legacy layout 'name-first' for backwards compatibility with unmigrated dashboard components
+ * until Step 3. For new standard format ("EMP-008 · Ricardo Bautista"), use { layout: 'id-first' }
+ * or import directly from '../../utils/driverUtils'.
+ */
 export const formatDriverDisplay = (
     fullName?: string | null,
     employeeId?: string | null,
-    isActive?: boolean | null
+    isActive?: boolean | null,
+    options?: FormatDriverOptions
 ): { displayText: string; isInactive: boolean } => {
-    if (!employeeId && !fullName) {
-        return { displayText: 'Unassigned', isInactive: false };
-    }
-    if (fullName === 'Unassigned' || (!employeeId && fullName === 'Unassigned')) {
-        return { displayText: 'Unassigned', isInactive: false };
-    }
-    const hasName = fullName && fullName.trim().length > 0 && fullName !== employeeId && fullName !== 'Unassigned';
-    const hasEmp = employeeId && employeeId.trim().length > 0;
-
-    let text = '';
-    if (hasName && hasEmp) {
-        text = `${fullName.trim()} (${employeeId.trim()})`;
-    } else if (hasName) {
-        text = fullName.trim();
-    } else if (hasEmp) {
-        text = employeeId.trim();
-    } else {
-        text = 'Unassigned';
-    }
-
-    const isInactive = isActive === false;
-    return { displayText: text, isInactive };
+    return formatDriverDisplayShared(fullName, employeeId, isActive, options ?? { layout: 'name-first' });
 };
 
 export const isImageFile = (fileName?: string | null, fileType?: string | null): boolean => {
@@ -1917,6 +1906,15 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 })()}
                                             </div>
                                         )}
+                                        {(deliveryDetail.expectedDelivery || deliveryDetail.expectedDeliveryDate) && (
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-expected-delivery">
+                                                <span className="tv-dms-grid-label">Expected Delivery</span>
+                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Calendar size={12} color="var(--primary)" />
+                                                    {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
+                                                </span>
+                                            </div>
+                                        )}
                                         {deliveryDetail.packageDescription && (
                                             <div className="tv-dms-grid-item tv-dms-grid-full">
                                                 <span className="tv-dms-grid-label">Package Description</span>
@@ -2013,7 +2011,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
                                                 </span>
                                             </div>
-                                            {deliveryDetail.packageDescription && (
+                                            {(deliveryDetail.expectedDelivery || deliveryDetail.expectedDeliveryDate) && (
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-expected-delivery">
+                                                <span className="tv-dms-grid-label">Expected Delivery</span>
+                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Calendar size={12} color="var(--primary)" />
+                                                    {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.packageDescription && (
                                                 <div className="tv-dms-grid-item tv-dms-grid-full">
                                                     <span className="tv-dms-grid-label">Package Description</span>
                                                     <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
