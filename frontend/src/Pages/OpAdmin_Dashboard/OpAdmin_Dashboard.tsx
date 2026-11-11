@@ -1155,14 +1155,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             employeeNumber: best.employeeNumber || '',
                         });
 
-                        // If pre-delivery has a driver/courier ID and assignee is not yet selected, match it
-                        if (!form.assignedTo && deliveryForm.courierEmployeeId) {
+                        // If pre-delivery has a driver/courier ID and assignee/name is not yet selected, match it
+                        if (deliveryForm.courierEmployeeId) {
                             const matched = mapped.find(e =>
                                 e.accountId.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase() ||
                                 (e.employeeNumber && e.employeeNumber.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase())
                             );
                             if (matched) {
-                                setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                if (!form.assignedTo) {
+                                    setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                }
+                                if (!deliveryForm.courierFullName) {
+                                    setDeliveryForm(prev => ({ ...prev, courierFullName: prev.courierFullName || matched.employeeName }));
+                                }
                             }
                         }
                     }
@@ -1951,6 +1956,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             setDeliveryForm(prev => ({
                                                                 ...prev,
                                                                 courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                                courierFullName: recEmp?.employeeName || recommendation.employeeName,
                                                             }));
                                                             setErrors(prev => ({ ...prev, assignedTo: '' }));
                                                         }}
@@ -1987,6 +1993,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             setDeliveryForm(prev => ({
                                                                 ...prev,
                                                                 courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                                courierFullName: isCourierUnmapped
+                                                                    ? (recEmp?.employeeName || recommendation.employeeName)
+                                                                    : (prev.courierFullName || recEmp?.employeeName || recommendation.employeeName),
                                                             }));
                                                         }
                                                         setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2061,6 +2070,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                                     setDeliveryForm(prev => ({
                                                                         ...prev,
                                                                         courierEmployeeId: e.employeeNumber || e.employeeName || e.accountId,
+                                                                        courierFullName: isCourierUnmapped
+                                                                            ? e.employeeName
+                                                                            : (prev.courierFullName || e.employeeName),
                                                                     }));
                                                                 }
                                                                 setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2243,16 +2255,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                 style={{ fontSize: 12 }}
                                             />
                                         </div>
+                                        <div className="field" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: 11 }}>Package Description</label>
+                                            <input
+                                                value={deliveryForm.packageDescription}
+                                                onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                                placeholder="e.g. Confidential Project Dossier"
+                                                style={{ fontSize: 12 }}
+                                            />
+                                        </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                            <div className="field" style={{ margin: 0 }}>
-                                                <label style={{ fontSize: 11 }}>Package Description</label>
-                                                <input
-                                                    value={deliveryForm.packageDescription}
-                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
-                                                    placeholder="e.g. Confidential Project Dossier"
-                                                    style={{ fontSize: 12 }}
-                                                />
-                                            </div>
                                             <div className="field" style={{ margin: 0 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
@@ -2266,7 +2278,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
                                                         );
                                                         const driverDisplay = formatDriverDisplayShared(
-                                                            emp?.employeeName || (deliveryForm as any).courierFullName,
+                                                            (deliveryForm as any).courierFullName || emp?.employeeName,
                                                             deliveryForm.courierEmployeeId,
                                                             undefined,
                                                             { layout: 'id-first' }
@@ -2282,11 +2294,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     value={deliveryForm.courierEmployeeId}
                                                     onChange={e => {
                                                         const val = e.target.value;
-                                                        setDeliveryForm(prev => ({ ...prev, courierEmployeeId: val }));
                                                         const matched = eligibleEmployees.find(emp =>
                                                             emp.accountId.toLowerCase() === val.trim().toLowerCase() ||
                                                             (emp as any).employeeNumber?.toLowerCase() === val.trim().toLowerCase()
                                                         );
+                                                        setDeliveryForm(prev => {
+                                                            const next = { ...prev, courierEmployeeId: val };
+                                                            if (matched && !prev.courierFullName) {
+                                                                next.courierFullName = matched.employeeName;
+                                                            }
+                                                            return next;
+                                                        });
                                                         if (matched) {
                                                             setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
                                                             setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2294,6 +2312,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     }}
                                                     placeholder="e.g. DRV-001"
                                                     style={{ fontSize: 12 }}
+                                                    data-testid="pre-delivery-courier-id-input"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Courier Name (Optional)</label>
+                                                <input
+                                                    value={(deliveryForm as any).courierFullName || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, courierFullName: e.target.value }))}
+                                                    placeholder="e.g. Ricardo Bautista"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="pre-delivery-courier-name-input"
                                                 />
                                             </div>
                                         </div>
