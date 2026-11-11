@@ -598,7 +598,7 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                                             title="Copy Invoice Number"
                                                             onClick={() => handleCopy(alert.invoiceNumber, `inv-${alert.id}`)}
                                                         >
-                                                            {copiedKey === `inv-${alert.id}` ? <Check size={12} color="#008B8B" /> : <Copy size={12} />}
+                                                            {copiedKey === `inv-${alert.id}` ? <Check size={12} color="#00A99D" /> : <Copy size={12} />}
                                                         </button>
                                                     </div>
                                                     <span className="foms-client-name" title={alert.clientName}>

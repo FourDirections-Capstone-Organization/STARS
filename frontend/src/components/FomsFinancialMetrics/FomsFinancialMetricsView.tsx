@@ -614,7 +614,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 <div className="table-card-header">
                     <div>
                         <h3 className="table-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Building size={18} style={{ color: 'var(--teal, #008B8B)' }} />
+                            <Building size={18} style={{ color: 'var(--teal, #00A99D)' }} />
                             <span>Client Financial Statuses &amp; Aging Monitor</span>
                         </h3>
                         <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>

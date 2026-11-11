@@ -101,7 +101,7 @@
 
 .kpi-card:hover {
     border-color: var(--teal);
-    box-shadow: 0 4px 12px rgba(0, 139, 139, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 169, 157, 0.08);
 }
 
 .kpi-card-header {
@@ -441,11 +441,11 @@
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: var(--teal-bg, rgba(0, 139, 139, 0.08));
+    background: var(--teal-bg, rgba(0, 169, 157, 0.08));
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--teal-ring, rgba(0, 139, 139, 0.2));
+    border: 1px solid var(--teal-ring, rgba(0, 169, 157, 0.2));
 }
 
 .kpi-formula-modal-title {

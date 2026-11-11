@@ -1546,13 +1546,13 @@
 }
 
 .table-card .btn-primary {
-    background: var(--teal, #008B8B);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border-color: var(--teal, #008B8B);
+    border-color: var(--teal, #00A99D);
 }
 .table-card .btn-primary:hover:not(:disabled) {
-    background: var(--teal-hover, #007676);
-    border-color: var(--teal-hover, #007676);
+    background: var(--teal-hover, #009189);
+    border-color: var(--teal-hover, #009189);
 }
 
 @media (max-width: 768px) {

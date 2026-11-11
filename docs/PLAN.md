@@ -32,7 +32,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.tsx`, `frontend/src/components/TaskManager/TaskManager.tsx`, `frontend/src/components/TaskView/TaskView.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `frontend/src/Pages/EmergingTechAI/AIAssignmentView.tsx`
   - Verify: Manual and test verification that all task statuses display in Title Case while underlying values and API calls remain untouched.
 
-- [ ] Step 6: Grep audit for UI integrity
+- [x] Step 6: Grep audit for UI integrity
   - Files: `frontend/src/**`
   - Verify: Run grep checks ensuring zero old teal values (`#008b8b`), zero conflicting inline th styles (`style={{ ...color... }}`), and zero raw status display strings.
 

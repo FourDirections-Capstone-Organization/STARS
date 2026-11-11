@@ -991,9 +991,9 @@ const AIAssignmentView: React.FC<AIAssignmentViewProps> = ({ onBack, onTaskCreat
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)', width: 110 }}>Similarity</th>
-                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Existing Task</th>
-                                <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Status</th>
+                                <th style={{ padding: '8px 8px', fontWeight: 700, width: 110 }}>Similarity</th>
+                                <th style={{ padding: '8px 8px', fontWeight: 700 }}>Existing Task</th>
+                                <th style={{ padding: '8px 8px', fontWeight: 700 }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>

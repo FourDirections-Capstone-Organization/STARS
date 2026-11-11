@@ -564,7 +564,7 @@
     left: 0;
     right: 0;
     height: 3px;
-    background: var(--teal, #008B8B);
+    background: var(--teal, #00A99D);
     opacity: 0;
     transition: opacity 0.2s ease;
 }
@@ -604,8 +604,8 @@
     width: 34px;
     height: 34px;
     border-radius: var(--r-sm, 8px);
-    background: var(--teal-bg, rgba(0, 139, 139, 0.08));
-    color: var(--teal, #008B8B);
+    background: var(--teal-bg, rgba(0, 169, 157, 0.08));
+    color: var(--teal, #00A99D);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1075,16 +1075,16 @@
     padding: 6px 12px;
     font-size: 13px;
     font-weight: 600;
-    color: var(--teal, #008B8B);
-    background: var(--teal-bg, rgba(0, 139, 139, 0.08));
-    border: 1px solid var(--teal-ring, rgba(0, 139, 139, 0.22));
+    color: var(--teal, #00A99D);
+    background: var(--teal-bg, rgba(0, 169, 157, 0.08));
+    border: 1px solid var(--teal-ring, rgba(0, 169, 157, 0.22));
     border-radius: var(--r-sm, 8px);
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .kpi-page-back-btn:hover {
-    background: rgba(0, 139, 139, 0.16);
+    background: rgba(0, 169, 157, 0.16);
     transform: translateX(-2px);
 }
 
@@ -1097,9 +1097,9 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     border-radius: 9999px;
-    background: var(--teal-bg, rgba(0, 139, 139, 0.08));
-    color: var(--teal, #008B8B);
-    border: 1px solid var(--teal-ring, rgba(0, 139, 139, 0.22));
+    background: var(--teal-bg, rgba(0, 169, 157, 0.08));
+    color: var(--teal, #00A99D);
+    border: 1px solid var(--teal-ring, rgba(0, 169, 157, 0.22));
 }
 
 .table-card-pagination-bar {
