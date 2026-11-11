@@ -75,6 +75,7 @@ import FormModal from '../../components/FormModal/FormModal';
 import ActionButton from '../../components/ActionButton/ActionButton';
 import ConfirmationModal from '../../components/ConfirmationModal/ConfirmationModal';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { formatStatus, getStatusBadgeClass } from '../../utils/statusUtils';
 import EmptyState from '../../components/ui/EmptyState';
 import Pagination from '../../components/ui/Pagination';
 import SubTabNav from '../../components/ui/SubTabNav';
@@ -561,17 +562,7 @@ const getInitials = (name: string): string => {
     return name.slice(0, 2).toUpperCase();
 };
 
-const statusBadgeClass = (s: string): string =>
-({
-    'Draft': 'badge badge-gray',
-    'Assigned': 'badge badge-purple',
-    'Pending': 'badge badge-blue',
-    'In Progress': 'badge badge-amber',
-    'Pending Admin Review': 'badge badge-purple',
-    'Done': 'badge badge-blue',
-    'Completed': 'badge badge-green',
-    'Overdue': 'badge badge-red'
-}[s] ?? 'badge badge-blue');
+const statusBadgeClass = (s: string): string => getStatusBadgeClass(s);
 
 // --- FSM (Finite State Machine) Task Status Transitions ----------------------
 const FSM_TRANSITIONS: Record<string, string[]> = {
@@ -759,7 +750,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
                     </span>
                     {task.taskTitle}
                 </span>
-                <span className={statusBadgeClass(effectiveStatus)}>{effectiveStatus}</span>
+                <StatusBadge status={effectiveStatus} />
                 {showEditBtn && onEdit && (
                     <ActionsDropdown
                         actions={[
@@ -2370,7 +2361,7 @@ const ViewModal: React.FC<ViewModalProps> = ({ task, onEdit, onReopen, onStatusC
                     </div>
                     <div className="view-modal-meta-item">
                         <span className="view-modal-label">Status</span>
-                        <span className={statusBadgeClass(task.taskStatus)}>{task.taskStatus}</span>
+                        <StatusBadge status={task.taskStatus} />
                     </div>
                 </div>
 
@@ -2513,7 +2504,7 @@ const AdminOverrideModal: React.FC<AdminOverrideModalProps> = ({ task, onSubmit,
                 </div>
                 <div className="view-modal-meta-item">
                     <span className="view-modal-label">Current Status</span>
-                    <span className={statusBadgeClass(task.taskStatus)}>{task.taskStatus}</span>
+                    <StatusBadge status={task.taskStatus} />
                 </div>
                 <div className="view-modal-meta-item">
                     <span className="view-modal-label">Priority</span>
@@ -2525,7 +2516,7 @@ const AdminOverrideModal: React.FC<AdminOverrideModalProps> = ({ task, onSubmit,
                 <label>Requested Status *</label>
                 <select value={requestedStatus} onChange={e => setRequestedStatus(e.target.value)}
                     className={errors.requestedStatus ? 'report-input report-input-error' : 'report-input'}>
-                    {OVERRIDE_TARGETS.map(s => (<option key={s} value={s}>{s}</option>))}
+                    {OVERRIDE_TARGETS.map(s => (<option key={s} value={s}>{formatStatus(s)}</option>))}
                 </select>
                 {errors.requestedStatus && <span className="report-field-error">{errors.requestedStatus}</span>}
             </div>
@@ -3438,7 +3429,7 @@ const TasksTab: React.FC<{
                                             {t.taskTitle}
                                         </div>
                                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span className={statusBadgeClass(effectiveStatus)} style={{ fontSize: 10, padding: '1px 8px' }}>{effectiveStatus}</span>
+                                            <StatusBadge status={effectiveStatus} size="sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -6633,7 +6624,7 @@ export const ReportsTab: React.FC<{
                                         onChange={e => setTcFilter(p => ({ ...p, taskStatus: e.target.value }))}>
                                         <option value="">All Statuses</option>
                                         {TASK_STATUSES_FILTER.map(s => (
-                                            <option key={s} value={s}>{s}</option>
+                                            <option key={s} value={s}>{formatStatus(s)}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -6809,7 +6800,7 @@ export const ReportsTab: React.FC<{
                                                                     </span>
                                                                 </td>
                                                                 <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                    <span className="report-pill teal">{task.status}</span>
+                                                                    <span className="report-pill teal">{formatStatus(task.status)}</span>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -9112,7 +9103,7 @@ const ReopenApprovalModal: React.FC<ReopenApprovalModalProps> = ({ request, onAp
                 </div>
                 <div className="reopen-info-item">
                     <span className="reopen-info-label">Current Status</span>
-                    <span className={statusBadgeClass(request.currentStatus)} style={{ fontSize: 11 }}>{request.currentStatus}</span>
+                    <StatusBadge status={request.currentStatus} size="sm" />
                 </div>
                 <div className="reopen-info-item">
                     <span className="reopen-info-label">Submitted</span>
@@ -9336,7 +9327,7 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
                                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{d.referenceNumber || (d.taskId.length > 8 ? d.taskId.slice(0, 8) + '…' : d.taskId)}</div>
                             </td>
                             <td style={{ padding: '10px 8px' }}>
-                                <span className={statusBadgeClass(d.status)} style={{ fontSize: 11 }}>{d.status}</span>
+                                <StatusBadge status={d.status} size="sm" />
                             </td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)' }}>{d.loading ? '…' : (d.priority || '—')}</td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{d.loading ? '…' : formatDeadlineWithRemaining(d.deadline)}</td>

@@ -28,7 +28,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/components/Sidebar/Sidebar.css`, `frontend/src/components/GlobalHeader/GlobalHeader.css`, `frontend/src/components/TaskView/TaskView.css`, `frontend/src/components/TaskComments/TaskComments.css`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeCharts.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeCharts.css`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.css`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`
   - Verify: Run `git grep -i "008b8b" frontend/src/` to confirm zero hard-coded old teal references.
 
-- [ ] Step 5: Apply Title Case status mapping to tables, badges, dropdowns, filters, modals, and empty states
+- [x] Step 5: Apply Title Case status mapping to tables, badges, dropdowns, filters, modals, and empty states
   - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/Pages/OpEmployee_Dashboard/OpEmployee_Dashboard.tsx`, `frontend/src/components/TaskManager/TaskManager.tsx`, `frontend/src/components/TaskView/TaskView.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists.tsx`, `frontend/src/Pages/EmergingTechAI/AIAssignmentView.tsx`
   - Verify: Manual and test verification that all task statuses display in Title Case while underlying values and API calls remain untouched.
 

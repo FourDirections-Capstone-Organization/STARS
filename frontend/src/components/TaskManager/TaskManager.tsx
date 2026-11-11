@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
+import { formatStatus } from '../../utils/statusUtils';
 import StatusCard from '../StatusCard/StatusCard';
 import SearchableSelect from '../ui/SearchableSelect';
 import FormModal from '../FormModal/FormModal';
@@ -809,7 +810,7 @@ export default function TaskManager({
                                 </select>
                                 <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
                                     <option value="">All Statuses</option>
-                                    {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                    {availableStatuses.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
                                 </select>
                                 <SearchableSelect
                                     value={filterAssignee}
@@ -887,7 +888,7 @@ export default function TaskManager({
                     filterElements={tab !== 'bin' ? <>
                         <select value={filterStatus} onChange={e => handleStatusChange(e.target.value)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff', cursor: 'pointer' }}>
                             <option value="">All Statuses</option>
-                            {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                            {availableStatuses.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
                         </select>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <input

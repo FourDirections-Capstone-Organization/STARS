@@ -337,7 +337,7 @@ const statusMeta: Record<string, { label: string; cls: string; icon: React.React
     assigned: { label: 'Assigned', cls: 'badge-purple', icon: <Clock size={11} /> },
     'in-progress': { label: 'In Progress', cls: 'badge-amber', icon: <Loader2 size={11} /> },
     'pending-review': { label: 'Pending Review', cls: 'badge-purple', icon: <Eye size={11} /> },
-    done: { label: 'Done', cls: 'badge-blue', icon: <CheckCircle2 size={11} /> },
+    done: { label: 'Pending Review', cls: 'badge-purple', icon: <CheckCircle2 size={11} /> },
     completed: { label: 'Completed', cls: 'badge-green', icon: <CheckCircle2 size={11} /> },
     'on-hold': { label: 'On Hold', cls: 'badge-gray', icon: <PauseCircle size={11} /> },
     overdue: { label: 'Overdue', cls: 'badge-red', icon: <AlertCircle size={11} /> },
@@ -1520,7 +1520,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                     <option value="on-hold">On Hold</option>
                     <option value="completed">Completed</option>
                     <option value="overdue">Overdue</option>
-                    <option value="cancelled">Bin</option>
+                    <option value="cancelled">Cancelled</option>
                 </select>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{filtered.length} task{filtered.length === 1 ? '' : 's'}</span>
             </div>
@@ -1532,7 +1532,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                         <p>
                             {filter === 'on-hold' ? 'No tasks on hold' :
                              filter === 'completed' ? 'No completed tasks' :
-                             filter === 'cancelled' ? 'Bin is empty' :
+                             filter === 'cancelled' ? 'No cancelled tasks' :
                              'No tasks match your filters'}
                         </p>
                     </div>

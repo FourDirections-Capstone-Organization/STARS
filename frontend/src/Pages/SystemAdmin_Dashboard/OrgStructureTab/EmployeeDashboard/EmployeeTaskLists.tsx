@@ -295,6 +295,9 @@ export default function EmployeeTaskLists({
                 const overdue = isTaskOverdue(item);
                 if (sf === 'overdue') return overdue;
                 const statusStr = formatStatus(item.status).toLowerCase();
+                if (sf === 'pending' || sf === 'not started') {
+                    return statusStr === 'pending' || statusStr === 'not started' || statusStr === 'to do';
+                }
                 return statusStr === sf;
             });
         }
