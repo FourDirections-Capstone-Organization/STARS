@@ -62,9 +62,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import './OpAdmin_Dashboard.css';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import TaskView, { TaskViewTask, formatDriverDisplay } from '../../components/TaskView/TaskView';
+import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
 import { useToast } from '../../components/Toast/Toast';
 import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
-import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
+import { formatDeadlineWithRemaining, formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
 
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import GlobalHeader, { NotificationItem } from '../../components/GlobalHeader/GlobalHeader';
@@ -1582,9 +1583,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                         />
                                         <FieldErr name="dueAt" />
                                         {isDmsDeadlineLocked ? (
-                                            <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
-                                                Deadline is synchronized and pre-set from DMS.
-                                            </span>
+                                            <div>
+                                                <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                    Deadline is synchronized and pre-set from DMS.
+                                                </span>
+                                                <div className="dms-deadline-dateonly-display" data-testid="dms-dateonly-display" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
+                                                    <Calendar size={13} />
+                                                    <span>DMS Delivery Deadline: {formatDateOnly(form.dueAt)} (Date-only)</span>
+                                                </div>
+                                            </div>
                                         ) : isPreDelivery && isHistoricalDeadline ? (
                                             <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
                                                 Original DMS expected delivery has passed. Automatically adjusted to a valid future SLA deadline.
@@ -2250,6 +2257,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     {isPreDelivery && isCourierUnmapped && (
                                                         <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>Unmapped in STARS</span>
                                                     )}
+                                                    {deliveryForm.courierEmployeeId && !isCourierUnmapped && (() => {
+                                                        const courierId = deliveryForm.courierEmployeeId.trim().toLowerCase();
+                                                        const emp = eligibleEmployees.find(e =>
+                                                            e.accountId.toLowerCase() === courierId ||
+                                                            (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
+                                                        );
+                                                        const driverDisplay = formatDriverDisplayShared(emp?.employeeName, deliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
+                                                        return (
+                                                            <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
+                                                                {driverDisplay.displayText}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <input
                                                     value={deliveryForm.courierEmployeeId}
@@ -5481,15 +5501,17 @@ export const ReportsTab: React.FC<{
             error('No DMS delivery performance records to export.');
             return;
         }
-        const headers = ['Waybill Number', 'Driver ID', 'Driver Name', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
+        const headers = ['Waybill Number', 'Driver ID', 'Driver Name', 'Assigned Driver Label', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
         const rows = dmsPerfData.records.map(r => {
             const driverNameText = r.driverName
                 ? `${r.driverName}${r.driverIsActive === false ? ' [Inactive]' : ''}`
                 : (r.driverId || 'Unassigned');
+            const pairedLabel = formatDriverDisplayShared(r.driverName, r.driverId, r.driverIsActive, { layout: 'id-first' }).displayText;
             return [
                 `"${r.waybillNo || ''}"`,
                 `"${r.driverId || ''}"`,
                 `"${driverNameText}"`,
+                `"${pairedLabel}"`,
                 `"${r.starsTaskId || ''}"`,
                 `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
                 `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
@@ -7794,6 +7816,7 @@ export const ReportsTab: React.FC<{
                                             const isTop = d.onTimeRate >= 95;
                                             const isGood = d.onTimeRate >= 80 && d.onTimeRate < 95;
                                             const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                            const pairedInfo = formatDriverDisplayShared(d.driverName, d.driverId, d.driverIsActive, { layout: 'id-first' });
                                             const isSelected = dmsDriverFilter === d.driverId;
                                             return (
                                                 <tr
@@ -7824,7 +7847,10 @@ export const ReportsTab: React.FC<{
                                                     <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                             <Truck size={14} style={{ color: isSelected ? '#00A99D' : '#4318ff', flexShrink: 0 }} />
-                                                            <span data-testid={`dms-driver-breakdown-${d.driverId}`}>{driverInfo.displayText}</span>
+                                                            <span data-testid={`dms-driver-breakdown-${d.driverId}`}>
+                                                                <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                                <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                            </span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
                                                                     [Inactive]
@@ -7939,9 +7965,11 @@ export const ReportsTab: React.FC<{
                                                         <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                                                             {(() => {
                                                                 const driverInfo = formatDriverDisplay(r.driverName, r.driverId, r.driverIsActive);
+                                                                const pairedInfo = formatDriverDisplayShared(r.driverName, r.driverId, r.driverIsActive, { layout: 'id-first' });
                                                                 return (
                                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid={`dms-record-driver-${r.waybillNo}`}>
-                                                                        <span>{driverInfo.displayText}</span>
+                                                                        <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                                        <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                                         {driverInfo.isInactive && (
                                                                             <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
                                                                                 [Inactive]
@@ -9353,14 +9381,23 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
     let isHistoricalDeadline = false;
     let originalExpectedDelivery = '';
 
-    if (order.expectedDelivery) {
+    if (order.expectedDelivery || (order as any).expectedDeliveryDate) {
         try {
-            const ed = new Date(order.expectedDelivery);
-            if (!isNaN(ed.getTime())) {
+            const raw = (order as any).expectedDeliveryDate || order.expectedDelivery;
+            const parsed = parseLocalDate(raw);
+            if (parsed && !isNaN(parsed.getTime())) {
                 const pad = (n: number) => String(n).padStart(2, '0');
-                originalExpectedDelivery = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                const isMidnightOrDateOnly = typeof raw === 'string' && (
+                    !raw.includes('T') ||
+                    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s]00:00(?::00(?:\.000)?)?(?:Z|[+-]00:?00)?)?$/.test(raw.trim())
+                );
+                if (isMidnightOrDateOnly) {
+                    originalExpectedDelivery = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T00:00`;
+                } else {
+                    originalExpectedDelivery = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+                }
                 const now = new Date();
-                if (ed.getTime() <= now.getTime()) {
+                if (parsed.getTime() <= now.getTime()) {
                     isHistoricalDeadline = true;
                     const adjusted = getAdjustedSlaDeadline(order.priority || 'Medium', now);
                     dmsDeadline = formatDateForInput(adjusted);

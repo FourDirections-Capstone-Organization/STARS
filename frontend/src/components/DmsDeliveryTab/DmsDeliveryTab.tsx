@@ -35,6 +35,8 @@ import {
     downloadDeliveryCsvReport,
 } from './DeliveryReportExport';
 import { formatDriverDisplay } from '../TaskView/TaskView';
+import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
+import { formatDateOnly } from '../../utils/dateUtils';
 import './DmsDeliveryTab.css';
 
 export interface DmsDeliveryItem {
@@ -64,6 +66,8 @@ export interface DmsDeliveryItem {
     dmsLongitude?: number;
     syncStatus: string;
     createdAt?: string;
+    expectedDelivery?: string;
+    expectedDeliveryDate?: string;
 }
 
 interface PerformanceSummary {
@@ -645,12 +649,16 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                 <span className="dms-detail-val">
                                     {(() => {
                                         const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
+                                        const pairedInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
                                         if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
                                             return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
                                         }
                                         return (
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                <span className="dms-detail-driver-badge">{driverInfo.displayText}</span>
+                                                <span className="dms-detail-driver-badge">
+                                                    <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                    <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                </span>
                                                 {driverInfo.isInactive && (
                                                     <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>
                                                         [Inactive]
@@ -661,6 +669,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                     })()}
                                 </span>
                             </div>
+                            {(selectedDelivery.expectedDelivery || selectedDelivery.expectedDeliveryDate) && (
+                                <div className="dms-detail-row" data-testid="dms-detail-expected-delivery">
+                                    <span className="dms-detail-label">Expected Delivery</span>
+                                    <span className="dms-detail-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <Calendar size={12} color="var(--primary, #00A99D)" />
+                                        {formatDateOnly(selectedDelivery.expectedDeliveryDate || selectedDelivery.expectedDelivery)}
+                                    </span>
+                                </div>
+                            )}
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Linked STARS Task</span>
                                 <span className="dms-detail-val">
@@ -1102,13 +1119,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                     <td>
                                         {(() => {
                                             const driverInfo = formatDriverDisplay(item.courierFullName, item.courierEmployeeId, item.courierIsActive);
+                                            const pairedInfo = formatDriverDisplayShared(item.courierFullName, item.courierEmployeeId, item.courierIsActive, { layout: 'id-first' });
                                             if (driverInfo.displayText === 'Unassigned' && !item.courierEmployeeId) {
                                                 return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>;
                                             }
                                             return (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                     <span className="dms-driver-badge" data-testid="dms-courier-name">
-                                                        {driverInfo.displayText}
+                                                        <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                        <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                     </span>
                                                     {driverInfo.isInactive && (
                                                         <span className="tv-driver-inactive-badge" title="Driver account is inactive" style={{ fontSize: 10, padding: '1px 5px' }}>

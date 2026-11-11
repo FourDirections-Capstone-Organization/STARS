@@ -88,6 +88,8 @@ import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
+import { formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
+import { formatDriverDisplay } from '../../utils/driverUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -4293,19 +4295,20 @@ export default function Dashboard() {
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
         let dmsDeadline = '';
-        if (order.expectedDelivery) {
+        if (order.expectedDelivery || (order as any).expectedDeliveryDate) {
             try {
-                const ed = new Date(order.expectedDelivery);
-                if (!isNaN(ed.getTime())) {
+                const raw = (order as any).expectedDeliveryDate || order.expectedDelivery;
+                const parsed = parseLocalDate(raw);
+                if (parsed && !isNaN(parsed.getTime())) {
                     const pad = (n: number) => String(n).padStart(2, '0');
                     const now = new Date();
-                    if (ed.getTime() <= now.getTime()) {
+                    if (parsed.getTime() <= now.getTime()) {
                         const prio = (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium');
                         const hours = prio === 'Urgent' ? 24 : prio === 'High' ? 48 : prio === 'Medium' ? 72 : 168;
                         const adjusted = new Date(now.getTime() + hours * 60 * 60 * 1000);
                         dmsDeadline = `${adjusted.getFullYear()}-${pad(adjusted.getMonth() + 1)}-${pad(adjusted.getDate())}T${pad(adjusted.getHours())}:${pad(adjusted.getMinutes())}`;
                     } else {
-                        dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                        dmsDeadline = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T00:00`;
                     }
                 }
             } catch { }
@@ -5789,6 +5792,11 @@ export default function Dashboard() {
                                                 max={newEnableDelivery ? undefined : range.max}
                                                 style={(newTaskForm.priority === 'Urgent' || newEnableDelivery) ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8, marginTop: 4 } : { marginTop: 4 }}
                                             />
+                                            {newEnableDelivery && newTaskForm.deadline && (
+                                                <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                    Deadline is synchronized and pre-set from DMS (Date-only: {formatDateOnly(newTaskForm.deadline)}).
+                                                </span>
+                                            )}
                                             {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && !newEnableDelivery && (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: 10, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>Quick Pick:</span>
@@ -6201,7 +6209,22 @@ export default function Dashboard() {
                                         />
                                     </div>
                                     <div className="fm-field" style={{ margin: 0 }}>
-                                        <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                            {newDeliveryForm.courierEmployeeId && (() => {
+                                                const courierId = newDeliveryForm.courierEmployeeId.trim().toLowerCase();
+                                                const emp = employees.find(e =>
+                                                    (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId) ||
+                                                    (e.id && e.id.toLowerCase() === courierId)
+                                                );
+                                                const driverDisplay = formatDriverDisplay(emp?.employeeName, newDeliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
+                                                return (
+                                                    <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }}>
+                                                        {driverDisplay.displayText}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
                                         <input
                                             className="fm-input"
                                             value={newDeliveryForm.courierEmployeeId}
