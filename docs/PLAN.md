@@ -1,40 +1,36 @@
-# Plan: Fix STARS/DMS Deadline and Driver Identification Integration Defects
+# Plan: Pre-Delivery Helper Text Removal and DMS Courier Name Presentation
 
-**Feature branch:** `fix/dms-integration-deadline-driver` | **Step branches:** `step-N-<short-name>`
+**Feature branch:** `fix/dms-courier-name-and-pre-delivery-helper-text` | **Step branches:** `step-N-<short-name>`
 Never push directly to `refactoring/bug-fix`. Commit each step on a step branch and merge to feature branch.
 
 ## Findings so far
-- Deadline field & date formatting: `OpAdmin_Dashboard.tsx`, `SystemAdmin_Dashboard.tsx`, and `dateUtils.ts` parse ISO dates with `new Date()`, causing UTC midnight (`00:00Z`) to shift to `08:00 am` in UTC+8 inside `datetime-local` inputs.
-- DMS sync & mapping: `DmsIntegrationService.cs` and `DmsIntegrationDTOs.cs` receive `ExpectedDelivery` as `DateTime` and sync `CourierEmployeeId` as the primary key.
-- Driver display: `TaskView.tsx`, `DmsDeliveryTab.tsx`, `PreDeliveryTab.tsx`, and `DeliveryReportExport.ts` format drivers inconsistently, showing name first or ID only.
-- Tables & modals: `TaskModal` in dashboards locks DMS deadlines with `input[type="datetime-local"]` rather than a date-only display.
-- Existing driver resolution: `DmsIntegrationService.cs` resolves driver full names from `_db.Users` via `EmployeeNumber`.
+- Task form: `SystemAdmin_Dashboard.tsx` and `OpAdmin_Dashboard.tsx` render the "(Date-only: ...)" helper text below locked DMS deadlines.
+- DMS sync handler: `DmsIntegrationService.cs` drops driver names from DMS payloads when employee numbers are unmapped in STARS `_db.Users`.
+- Waybill model & DTOs: `TaskDeliveryDetail.cs`, `DmsIntegrationDTOs.cs`, and `UpsertTaskDeliveryDetailDTO` lack a dedicated `CourierFullName` field.
+- Task details view: `TaskView.tsx` renders courier info using `formatDriverDisplay`, but receives employee ID alone if the name is not persisted.
+- Courier label: `frontend/src/utils/driverUtils.ts` already provides the standard `EMP-008 · Ricardo Bautista` formatter with clean ID-only fallback.
 
 ## Steps
 
-- [x] Step 1: Align backend DMS DTOs, sync payload, and driver mapping to use employee ID as key and normalize date-only deadlines
-  - Files: `backend/Models/DTOs/DmsIntegrationDTOs.cs`, `backend/Modules/DmsIntegration/DmsIntegrationService.cs`
-  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to confirm driver ID matching and date parsing.
+- [ ] Step 1: Add CourierFullName to delivery detail model and integration DTOs to support courier name persistence
+  - Files: `backend/Models/TaskDeliveryDetail.cs`, `backend/Models/DTOs/DmsIntegrationDTOs.cs`
+  - Verify: Run `dotnet build backend/Backend.csproj --configuration Release` to confirm model and DTO schema compilation.
 
-- [x] Step 2: Implement shared date-only and driver-label formatters with regression guards for midnight dates and missing names
-  - Files: `frontend/src/utils/dateUtils.ts`, `frontend/src/utils/driverUtils.ts`, `frontend/src/components/TaskView/TaskView.tsx`
-  - Verify: Vitest tests for `formatDateOnly` near midnight and `formatDriverDisplay` returning `EMP-008 · Ricardo Bautista` or ID fallback.
+- [ ] Step 2: Update DMS sync handlers to capture, persist, and resolve courier names from DMS payloads and STARS user records
+  - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to verify ID and name mapping.
 
-- [x] Step 3: Update task modals, detail views, tables, and exports to render date-only DMS deadlines and paired driver labels
-  - Files: `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/components/PreDeliveryTab/PreDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/components/DmsDeliveryTab/DeliveryReportExport.ts`
-  - Verify: Component tests and UI check verifying read-only date-only deadline with locked badge, plus driver label format in tables and forms.
+- [ ] Step 3: Remove "(Date-only: ...)" helper text and present paired courier labels in task modals and task details
+  - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/components/TaskView/TaskView.tsx`
+  - Verify: Run `npm --prefix frontend test -- -t "DmsDeadlineDriverUI|PreDelivery"` to confirm clean layout and paired driver display.
 
-- [x] Step 4: Run full backend and frontend test suites and verify DMS sync against both QA defect scenarios
-  - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/PreDeliveryDueDateAndCourierFix.test.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
-  - Verify: Execute `dotnet test` and `npm --prefix frontend test`, confirming zero regressions across all backend and frontend tests.
+- [ ] Step 4: Run full backend and frontend regression suites and perform manual end-to-end verification
+  - Files: `frontend/src/test/DmsDeadlineDriverUI.test.tsx`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj && npm --prefix frontend test`, then verify helper text removal and waybill courier name in UI.
 
 ## Open questions / assumptions
-- Time origin: DMS has no time component; "08:00 am" is an artifact of UTC midnight converted to UTC+8 browser local time in `<input type="datetime-local">`.
-- Driver payload from DMS: We assume DMS sends `DriverEmployeeId` (or `driverId`); if DMS sends full name only, DMS will need a backend update to transmit ID.
-- DMS change for ID: Proposed pairing `EMP-008 · Ricardo Bautista` should be mirrored in DMS UI; STARS handles its side independently without DMS breakage.
-- Existing deadlines: Existing stored task deadlines with timestamp components will display formatted as date-only (`DD/MM/YYYY`) with no DB migration required.
-- Existing drivers: Existing tasks without driver show "Unassigned"; tasks with ID but no matching user name gracefully display the employee ID alone.
-- Date format: All user-facing views, detail modals, tables, and exports will use standard `DD/MM/YYYY` (e.g. `13/11/2026`) for DMS delivery deadlines.
-- Separator convention: Proposing middle dot ` · ` (`EMP-008 · Ricardo Bautista`) as standard layout across forms, cards, tables, and exports.
-
-If there's some modification needed for the DMS, list me the details that needs to be improved there.
+- DMS courier payload: Assumes DMS sends courier name under `driverName` or `courierName`; STARS preserves it or resolves from `_db.Users`.
+- STARS employee lookup: If DMS sends ID only, STARS looks up `_db.Users` by `EmployeeNumber`; if unmapped in both, ID alone is displayed.
+- Existing waybills: Existing waybills without a name display the ID alone cleanly ("EMP-008") with no data backfill or schema break required.
+- Date-only text locations: "(Date-only)" appeared in `SystemAdmin_Dashboard.tsx` helper text and `OpAdmin_Dashboard.tsx` deadline badge.
+- Proposed courier layout: Middle dot convention `EMP-008 · Ricardo Bautista` via `formatDriverDisplay` with clean fallback to `EMP-008`.
