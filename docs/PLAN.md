@@ -36,7 +36,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/**`
   - Verify: Run grep checks ensuring zero old teal values (`#008b8b`), zero conflicting inline th styles (`style={{ ...color... }}`), and zero raw status display strings.
 
-- [ ] Step 7: Run full verification test suites and visual inspection pass
+- [x] Step 7: Run full verification test suites and visual inspection pass
   - Files: `frontend/src/**`, `backend/**`
   - Verify: Run `npm --prefix frontend test` and `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`, followed by visual review of main views.
 
