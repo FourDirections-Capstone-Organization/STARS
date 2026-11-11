@@ -20,7 +20,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/utils/statusUtils.ts`, `frontend/src/components/ui/StatusBadge.tsx`
   - Verify: Unit test verifying Title Case display outputs ("To Do", "In Progress", "On Hold", "Pending Review", "Completed") for all raw inputs.
 
-- [ ] Step 3: Define shared table header style and standardize form/modal button radius
+- [x] Step 3: Define shared table header style and standardize form/modal button radius
   - Files: `frontend/src/global.css`, `frontend/src/components/ui/DataTable.css`, `frontend/src/components/FormModal/FormModal.css`, `frontend/src/components/ConfirmationModal/ConfirmationModal.css`, `frontend/src/components/ConfirmModal/ConfirmModal.css`, `frontend/src/components/TaskView/TaskView.css`
   - Verify: Visual and DOM inspection verifying uppercase 0.75rem #64748B headers and 8px border-radius on modal buttons.
 
