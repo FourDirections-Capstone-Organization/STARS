@@ -18,7 +18,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests`
 
-- [ ] Step 2: Frontend: Update `DmsDeliveryTab.tsx` fallback logic and row keys to guarantee delivery data presentation
+- [x] Step 2: Frontend: Update `DmsDeliveryTab.tsx` fallback logic and row keys to guarantee delivery data presentation
   - Files: `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "DmsDeliveryTab|DeliveryAnalytics"`
 

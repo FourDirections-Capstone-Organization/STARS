@@ -491,6 +491,47 @@ describe('Delivery Analytics - Driver Full Names, Search/Filter, Charts & CSV Ex
                 expect(screen.getByText('DRV-001 · Juan Dela Cruz')).toBeInTheDocument();
             });
         });
+
+        it('Scenario 3: falls back to pending DMS orders and displays pending creation tags when deliveries endpoint returns empty', async () => {
+            const fallbackPendingOrders = [
+                {
+                    orderId: 888,
+                    waybillNo: 'WB-FALLBACK-001',
+                    recipientName: 'Grace Tan',
+                    recipientContact: '09179998888',
+                    recipientAddress: 'Ortigas, Pasig',
+                    area: 'Pasig',
+                    packageDescription: 'Contract Docs',
+                    driverEmployeeId: 'EMP-008',
+                    driverName: 'Ricardo Bautista',
+                    status: 'Pending',
+                    orderDate: '2026-11-11T10:00:00Z',
+                },
+            ];
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: [] } });
+                }
+                if (url.includes('/api/dms-integration/pending-orders')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: fallbackPendingOrders } });
+                }
+                if (url.includes('/api/Task')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: { items: [], totalCount: 0 } } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Grace Tan')).toBeInTheDocument();
+            });
+
+            expect(screen.getByText('WB-FALLBACK-001')).toBeInTheDocument();
+            expect(screen.getAllByText('Pending Creation').length).toBeGreaterThanOrEqual(1);
+            expect(screen.getByText('EMP-008 · Ricardo Bautista')).toBeInTheDocument();
+        });
     });
 });
 
