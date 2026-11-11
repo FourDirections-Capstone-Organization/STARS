@@ -59,6 +59,10 @@ public class DmsIntegrationService : IDmsIntegrationService
         if (task == null)
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("Task not found");
 
+        var incomingCourierFullName = !string.IsNullOrWhiteSpace(dto.CourierFullName)
+            ? dto.CourierFullName.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName.Trim() : null);
+
         var detail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == taskId);
         if (detail == null)
         {
@@ -71,6 +75,7 @@ public class DmsIntegrationService : IDmsIntegrationService
                 Area = (dto.Area ?? string.Empty).Trim(),
                 PackageDescription = (dto.PackageDescription ?? string.Empty).Trim(),
                 CourierEmployeeId = dto.CourierEmployeeId?.Trim(),
+                CourierFullName = incomingCourierFullName,
                 SenderAddress = dto.SenderAddress?.Trim(),
                 SpecialInstructions = dto.SpecialInstructions?.Trim(),
                 DmsOrderId = dto.DmsOrderId,
@@ -88,11 +93,28 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.Area = (dto.Area ?? string.Empty).Trim();
             detail.PackageDescription = (dto.PackageDescription ?? string.Empty).Trim();
             detail.CourierEmployeeId = dto.CourierEmployeeId?.Trim();
+            if (!string.IsNullOrWhiteSpace(incomingCourierFullName))
+            {
+                detail.CourierFullName = incomingCourierFullName;
+            }
             detail.SenderAddress = dto.SenderAddress?.Trim();
             detail.SpecialInstructions = dto.SpecialInstructions?.Trim();
             if (dto.DmsOrderId.HasValue) detail.DmsOrderId = dto.DmsOrderId;
             if (!string.IsNullOrWhiteSpace(dto.DmsWaybillNo)) detail.DmsWaybillNo = dto.DmsWaybillNo.Trim();
             detail.UpdatedAt = DateTime.UtcNow;
+        }
+
+        User? driverUser = null;
+        if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+        {
+            driverUser = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+
+            if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+            {
+                detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(dto.DmsStatus))
@@ -138,14 +160,6 @@ public class DmsIntegrationService : IDmsIntegrationService
             null,
             $"Delivery details updated for task '{task.Title}'",
             "DmsIntegration");
-
-        User? driverUser = null;
-        if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
-        {
-            driverUser = await _db.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
-        }
 
         if (detail.Task == null) detail.Task = task;
 
@@ -256,7 +270,12 @@ public class DmsIntegrationService : IDmsIntegrationService
             : null;
         var driverFullName = driverUser != null
             ? $"{driverUser.FirstName} {driverUser.LastName}".Trim()
-            : null;
+            : (!string.IsNullOrWhiteSpace(detail.CourierFullName) ? detail.CourierFullName.Trim() : null);
+
+        if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+        {
+            detail.CourierFullName = driverFullName;
+        }
 
         var payload = new
         {
@@ -279,6 +298,8 @@ public class DmsIntegrationService : IDmsIntegrationService
             driverEmployeeId = detail.CourierEmployeeId,
             driverId = detail.CourierEmployeeId,
             driverName = driverFullName,
+            courierName = driverFullName,
+            courierFullName = driverFullName,
             expectedDelivery = deadlineDateOnly,
             expectedDeliveryDate = deadlineDateOnly,
             deadline = deadlineDateOnly,
@@ -326,6 +347,39 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.SyncStatus = "Synced";
             detail.SyncError = null;
             detail.UpdatedAt = DateTime.UtcNow;
+
+            string? drvId = null;
+            if (root.TryGetProperty("driverEmployeeId", out var deiProp) && deiProp.ValueKind == JsonValueKind.String)
+                drvId = deiProp.GetString();
+            else if (root.TryGetProperty("driverId", out var diProp) && diProp.ValueKind == JsonValueKind.String)
+                drvId = diProp.GetString();
+            else if (root.TryGetProperty("courierEmployeeId", out var ceiProp) && ceiProp.ValueKind == JsonValueKind.String)
+                drvId = ceiProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvId))
+                detail.CourierEmployeeId = drvId.Trim();
+
+            string? drvName = null;
+            if (root.TryGetProperty("driverName", out var dnProp) && dnProp.ValueKind == JsonValueKind.String)
+                drvName = dnProp.GetString();
+            else if (root.TryGetProperty("courierName", out var cnProp) && cnProp.ValueKind == JsonValueKind.String)
+                drvName = cnProp.GetString();
+            else if (root.TryGetProperty("courierFullName", out var cfnProp) && cfnProp.ValueKind == JsonValueKind.String)
+                drvName = cfnProp.GetString();
+            else if (root.TryGetProperty("driverFullName", out var dfnProp) && dfnProp.ValueKind == JsonValueKind.String)
+                drvName = dfnProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvName))
+                detail.CourierFullName = drvName.Trim();
+
+            if (driverUser == null && !string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+            {
+                driverUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+                if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+                {
+                    detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+                }
+            }
 
             var normStatus = (status ?? "").Trim().ToLowerInvariant();
             if (normStatus == "delivered" || normStatus == "completed")
@@ -397,7 +451,7 @@ public class DmsIntegrationService : IDmsIntegrationService
 
             _logger.LogInformation("Task {TaskId} mapped to DMS Waybill {WaybillNo}", taskId, waybillNo);
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
-                MapToDTO(detail), "Delivery order created successfully in DMS");
+                MapToDTO(detail, driverUser), "Delivery order created successfully in DMS");
         }
         catch (Exception ex)
         {
@@ -502,6 +556,40 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.SyncError = null;
             detail.UpdatedAt = DateTime.UtcNow;
 
+            string? drvId = null;
+            if (root.TryGetProperty("driverEmployeeId", out var deiProp) && deiProp.ValueKind == JsonValueKind.String)
+                drvId = deiProp.GetString();
+            else if (root.TryGetProperty("driverId", out var diProp) && diProp.ValueKind == JsonValueKind.String)
+                drvId = diProp.GetString();
+            else if (root.TryGetProperty("courierEmployeeId", out var ceiProp) && ceiProp.ValueKind == JsonValueKind.String)
+                drvId = ceiProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvId))
+                detail.CourierEmployeeId = drvId.Trim();
+
+            string? drvName = null;
+            if (root.TryGetProperty("driverName", out var dnProp) && dnProp.ValueKind == JsonValueKind.String)
+                drvName = dnProp.GetString();
+            else if (root.TryGetProperty("courierName", out var cnProp) && cnProp.ValueKind == JsonValueKind.String)
+                drvName = cnProp.GetString();
+            else if (root.TryGetProperty("courierFullName", out var cfnProp) && cfnProp.ValueKind == JsonValueKind.String)
+                drvName = cfnProp.GetString();
+            else if (root.TryGetProperty("driverFullName", out var dfnProp) && dfnProp.ValueKind == JsonValueKind.String)
+                drvName = dfnProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvName))
+                detail.CourierFullName = drvName.Trim();
+
+            User? driverUser = null;
+            if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+            {
+                driverUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+                if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+                {
+                    detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+                }
+            }
+
             var normStatus = (status ?? "").Trim().ToLowerInvariant();
             if (normStatus == "delivered" || normStatus == "completed")
             {
@@ -529,18 +617,6 @@ public class DmsIntegrationService : IDmsIntegrationService
                 task.Status = Backend.Models.Enums.TaskStatus.Cancelled;
                 task.UpdatedAt = DateTime.UtcNow;
             }
-
-            // Sync driver courier employee ID if provided in DMS response
-            string? drvId = null;
-            if (root.TryGetProperty("driverEmployeeId", out var deiProp) && deiProp.ValueKind == JsonValueKind.String)
-                drvId = deiProp.GetString();
-            else if (root.TryGetProperty("driverId", out var diProp) && diProp.ValueKind == JsonValueKind.String)
-                drvId = diProp.GetString();
-            else if (root.TryGetProperty("courierEmployeeId", out var ceiProp) && ceiProp.ValueKind == JsonValueKind.String)
-                drvId = ceiProp.GetString();
-
-            if (!string.IsNullOrWhiteSpace(drvId))
-                detail.CourierEmployeeId = drvId.Trim();
 
             // Sync Proof of Delivery (POD) if returned in DMS response
             string? podCandidate = null;
@@ -585,13 +661,6 @@ public class DmsIntegrationService : IDmsIntegrationService
                 $"DMS Delivery Order status synchronized: {status} (Waybill: {waybillNo})",
                 "DmsIntegration");
 
-            User? driverUser = null;
-            if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
-            {
-                driverUser = await _db.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
-            }
             var podAttachment = await _db.TaskAttachments
                 .AsNoTracking()
                 .Where(a => a.TaskId == taskId && a.Description != null && a.Description.Contains("Proof of Delivery"))
@@ -621,6 +690,16 @@ public class DmsIntegrationService : IDmsIntegrationService
 
     public async Task<ApiResponseDTO<bool>> ProcessStatusUpdateAsync(DmsStatusWebhookDTO dto)
     {
+        var incomingDriver = !string.IsNullOrWhiteSpace(dto.DriverId)
+            ? dto.DriverId.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverEmployeeId)
+                ? dto.DriverEmployeeId.Trim()
+                : (!string.IsNullOrWhiteSpace(dto.CourierEmployeeId) ? dto.CourierEmployeeId.Trim() : null));
+
+        var incomingDriverName = !string.IsNullOrWhiteSpace(dto.CourierFullName)
+            ? dto.CourierFullName.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName.Trim() : null);
+
         var detail = await _db.TaskDeliveryDetails
             .Include(d => d.Task)
             .FirstOrDefaultAsync(d => d.TaskId == dto.StarsTaskId || d.DmsWaybillNo == dto.WaybillNo);
@@ -672,6 +751,8 @@ public class DmsIntegrationService : IDmsIntegrationService
                 DeliveryAddress = initDeliveryAddress,
                 Area = initArea,
                 PackageDescription = initPackageDesc,
+                CourierEmployeeId = incomingDriver,
+                CourierFullName = incomingDriverName,
                 DmsWaybillNo = dto.WaybillNo,
                 DmsStatus = dto.DmsStatus ?? dto.Status,
                 DmsRawStatus = dto.DmsStatus ?? dto.Status,
@@ -705,14 +786,22 @@ public class DmsIntegrationService : IDmsIntegrationService
         if (!string.IsNullOrWhiteSpace(dto.PackageDescription))
             detail.PackageDescription = dto.PackageDescription.Trim();
 
-        var incomingDriver = !string.IsNullOrWhiteSpace(dto.DriverId)
-            ? dto.DriverId.Trim()
-            : (!string.IsNullOrWhiteSpace(dto.DriverEmployeeId)
-                ? dto.DriverEmployeeId.Trim()
-                : (!string.IsNullOrWhiteSpace(dto.CourierEmployeeId) ? dto.CourierEmployeeId.Trim() : null));
-
         if (!string.IsNullOrWhiteSpace(incomingDriver))
             detail.CourierEmployeeId = incomingDriver;
+
+        if (!string.IsNullOrWhiteSpace(incomingDriverName))
+            detail.CourierFullName = incomingDriverName;
+
+        if (string.IsNullOrWhiteSpace(detail.CourierFullName) && !string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+        {
+            var driverUser = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+            if (driverUser != null)
+            {
+                detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            }
+        }
 
         detail.UpdatedAt = DateTime.UtcNow;
 
@@ -1058,13 +1147,20 @@ public class DmsIntegrationService : IDmsIntegrationService
                 courierFullName = $"{u.FirstName} {u.LastName}".Trim();
                 courierIsActive = u.IsActive && !u.IsDeactivated;
             }
+            else if (!string.IsNullOrWhiteSpace(d.CourierFullName))
+            {
+                courierFullName = d.CourierFullName.Trim();
+                courierIsActive = null;
+            }
             else if (string.IsNullOrWhiteSpace(d.CourierEmployeeId))
             {
                 courierFullName = "Unassigned";
+                courierIsActive = null;
             }
             else
             {
                 courierFullName = d.CourierEmployeeId;
+                courierIsActive = null;
             }
 
             string? podUrl = null;
@@ -1192,6 +1288,12 @@ public class DmsIntegrationService : IDmsIntegrationService
                         order.DriverName = $"{u.FirstName} {u.LastName}".Trim();
                         order.DriverIsActive = u.IsActive && !u.IsDeactivated;
                     }
+                    else if (!string.IsNullOrWhiteSpace(order.DriverName) && !string.Equals(order.DriverName.Trim(), driverEmpId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Preserve DMS driverName/CourierFullName if provided in payload and not just an echo of driverEmpId
+                        order.DriverName = order.DriverName.Trim();
+                        order.DriverIsActive = null;
+                    }
                     else
                     {
                         // Fallback to employee ID alone when user name is not found in STARS
@@ -1201,10 +1303,20 @@ public class DmsIntegrationService : IDmsIntegrationService
                 }
                 else
                 {
-                    order.DriverEmployeeId = null;
-                    order.DriverId = null;
-                    order.DriverName = "Unassigned";
-                    order.DriverIsActive = null;
+                    if (!string.IsNullOrWhiteSpace(order.DriverName) && !order.DriverName.Trim().Equals("Unassigned", StringComparison.OrdinalIgnoreCase))
+                    {
+                        order.DriverEmployeeId = null;
+                        order.DriverId = null;
+                        order.DriverName = order.DriverName.Trim();
+                        order.DriverIsActive = null;
+                    }
+                    else
+                    {
+                        order.DriverEmployeeId = null;
+                        order.DriverId = null;
+                        order.DriverName = "Unassigned";
+                        order.DriverIsActive = null;
+                    }
                 }
             }
 
@@ -1241,6 +1353,11 @@ public class DmsIntegrationService : IDmsIntegrationService
         {
             courierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
             courierIsActive = driverUser.IsActive && !driverUser.IsDeactivated;
+        }
+        else if (!string.IsNullOrWhiteSpace(d.CourierFullName))
+        {
+            courierFullName = d.CourierFullName.Trim();
+            courierIsActive = null;
         }
         else if (string.IsNullOrWhiteSpace(d.CourierEmployeeId))
         {
@@ -1468,7 +1585,13 @@ public class DmsIntegrationService : IDmsIntegrationService
         else if (!string.IsNullOrWhiteSpace(detail?.CourierEmployeeId))
         {
             var courier = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
-            uploadedByName = courier != null ? $"{courier.FirstName} {courier.LastName}".Trim() : "Field Courier";
+            uploadedByName = courier != null
+                ? $"{courier.FirstName} {courier.LastName}".Trim()
+                : (!string.IsNullOrWhiteSpace(detail?.CourierFullName) ? detail.CourierFullName.Trim() : "Field Courier");
+        }
+        else if (!string.IsNullOrWhiteSpace(detail?.CourierFullName))
+        {
+            uploadedByName = detail.CourierFullName.Trim();
         }
         else
         {
