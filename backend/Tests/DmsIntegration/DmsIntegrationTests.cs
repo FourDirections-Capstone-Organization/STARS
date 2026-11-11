@@ -1474,4 +1474,53 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("Apolinario Mabini", item.CourierFullName);
         Assert.Equal("Apolinario Mabini", item.DriverName);
     }
+
+    [Fact]
+    public async Task GetAllDeliveries_AugmentsWithPendingOrders_WhenTaskDeliveryDetailsIsEmpty()
+    {
+        var pendingOrdersJson = @"[
+            {
+                ""orderId"": 901,
+                ""waybillNo"": ""WB-DMS-AUTO-01"",
+                ""clientName"": ""Apex Deliveries"",
+                ""recipientName"": ""Elena Roxas"",
+                ""recipientContact"": ""09170001234"",
+                ""recipientAddress"": ""BGC Taguig"",
+                ""area"": ""Taguig"",
+                ""packageDescription"": ""Corporate Legal Dossier"",
+                ""orderDate"": ""2026-11-11T09:00:00Z"",
+                ""expectedDelivery"": ""2026-11-12T15:00:00Z"",
+                ""driverEmployeeId"": ""EMP-008"",
+                ""driverName"": ""Ricardo Bautista"",
+                ""status"": ""Pending""
+            }
+        ]";
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains("/api/integration/stars/pending-orders")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(pendingOrdersJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var service = CreateService(client);
+
+        var result = await service.GetAllDeliveriesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        var delivery = Assert.Single(result.Data);
+        Assert.Equal("WB-DMS-AUTO-01", delivery.DmsWaybillNo);
+        Assert.Equal("Elena Roxas", delivery.RecipientName);
+        Assert.Equal("Taguig", delivery.Area);
+        Assert.Equal("EMP-008", delivery.CourierEmployeeId);
+        Assert.Equal("Ricardo Bautista", delivery.CourierFullName);
+        Assert.Equal("Pending", delivery.DmsStatus);
+    }
 }

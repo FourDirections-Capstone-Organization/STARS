@@ -1127,7 +1127,10 @@ public class DmsIntegrationService : IDmsIntegrationService
             .AsNoTracking()
             .Where(u => courierIds.Contains(u.EmployeeNumber))
             .ToListAsync();
-        var driverDict = driverUsers.ToDictionary(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase);
+        var driverDict = driverUsers
+            .Where(u => !string.IsNullOrWhiteSpace(u.EmployeeNumber))
+            .GroupBy(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         var podAttachments = await _db.TaskAttachments
             .AsNoTracking()
@@ -1206,6 +1209,179 @@ public class DmsIntegrationService : IDmsIntegrationService
                 ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null,
             };
         }).ToList();
+
+        var existingWaybills = new HashSet<string>(
+            list.Where(x => !string.IsNullOrWhiteSpace(x.DmsWaybillNo)).Select(x => x.DmsWaybillNo!),
+            StringComparer.OrdinalIgnoreCase);
+        var existingDmsOrderIds = new HashSet<int>(
+            list.Where(x => x.DmsOrderId.HasValue).Select(x => x.DmsOrderId!.Value));
+        var existingTaskIds = new HashSet<Guid>(
+            list.Where(x => x.TaskId != Guid.Empty).Select(x => x.TaskId));
+
+        // 1. Augment with active pre-delivery orders from DMS so all shipments appear in Delivery Summary
+        try
+        {
+            var pendingRes = await GetPendingOrdersAsync();
+            if (pendingRes.IsSuccess && pendingRes.Data != null && pendingRes.Data.Count > 0)
+            {
+                var pendingOrders = pendingRes.Data;
+                var pendingWaybills = pendingOrders
+                    .Select(o => o.WaybillNo)
+                    .Where(w => !string.IsNullOrWhiteSpace(w))
+                    .Distinct()
+                    .ToList();
+
+                var candidateTasks = await _db.Tasks
+                    .AsNoTracking()
+                    .Where(t => t.Title.StartsWith("[Pre-Delivery]") || (t.Description != null && t.Description.Contains("Pre-delivery")))
+                    .ToListAsync();
+
+                var matchingTasks = candidateTasks
+                    .Where(t => pendingWaybills.Any(w =>
+                        (!string.IsNullOrEmpty(t.Title) && t.Title.Contains(w, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(t.Description) && t.Description.Contains(w, StringComparison.OrdinalIgnoreCase))))
+                    .ToList();
+
+                // Batch resolve drivers from pending orders if unmapped in driverDict
+                var pendingDriverIds = pendingOrders
+                    .Select(o => o.DriverEmployeeId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && !driverDict.ContainsKey(id))
+                    .Distinct()
+                    .ToList();
+
+                if (pendingDriverIds.Count > 0)
+                {
+                    var extraDrivers = await _db.Users
+                        .AsNoTracking()
+                        .Where(u => pendingDriverIds.Contains(u.EmployeeNumber))
+                        .ToListAsync();
+                    foreach (var ed in extraDrivers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(ed.EmployeeNumber) && !driverDict.ContainsKey(ed.EmployeeNumber))
+                        {
+                            driverDict[ed.EmployeeNumber] = ed;
+                        }
+                    }
+                }
+
+                foreach (var order in pendingOrders)
+                {
+                    if (existingDmsOrderIds.Contains(order.OrderId)) continue;
+                    if (!string.IsNullOrWhiteSpace(order.WaybillNo) && existingWaybills.Contains(order.WaybillNo)) continue;
+
+                    var matchedTask = matchingTasks.FirstOrDefault(t =>
+                        !string.IsNullOrWhiteSpace(order.WaybillNo) &&
+                        (t.Title.Contains(order.WaybillNo) || t.Description.Contains(order.WaybillNo)));
+
+                    string? courierName = !string.IsNullOrWhiteSpace(order.CourierFullName)
+                        ? order.CourierFullName.Trim()
+                        : (!string.IsNullOrWhiteSpace(order.DriverName) ? order.DriverName.Trim() : null);
+
+                    bool? courierActive = order.DriverIsActive;
+
+                    if (string.IsNullOrWhiteSpace(courierName) && !string.IsNullOrWhiteSpace(order.DriverEmployeeId))
+                    {
+                        if (driverDict.TryGetValue(order.DriverEmployeeId, out var u))
+                        {
+                            courierName = $"{u.FirstName} {u.LastName}".Trim();
+                            courierActive = u.IsActive && !u.IsDeactivated;
+                        }
+                    }
+
+                    DateTime createdAt = order.OrderDate != default ? order.OrderDate : DateTime.UtcNow;
+                    DateTime? expDel = order.ExpectedDelivery != default ? order.ExpectedDelivery : null;
+
+                    var item = new DmsDeliveryItemDTO
+                    {
+                        TaskId = matchedTask?.Id ?? Guid.Empty,
+                        TaskTitle = matchedTask?.Title ?? $"[Pre-Delivery] Delivery to {order.RecipientName} - Waybill {order.WaybillNo}",
+                        TaskNumber = matchedTask?.TaskNumber,
+                        TaskReferenceNumber = matchedTask?.TaskNumber,
+                        RecipientName = order.RecipientName,
+                        RecipientContact = order.RecipientContact,
+                        DeliveryAddress = order.RecipientAddress,
+                        Area = order.Area,
+                        PackageDescription = order.PackageDescription,
+                        SenderAddress = order.SenderAddress,
+                        SpecialInstructions = order.SpecialInstructions,
+                        CourierEmployeeId = order.DriverEmployeeId,
+                        CourierFullName = courierName,
+                        CourierIsActive = courierActive,
+                        DmsWaybillNo = order.WaybillNo,
+                        DmsOrderId = order.OrderId,
+                        DmsStatus = string.IsNullOrWhiteSpace(order.Status) ? "Pending" : order.Status,
+                        DmsRawStatus = order.Status ?? "Pending",
+                        SyncStatus = "Synced",
+                        CreatedAt = createdAt,
+                        ExpectedDelivery = matchedTask?.RevisedDeadline ?? matchedTask?.Deadline ?? expDel,
+                        ExpectedDeliveryDate = order.ExpectedDeliveryDate ?? (expDel.HasValue ? expDel.Value.ToString("yyyy-MM-dd") : null),
+                    };
+
+                    list.Add(item);
+                    if (!string.IsNullOrWhiteSpace(order.WaybillNo)) existingWaybills.Add(order.WaybillNo);
+                    existingDmsOrderIds.Add(order.OrderId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to augment deliveries with pending DMS orders in GetAllDeliveriesAsync");
+        }
+
+        // 2. Augment with any existing operational pre-delivery tasks in STARS that lack TaskDeliveryDetail rows
+        try
+        {
+            var deliveryTasks = await _db.Tasks
+                .AsNoTracking()
+                .Where(t => !existingTaskIds.Contains(t.Id) &&
+                            (t.Title.StartsWith("[Pre-Delivery]") || (t.Description != null && t.Description.Contains("Pre-delivery operational validation"))))
+                .ToListAsync();
+
+            foreach (var task in deliveryTasks)
+            {
+                string? waybill = null;
+                var wbMatch = System.Text.RegularExpressions.Regex.Match(task.Title, @"Waybill\s+([A-Za-z0-9\-_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (wbMatch.Success) waybill = wbMatch.Groups[1].Value.Trim();
+
+                if (!string.IsNullOrEmpty(waybill) && existingWaybills.Contains(waybill)) continue;
+
+                string recipient = "Operations Dispatch";
+                var recMatch = System.Text.RegularExpressions.Regex.Match(task.Title, @"Delivery to\s+([^\-]+)\s+-", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (recMatch.Success) recipient = recMatch.Groups[1].Value.Trim();
+
+                var item = new DmsDeliveryItemDTO
+                {
+                    TaskId = task.Id,
+                    TaskTitle = task.Title,
+                    TaskNumber = task.TaskNumber,
+                    TaskReferenceNumber = task.TaskNumber,
+                    RecipientName = recipient,
+                    RecipientContact = "—",
+                    DeliveryAddress = "Metro Manila",
+                    PackageDescription = task.Title,
+                    DmsWaybillNo = waybill,
+                    DmsStatus = task.Status == Backend.Models.Enums.TaskStatus.Completed ? "Delivered" : "In Transit",
+                    DmsRawStatus = task.Status == Backend.Models.Enums.TaskStatus.Completed ? "Delivered" : "In Transit",
+                    SyncStatus = "Synced",
+                    CreatedAt = task.CreatedAt,
+                    ExpectedDelivery = task.RevisedDeadline ?? task.Deadline,
+                    ExpectedDeliveryDate = (task.RevisedDeadline ?? task.Deadline).ToString("yyyy-MM-dd"),
+                };
+
+                list.Add(item);
+                if (!string.IsNullOrEmpty(waybill)) existingWaybills.Add(waybill);
+                existingTaskIds.Add(task.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to augment deliveries with operational tasks in GetAllDeliveriesAsync");
+        }
+
+        list = list
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.DmsOrderId ?? 0)
+            .ToList();
 
         return ApiResponseDTO<List<DmsDeliveryItemDTO>>.Success(list);
     }
