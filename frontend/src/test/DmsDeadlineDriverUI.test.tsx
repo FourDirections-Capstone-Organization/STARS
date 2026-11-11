@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import {
     buildPreDeliveryTaskInitialData,
     TaskModal,
@@ -426,6 +426,147 @@ describe('Step 3: DMS Date-Only Deadlines and Paired Driver Labels', () => {
                 expect(pairedDriver).toBeInTheDocument();
                 expect(pairedDriver).toHaveTextContent('EMP-008');
             });
+        });
+    });
+
+    describe('6. Dedicated Courier Name Field & Unlinked Delivery Presentation', () => {
+        it('renders Courier Name input side-by-side with Courier Employee ID, auto-fills on ID match, and submits courierFullName', async () => {
+            const futureDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+            const y = futureDate.getFullYear();
+            const m = String(futureDate.getMonth() + 1).padStart(2, '0');
+            const d = String(futureDate.getDate()).padStart(2, '0');
+
+            const orderWithoutDriver: DmsPendingOrder = {
+                orderId: 777,
+                waybillNo: 'WB-2026-7777',
+                clientName: 'Global Courier',
+                clientType: 'Corporate',
+                contactNumber: '09171112222',
+                senderAddress: 'Makati Hub',
+                recipientName: 'Elena Cruz',
+                recipientContact: '09181112222',
+                recipientAddress: 'Pasig City',
+                area: 'Pasig',
+                route: 'Route C',
+                status: 'Pending',
+                taskType: 'Delivery',
+                packageType: 'Box',
+                packageDescription: 'IT Equipment',
+                itemCount: 1,
+                weight: '2.0 kg',
+                priority: 'Medium',
+                orderDate: '2026-11-11T08:00:00Z',
+                expectedDelivery: `${y}-${m}-${d}T00:00:00Z`,
+                expectedDeliveryDate: `${y}-${m}-${d}`,
+            };
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/Task/assignable-users') || url.includes('/api/User')) {
+                    return Promise.resolve({
+                        data: [
+                            { id: 'emp-uuid-8', employeeNumber: 'EMP-008', fullName: 'Ricardo Bautista', role: 'Courier', isAvailable: true, workload: 0, availabilityStatus: 'Available' },
+                        ],
+                    });
+                }
+                return Promise.resolve({ data: [] });
+            });
+
+            const onSaveMock = vi.fn();
+            const initial = buildPreDeliveryTaskInitialData(orderWithoutDriver);
+
+            render(
+                <TaskModal
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    onSave={onSaveMock}
+                    initial={initial}
+                    mode="new"
+                    teamMembers={[
+                        { accountId: 'emp-uuid-8', employeeNumber: 'EMP-008', employeeName: 'Ricardo Bautista', role: 'Courier', presenceStatus: 'Active' } as any,
+                    ]}
+                />
+            );
+
+            const idInput = await screen.findByTestId('pre-delivery-courier-id-input') as HTMLInputElement;
+            const nameInput = screen.getByTestId('pre-delivery-courier-name-input') as HTMLInputElement;
+            expect(idInput).toBeInTheDocument();
+            expect(nameInput).toBeInTheDocument();
+            expect(nameInput.value).toBe('');
+
+            // Enter known STARS courier employee ID -> auto-fills courier name
+            fireEvent.change(idInput, { target: { value: 'EMP-008' } });
+            await waitFor(() => {
+                expect(nameInput.value).toBe('Ricardo Bautista');
+            });
+
+            // Edit courier name manually and submit
+            fireEvent.change(nameInput, { target: { value: 'Ricardo Bautista Jr.' } });
+            expect(nameInput.value).toBe('Ricardo Bautista Jr.');
+
+            const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+            fireEvent.click(saveBtn);
+
+            await waitFor(() => {
+                expect(onSaveMock).toHaveBeenCalledTimes(1);
+            });
+
+            const savedPayload = onSaveMock.mock.calls[0][0];
+            expect(savedPayload.deliveryDetails.courierEmployeeId).toBe('EMP-008');
+            expect(savedPayload.deliveryDetails.courierFullName).toBe('Ricardo Bautista Jr.');
+        });
+
+        it('renders multiple unlinked DMS shipments in DmsDeliveryTab cleanly with unique keys and Pending Creation badges', async () => {
+            const unlinkedDeliveries: DmsDeliveryItem[] = [
+                {
+                    taskId: '00000000-0000-0000-0000-000000000000',
+                    taskTitle: '[DMS Pre-Delivery] First Recipient',
+                    recipientName: 'First Recipient',
+                    recipientContact: '09170000001',
+                    deliveryAddress: 'Manila',
+                    dmsWaybillNo: 'WB-UNLINKED-01',
+                    dmsOrderId: 1001,
+                    dmsStatus: 'Pending',
+                    syncStatus: 'Synced',
+                    createdAt: '2026-11-11T09:00:00Z',
+                },
+                {
+                    taskId: '',
+                    taskTitle: '[DMS Pre-Delivery] Second Recipient',
+                    recipientName: 'Second Recipient',
+                    recipientContact: '09170000002',
+                    deliveryAddress: 'Makati',
+                    dmsWaybillNo: 'WB-UNLINKED-02',
+                    dmsOrderId: 1002,
+                    dmsStatus: 'Pending',
+                    syncStatus: 'Synced',
+                    createdAt: '2026-11-11T08:00:00Z',
+                },
+            ];
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return Promise.resolve({ data: { isSuccess: true, data: unlinkedDeliveries } });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            const consoleErrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            render(<DmsDeliveryTab onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('First Recipient')).toBeInTheDocument();
+                expect(screen.getByText('Second Recipient')).toBeInTheDocument();
+            });
+
+            expect(screen.getByText('WB-UNLINKED-01')).toBeInTheDocument();
+            expect(screen.getByText('WB-UNLINKED-02')).toBeInTheDocument();
+            expect(screen.getAllByText('Pending Creation').length).toBeGreaterThanOrEqual(2);
+
+            const dupKeyErrors = consoleErrSpy.mock.calls.filter(call =>
+                call.some(arg => typeof arg === 'string' && arg.includes('same key'))
+            );
+            expect(dupKeyErrors).toHaveLength(0);
+            consoleErrSpy.mockRestore();
         });
     });
 });

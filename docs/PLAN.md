@@ -26,7 +26,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "PreDelivery"`
 
-- [ ] Step 4: Regression tests & full suite verification
+- [x] Step 4: Regression tests & full suite verification
   - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/PreDeliveryTab.test.tsx`, `frontend/src/test/DmsDeadlineDriverUI.test.tsx`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` and `npm --prefix frontend test`
 
