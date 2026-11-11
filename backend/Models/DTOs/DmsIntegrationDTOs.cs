@@ -53,6 +53,26 @@ public class UpsertTaskDeliveryDetailDTO
         }
     }
 
+    private string? _courierFullName;
+
+    [MaxLength(200)]
+    public string? CourierFullName
+    {
+        get => _courierFullName;
+        set => _courierFullName = value?.Trim();
+    }
+
+    [MaxLength(200)]
+    public string? DriverName
+    {
+        get => _courierFullName;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_courierFullName))
+                _courierFullName = value?.Trim();
+        }
+    }
+
     [MaxLength(500)]
     public string? SenderAddress { get; set; }
 
@@ -257,6 +277,24 @@ public class DmsStatusWebhookDTO
         {
             if (string.IsNullOrWhiteSpace(_driverId))
                 _driverId = value?.Trim();
+        }
+    }
+
+    private string? _driverName;
+
+    public string? DriverName
+    {
+        get => _driverName;
+        set => _driverName = value?.Trim();
+    }
+
+    public string? CourierFullName
+    {
+        get => _driverName;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(_driverName))
+                _driverName = value?.Trim();
         }
     }
 
