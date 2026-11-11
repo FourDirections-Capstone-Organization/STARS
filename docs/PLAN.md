@@ -22,7 +22,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Files: `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "DmsDeliveryTab|DeliveryAnalytics"`
 
-- [ ] Step 3: Frontend: Add dedicated Courier Name input field in Create Pre-Delivery Operational Task modals
+- [x] Step 3: Frontend: Add dedicated Courier Name input field in Create Pre-Delivery Operational Task modals
   - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`
   - Verify: Run `npm --prefix frontend test -- -t "PreDelivery"`
 
