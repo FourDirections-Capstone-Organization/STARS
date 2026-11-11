@@ -12,7 +12,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
 
 ## Steps
 
-- [ ] Step 1: Align backend DMS DTOs, sync payload, and driver mapping to use employee ID as key and normalize date-only deadlines
+- [x] Step 1: Align backend DMS DTOs, sync payload, and driver mapping to use employee ID as key and normalize date-only deadlines
   - Files: `backend/Models/DTOs/DmsIntegrationDTOs.cs`, `backend/Modules/DmsIntegration/DmsIntegrationService.cs`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests` to confirm driver ID matching and date parsing.
 
