@@ -91,6 +91,7 @@ import { AI_ANALYTICS_ENABLED } from '../../config/features';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 import { formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
 import { formatDriverDisplay } from '../../utils/driverUtils';
+import { recordCreatedDmsOrder, syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -4203,6 +4204,8 @@ export default function Dashboard() {
                 } else {
                     await api.patch(`/api/Task/${id}/status`, { status: 3 });
                 }
+                syncDmsTaskCompleted(id).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: id } }));
             } catch { /* ignore individual failures */ }
         }
         success(`${ids.length} task${ids.length !== 1 ? 's' : ''} marked done.`);
@@ -4483,6 +4486,14 @@ export default function Dashboard() {
                     });
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
+                }
+                const dmsOrderIdVal = (newDeliveryForm as any).dmsOrderId;
+                const dmsWaybillVal = (newDeliveryForm as any).dmsWaybillNo;
+                if (dmsOrderIdVal || dmsWaybillVal) {
+                    recordCreatedDmsOrder(dmsOrderIdVal, dmsWaybillVal);
+                    window.dispatchEvent(new CustomEvent('stars:dms-task-created', {
+                        detail: { orderId: dmsOrderIdVal, waybillNo: dmsWaybillVal, taskId }
+                    }));
                 }
             }
 
@@ -5254,6 +5265,8 @@ export default function Dashboard() {
                                     onApprove={async (id) => {
                                         try {
                                             await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
+                                            syncDmsTaskCompleted(id).catch(() => {});
+                                            window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: id } }));
                                             let waybillMsg = '';
                                             try {
                                                 const delRes = await api.get(`/api/dms-integration/tasks/${id}/delivery-details`);
@@ -5362,6 +5375,7 @@ export default function Dashboard() {
                                     openManagerTaskById(taskId);
                                 }
                             }}
+                            onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>
                 )}

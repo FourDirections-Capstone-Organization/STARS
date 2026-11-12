@@ -150,12 +150,57 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
         try {
             await fetchPerformance();
 
+            const completedTaskIds = new Set<string>();
+            (tasks || []).forEach(t => {
+                const s = String(t.taskStatus ?? t.status ?? '').toLowerCase();
+                if (s === 'completed' || s === 'done' || t.status === 3) {
+                    const id = String(t.taskId || t.id || '');
+                    if (id) completedTaskIds.add(id);
+                }
+            });
+
             // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
             try {
                 const res = await api.get('/api/dms-integration/deliveries');
                 const list = res?.data?.data ?? res?.data;
                 if (Array.isArray(list) && list.length > 0) {
-                    const sorted = [...list].sort((a, b) => {
+                    const hasPendingWithTaskId = list.some((item: any) => {
+                        const s = String(item.dmsStatus || '').toLowerCase();
+                        return (!s || s === 'pending' || s.includes('pending approval')) && item.taskId && !completedTaskIds.has(String(item.taskId));
+                    });
+
+                    if (hasPendingWithTaskId) {
+                        try {
+                            const compRes = await api.get('/api/Task?status=3&pageNumber=1&pageSize=100');
+                            const compJson = compRes?.data;
+                            const compItems = compJson?.data?.items ?? compJson?.data ?? (Array.isArray(compJson) ? compJson : []);
+                            if (Array.isArray(compItems)) {
+                                compItems.forEach((ct: any) => {
+                                    if (ct && (ct.id || ct.taskId) && (ct.title || ct.taskTitle)) {
+                                        completedTaskIds.add(String(ct.id || ct.taskId));
+                                    }
+                                });
+                            }
+                        } catch {
+                            // Best-effort check for completed tasks
+                        }
+                    }
+
+                    const reconciled = list.map((item: DmsDeliveryItem) => {
+                        const s = String(item.dmsStatus || '').toLowerCase();
+                        const isPendingOrApproval = !s || s === 'pending' || s.includes('pending approval') || s === 'awaiting';
+                        if (isPendingOrApproval && item.taskId && completedTaskIds.has(String(item.taskId))) {
+                            return {
+                                ...item,
+                                dmsStatus: 'Delivered',
+                                dmsRawStatus: 'Delivered',
+                                syncStatus: 'Synced',
+                            };
+                        }
+                        return item;
+                    });
+
+                    const sorted = [...reconciled].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                         if (dateB !== dateA) return dateB - dateA;
@@ -190,6 +235,12 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                         const res = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
                         const d = res?.data?.data ?? res?.data;
                         if (d && (d.dmsWaybillNo || d.recipientName || d.dmsStatus)) {
+                            const rawDmsStatus = d.dmsStatus || 'Pending';
+                            const rawLower = String(rawDmsStatus).toLowerCase();
+                            const tStatusLower = String(t.taskStatus ?? t.status ?? '').toLowerCase();
+                            const isTaskCompleted = tStatusLower === 'completed' || tStatusLower === 'done' || t.status === 3 || completedTaskIds.has(String(taskId));
+                            const isPendingOrApproval = !rawLower || rawLower === 'pending' || rawLower.includes('pending approval') || rawLower === 'awaiting';
+                            const resolvedStatus = (isPendingOrApproval && isTaskCompleted) ? 'Delivered' : rawDmsStatus;
                             return {
                                 taskId: taskId,
                                 taskTitle: t.taskTitle || t.title || t.name || 'Delivery Task',
@@ -209,8 +260,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                 podUploadedAt: d.podUploadedAt,
                                 dmsWaybillNo: d.dmsWaybillNo,
                                 dmsOrderId: d.dmsOrderId,
-                                dmsStatus: d.dmsStatus || 'Pending',
-                                dmsRawStatus: d.dmsRawStatus || d.dmsStatus || 'Pending',
+                                dmsStatus: resolvedStatus,
+                                dmsRawStatus: resolvedStatus,
                                 dmsLastSyncedAt: d.dmsLastSyncedAt,
                                 dmsFailureReason: d.dmsFailureReason,
                                 dmsLatitude: d.dmsLatitude,
@@ -306,6 +357,19 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
         }, 20000);
         return () => clearInterval(interval);
     }, [autoSync, fetchDeliveries]);
+
+    // Refresh immediately when a STARS delivery task is created or completed
+    useEffect(() => {
+        const handleSyncEvent = () => {
+            fetchDeliveries();
+        };
+        window.addEventListener('stars:dms-task-created', handleSyncEvent);
+        window.addEventListener('stars:dms-task-updated', handleSyncEvent);
+        return () => {
+            window.removeEventListener('stars:dms-task-created', handleSyncEvent);
+            window.removeEventListener('stars:dms-task-updated', handleSyncEvent);
+        };
+    }, [fetchDeliveries]);
 
     const handleCopy = (waybill: string) => {
         navigator.clipboard.writeText(waybill);

@@ -16,6 +16,7 @@ import api from '../../api';
 import axios from 'axios';
 import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
 import { formatDriverDisplay as formatDriverDisplayShared, FormatDriverOptions } from '../../utils/driverUtils';
+import { syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1015,6 +1016,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                 at: new Date().toISOString(),
             }]);
             onUpdate?.({ ...task, taskStatus: 'Completed' });
+            await syncDmsTaskCompleted(task.taskId);
+            window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: task.taskId } }));
             await fetchDeliveryDetail();
         } catch (err: any) {
             toastError(err?.response?.data?.message || err?.message || 'Failed to approve task.');
@@ -1773,11 +1776,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {copiedWaybill ? <Check size={12} color="#059669" /> : <Copy size={12} />}
                                                 {copiedWaybill ? 'Copied!' : 'Copy Waybill'}
                                             </button>
-                                            {deliveryDetail.dmsStatus && (
-                                                <span className="tv-dms-status-tag">
-                                                    Status: <strong>{formatStatus(deliveryDetail.dmsStatus)}</strong>
-                                                </span>
-                                            )}
+                                            {deliveryDetail.dmsStatus && (() => {
+                                                const isCompletedTask = localStatus === 'Completed' || task.taskStatus === 'Completed';
+                                                const sRaw = (deliveryDetail.dmsStatus || '').toLowerCase();
+                                                const displaySt = (isCompletedTask && (sRaw.includes('pending') || sRaw === 'awaiting'))
+                                                    ? 'Delivered'
+                                                    : deliveryDetail.dmsStatus;
+                                                return (
+                                                    <span className="tv-dms-status-tag">
+                                                        Status: <strong>{formatStatus(displaySt)}</strong>
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 
@@ -1793,9 +1803,10 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 { key: 'out_for_delivery', label: 'OUT FOR DELIVERY' },
                                                 { key: 'delivered', label: 'DELIVERED' },
                                             ];
+                                            const isCompletedTask = localStatus === 'Completed' || task.taskStatus === 'Completed';
                                             const s = `${deliveryDetail.dmsRawStatus || ''} ${deliveryDetail.dmsStatus || ''}`.toLowerCase();
                                             let activeIdx = 0;
-                                            if (s.includes('delivered') || s.includes('completed')) activeIdx = 6;
+                                            if (s.includes('delivered') || s.includes('completed') || isCompletedTask) activeIdx = 6;
                                             else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 5;
                                             else if (s.includes('transit')) activeIdx = 4;
                                             else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 3;

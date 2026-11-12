@@ -98,6 +98,7 @@ import NotificationsTab from '../../components/NotificationsTab/NotificationsTab
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 import { aiService, SuitabilityResponseDTO } from '../../services/aiService';
 import { suitabilityCache, reRankSuitabilityItems } from '../../services/suitabilityCache';
+import { recordCreatedDmsOrder, syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -10426,6 +10427,13 @@ export default function OpsAdminDashboard() {
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
                 }
+                const delObj = (data as any).deliveryDetails;
+                if (delObj.dmsOrderId || delObj.dmsWaybillNo) {
+                    recordCreatedDmsOrder(delObj.dmsOrderId, delObj.dmsWaybillNo);
+                    window.dispatchEvent(new CustomEvent('stars:dms-task-created', {
+                        detail: { orderId: delObj.dmsOrderId, waybillNo: delObj.dmsWaybillNo, taskId }
+                    }));
+                }
             }
 
             // Link FOMS invoice endorsement if task was created from endorsement
@@ -10723,6 +10731,8 @@ export default function OpsAdminDashboard() {
             await api.patch(`/api/Task/${taskId}/status`, { newStatus: STATUS_TO_BACKEND[newStatus] || newStatus });
             if (newStatus === 'Completed') {
                 setTaskTab('completed');
+                syncDmsTaskCompleted(taskId).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
             await doFetchDashboard();
@@ -10742,6 +10752,8 @@ export default function OpsAdminDashboard() {
             });
             if (adminDecision === 'Approve & Close') {
                 setTaskTab('completed');
+                syncDmsTaskCompleted(taskId).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
             await fetchAwaitingReview();
@@ -11291,7 +11303,7 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'delivery' && (
                     <div className="dashboard-content">
                         <DmsDeliveryTab
-                            tasks={tasks}
+                            tasks={allTasks.length > 0 ? allTasks : tasks}
                             onViewTask={handleOpenTaskById}
                         />
                     </div>
@@ -11300,9 +11312,10 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'pre_delivery' && (
                     <div className="dashboard-content">
                         <PreDeliveryTab
-                            tasks={tasks}
+                            tasks={allTasks.length > 0 ? allTasks : tasks}
                             onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
                             onViewTask={handleOpenTaskById}
+                            onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>
                 )}
