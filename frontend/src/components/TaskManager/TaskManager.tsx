@@ -20,7 +20,7 @@ export interface TMTask {
     assignee?: { id: string; name: string };
     assignees?: { id: string; name: string }[];
     priority: 'Urgent' | 'High' | 'Medium' | 'Low';
-    status: 'Backlog' | 'To do' | 'In progress' | 'In review' | 'Done' | 'Cancelled' | 'On hold';
+    status: 'Backlog' | 'To do' | 'In progress' | 'In review' | 'Done' | 'Completed' | 'Cancelled' | 'On hold';
     dueDate?: string;
     startDate?: string;
     progress: number;
@@ -144,7 +144,7 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
     const todoTasks = useMemo(() => tasks.filter(t => t.status === 'Backlog' || t.status === 'To do'), [tasks]);
     const inProgressTasks = useMemo(() => tasks.filter(t => t.status === 'In progress'), [tasks]);
     const reviewTasks = useMemo(() => tasks.filter(t => t.status === 'In review'), [tasks]);
-    const doneTasks = useMemo(() => tasks.filter(t => t.status === 'Done'), [tasks]);
+    const doneTasks = useMemo(() => tasks.filter(t => t.status === 'Done' || t.status === 'Completed'), [tasks]);
 
     const handleDragStart = (e: React.DragEvent, taskId: string) => {
         setDraggingTaskId(taskId);
@@ -345,7 +345,7 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                 </div>
 
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} />
+                                                    <DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Completed' || t.status === 'Cancelled'} />
                                                     <div className="tm-board-card-actions" onClick={e => e.stopPropagation()}>
                                                         <ActionsDropdown
                                                             actions={[
@@ -359,7 +359,7 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
                                                                         variant: 'danger' as const,
                                                                     },
                                                                 ] : []),
-                                                                ...(t.status !== 'Done' ? [
+                                                                ...(t.status !== 'Done' && t.status !== 'Completed' ? [
                                                                     { label: t.status === 'In review' ? 'Approve & Mark Done' : 'Mark Done', icon: <CheckCircle2 size={13} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
                                                                 ] : []),
                                                                 {
@@ -980,7 +980,7 @@ export default function TaskManager({
                                 </td>
                                 <td>{t.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AssigneeAvatar name={t.assignee.name} /><span style={{ fontSize: 13 }}>{t.assignee.name}</span></div> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                 <td><PriorityBadge p={t.priority} /></td>
-                                <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Cancelled'} /></td>
+                                <td><DueLabel date={t.dueDate} isSLALocked={t.isSLALocked} isCompleted={t.status === 'Done' || t.status === 'Completed' || t.status === 'Cancelled'} /></td>
                                 <td>
                                     <StatusBadge status={t.status} size="sm" />
                                 </td>
@@ -993,7 +993,7 @@ export default function TaskManager({
                                                 ...(t.status === 'In review' ? [
                                                     { label: 'Push Back for Rework', icon: <RotateCcw size={12} />, onClick: () => setPushBackTask(t), variant: 'danger' as const },
                                                 ] : []),
-                                                ...(t.status !== 'Done' ? [
+                                                ...(t.status !== 'Done' && t.status !== 'Completed' ? [
                                                     { label: t.status === 'In review' ? 'Approve & Mark Done' : 'Mark Done', icon: <CheckCircle2 size={12} />, onClick: () => onMarkDone([t.id]), variant: 'success' as const }
                                                 ] : []),
                                                 { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => { onArchive([t.id]); setSelectedIds(p => { const n = new Set(p); n.delete(t.id); return n; }); }, variant: 'danger' as const },

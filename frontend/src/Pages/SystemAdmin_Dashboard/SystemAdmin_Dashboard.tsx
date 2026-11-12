@@ -91,6 +91,7 @@ import { AI_ANALYTICS_ENABLED } from '../../config/features';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 import { formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
 import { formatDriverDisplay } from '../../utils/driverUtils';
+import { recordCreatedDmsOrder, syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3686,6 +3687,8 @@ export default function Dashboard() {
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [tmDetailTask, setTmDetailTask] = useState<TaskViewTask | null>(null);
     const [tmEditingTask, setTmEditingTask] = useState<TaskViewTask | null>(null);
+    const [tmTrackerTaskId, setTmTrackerTaskId] = useState<string | undefined>(undefined);
+    const [tmTrackerWaybill, setTmTrackerWaybill] = useState<string | undefined>(undefined);
     interface WorkloadInfo {
         employeeName: string;
         accountId: string;
@@ -3906,14 +3909,14 @@ export default function Dashboard() {
                 const s = t.status;
                 if (typeof s === 'number') {
                     const map: Record<number, TMTask['status']> = {
-                        0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Done', 4: 'On hold', 5: 'Cancelled'
+                        0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Completed', 4: 'On hold', 5: 'Cancelled'
                     };
                     statusVal = map[s] || 'Backlog';
                 } else if (typeof s === 'string') {
                     const sLower = s.toLowerCase();
                     if (sLower === 'cancelled' || sLower === 'canceled') statusVal = 'Cancelled';
                     else if (sLower === 'onhold' || sLower === 'on hold') statusVal = 'On hold';
-                    else if (sLower === 'completed' || sLower === 'done') statusVal = 'Done';
+                    else if (sLower === 'completed' || sLower === 'done') statusVal = 'Completed';
                     else if (sLower === 'inprogress' || sLower === 'in progress') statusVal = 'In progress';
                     else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'in review') statusVal = 'In review';
                     else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') statusVal = 'To do';
@@ -4203,6 +4206,8 @@ export default function Dashboard() {
                 } else {
                     await api.patch(`/api/Task/${id}/status`, { status: 3 });
                 }
+                syncDmsTaskCompleted(id).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: id } }));
             } catch { /* ignore individual failures */ }
         }
         success(`${ids.length} task${ids.length !== 1 ? 's' : ''} marked done.`);
@@ -4483,6 +4488,14 @@ export default function Dashboard() {
                     });
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
+                }
+                const dmsOrderIdVal = (newDeliveryForm as any).dmsOrderId;
+                const dmsWaybillVal = (newDeliveryForm as any).dmsWaybillNo;
+                if (dmsOrderIdVal || dmsWaybillVal) {
+                    recordCreatedDmsOrder(dmsOrderIdVal, dmsWaybillVal);
+                    window.dispatchEvent(new CustomEvent('stars:dms-task-created', {
+                        detail: { orderId: dmsOrderIdVal, waybillNo: dmsWaybillVal, taskId }
+                    }));
                 }
             }
 
@@ -5254,6 +5267,8 @@ export default function Dashboard() {
                                     onApprove={async (id) => {
                                         try {
                                             await api.patch(`/api/Task/${id}/review`, { isApproved: true, remarks: null });
+                                            syncDmsTaskCompleted(id).catch(() => {});
+                                            window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: id } }));
                                             let waybillMsg = '';
                                             try {
                                                 const delRes = await api.get(`/api/dms-integration/tasks/${id}/delivery-details`);
@@ -5283,6 +5298,12 @@ export default function Dashboard() {
                                     onUpdate={(updated) => {
                                         setTmDetailTask(updated);
                                         fetchManagerTasks();
+                                    }}
+                                    onNavigateToDeliveryTracker={(taskId, waybillNo) => {
+                                        setTmDetailTask(null);
+                                        setTmTrackerTaskId(taskId);
+                                        setTmTrackerWaybill(waybillNo);
+                                        handleNavChange('delivery');
                                     }}
                                 />
                             </div>
@@ -5329,13 +5350,15 @@ export default function Dashboard() {
                     </>
                 )}
                 {activeTab === 'reports' && (
-                    <ReportsTab teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
+                    <ReportsTab tasks={tasks} teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
                 )}
 
                 {activeTab === 'delivery' && (
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tmTasks}
+                            initialTaskId={tmTrackerTaskId}
+                            initialWaybill={tmTrackerWaybill}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {
@@ -5362,6 +5385,7 @@ export default function Dashboard() {
                                     openManagerTaskById(taskId);
                                 }
                             }}
+                            onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>
                 )}

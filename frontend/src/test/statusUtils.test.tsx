@@ -91,9 +91,6 @@ describe('statusUtils — Centralized Status Label Mapping', () => {
                 'in review',
                 'in-review',
                 'in_review',
-                'Done',
-                'done',
-                'DONE',
             ];
 
             rawInputs.forEach(input => {
@@ -109,6 +106,9 @@ describe('statusUtils — Centralized Status Label Mapping', () => {
                 'Completed',
                 'completed',
                 'COMPLETED',
+                'Done',
+                'done',
+                'DONE',
             ];
 
             rawInputs.forEach(input => {
@@ -269,7 +269,7 @@ describe('StatusBadge Component with Centralized Mapping', () => {
         expect(badge2).toHaveClass('badge-amber');
     });
 
-    it('renders "Pending Review" with badge-purple for raw inputs (2, "DonePendingReview", "In review", "Done")', () => {
+    it('renders "Pending Review" with badge-purple for raw inputs (2, "DonePendingReview", "In review")', () => {
         const { unmount } = render(<StatusBadge status={2} />);
         const badge1 = screen.getByText('Pending Review');
         expect(badge1).toHaveClass('badge-purple');
@@ -280,15 +280,20 @@ describe('StatusBadge Component with Centralized Mapping', () => {
         expect(badge2).toHaveClass('badge-purple');
     });
 
-    it('renders "Completed" with badge-green for raw inputs (3, "completed")', () => {
+    it('renders "Completed" with badge-green for raw inputs (3, "completed", "Done")', () => {
         const { unmount } = render(<StatusBadge status={3} />);
         const badge1 = screen.getByText('Completed');
         expect(badge1).toHaveClass('badge-green');
         unmount();
 
-        render(<StatusBadge status="completed" />);
+        const { unmount: unmount2 } = render(<StatusBadge status="completed" />);
         const badge2 = screen.getByText('Completed');
         expect(badge2).toHaveClass('badge-green');
+        unmount2();
+
+        render(<StatusBadge status="Done" />);
+        const badge3 = screen.getByText('Completed');
+        expect(badge3).toHaveClass('badge-green');
     });
 
     it('renders "On Hold" with badge-amber for raw inputs (4, "on-hold")', () => {

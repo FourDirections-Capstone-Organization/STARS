@@ -718,6 +718,54 @@ public class KpiController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves applicable target roles for a specific department.
+    /// </summary>
+    [HttpGet("departments/{departmentId:guid}/roles")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> GetDepartmentRoles(
+        [FromRoute] Guid departmentId,
+        CancellationToken cancellationToken = default)
+    {
+        if (departmentId == Guid.Empty)
+        {
+            return BadRequest(ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>.Failure("Department ID is required."));
+        }
+
+        try
+        {
+            var department = await _db.Departments
+                .Include(d => d.Users)
+                .Include(d => d.JobPositions)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == departmentId && d.IsActive, cancellationToken);
+
+            if (department == null)
+            {
+                return NotFound(ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>.Failure(
+                    $"Department with ID '{departmentId}' was not found."));
+            }
+
+            var roles = KpiDepartmentRoleHelper.GetApplicableRoles(department)
+                .Select(role => new KpiDepartmentRoleOptionDTO
+                {
+                    Role = role,
+                    DisplayName = KpiDepartmentRoleHelper.GetDisplayName(role)
+                })
+                .ToList();
+
+            return Ok(ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>.Success(
+                roles,
+                "Applicable department roles retrieved successfully."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving applicable roles for department {DepartmentId}.", departmentId);
+            return StatusCode(500, ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>.Failure(
+                "An unexpected error occurred while retrieving department roles."));
+        }
+    }
+
+    /// <summary>
     /// Creates a new prospective KPI configuration with weighted items and thresholds.
     /// </summary>
     [HttpPost("configurations")]
@@ -740,16 +788,26 @@ public class KpiController : ControllerBase
 
         try
         {
-            if (request.DepartmentId.HasValue)
-            {
-                var departmentExists = await _db.Departments
-                    .AnyAsync(d => d.Id == request.DepartmentId.Value, cancellationToken);
+            var department = await _db.Departments
+                .Include(d => d.Users)
+                .Include(d => d.JobPositions)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == request.DepartmentId!.Value && d.IsActive, cancellationToken);
 
-                if (!departmentExists)
-                {
-                    return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
-                        $"Department with ID '{request.DepartmentId.Value}' does not exist."));
-                }
+            if (department == null)
+            {
+                return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
+                    $"Department with ID '{request.DepartmentId!.Value}' does not exist."));
+            }
+
+            var applicableRoles = KpiDepartmentRoleHelper.GetApplicableRoles(department);
+            var matchedRole = applicableRoles.FirstOrDefault(
+                r => string.Equals(r, request.TargetRole!.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (matchedRole == null)
+            {
+                return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
+                    $"Target role '{request.TargetRole}' is not applicable to department '{department.Name}'. Applicable roles: {string.Join(", ", applicableRoles)}."));
             }
 
             var creatorId = GetCurrentUserId();
@@ -761,7 +819,7 @@ public class KpiController : ControllerBase
                 Id = configId,
                 Title = request.Title.Trim(),
                 Description = request.Description?.Trim(),
-                TargetRole = request.TargetRole?.Trim(),
+                TargetRole = matchedRole,
                 DepartmentId = request.DepartmentId,
                 EffectiveStartDate = DateTime.SpecifyKind(request.EffectiveStartDate, DateTimeKind.Utc),
                 EffectiveEndDate = request.EffectiveEndDate.HasValue
@@ -864,23 +922,33 @@ public class KpiController : ControllerBase
                     $"KPI configuration with ID '{id}' was not found."));
             }
 
-            if (request.DepartmentId.HasValue)
-            {
-                var departmentExists = await _db.Departments
-                    .AnyAsync(d => d.Id == request.DepartmentId.Value, cancellationToken);
+            var department = await _db.Departments
+                .Include(d => d.Users)
+                .Include(d => d.JobPositions)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == request.DepartmentId!.Value && d.IsActive, cancellationToken);
 
-                if (!departmentExists)
-                {
-                    return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
-                        $"Department with ID '{request.DepartmentId.Value}' does not exist."));
-                }
+            if (department == null)
+            {
+                return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
+                    $"Department with ID '{request.DepartmentId!.Value}' does not exist."));
+            }
+
+            var applicableRoles = KpiDepartmentRoleHelper.GetApplicableRoles(department);
+            var matchedRole = applicableRoles.FirstOrDefault(
+                r => string.Equals(r, request.TargetRole!.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (matchedRole == null)
+            {
+                return BadRequest(ApiResponseDTO<KpiConfigurationResponseDTO>.Failure(
+                    $"Target role '{request.TargetRole}' is not applicable to department '{department.Name}'. Applicable roles: {string.Join(", ", applicableRoles)}."));
             }
 
             var now = DateTime.UtcNow;
 
             existingConfig.Title = request.Title.Trim();
             existingConfig.Description = request.Description?.Trim();
-            existingConfig.TargetRole = request.TargetRole?.Trim();
+            existingConfig.TargetRole = matchedRole;
             existingConfig.DepartmentId = request.DepartmentId;
             existingConfig.EffectiveStartDate = DateTime.SpecifyKind(request.EffectiveStartDate, DateTimeKind.Utc);
             existingConfig.EffectiveEndDate = request.EffectiveEndDate.HasValue
