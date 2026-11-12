@@ -9467,6 +9467,10 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             dmsStatus: order.status,
             isHistoricalDeadline,
             originalExpectedDelivery,
+            taskType: order.taskType,
+            packageType: order.packageType,
+            weight: order.weight,
+            itemCount: order.itemCount,
         }
     };
 };
@@ -9724,6 +9728,8 @@ export default function OpsAdminDashboard() {
     const [detailTask, setDetailTask] = useState<TaskViewTask | null>(null);
     const [overrideTask, setOverrideTask] = useState<Task | null>(null);
     const [reviewTask, setReviewTask] = useState<Task | null>(null);
+    const [trackerTargetTaskId, setTrackerTargetTaskId] = useState<string | undefined>(undefined);
+    const [trackerTargetWaybill, setTrackerTargetWaybill] = useState<string | undefined>(undefined);
 
     // -- Fetch Tasks --
     const [allTasks, setAllTasks] = useState<Task[]>([]);
@@ -11068,6 +11074,12 @@ export default function OpsAdminDashboard() {
                                         setDetailTask(updated);
                                         fetchTasks();
                                     }}
+                                    onNavigateToDeliveryTracker={(taskId, waybillNo) => {
+                                        setDetailTask(null);
+                                        setTrackerTargetTaskId(taskId);
+                                        setTrackerTargetWaybill(waybillNo);
+                                        handleNavChange('delivery');
+                                    }}
                                 />
                             </div>
                         ) : (
@@ -11305,6 +11317,8 @@ export default function OpsAdminDashboard() {
                         <DmsDeliveryTab
                             tasks={allTasks.length > 0 ? allTasks : tasks}
                             onViewTask={handleOpenTaskById}
+                            initialTaskId={trackerTargetTaskId}
+                            initialWaybill={trackerTargetWaybill}
                         />
                     </div>
                 )}

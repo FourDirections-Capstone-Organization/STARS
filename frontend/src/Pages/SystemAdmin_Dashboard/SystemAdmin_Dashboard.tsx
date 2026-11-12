@@ -3687,6 +3687,8 @@ export default function Dashboard() {
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [tmDetailTask, setTmDetailTask] = useState<TaskViewTask | null>(null);
     const [tmEditingTask, setTmEditingTask] = useState<TaskViewTask | null>(null);
+    const [tmTrackerTaskId, setTmTrackerTaskId] = useState<string | undefined>(undefined);
+    const [tmTrackerWaybill, setTmTrackerWaybill] = useState<string | undefined>(undefined);
     interface WorkloadInfo {
         employeeName: string;
         accountId: string;
@@ -5297,6 +5299,12 @@ export default function Dashboard() {
                                         setTmDetailTask(updated);
                                         fetchManagerTasks();
                                     }}
+                                    onNavigateToDeliveryTracker={(taskId, waybillNo) => {
+                                        setTmDetailTask(null);
+                                        setTmTrackerTaskId(taskId);
+                                        setTmTrackerWaybill(waybillNo);
+                                        handleNavChange('delivery');
+                                    }}
                                 />
                             </div>
                         ) : (
@@ -5349,6 +5357,8 @@ export default function Dashboard() {
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tmTasks}
+                            initialTaskId={tmTrackerTaskId}
+                            initialWaybill={tmTrackerWaybill}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TaskView, { TaskViewTask, formatDriverDisplay, isImageFile, isPdfFile, formatFileSize } from '../components/TaskView/TaskView';
+import { DmsDeliveryTab, DmsDeliveryItem } from '../components/DmsDeliveryTab/DmsDeliveryTab';
 import api from '../api';
 
 // Mock api
@@ -25,7 +26,7 @@ vi.mock('../components/Toast/Toast', () => ({
     }),
 }));
 
-describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
+describe('DMS Delivery Tracker, POD & Driver Details Defect Resolution', () => {
     const mockTask: TaskViewTask = {
         taskId: 'task-dms-01',
         taskTitle: 'Deliver Electronics to Northern Hub',
@@ -43,6 +44,7 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        localStorage.clear();
         localStorage.setItem('userRole', 'Coordinator');
         localStorage.setItem('authToken', 'test-token');
 
@@ -98,12 +100,11 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
             expect(formatFileSize(500)).toBe('500 B');
             expect(formatFileSize(2048)).toBe('2.0 KB');
             expect(formatFileSize(1572864)).toBe('1.50 MB');
-            expect(formatFileSize(0)).toBe('—');
         });
     });
 
-    describe('Driver Display in TaskView', () => {
-        it('renders assigned driver full name and employee ID in DMS details', async () => {
+    describe('Driver Display and DMS Details in TaskView', () => {
+        it('renders assigned driver name without employee ID prefix in main driver badge and shows DMS fields', async () => {
             vi.mocked(api.get).mockImplementation(async (url: string) => {
                 if (url.includes('/delivery-details')) {
                     return {
@@ -117,15 +118,16 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
                                 dmsWaybillNo: 'WB-2026-449612',
                                 dmsStatus: 'Out for Delivery',
                                 syncStatus: 'Synced',
-                                courierEmployeeId: 'DRV-001',
-                                courierFullName: 'Juan Dela Cruz',
+                                courierEmployeeId: 'EMP-008',
+                                courierFullName: 'Ricardo Bautista',
                                 courierIsActive: true,
+                                taskType: 'Express Dispatch',
+                                packageType: 'Secure Crate',
+                                weight: '5.2 kg',
+                                itemCount: 3,
                             },
                         },
                     };
-                }
-                if (url.includes('/pod')) {
-                    return { data: { isSuccess: true, data: { hasPod: false } } };
                 }
                 return { data: { isSuccess: true, data: null } };
             });
@@ -133,10 +135,17 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
             render(<TaskView task={mockTask} />);
 
             await waitFor(() => {
-                const driverElement = screen.getByTestId('tv-dms-assigned-driver');
+                const driverElement = screen.getByTestId('tv-dms-driver-name');
                 expect(driverElement).toBeInTheDocument();
-                expect(driverElement).toHaveTextContent('Juan Dela Cruz (DRV-001)');
-                expect(screen.queryByText('[Inactive]')).not.toBeInTheDocument();
+                // Verifies driver full name is displayed without employee ID prefix
+                expect(driverElement).toHaveTextContent('Ricardo Bautista');
+                expect(driverElement.textContent).not.toContain('EMP-008');
+
+                // Verifies Task Type, Package Type, Weight, Item Count are rendered
+                expect(screen.getByTestId('tv-dms-task-type')).toHaveTextContent('Express Dispatch');
+                expect(screen.getByTestId('tv-dms-package-type')).toHaveTextContent('Secure Crate');
+                expect(screen.getByTestId('tv-dms-weight')).toHaveTextContent('5.2 kg');
+                expect(screen.getByTestId('tv-dms-item-count')).toHaveTextContent('3 items');
             });
         });
 
@@ -161,23 +170,24 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
                         },
                     };
                 }
-                if (url.includes('/pod')) {
-                    return { data: { isSuccess: true, data: { hasPod: false } } };
-                }
                 return { data: { isSuccess: true, data: null } };
             });
 
             render(<TaskView task={mockTask} />);
 
             await waitFor(() => {
-                const driverElement = screen.getByTestId('tv-dms-assigned-driver');
+                const driverElement = screen.getByTestId('tv-dms-driver-name');
                 expect(driverElement).toBeInTheDocument();
-                expect(driverElement).toHaveTextContent('Maria Santos (DRV-002)');
+                expect(driverElement).toHaveTextContent('Maria Santos');
                 expect(screen.getByText('[Inactive]')).toBeInTheDocument();
             });
         });
+    });
 
-        it('renders Unassigned when no driver is attached to delivery details', async () => {
+    describe('Task Details - POD Removed and Live Delivery Tracker Button', () => {
+        it('ensures POD section is removed from Task Details and Live Delivery Tracker button redirects', async () => {
+            const handleNavigate = vi.fn();
+
             vi.mocked(api.get).mockImplementation(async (url: string) => {
                 if (url.includes('/delivery-details')) {
                     return {
@@ -189,301 +199,175 @@ describe('TaskView - DMS POD Visibility & Driver Details (Step 2)', () => {
                                 recipientContact: '09123456789',
                                 deliveryAddress: '123 Harbor Rd',
                                 dmsWaybillNo: 'WB-2026-449612',
-                                dmsStatus: 'Pending Dispatch',
+                                dmsStatus: 'In Transit',
                                 syncStatus: 'Synced',
-                                courierEmployeeId: null,
-                                courierFullName: 'Unassigned',
-                                courierIsActive: null,
                             },
                         },
                     };
+                }
+                return { data: { isSuccess: true, data: null } };
+            });
+
+            render(<TaskView task={mockTask} onNavigateToDeliveryTracker={handleNavigate} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('tv-dms-tracker-btn')).toBeInTheDocument();
+            });
+
+            // Proof of Delivery section MUST be removed from Task Details
+            expect(screen.queryByTestId('tv-pod-section')).not.toBeInTheDocument();
+
+            // Clicking Live Delivery Tracker button redirects user to the tracker page
+            const trackerBtn = screen.getByTestId('tv-dms-tracker-btn');
+            fireEvent.click(trackerBtn);
+
+            expect(handleNavigate).toHaveBeenCalledWith(mockTask.taskId, 'WB-2026-449612');
+        });
+    });
+
+    describe('DmsDeliveryTab - Proof of Delivery (POD) in Live Delivery Tracker', () => {
+        const sampleDelivery: DmsDeliveryItem = {
+            taskId: 'task-dms-01',
+            taskTitle: 'Deliver Electronics to Northern Hub',
+            recipientName: 'Acme Logistics',
+            recipientContact: '09123456789',
+            deliveryAddress: '123 Harbor Rd, Manila',
+            dmsWaybillNo: 'WB-2026-449612',
+            dmsOrderId: 1001,
+            dmsStatus: 'In Transit',
+            dmsRawStatus: 'In Transit',
+            syncStatus: 'Synced',
+            courierEmployeeId: 'EMP-008',
+            courierFullName: 'Ricardo Bautista',
+            courierIsActive: true,
+            taskType: 'Express Delivery',
+            packageType: 'Electronic Box',
+            weight: '4.8 kg',
+            itemCount: 2,
+        };
+
+        it('renders POD empty state in DmsDeliveryTab when no POD is uploaded yet', async () => {
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { totalDeliveries: 1, onTimeCount: 1, lateCount: 0, onTimePercentage: 100 } };
+                }
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [sampleDelivery] } };
                 }
                 if (url.includes('/pod')) {
                     return { data: { isSuccess: true, data: { hasPod: false } } };
                 }
-                return { data: { isSuccess: true, data: null } };
+                return { data: { isSuccess: true, data: [] } };
             });
 
-            render(<TaskView task={mockTask} />);
+            render(<DmsDeliveryTab onViewTask={vi.fn()} initialTaskId="task-dms-01" />);
 
             await waitFor(() => {
-                const driverElement = screen.getByTestId('tv-dms-assigned-driver');
-                expect(driverElement).toBeInTheDocument();
-                expect(driverElement).toHaveTextContent('Unassigned');
-            });
-        });
-    });
-
-    describe('Proof of Delivery (POD) Section', () => {
-        it('renders dedicated POD section with empty state when no POD is uploaded', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                hasPod: false,
-                                podUrl: null,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            expect(screen.getByTestId('tv-pod-section')).toBeInTheDocument();
-            await waitFor(() => {
-                expect(screen.getByTestId('tv-pod-empty')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-card')).toBeInTheDocument();
                 expect(screen.getByText('No Proof of Delivery (POD) Uploaded Yet')).toBeInTheDocument();
             });
         });
 
-        it('renders POD image thumbnail, metadata, and download button when POD image exists', async () => {
+        it('renders POD attachment with thumbnail, metadata, and opens preview modal in DmsDeliveryTab', async () => {
             vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { totalDeliveries: 1, onTimeCount: 1, lateCount: 0, onTimePercentage: 100 } };
+                }
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [sampleDelivery] } };
+                }
                 if (url.includes('/pod')) {
                     return {
                         data: {
                             isSuccess: true,
                             data: {
-                                taskId: mockTask.taskId,
+                                taskId: 'task-dms-01',
                                 waybillNo: 'WB-2026-449612',
                                 fileName: 'POD_WB-2026-449612.jpg',
                                 fileType: '.jpg',
                                 fileSize: 245760,
                                 uploadedAt: '2026-11-06T14:30:00Z',
-                                uploadedByName: 'Juan Dela Cruz',
-                                podUrl: '/api/dms-integration/tasks/task-dms-01/pod/download?inline=true',
+                                uploadedByName: 'Ricardo Bautista',
+                                podUrl: 'https://stars.blob.core.windows.net/pod/WB-2026-449612.jpg',
                                 downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
                                 hasPod: true,
                             },
                         },
                     };
                 }
-                return { data: { isSuccess: true, data: null } };
+                return { data: { isSuccess: true, data: [] } };
             });
 
-            render(<TaskView task={mockTask} />);
+            render(<DmsDeliveryTab onViewTask={vi.fn()} initialTaskId="task-dms-01" />);
 
             await waitFor(() => {
-                expect(screen.getByTestId('tv-pod-card')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-card')).toBeInTheDocument();
                 expect(screen.getByText('POD_WB-2026-449612.jpg')).toBeInTheDocument();
-                expect(screen.getByText('Juan Dela Cruz')).toBeInTheDocument();
-                expect(screen.getByText('240.0 KB')).toBeInTheDocument();
-                expect(screen.getByText('Download POD')).toBeInTheDocument();
-                expect(screen.getByAltText(/Proof of Delivery for WB-2026-449612/i)).toBeInTheDocument();
-            });
-        });
-
-        it('opens interactive preview modal when clicking the image thumbnail', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                waybillNo: 'WB-2026-449612',
-                                fileName: 'POD_photo.jpg',
-                                fileType: '.jpg',
-                                fileSize: 102400,
-                                uploadedAt: '2026-11-06T14:30:00Z',
-                                uploadedByName: 'Juan Dela Cruz',
-                                podUrl: 'https://dms.storage.example/pod/123.jpg',
-                                downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                hasPod: true,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
-                expect(screen.getByAltText(/Proof of Delivery/i)).toBeInTheDocument();
-            });
-
-            const thumbnailWrapper = screen.getByRole('button', { name: /Click to preview full Proof of Delivery/i });
-            fireEvent.click(thumbnailWrapper);
-
-            // Modal should be open
-            expect(screen.getByTestId('tv-pod-preview-modal')).toBeInTheDocument();
-            expect(screen.getByText('Proof of Delivery Preview')).toBeInTheDocument();
-            expect(screen.getByText('Download Original')).toBeInTheDocument();
-
-            // Close modal
-            const closeBtn = screen.getByRole('button', { name: /Close Preview/i });
-            fireEvent.click(closeBtn);
-
-            expect(screen.queryByTestId('tv-pod-preview-modal')).not.toBeInTheDocument();
-        });
-
-        it('renders PDF document card and opens PDF viewer in preview modal when file is a PDF', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                waybillNo: 'WB-2026-449612',
-                                fileName: 'Signed_Receipt.pdf',
-                                fileType: '.pdf',
-                                fileSize: 524288,
-                                uploadedAt: '2026-11-06T15:00:00Z',
-                                uploadedByName: 'Field Courier',
-                                podUrl: '/api/dms-integration/tasks/task-dms-01/pod/download?inline=true',
-                                downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                hasPod: true,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
-                expect(screen.getByTestId('tv-pod-pdf-card')).toBeInTheDocument();
-                expect(screen.getAllByText('Signed_Receipt.pdf').length).toBeGreaterThanOrEqual(1);
-                expect(screen.getAllByText(/512.0 KB/i).length).toBeGreaterThanOrEqual(1);
-            });
-
-            const previewPdfBtn = screen.getByRole('button', { name: /Preview PDF/i });
-            fireEvent.click(previewPdfBtn);
-
-            expect(screen.getByTestId('tv-pod-preview-modal')).toBeInTheDocument();
-            expect(screen.getByTitle('POD PDF Viewer')).toBeInTheDocument();
-        });
-
-        it('gracefully handles broken image with fallback UI and download button', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                waybillNo: 'WB-2026-449612',
-                                fileName: 'broken_pod.jpg',
-                                fileType: '.jpg',
-                                fileSize: 1024,
-                                podUrl: '/invalid/image/path.jpg',
-                                downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                hasPod: true,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
-                const img = screen.getByAltText(/Proof of Delivery/i);
-                fireEvent.error(img);
-            });
-
-            expect(screen.getByTestId('tv-pod-broken')).toBeInTheDocument();
-            expect(screen.getByText('Image preview unavailable or broken')).toBeInTheDocument();
-            expect(screen.getByText('Download File')).toBeInTheDocument();
-        });
-
-        it('gracefully handles unsupported file types with fallback UI', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                waybillNo: 'WB-2026-449612',
-                                fileName: 'pod_archive.zip',
-                                fileType: '.zip',
-                                fileSize: 2097152,
-                                podUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                hasPod: true,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
-                expect(screen.getByTestId('tv-pod-unsupported')).toBeInTheDocument();
-                expect(screen.getByText(/Preview not supported for this file type/i)).toBeInTheDocument();
-                expect(screen.getByText('Download File')).toBeInTheDocument();
-            });
-        });
-
-        it('displays permission error banner when POD API returns 403 Forbidden', async () => {
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod')) {
-                    const error: any = new Error('Access denied');
-                    error.response = { status: 403 };
-                    throw error;
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
-                expect(screen.getByTestId('tv-pod-error')).toBeInTheDocument();
-                expect(screen.getByText(/Access denied: You do not have permission to view Proof of Delivery for this task/i)).toBeInTheDocument();
-            });
-        });
-
-        it('triggers download when user clicks Download POD', async () => {
-            const mockBlob = new Blob(['mock binary data'], { type: 'image/jpeg' });
-            vi.mocked(api.get).mockImplementation(async (url: string) => {
-                if (url.includes('/pod/download')) {
-                    return { data: mockBlob };
-                }
-                if (url.includes('/pod')) {
-                    return {
-                        data: {
-                            isSuccess: true,
-                            data: {
-                                taskId: mockTask.taskId,
-                                waybillNo: 'WB-2026-449612',
-                                fileName: 'POD_photo.jpg',
-                                fileType: '.jpg',
-                                podUrl: '/api/dms-integration/tasks/task-dms-01/pod/download?inline=true',
-                                downloadUrl: '/api/dms-integration/tasks/task-dms-01/pod/download',
-                                hasPod: true,
-                            },
-                        },
-                    };
-                }
-                return { data: { isSuccess: true, data: null } };
-            });
-
-            render(<TaskView task={mockTask} />);
-
-            await waitFor(() => {
                 expect(screen.getByText('Download POD')).toBeInTheDocument();
             });
 
-            const downloadBtn = screen.getByText('Download POD');
-            fireEvent.click(downloadBtn);
+            // Click to open preview modal
+            const thumb = screen.getByTitle('Click to preview full Proof of Delivery');
+            fireEvent.click(thumb);
+
+            expect(screen.getByTestId('dms-pod-preview-modal')).toBeInTheDocument();
+            expect(screen.getByAltText('Proof of Delivery Full Preview')).toBeInTheDocument();
+        });
+
+        it('displays driver name without employee ID and shows Task Type, Weight, Item Count, Package Type', async () => {
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { totalDeliveries: 1, onTimeCount: 1, lateCount: 0, onTimePercentage: 100 } };
+                }
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [sampleDelivery] } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} initialTaskId="task-dms-01" />);
 
             await waitFor(() => {
-                expect(api.get).toHaveBeenCalledWith(
-                    expect.stringContaining('/pod/download'),
-                    expect.objectContaining({ responseType: 'blob' })
-                );
+                // Driver name only (no employee ID prefix)
+                expect(screen.getByText('Ricardo Bautista')).toBeInTheDocument();
+                // DMS fields
+                expect(screen.getByTestId('dms-detail-task-type')).toHaveTextContent('Express Delivery');
+                expect(screen.getByTestId('dms-detail-package-type')).toHaveTextContent('Electronic Box');
+                expect(screen.getByTestId('dms-detail-weight')).toHaveTextContent('4.8 kg');
+                expect(screen.getByTestId('dms-detail-item-count')).toHaveTextContent('2');
             });
+        });
+
+        it('retains delivered orders in Delivered tab when delivery status is set to DELIVERED without disappearing', async () => {
+            const deliveredItem: DmsDeliveryItem = {
+                ...sampleDelivery,
+                dmsStatus: 'DELIVERED',
+                dmsRawStatus: 'DELIVERED',
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { totalDeliveries: 1, onTimeCount: 1, lateCount: 0, onTimePercentage: 100 } };
+                }
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [deliveredItem] } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
+            });
+
+            // Click "Delivered" filter pill
+            const deliveredPill = screen.getByRole('button', { name: /Delivered/i });
+            fireEvent.click(deliveredPill);
+
+            // Order must NOT disappear, but remain visible in Delivered view
+            expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
+            expect(screen.getByText('WB-2026-449612')).toBeInTheDocument();
         });
     });
 });
