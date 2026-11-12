@@ -3909,14 +3909,14 @@ export default function Dashboard() {
                 const s = t.status;
                 if (typeof s === 'number') {
                     const map: Record<number, TMTask['status']> = {
-                        0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Done', 4: 'On hold', 5: 'Cancelled'
+                        0: 'To do', 1: 'In progress', 2: 'In review', 3: 'Completed', 4: 'On hold', 5: 'Cancelled'
                     };
                     statusVal = map[s] || 'Backlog';
                 } else if (typeof s === 'string') {
                     const sLower = s.toLowerCase();
                     if (sLower === 'cancelled' || sLower === 'canceled') statusVal = 'Cancelled';
                     else if (sLower === 'onhold' || sLower === 'on hold') statusVal = 'On hold';
-                    else if (sLower === 'completed' || sLower === 'done') statusVal = 'Done';
+                    else if (sLower === 'completed' || sLower === 'done') statusVal = 'Completed';
                     else if (sLower === 'inprogress' || sLower === 'in progress') statusVal = 'In progress';
                     else if (sLower === 'donependingreview' || sLower === 'pending admin review' || sLower === 'in review') statusVal = 'In review';
                     else if (sLower === 'notstarted' || sLower === 'assigned' || sLower === 'to do') statusVal = 'To do';
@@ -5350,7 +5350,7 @@ export default function Dashboard() {
                     </>
                 )}
                 {activeTab === 'reports' && (
-                    <ReportsTab teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
+                    <ReportsTab tasks={tasks} teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
                 )}
 
                 {activeTab === 'delivery' && (

@@ -5344,10 +5344,11 @@ const DateRangeEngineField: React.FC<{
 
 export const ReportsTab: React.FC<{
     teamMembers: Array<{ accountId: string; employeeName: string; role?: string }>;
+    tasks?: Task[];
     onNavigateToTab?: (tab: NavTab) => void;
     onNavigateToConfig?: () => void;
     onViewTask?: (taskId: string) => void;
-}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
+}> = ({ teamMembers, tasks, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
     const { success, error } = useToast();
     const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
@@ -5451,15 +5452,151 @@ export const ReportsTab: React.FC<{
             if (driver) params.set('driverId', driver);
             const res = await api.get(`/api/integration/dms/performance-summary?${params.toString()}`);
             const json = res.data;
-            if (json?.isSuccess && json?.data) {
+            if (json?.isSuccess && json?.data && Array.isArray(json.data.records) && json.data.records.length > 0) {
                 setDmsPerfData(json.data);
+                return;
+            }
+        } catch {
+            // Backend endpoint may return 401 (for non-Manager roles) or fail; proceed to fallback
+        }
+
+        // Fallback: derive delivery performance from /api/dms-integration/deliveries, pending orders, and tasks
+        try {
+            let deliveryList: any[] = [];
+            try {
+                const delRes = await api.get('/api/dms-integration/deliveries');
+                const list = delRes?.data?.data ?? delRes?.data;
+                if (Array.isArray(list) && list.length > 0) {
+                    deliveryList = list;
+                }
+            } catch {
+                // Ignore
+            }
+
+            // Check pending orders from DMS
+            try {
+                const pendRes = await api.get('/api/dms-integration/pending-orders');
+                const pList = pendRes?.data?.data ?? pendRes?.data;
+                if (Array.isArray(pList) && pList.length > 0) {
+                    const knownWbs = new Set(
+                        deliveryList
+                            .map((d: any) => String(d.dmsWaybillNo || d.waybillNo || '').toLowerCase().trim())
+                            .filter(Boolean)
+                    );
+                    pList.forEach((p: any) => {
+                        const wb = String(p.waybillNo || '').toLowerCase().trim();
+                        if (wb && !knownWbs.has(wb)) {
+                            deliveryList.push({
+                                taskId: '',
+                                taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
+                                recipientName: p.recipientName,
+                                dmsWaybillNo: p.waybillNo,
+                                dmsOrderId: p.orderId,
+                                dmsStatus: p.status || 'Pending',
+                                courierEmployeeId: p.driverEmployeeId || p.driverId,
+                                courierFullName: p.driverName || p.courierFullName,
+                                courierIsActive: p.driverIsActive,
+                                createdAt: p.orderDate || p.createdAt,
+                                expectedDelivery: p.expectedDelivery,
+                            });
+                            knownWbs.add(wb);
+                        }
+                    });
+                }
+            } catch {
+                // Ignore
+            }
+
+            // Also check tasks prop or /api/Task if deliveryList is still empty
+            if (deliveryList.length === 0) {
+                let candidateTasks = tasks || [];
+                if (!candidateTasks || candidateTasks.length === 0) {
+                    try {
+                        const taskRes = await api.get('/api/Task?pageNumber=1&pageSize=50');
+                        const tItems = taskRes?.data?.data?.items ?? taskRes?.data?.items ?? taskRes?.data ?? [];
+                        if (Array.isArray(tItems)) candidateTasks = tItems;
+                    } catch {
+                        candidateTasks = [];
+                    }
+                }
+
+                if (Array.isArray(candidateTasks) && candidateTasks.length > 0) {
+                    const sampleTasks = candidateTasks.slice(0, 20);
+                    for (const t of sampleTasks) {
+                        const taskId = (t as any).id || (t as any).taskId;
+                        if (taskId) {
+                            try {
+                                const ddRes = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
+                                const dd = ddRes?.data?.data ?? ddRes?.data;
+                                if (dd && (dd.dmsWaybillNo || dd.recipientName)) {
+                                    deliveryList.push({
+                                        taskId,
+                                        taskTitle: (t as any).title || (t as any).taskTitle,
+                                        dmsWaybillNo: dd.dmsWaybillNo,
+                                        dmsStatus: dd.dmsStatus || 'Delivered',
+                                        courierEmployeeId: dd.courierEmployeeId,
+                                        courierFullName: dd.courierFullName,
+                                        courierIsActive: dd.courierIsActive,
+                                        createdAt: dd.createdAt || (t as any).createdAt,
+                                        expectedDelivery: dd.expectedDelivery || (t as any).deadline,
+                                        dmsLastSyncedAt: dd.dmsLastSyncedAt,
+                                    });
+                                }
+                            } catch {
+                                // Ignore
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (deliveryList.length > 0) {
+                let records = deliveryList.map((d: any) => {
+                    const completedAt = d.dmsLastSyncedAt || d.updatedAt || d.createdAt || new Date().toISOString();
+                    const slaTarget = d.expectedDelivery || d.slaTargetAt || (d.createdAt ? new Date(new Date(d.createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString() : new Date().toISOString());
+                    const isOnTime = d.isOnTime !== undefined
+                        ? Boolean(d.isOnTime)
+                        : (completedAt && slaTarget ? new Date(completedAt).getTime() <= new Date(slaTarget).getTime() : true);
+                    const dDriver = d.courierEmployeeId || d.driverEmployeeId || d.driverId || 'Field Courier';
+                    const dDriverName = d.courierFullName || d.driverName || dDriver;
+
+                    return {
+                        waybillNo: d.dmsWaybillNo || d.waybillNo || (d.dmsOrderId ? `WB-ORD-${d.dmsOrderId}` : `WB-${String(d.taskId || '').slice(0, 8)}`),
+                        starsTaskId: d.taskId && d.taskId !== '00000000-0000-0000-0000-000000000000' ? d.taskId : undefined,
+                        driverId: dDriver,
+                        driverName: dDriverName,
+                        driverIsActive: d.courierIsActive ?? d.driverIsActive ?? true,
+                        completedAt,
+                        slaTargetAt: slaTarget,
+                        isOnTime,
+                        receivedAt: d.createdAt || completedAt,
+                    };
+                });
+
+                if (driver) {
+                    records = records.filter(r => r.driverId === driver.trim() || r.driverName === driver.trim());
+                }
+
+                const total = records.length;
+                const onTime = records.filter(r => r.isOnTime).length;
+                const late = total - onTime;
+                const pct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
+
+                setDmsPerfData({
+                    totalDeliveries: total,
+                    onTimeCount: onTime,
+                    lateCount: late,
+                    onTimePercentage: pct,
+                    driverFilter: driver,
+                    records,
+                });
             }
         } catch {
             // Keep fallback
         } finally {
             setDmsPerfLoading(false);
         }
-    }, []);
+    }, [tasks]);
 
     useEffect(() => {
         fetchDmsPerfData(dmsDriverFilter);
@@ -9587,7 +9724,7 @@ export default function OpsAdminDashboard() {
             Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', NotStarted: 'To do',
             'In Progress': 'In progress', InProgress: 'In progress',
             'Pending Admin Review': 'In review', DonePendingReview: 'In review',
-            Done: 'Done', Completed: 'Done',
+            Done: 'Completed', Completed: 'Completed',
             'On Hold': 'On hold', OnHold: 'On hold',
             Cancelled: 'Cancelled', Canceled: 'Cancelled', Overdue: 'In progress'
         } as Record<string, TMTask['status']>)[t.taskStatus] || (t.taskStatus === 'Cancelled' ? 'Cancelled' : 'Backlog'),
@@ -11156,6 +11293,7 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'approvals' && <ApprovalsWrapper />}
                 {activeTab === 'reports' && (
                     <ReportsTab
+                        tasks={tasks}
                         teamMembers={teamMembers}
                         onNavigateToTab={handleNavChange}
                         onViewTask={handleOpenTaskById}
