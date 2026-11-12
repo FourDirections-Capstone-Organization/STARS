@@ -16,9 +16,10 @@ export interface FormatDriverOptions {
      * Formatting layout:
      * - 'id-first': "EMP-008 · Ricardo Bautista" (standard across STARS/DMS)
      * - 'name-first': "Ricardo Bautista (EMP-008)" (legacy layout)
+     * - 'name-only': "Ricardo Bautista" (displays courier/driver full name instead of employee ID)
      * Defaults to 'id-first'.
      */
-    layout?: 'id-first' | 'name-first';
+    layout?: 'id-first' | 'name-first' | 'name-only';
     /**
      * Fallback text when neither employee ID nor full name is available.
      * Defaults to 'Unassigned'.
@@ -95,8 +96,16 @@ export function formatDriverDisplay(
     let displayText = fallback;
 
     if (hasEmp && hasName) {
-        // If the name already contains the paired layout, avoid duplication
-        if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
+        if (layout === 'name-only') {
+            if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
+                const parts = cleanName.split(DRIVER_DISPLAY_SEPARATOR);
+                displayText = parts[parts.length - 1].trim();
+            } else if (cleanName.startsWith(`${cleanEmpId} - `) || cleanName.startsWith(`${cleanEmpId}: `)) {
+                displayText = cleanName.substring(cleanEmpId.length + 3).trim();
+            } else {
+                displayText = cleanName;
+            }
+        } else if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
             displayText = cleanName;
         } else if (cleanName.startsWith(`${cleanEmpId} - `) || cleanName.startsWith(`${cleanEmpId}: `)) {
             const stripped = cleanName.substring(cleanEmpId.length + 3).trim();
@@ -106,10 +115,15 @@ export function formatDriverDisplay(
         } else {
             displayText = `${cleanEmpId}${DRIVER_DISPLAY_SEPARATOR}${cleanName}`;
         }
+    } else if (hasName) {
+        if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR) && layout === 'name-only') {
+            const parts = cleanName.split(DRIVER_DISPLAY_SEPARATOR);
+            displayText = parts[parts.length - 1].trim();
+        } else {
+            displayText = cleanName;
+        }
     } else if (hasEmp) {
         displayText = cleanEmpId;
-    } else if (hasName) {
-        displayText = cleanName;
     } else {
         displayText = fallback;
     }
@@ -122,5 +136,17 @@ export function formatDriverDisplay(
         employeeId: hasEmp ? cleanEmpId : null,
         fullName: hasName ? cleanName : null,
     };
+}
+
+/**
+ * Convenience helper to format driver display showing name only without employee ID prefix.
+ */
+export function formatDriverNameOnly(
+    fullNameOrObj?: string | null | DriverObjectInput,
+    employeeId?: string | null,
+    isActive?: boolean | null,
+    options?: Omit<FormatDriverOptions, 'layout'>
+): DriverDisplayInfo {
+    return formatDriverDisplay(fullNameOrObj, employeeId, isActive, { ...options, layout: 'name-only' });
 }
 

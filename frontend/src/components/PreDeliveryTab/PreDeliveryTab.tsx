@@ -386,6 +386,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
     const activeValidationTasks = useMemo(() => {
         return operationalValidationTasks.filter(t => {
             const s = (t._status || '').toLowerCase();
+            const dms = String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase();
+            if (dms.includes('delivered') || dms.includes('completed')) return false;
             return s !== 'completed' && s !== 'done' && s !== 'cancelled' && s !== 'canceled';
         });
     }, [operationalValidationTasks]);
@@ -393,7 +395,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
     const completedValidationTasks = useMemo(() => {
         return operationalValidationTasks.filter(t => {
             const s = (t._status || '').toLowerCase();
-            return s === 'completed' || s === 'done';
+            const dms = String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase();
+            return s === 'completed' || s === 'done' || dms.includes('delivered') || dms.includes('completed');
         });
     }, [operationalValidationTasks]);
 
@@ -880,7 +883,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                             gap: 4
                                                         }}
                                                     >
-                                                        <CheckCircle2 size={12} /> Completed
+                                                        <CheckCircle2 size={12} /> {String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase().includes('delivered') ? 'Delivered' : 'Completed'}
                                                     </span>
                                                 </td>
                                                 <td style={{ fontSize: '0.8125rem' }}>
