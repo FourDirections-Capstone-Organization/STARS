@@ -241,6 +241,42 @@ describe('KpiConfigurationTab', () => {
         expect(screen.getByTestId('kpi-configuration-editor')).toBeInTheDocument();
         expect(screen.getByText(/New Prospective KPI Configuration/i)).toBeInTheDocument();
     });
+
+    it('ties role filter options in filter bar to the selected department', async () => {
+        const depts: DepartmentOption[] = [
+            { id: 'dept-dl', name: 'Delivery and Logistics' },
+            { id: 'dept-cs', name: 'Coordinator & Customer Service Team' }
+        ];
+        renderWithToast(<KpiConfigurationTab departments={depts} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Default Logistics Operations KPI')).toBeInTheDocument();
+        });
+
+        const deptFilter = screen.getByTestId('kpi-filter-department') as HTMLSelectElement;
+        const roleFilter = screen.getByTestId('kpi-filter-role') as HTMLSelectElement;
+
+        // Select Delivery and Logistics -> should show Courier, Dispatcher, Encoder (not Manager/Accountant)
+        fireEvent.change(deptFilter, { target: { value: 'dept-dl' } });
+        const dlOptions = Array.from(roleFilter.options).map(o => o.value);
+        expect(dlOptions).toContain('Courier');
+        expect(dlOptions).toContain('Dispatcher');
+        expect(dlOptions).toContain('Encoder');
+        expect(dlOptions).not.toContain('Manager');
+        expect(dlOptions).not.toContain('Accountant');
+
+        // Select Courier, then switch to Coordinator & Customer Service Team -> Courier should clear
+        fireEvent.change(roleFilter, { target: { value: 'Courier' } });
+        expect(roleFilter.value).toBe('Courier');
+
+        fireEvent.change(deptFilter, { target: { value: 'dept-cs' } });
+        expect(roleFilter.value).toBe('');
+        const csOptions = Array.from(roleFilter.options).map(o => o.value);
+        expect(csOptions).toContain('Coordinator');
+        expect(csOptions).toContain('Manager');
+        expect(csOptions).not.toContain('Courier');
+        expect(csOptions).not.toContain('Dispatcher');
+    });
 });
 
 describe('KpiConfigurationEditor', () => {
@@ -257,7 +293,7 @@ describe('KpiConfigurationEditor', () => {
         });
     });
 
-    it('renders editor with prospective default values and 100% total weight', () => {
+    it('renders editor with required department, disabled role filter, no pre-loaded general metrics, and 4-metric dropdown', () => {
         render(
             <KpiConfigurationEditor
                 departments={mockDepartments}
@@ -269,8 +305,107 @@ describe('KpiConfigurationEditor', () => {
 
         expect(screen.getByTestId('config-title-input')).toBeInTheDocument();
         expect(screen.getByTestId('config-start-date-input')).toBeInTheDocument();
-        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('100.0% / 100.0%');
-        expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled(); // Title is empty
+
+        // Department is required (no "All Departments (Global)" option)
+        const deptSelect = screen.getByTestId('config-department-select') as HTMLSelectElement;
+        const deptOptionTexts = Array.from(deptSelect.options).map(o => o.text);
+        expect(deptOptionTexts.some(t => /All Departments/i.test(t))).toBe(false);
+
+        // Role select is disabled until a department is chosen and has no "All Operational Roles" option
+        const roleSelect = screen.getByTestId('config-role-select') as HTMLSelectElement;
+        expect(roleSelect).toBeDisabled();
+        const roleOptionTexts = Array.from(roleSelect.options).map(o => o.text);
+        expect(roleOptionTexts.some(t => /All Operational Roles/i.test(t))).toBe(false);
+
+        // No general metrics pre-loaded; metric dropdown contains the 4 existing metrics
+        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('0.0% / 100.0%');
+        expect(screen.getByTestId('empty-metric-selection')).toBeInTheDocument();
+
+        const metricSelect = screen.getByTestId('kpi-metric-select') as HTMLSelectElement;
+        const metricValues = Array.from(metricSelect.options).map(o => o.value).filter(Boolean);
+        expect(metricValues).toEqual([
+            'OTIF',
+            'ORDER_ACCURACY',
+            'TASK_COMPLETION_RATE',
+            'AVERAGE_HANDLING_TIME'
+        ]);
+
+        expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled();
+    });
+
+    it('ties target role filter options strictly to selected department and clears incompatible role on change', () => {
+        const deptList: DepartmentOption[] = [
+            { id: 'dept-dl', name: 'Delivery and Logistics' },
+            { id: 'dept-cs', name: 'Coordinator & Customer Service Team' }
+        ];
+
+        render(
+            <KpiConfigurationEditor
+                departments={deptList}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={false}
+            />
+        );
+
+        const deptSelect = screen.getByTestId('config-department-select') as HTMLSelectElement;
+        const roleSelect = screen.getByTestId('config-role-select') as HTMLSelectElement;
+
+        // Select Delivery and Logistics
+        fireEvent.change(deptSelect, { target: { value: 'dept-dl' } });
+        expect(roleSelect).not.toBeDisabled();
+
+        const dlRoles = Array.from(roleSelect.options).map(o => o.value).filter(Boolean);
+        expect(dlRoles).toEqual(['Courier', 'Dispatcher', 'Encoder']);
+        expect(dlRoles).not.toContain('Manager');
+        expect(dlRoles).not.toContain('Accountant');
+
+        // Choose Courier
+        fireEvent.change(roleSelect, { target: { value: 'Courier' } });
+        expect(roleSelect.value).toBe('Courier');
+
+        // Switch to Coordinator & Customer Service Team -> Courier is inapplicable and cleared
+        fireEvent.change(deptSelect, { target: { value: 'dept-cs' } });
+        expect(roleSelect.value).toBe('');
+        const csRoles = Array.from(roleSelect.options).map(o => o.value).filter(Boolean);
+        expect(csRoles).toEqual(['Coordinator', 'Manager']);
+    });
+
+    it('uses backend department roles endpoint when available', async () => {
+        (api.get as any).mockImplementation((url: string) => {
+            if (url === '/api/kpi/departments/dept-1/roles') {
+                return Promise.resolve({
+                    data: {
+                        isSuccess: true,
+                        data: [
+                            { role: 'Courier', displayName: 'Courier / Driver' },
+                            { role: 'Dispatcher', displayName: 'Dispatcher' }
+                        ]
+                    }
+                });
+            }
+            return Promise.resolve({ data: { isSuccess: true, data: mockVariables } });
+        });
+
+        render(
+            <KpiConfigurationEditor
+                departments={mockDepartments}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={false}
+            />
+        );
+
+        fireEvent.change(screen.getByTestId('config-department-select'), {
+            target: { value: 'dept-1' }
+        });
+
+        await waitFor(() => {
+            expect(api.get).toHaveBeenCalledWith('/api/kpi/departments/dept-1/roles');
+            const roleSelect = screen.getByTestId('config-role-select') as HTMLSelectElement;
+            const roleValues = Array.from(roleSelect.options).map(o => o.value).filter(Boolean);
+            expect(roleValues).toEqual(['Courier', 'Dispatcher']);
+        });
     });
 
     it('validates prospective start and end dates', () => {
@@ -297,7 +432,7 @@ describe('KpiConfigurationEditor', () => {
         expect(screen.getByTestId('save-kpi-config-btn')).toBeDisabled();
     });
 
-    it('submits valid prospective configuration upon form submission', async () => {
+    it('allows selecting only one KPI metric per role from dropdown with 100% weight and submits valid configuration', async () => {
         render(
             <KpiConfigurationEditor
                 departments={mockDepartments}
@@ -307,11 +442,24 @@ describe('KpiConfigurationEditor', () => {
             />
         );
 
-        const titleInput = screen.getByTestId('config-title-input');
-        fireEvent.change(titleInput, { target: { value: 'Valid Q4 2026 Operations Config' } });
+        fireEvent.change(screen.getByTestId('config-title-input'), {
+            target: { value: 'Valid Q4 2026 Operations Config' }
+        });
+        fireEvent.change(screen.getByTestId('config-department-select'), {
+            target: { value: 'dept-1' }
+        });
+        fireEvent.change(screen.getByTestId('config-role-select'), {
+            target: { value: 'Courier' }
+        });
 
-        const roleSelect = screen.getByTestId('config-role-select');
-        fireEvent.change(roleSelect, { target: { value: 'Courier' } });
+        const metricSelect = screen.getByTestId('kpi-metric-select');
+        // Select OTIF first, then switch to ORDER_ACCURACY -> replaces rather than appending
+        fireEvent.change(metricSelect, { target: { value: 'OTIF' } });
+        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('100.0% / 100.0%');
+
+        fireEvent.change(metricSelect, { target: { value: 'ORDER_ACCURACY' } });
+        expect(screen.getAllByTestId(/^kpi-item-row-/)).toHaveLength(1);
+        expect(screen.getByTestId('item-weight-input-0')).toHaveValue(100);
 
         const saveBtn = screen.getByTestId('save-kpi-config-btn');
         expect(saveBtn).not.toBeDisabled();
@@ -322,12 +470,42 @@ describe('KpiConfigurationEditor', () => {
             expect(handleSave).toHaveBeenCalledTimes(1);
             const savedData = handleSave.mock.calls[0][0];
             expect(savedData.title).toBe('Valid Q4 2026 Operations Config');
+            expect(savedData.departmentId).toBe('dept-1');
             expect(savedData.targetRole).toBe('Courier');
             expect(savedData.overallGreenThreshold).toBe(85.0);
-            expect(savedData.items).toHaveLength(4);
-            const sumWeights = savedData.items.reduce((s: number, i: any) => s + i.weight, 0);
-            expect(sumWeights).toBe(100.0);
+            expect(savedData.items).toHaveLength(1);
+            expect(savedData.items[0].metricCode).toBe('ORDER_ACCURACY');
+            expect(savedData.items[0].weight).toBe(100);
         });
+    });
+
+    it('normalizes legacy multi-metric initialData to a single metric at 100% weight', () => {
+        render(
+            <KpiConfigurationEditor
+                initialData={{
+                    id: 'legacy-1',
+                    title: 'Legacy Config',
+                    description: '',
+                    targetRole: 'Courier',
+                    departmentId: 'dept-1',
+                    effectiveStartDate: '2026-01-01',
+                    effectiveEndDate: '',
+                    isActive: true,
+                    overallGreenThreshold: 85,
+                    overallAmberThreshold: 70,
+                    overallRedThreshold: 60,
+                    items: STANDARD_METRIC_TEMPLATES.map((t, i) => ({ ...t, order: i + 1 }))
+                }}
+                departments={mockDepartments}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isSaving={false}
+            />
+        );
+
+        expect(screen.getByTestId('legacy-conversion-notice')).toBeInTheDocument();
+        expect(screen.getAllByTestId(/^kpi-item-row-/)).toHaveLength(1);
+        expect(screen.getByTestId('total-weight-display')).toHaveTextContent('100.0% / 100.0%');
     });
 });
 
@@ -578,7 +756,7 @@ describe('KpiConfigurationEditor with Custom Formula Metrics', () => {
         // Modal should close and row should show formula preview
         await waitFor(() => {
             expect(screen.queryByTestId('formula-builder-modal')).not.toBeInTheDocument();
-            expect(screen.getByTestId('formula-preview-4')).toHaveTextContent('(completed_tasks / total_assigned_tasks) * 100');
+            expect(screen.getByTestId('formula-preview-0')).toHaveTextContent('(completed_tasks / total_assigned_tasks) * 100');
         });
     });
 

@@ -65,7 +65,7 @@ public class KpiControllerTests
             Title = "2026 Q4 Operations KPI Configuration",
             Description = "Standard weighted evaluation for courier operations",
             TargetRole = "Courier",
-            DepartmentId = departmentId,
+            DepartmentId = departmentId ?? Guid.NewGuid(),
             EffectiveStartDate = DateTime.UtcNow.AddDays(1),
             EffectiveEndDate = DateTime.UtcNow.AddMonths(3),
             IsActive = true,
@@ -78,50 +78,13 @@ public class KpiControllerTests
                 {
                     Name = "On-Time In-Full (OTIF)",
                     MetricCode = "OTIF",
-                    Weight = 30.0,
+                    Weight = 100.0,
                     TargetValue = 95.0,
                     GreenThreshold = 95.0,
                     AmberThreshold = 85.0,
                     RedThreshold = 75.0,
                     IsLowerBetter = false,
                     Order = 1
-                },
-                new()
-                {
-                    Name = "Order Accuracy",
-                    MetricCode = "ORDER_ACCURACY",
-                    Weight = 25.0,
-                    TargetValue = 98.0,
-                    GreenThreshold = 98.0,
-                    AmberThreshold = 90.0,
-                    RedThreshold = 80.0,
-                    IsLowerBetter = false,
-                    Order = 2
-                },
-                new()
-                {
-                    Name = "Task Completion Rate",
-                    MetricCode = "COMPLETION_RATE",
-                    Weight = 25.0,
-                    TargetValue = 90.0,
-                    GreenThreshold = 90.0,
-                    AmberThreshold = 80.0,
-                    RedThreshold = 70.0,
-                    IsLowerBetter = false,
-                    Order = 3
-                },
-                new()
-                {
-                    Name = "Average Handling Time",
-                    MetricCode = "AHT",
-                    Unit = "hours",
-                    Weight = 20.0,
-                    TargetValue = 4.0,
-                    GreenThreshold = 4.0,
-                    AmberThreshold = 8.0,
-                    RedThreshold = 12.0,
-                    IsLowerBetter = true,
-                    Order = 4
                 }
             }
         };
@@ -658,12 +621,12 @@ public class KpiControllerTests
         response.Data.OverallGreenThreshold.Should().Be(90.0);
         response.Data.OverallAmberThreshold.Should().Be(75.0);
         response.Data.OverallRedThreshold.Should().Be(60.0);
-        response.Data.Items.Should().HaveCount(4);
+        response.Data.Items.Should().HaveCount(1);
 
         // Verify entity persisted in database
         var persisted = await db.KpiConfigurations.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == response.Data.Id);
         persisted.Should().NotBeNull();
-        persisted!.Items.Should().HaveCount(4);
+        persisted!.Items.Should().HaveCount(1);
         persisted.Items.Sum(i => i.Weight).Should().Be(100.0);
     }
 
@@ -677,7 +640,7 @@ public class KpiControllerTests
 
         var controller = CreateController(db: db);
         var request = CreateValidConfigurationRequest();
-        request.Items[0].Weight = 10.0; // Total becomes 80%, not 100%
+        request.Items[0].Weight = 80.0; // Total becomes 80%, not 100%
 
         var actionResult = await controller.CreateConfiguration(request);
 
@@ -708,6 +671,91 @@ public class KpiControllerTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task CreateConfiguration_WhenTargetRoleNotApplicableToDepartment_Returns400BadRequest()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var coordDept = new Department { Id = Guid.NewGuid(), Name = "Coordinator & Customer Service Team", IsActive = true };
+        db.Departments.Add(coordDept);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db: db);
+        var request = CreateValidConfigurationRequest(coordDept.Id);
+        request.TargetRole = "Courier"; // Not applicable to Coordinator & Customer Service Team
+
+        var actionResult = await controller.CreateConfiguration(request);
+
+        var badRequestResult = actionResult.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var response = badRequestResult.Value.Should().BeOfType<ApiResponseDTO<KpiConfigurationResponseDTO>>().Subject;
+        response.IsSuccess.Should().BeFalse();
+        response.Message.Should().Contain("not applicable to department");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CreateConfiguration_WhenMultipleMetricsSubmitted_Returns400BadRequest()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var dept = new Department { Id = Guid.NewGuid(), Name = "Delivery and Logistics", IsActive = true };
+        db.Departments.Add(dept);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db: db);
+        var request = CreateValidConfigurationRequest(dept.Id);
+        request.Items[0].Weight = 50.0;
+        request.Items.Add(new KpiItemRequestDTO
+        {
+            Name = "Order Accuracy",
+            MetricCode = "ORDER_ACCURACY",
+            Weight = 50.0,
+            GreenThreshold = 90,
+            AmberThreshold = 80,
+            RedThreshold = 70
+        });
+
+        var actionResult = await controller.CreateConfiguration(request);
+
+        var badRequestResult = actionResult.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var response = badRequestResult.Value.Should().BeOfType<ApiResponseDTO<KpiConfigurationResponseDTO>>().Subject;
+        response.IsSuccess.Should().BeFalse();
+        response.Message.Should().Contain("Only one KPI metric can be configured per role");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task GetDepartmentRoles_ReturnsRolesApplicableToDepartment()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var deliveryDept = new Department { Id = Guid.NewGuid(), Name = "Delivery and Logistics", IsActive = true };
+        var coordDept = new Department { Id = Guid.NewGuid(), Name = "Coordinator & Customer Service Team", IsActive = true };
+        db.Departments.AddRange(deliveryDept, coordDept);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db: db);
+
+        var deliveryResult = await controller.GetDepartmentRoles(deliveryDept.Id);
+        var deliveryOk = deliveryResult.Should().BeOfType<OkObjectResult>().Subject;
+        var deliveryPayload = deliveryOk.Value.Should().BeOfType<ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>>().Subject;
+        deliveryPayload.IsSuccess.Should().BeTrue();
+        deliveryPayload.Data!.Select(r => r.Role).Should().BeEquivalentTo(new[] { "Courier", "Dispatcher", "Encoder" });
+
+        var coordResult = await controller.GetDepartmentRoles(coordDept.Id);
+        var coordOk = coordResult.Should().BeOfType<OkObjectResult>().Subject;
+        var coordPayload = coordOk.Value.Should().BeOfType<ApiResponseDTO<List<KpiDepartmentRoleOptionDTO>>>().Subject;
+        coordPayload.IsSuccess.Should().BeTrue();
+        coordPayload.Data!.Select(r => r.Role).Should().BeEquivalentTo(new[] { "Coordinator", "Manager" });
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task UpdateConfiguration_WhenValid_UpdatesFieldsAndItems()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -715,12 +763,17 @@ public class KpiControllerTests
             .Options;
         using var db = new AppDbContext(options);
 
+        var dept = new Department { Id = Guid.NewGuid(), Name = "Delivery and Logistics", IsActive = true };
+        db.Departments.Add(dept);
+
         var configId = Guid.NewGuid();
         var existingConfig = new KpiConfiguration
         {
             Id = configId,
             Title = "Old 2025 Config",
             Description = "Old description",
+            DepartmentId = dept.Id,
+            TargetRole = "Courier",
             IsActive = true,
             OverallGreenThreshold = 85.0,
             OverallAmberThreshold = 70.0,
@@ -735,7 +788,7 @@ public class KpiControllerTests
         db.ChangeTracker.Clear();
 
         var controller = CreateController(db: db);
-        var updateRequest = CreateValidConfigurationRequest();
+        var updateRequest = CreateValidConfigurationRequest(dept.Id);
         updateRequest.Title = "Updated 2026 Q4 Operations Config";
         updateRequest.OverallGreenThreshold = 92.0;
 
@@ -747,13 +800,13 @@ public class KpiControllerTests
         response.IsSuccess.Should().BeTrue();
         response.Data!.Title.Should().Be("Updated 2026 Q4 Operations Config");
         response.Data.OverallGreenThreshold.Should().Be(92.0);
-        response.Data.Items.Should().HaveCount(4);
+        response.Data.Items.Should().HaveCount(1);
 
         // Verify in DB
         var updatedInDb = await db.KpiConfigurations.Include(c => c.Items).FirstAsync(c => c.Id == existingConfig.Id);
         updatedInDb.Title.Should().Be("Updated 2026 Q4 Operations Config");
         updatedInDb.OverallGreenThreshold.Should().Be(92.0);
-        updatedInDb.Items.Should().HaveCount(4);
+        updatedInDb.Items.Should().HaveCount(1);
     }
 
     [Fact]
