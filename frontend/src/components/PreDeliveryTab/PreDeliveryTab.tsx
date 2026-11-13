@@ -61,6 +61,8 @@ interface PreDeliveryTabProps {
     tasks?: any[];
     onCreateTaskForOrder: (order: DmsPendingOrder) => void;
     onViewTask?: (taskId: string) => void;
+    onRefreshPending?: () => void;
+    refreshPendingTrigger?: number;
 }
 
 // Helpers to detect mock data and sort newly created records to the top
@@ -126,6 +128,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
     tasks = [],
     onCreateTaskForOrder,
     onViewTask,
+    onRefreshPending,
+    refreshPendingTrigger,
 }) => {
     const { success: toastSuccess, error: toastError } = useToast();
     const [pendingOrders, setPendingOrders] = useState<DmsPendingOrder[]>([]);
@@ -158,7 +162,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
 
     useEffect(() => {
         fetchPendingOrders();
-    }, [fetchPendingOrders]);
+    }, [fetchPendingOrders, refreshPendingTrigger]);
 
     const handleCopy = (waybill: string) => {
         navigator.clipboard.writeText(waybill);
@@ -167,11 +171,50 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
         setTimeout(() => setCopiedWaybill(null), 2500);
     };
 
-    // Filter pending orders (mock data excluded, most recently created order strictly on top)
+    // Track active task order IDs and waybills for cross-tab exclusion
+    const activeTaskLinkedOrderIds = useMemo(() => {
+        const ids = new Set<number>();
+        for (const t of tasks) {
+            const orderId = t.deliveryDetails?.dmsOrderId ?? t.dmsOrderId;
+            if (typeof orderId === 'number' && orderId > 0) {
+                ids.add(orderId);
+            }
+        }
+        return ids;
+    }, [tasks]);
+
+    const activeTaskLinkedWaybills = useMemo(() => {
+        const waybills = new Set<string>();
+        for (const t of tasks) {
+            const wb = t.deliveryDetails?.dmsWaybillNo ?? t.dmsWaybillNo;
+            if (typeof wb === 'string' && wb.trim()) {
+                waybills.add(wb.trim().toLowerCase());
+            }
+        }
+        return waybills;
+    }, [tasks]);
+
+    // Filter pending orders (mock data excluded, active task orders excluded, most recently created order strictly on top)
     const filteredPending = useMemo(() => {
         const nonMock = pendingOrders.filter(o => !isMockOrder(o));
         const sorted = sortPendingOrdersDesc(nonMock);
         return sorted.filter(o => {
+            // Cross-tab exclusion: Exclude orders that already have an operational task created in STARS
+            if (activeTaskLinkedOrderIds.has(o.orderId)) {
+                return false;
+            }
+            if (o.waybillNo && activeTaskLinkedWaybills.has(o.waybillNo.trim().toLowerCase())) {
+                return false;
+            }
+            const hasTaskMatchingWaybill = o.waybillNo && tasks.some(t => {
+                if (isMockTask(t)) return false;
+                const title = t.taskTitle || t.title || '';
+                return title.toLowerCase().includes(o.waybillNo.toLowerCase());
+            });
+            if (hasTaskMatchingWaybill) {
+                return false;
+            }
+
             if (priorityFilter !== 'all' && (o.priority || '').toLowerCase() !== priorityFilter.toLowerCase()) {
                 return false;
             }
@@ -186,16 +229,18 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                 (o.clientName && o.clientName.toLowerCase().includes(q))
             );
         });
-    }, [pendingOrders, priorityFilter, searchQuery]);
+    }, [pendingOrders, priorityFilter, searchQuery, activeTaskLinkedOrderIds, activeTaskLinkedWaybills, tasks]);
 
-    // Active operational tasks in pre-delivery validation (mock data excluded, most recently created task on top)
+    // Active operational tasks in pre-delivery validation (mock data excluded, completed/done/cancelled excluded, most recently created task on top)
     const operationalValidationTasks = useMemo(() => {
         const list = tasks.filter(t => {
             if (isMockTask(t)) return false;
             const isDelivery = t.taskCategory === 'Delivery Operations' ||
                 (t.taskTitle && t.taskTitle.toLowerCase().includes('delivery')) ||
                 t.deliveryDetails;
-            return isDelivery;
+            if (!isDelivery) return false;
+            const s = (t.status || '').toLowerCase();
+            return s !== 'completed' && s !== 'done' && s !== 'cancelled';
         });
         return [...list].sort((a, b) => {
             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -248,23 +293,33 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
 
     // Stats calculations
     const stats = useMemo(() => {
-        const validPending = pendingOrders.filter(o => !isMockOrder(o));
-        const totalPending = validPending.length;
-        const urgentOrHigh = validPending.filter(o => {
+        const unassignedPending = pendingOrders.filter(o => {
+            if (isMockOrder(o)) return false;
+            if (activeTaskLinkedOrderIds.has(o.orderId)) return false;
+            if (o.waybillNo && activeTaskLinkedWaybills.has(o.waybillNo.trim().toLowerCase())) return false;
+            return true;
+        });
+        const totalPending = unassignedPending.length;
+        const urgentOrHigh = unassignedPending.filter(o => {
             const p = (o.priority || '').toLowerCase();
             return p === 'urgent' || p === 'high';
         }).length;
-        const inValidationCount = operationalValidationTasks.filter(t => {
-            const s = (t.status || '').toLowerCase();
-            return s !== 'completed' && s !== 'done' && s !== 'cancelled';
-        }).length;
-        const completedValidationCount = operationalValidationTasks.filter(t => {
+
+        const allDeliveryTasks = tasks.filter(t => {
+            if (isMockTask(t)) return false;
+            return t.taskCategory === 'Delivery Operations' ||
+                (t.taskTitle && t.taskTitle.toLowerCase().includes('delivery')) ||
+                t.deliveryDetails;
+        });
+
+        const inValidationCount = operationalValidationTasks.length;
+        const completedValidationCount = allDeliveryTasks.filter(t => {
             const s = (t.status || '').toLowerCase();
             return s === 'completed' || s === 'done';
         }).length;
 
         return { totalPending, urgentOrHigh, inValidationCount, completedValidationCount };
-    }, [pendingOrders, operationalValidationTasks]);
+    }, [pendingOrders, operationalValidationTasks, activeTaskLinkedOrderIds, activeTaskLinkedWaybills, tasks]);
 
     const getPriorityClass = (priority: string) => {
         const p = (priority || '').toLowerCase();
@@ -291,7 +346,10 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                 <div className="pre-delivery-actions">
                     <button
                         className="pre-delivery-btn pre-delivery-btn-secondary"
-                        onClick={fetchPendingOrders}
+                        onClick={() => {
+                            fetchPendingOrders();
+                            onRefreshPending?.();
+                        }}
                         disabled={loading}
                     >
                         <RefreshCw size={15} className={loading ? 'spin' : ''} />

@@ -231,4 +231,185 @@ describe('PreDeliveryTab Component', () => {
             })
         );
     });
+
+    it('REG-01 & REG-02: excludes orders already in tasks from Awaiting STARS Task (cross-tab exclusion and status consistency)', async () => {
+        const dmsOrders: DmsPendingOrder[] = [
+            {
+                orderId: 201,
+                waybillNo: 'WB-2026-000201',
+                clientName: 'Active Client Corp',
+                clientType: 'Corporate',
+                contactNumber: '09170001111',
+                senderAddress: 'Makati',
+                recipientName: 'Order Already In Task',
+                recipientContact: '09180001111',
+                recipientAddress: 'Manila',
+                area: 'Manila',
+                route: 'Route A',
+                status: 'Pending',
+                taskType: 'Delivery',
+                packageType: 'Box',
+                packageDescription: 'Office Gear',
+                itemCount: 1,
+                weight: '1.5 kg',
+                priority: 'Medium',
+                orderDate: '2026-11-01T10:00:00Z',
+                expectedDelivery: '2026-11-05T00:00:00Z',
+            },
+            {
+                orderId: 202,
+                waybillNo: 'WB-2026-000202',
+                clientName: 'New Client Corp',
+                clientType: 'Corporate',
+                contactNumber: '09170002222',
+                senderAddress: 'Pasig',
+                recipientName: 'Awaiting Order Unassigned',
+                recipientContact: '09180002222',
+                recipientAddress: 'Quezon City',
+                area: 'Quezon City',
+                route: 'Route B',
+                status: 'Pending',
+                taskType: 'Delivery',
+                packageType: 'Parcel',
+                packageDescription: 'Documents',
+                itemCount: 1,
+                weight: '0.5 kg',
+                priority: 'High',
+                orderDate: '2026-11-02T10:00:00Z',
+                expectedDelivery: '2026-11-06T00:00:00Z',
+            },
+        ];
+
+        (api.get as any).mockResolvedValue({
+            data: { isSuccess: true, data: dmsOrders },
+        });
+
+        const activeTasks = [
+            {
+                taskId: 'task-active-1',
+                taskNumber: 'TSK-2026-00201',
+                taskTitle: '[Pre-Delivery] Delivery to Order Already In Task - Waybill WB-2026-000201',
+                taskCategory: 'Delivery Operations',
+                priority: 'Medium',
+                status: 'InProgress',
+                deliveryDetails: {
+                    dmsOrderId: 201,
+                    dmsWaybillNo: 'WB-2026-000201',
+                },
+            },
+        ];
+
+        render(
+            <PreDeliveryTab
+                tasks={activeTasks}
+                onCreateTaskForOrder={vi.fn()}
+            />
+        );
+
+        // Under "Awaiting STARS Task": Order 201 must be excluded, only Order 202 is shown
+        await waitFor(() => {
+            expect(screen.getByText('Awaiting Order Unassigned')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('Order Already In Task')).not.toBeInTheDocument();
+
+        // Switch to "Active Validation Tasks" sub-tab
+        const activeTabBtn = screen.getByRole('button', { name: /Active Validation Tasks/i });
+        activeTabBtn.click();
+
+        await waitFor(() => {
+            expect(screen.getByText('[Pre-Delivery] Delivery to Order Already In Task - Waybill WB-2026-000201')).toBeInTheDocument();
+        });
+        // Confirms uniform status and single-tab presence
+        expect(screen.queryByText('Awaiting Order Unassigned')).not.toBeInTheDocument();
+    });
+
+    it('REG-05: excludes completed, done, and cancelled tasks from Active Validation Tasks sub-tab', async () => {
+        (api.get as any).mockResolvedValue({
+            data: { isSuccess: true, data: [] },
+        });
+
+        const mixedTasks = [
+            {
+                taskId: 't-in-progress',
+                taskNumber: 'TSK-IN-PROGRESS',
+                taskTitle: 'Active Validation Task In Progress',
+                taskCategory: 'Delivery Operations',
+                priority: 'High',
+                status: 'InProgress',
+                createdAt: '2026-11-03T10:00:00Z',
+            },
+            {
+                taskId: 't-completed',
+                taskNumber: 'TSK-COMPLETED',
+                taskTitle: 'Validation Task Completed',
+                taskCategory: 'Delivery Operations',
+                priority: 'Medium',
+                status: 'Completed',
+                createdAt: '2026-11-03T11:00:00Z',
+            },
+            {
+                taskId: 't-done',
+                taskNumber: 'TSK-DONE',
+                taskTitle: 'Validation Task Done',
+                taskCategory: 'Delivery Operations',
+                priority: 'Low',
+                status: 'Done',
+                createdAt: '2026-11-03T12:00:00Z',
+            },
+            {
+                taskId: 't-cancelled',
+                taskNumber: 'TSK-CANCELLED',
+                taskTitle: 'Validation Task Cancelled',
+                taskCategory: 'Delivery Operations',
+                priority: 'Low',
+                status: 'Cancelled',
+                createdAt: '2026-11-03T13:00:00Z',
+            },
+        ];
+
+        render(
+            <PreDeliveryTab
+                tasks={mixedTasks}
+                onCreateTaskForOrder={vi.fn()}
+            />
+        );
+
+        const activeTabBtn = screen.getByRole('button', { name: /Active Validation Tasks/i });
+        activeTabBtn.click();
+
+        await waitFor(() => {
+            expect(screen.getByText('Active Validation Task In Progress')).toBeInTheDocument();
+        });
+
+        // Completed, Done, and Cancelled tasks must have exited the tab
+        expect(screen.queryByText('Validation Task Completed')).not.toBeInTheDocument();
+        expect(screen.queryByText('Validation Task Done')).not.toBeInTheDocument();
+        expect(screen.queryByText('Validation Task Cancelled')).not.toBeInTheDocument();
+    });
+
+    it('refetches pending orders when refreshPendingTrigger updates', async () => {
+        (api.get as any).mockResolvedValue({
+            data: { isSuccess: true, data: [] },
+        });
+
+        const { rerender } = render(
+            <PreDeliveryTab
+                tasks={[]}
+                onCreateTaskForOrder={vi.fn()}
+                refreshPendingTrigger={0}
+            />
+        );
+
+        expect(api.get).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <PreDeliveryTab
+                tasks={[]}
+                onCreateTaskForOrder={vi.fn()}
+                refreshPendingTrigger={1}
+            />
+        );
+
+        expect(api.get).toHaveBeenCalledTimes(2);
+    });
 });

@@ -9690,6 +9690,10 @@ export default function OpsAdminDashboard() {
     const [isSavingTask, setIsSavingTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
+    const [preDeliveryRefreshTrigger, setPreDeliveryRefreshTrigger] = useState(0);
+    const refetchPendingOrders = useCallback(() => {
+        setPreDeliveryRefreshTrigger(prev => prev + 1);
+    }, []);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
         setInitialTaskData(buildPreDeliveryTaskInitialData(order));
@@ -10480,6 +10484,7 @@ export default function OpsAdminDashboard() {
             setPendingTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
+            refetchPendingOrders();
         } catch (err: any) {
             const status = err.response?.status;
             const respData = err.response?.data;
@@ -11303,6 +11308,8 @@ export default function OpsAdminDashboard() {
                             tasks={tasks}
                             onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
                             onViewTask={handleOpenTaskById}
+                            refreshPendingTrigger={preDeliveryRefreshTrigger}
+                            onRefreshPending={refetchPendingOrders}
                         />
                     </div>
                 )}
