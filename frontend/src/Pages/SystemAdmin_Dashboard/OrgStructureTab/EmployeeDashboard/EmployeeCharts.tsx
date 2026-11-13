@@ -60,7 +60,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const ROLE_COLORS = {
-    assigned: '#008B8B',        // --primary / --teal
+    assigned: '#00A99D',        // --primary / --teal
     created: '#293652',         // --secondary / --navy
 };
 
@@ -505,7 +505,7 @@ export const EmployeeCharts: React.FC<EmployeeChartsProps> = ({
                                     strokeWidth={2.5}
                                     fill="url(#gradEmployeeCompletion)"
                                     dot={{ r: 4, fill: '#00A99D', strokeWidth: 1.5, stroke: '#FFFFFF' }}
-                                    activeDot={{ r: 6, fill: '#008B8B', strokeWidth: 2, stroke: '#FFFFFF' }}
+                                    activeDot={{ r: 6, fill: '#00A99D', strokeWidth: 2, stroke: '#FFFFFF' }}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>

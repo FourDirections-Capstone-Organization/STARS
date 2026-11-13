@@ -1,34 +1,36 @@
-# Defects Plan: KPI Configuration and Performance Reviews
+# Plan: Delivery Summary Data Presentation and Courier Name Form Field
 
-Target Feature Branch: fix/kpi-and-performance-review-defects
+**Feature branch:** `fix/delivery-summary-data-and-courier-name-field` | **Step branches:** `step-N-<short-name>`
+Never push directly to `refactoring/bug-fix`. Commit each step on a step branch and merge to feature branch.
 
-## Findings so far
-- Files: SystemAdmin_Dashboard.tsx, PerformanceReviewTab.tsx, CriterionComparisonChart.tsx.
-- Defect #49: SystemAdmin_Dashboard renders ReportsTab without onNavigateToTab, leaving handleConfigClick a no-op.
-- 51a: Evaluation template UI exists at EvaluationTemplateTab.tsx but lacks a link from Performance Reviews.
-- 51b/c: Backend supports ReviewScope.Team; modal needs Team option and employee dropdown replacing GUID input.
-- 51d meaning: Compares self vs supervisor ratings per criterion to reveal perception gaps (|gap| >= 2.0 outlier).
-- 51d chart empty: Unrated criteria have 0.0 scores, which correctly map to 0-49% Unsatisfactory rating band.
+## Findings & Root Cause Analysis
+1. **Delivery Summary Tab Empty Data**:
+   - In `DmsDeliveryTab.tsx`, `fetchDeliveries` calls `api.get('/api/dms-integration/deliveries')`. If the backend returns an empty array `[]` (because `TaskDeliveryDetails` has 0 rows or hasn't linked DMS shipments yet), the frontend immediately sets `deliveries = []` and returns without evaluating candidate tasks or pending DMS shipments.
+   - In `DmsIntegrationService.cs`, `GetAllDeliveriesAsync()` only queries `_db.TaskDeliveryDetails`. If no STARS task has an attached `TaskDeliveryDetail` row yet, it returns an empty list, completely ignoring active DMS shipments and pre-delivery orders awaiting validation. Additionally, `driverUsers.ToDictionary` could throw if duplicate employee numbers exist.
+   - When pending DMS orders are retrieved or pre-delivery tasks exist in `Tasks`, they should be unified into `GetAllDeliveriesAsync()` so all shipments, metrics, and KPI charts are fully populated.
+2. **Missing Courier Name Field in Pre-Delivery Modal**:
+   - In `SystemAdmin_Dashboard.tsx` and `OpAdmin_Dashboard.tsx`, when creating a task from pre-delivery validation ("Create Pre-Delivery Operational Task"), the modal displays input fields for Recipient, Contact, Address, Area, Sender, Package Description, and `Courier Employee ID (Optional)`, but has **no input field for Courier Name / Full Name**.
+   - Although `courierFullName` exists in DTOs and state, operators cannot see, edit, or enter the courier's name directly in the form.
 
-## Decisions confirmed
-- Confirmed Self vs Manager subtitle explaining alignment and outlier threshold (|gap| >= 2.0).
-- Confirmed template discoverability via "Manage Templates" button navigating to evaluation_templates tab.
-- Confirmed team scope blocks creation with validation warning if selected team has 0 members.
-- Confirmed employee dropdown in Individual scope filters by selected department/team with Name (Role).
-- Confirmed target feature branch fix/kpi-and-performance-review-defects and plan archiving to docs/archive/plans/.
+## Steps
 
-## Implementation Steps
-- [x] Step 1: Reproduce "Configure KPI" button no-op in SystemAdmin_Dashboard and confirm missing navigation prop (Defect #49)
-  - Verify: Test verifies clicking Configure KPIs fails to trigger tab change when onNavigateToTab is omitted
-- [x] Step 2: Pass onNavigateToTab to ReportsTab in SystemAdmin_Dashboard and add passing regression test (Defect #49)
-  - Verify: Regression test confirms clicking Configure KPIs switches activeTab to kpi_configuration
-- [x] Step 3: Add "Manage Templates" navigation action to Performance Reviews header to make template UI discoverable (Defect #51a)
-  - Verify: Manage Templates button renders in Performance Reviews and navigates to evaluation_templates tab
-- [x] Step 4: Add Team scope option and team dropdown selector to Create Performance Review Cycle modal (Defect #51b)
-  - Verify: Scope dropdown includes Team option, reveals team selector, and submits valid team review payload
-- [x] Step 5: Replace Employee GUID text input with permission-scoped employee dropdown in review creation modal (Defect #51c)
-  - Verify: Individual scope renders employee dropdown showing accessible staff with name and role instead of GUID text field
-- [x] Step 6: Add in-UI explanatory subtitle and tooltip to Self vs. Manager criterion comparison chart (Defect #51d)
-  - Verify: Criterion comparison chart renders alignment explanation and outlier guidance in UI subtitle and tooltip
-- [x] Step 7: Run full backend and frontend test suites and archive plan to docs/archive/plans/ (Defect #49 & #51)
-  - Verify: dotnet test and npm test both pass with 0 failures; PLAN.md is archived to docs/archive/plans/
+- [x] Step 1: Backend: Enhance `GetAllDeliveriesAsync` to safely resolve driver mappings and merge unlinked DMS shipments
+  - Files: `backend/Modules/DmsIntegration/DmsIntegrationService.cs`, `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~DmsIntegrationTests`
+
+- [x] Step 2: Frontend: Update `DmsDeliveryTab.tsx` fallback logic and row keys to guarantee delivery data presentation
+  - Files: `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/DeliveryAnalyticsDriverNames.test.tsx`
+  - Verify: Run `npm --prefix frontend test -- -t "DmsDeliveryTab|DeliveryAnalytics"`
+
+- [x] Step 3: Frontend: Add dedicated Courier Name input field in Create Pre-Delivery Operational Task modals
+  - Files: `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`
+  - Verify: Run `npm --prefix frontend test -- -t "PreDelivery"`
+
+- [x] Step 4: Regression tests & full suite verification
+  - Files: `backend/Tests/DmsIntegration/DmsIntegrationTests.cs`, `frontend/src/test/PreDeliveryTab.test.tsx`, `frontend/src/test/DmsDeadlineDriverUI.test.tsx`
+  - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` and `npm --prefix frontend test`
+
+## Open questions / assumptions
+- Driver field layout: In the delivery details section, `Courier Employee ID` and `Courier Name` sit side-by-side in a responsive 2-column grid (`1fr 1fr`), consistent with Recipient / Contact and Area / Sender rows.
+- Unlinked DMS shipments: In `DmsDeliveryTab`, shipments not yet attached to a STARS task display "[DMS Pre-Delivery] <Recipient>" as title and "Pending Creation" for Waybill / Task Link.
+- Auto-fill driver name: If the operator enters a valid STARS courier employee number (e.g. `EMP-008`), the Courier Name field automatically populates with the employee's name if currently blank.

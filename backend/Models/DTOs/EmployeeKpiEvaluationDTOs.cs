@@ -29,6 +29,9 @@ public class EmployeeKpiEvaluationResultDTO
 
     public double OverallScore { get; set; }
     public string OverallRating { get; set; } = "Green";
+    public double OverallGreenThreshold { get; set; } = 85.0;
+    public double OverallAmberThreshold { get; set; } = 70.0;
+    public double OverallRedThreshold { get; set; } = 60.0;
 
     public List<KpiMetricValueDTO> Metrics { get; set; } = new();
 }

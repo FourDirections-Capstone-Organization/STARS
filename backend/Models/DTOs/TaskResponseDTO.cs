@@ -10,6 +10,7 @@ public class TaskResponseDTO
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public PriorityLevel PriorityLevel { get; set; }
+    public string Priority => PriorityLevel.ToString();
     public TaskClassification Classification { get; set; }
     public Enums.TaskStatus Status { get; set; }
     public AssignmentScope AssignmentScope { get; set; }

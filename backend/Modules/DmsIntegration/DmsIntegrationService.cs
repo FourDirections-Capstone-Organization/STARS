@@ -59,6 +59,10 @@ public class DmsIntegrationService : IDmsIntegrationService
         if (task == null)
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("Task not found");
 
+        var incomingCourierFullName = !string.IsNullOrWhiteSpace(dto.CourierFullName)
+            ? dto.CourierFullName.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName.Trim() : null);
+
         var detail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == taskId);
         if (detail == null)
         {
@@ -71,6 +75,7 @@ public class DmsIntegrationService : IDmsIntegrationService
                 Area = (dto.Area ?? string.Empty).Trim(),
                 PackageDescription = (dto.PackageDescription ?? string.Empty).Trim(),
                 CourierEmployeeId = dto.CourierEmployeeId?.Trim(),
+                CourierFullName = incomingCourierFullName,
                 SenderAddress = dto.SenderAddress?.Trim(),
                 SpecialInstructions = dto.SpecialInstructions?.Trim(),
                 DmsOrderId = dto.DmsOrderId,
@@ -88,11 +93,28 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.Area = (dto.Area ?? string.Empty).Trim();
             detail.PackageDescription = (dto.PackageDescription ?? string.Empty).Trim();
             detail.CourierEmployeeId = dto.CourierEmployeeId?.Trim();
+            if (!string.IsNullOrWhiteSpace(incomingCourierFullName))
+            {
+                detail.CourierFullName = incomingCourierFullName;
+            }
             detail.SenderAddress = dto.SenderAddress?.Trim();
             detail.SpecialInstructions = dto.SpecialInstructions?.Trim();
             if (dto.DmsOrderId.HasValue) detail.DmsOrderId = dto.DmsOrderId;
             if (!string.IsNullOrWhiteSpace(dto.DmsWaybillNo)) detail.DmsWaybillNo = dto.DmsWaybillNo.Trim();
             detail.UpdatedAt = DateTime.UtcNow;
+        }
+
+        User? driverUser = null;
+        if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+        {
+            driverUser = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+
+            if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+            {
+                detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(dto.DmsStatus))
@@ -139,20 +161,33 @@ public class DmsIntegrationService : IDmsIntegrationService
             $"Delivery details updated for task '{task.Title}'",
             "DmsIntegration");
 
+        if (detail.Task == null) detail.Task = task;
+
         return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
-            MapToDTO(detail), "Delivery details saved successfully");
+            MapToDTO(detail, driverUser), "Delivery details saved successfully");
     }
 
     public async Task<ApiResponseDTO<TaskDeliveryDetailResponseDTO>> GetDeliveryDetailAsync(Guid taskId)
     {
         var detail = await _db.TaskDeliveryDetails
+            .Include(d => d.Task)
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.TaskId == taskId);
 
         if (detail == null)
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Failure("No delivery details found for this task");
 
-        return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(MapToDTO(detail));
+        User? driverUser = null;
+        if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+        {
+            driverUser = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+        }
+
+        var podAttachment = await GetOrFetchPodAttachmentAsync(taskId, detail.DmsWaybillNo);
+
+        return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(MapToDTO(detail, driverUser, podAttachment));
     }
 
     public async Task<ApiResponseDTO<TaskDeliveryDetailResponseDTO>> CreateDeliveryOrderForTaskAsync(
@@ -227,10 +262,26 @@ public class DmsIntegrationService : IDmsIntegrationService
             ? $"{detail.SpecialInstructions.Trim()} (Referenced to STARS Task ID: {taskDisplayId})"
             : $"(Referenced to STARS Task ID: {taskDisplayId})";
 
+        var targetDeadline = task.RevisedDeadline ?? task.Deadline;
+        var deadlineDateOnly = targetDeadline != default ? targetDeadline.ToString("yyyy-MM-dd") : null;
+
+        var driverUser = !string.IsNullOrWhiteSpace(detail.CourierEmployeeId)
+            ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId)
+            : null;
+        var driverFullName = driverUser != null
+            ? $"{driverUser.FirstName} {driverUser.LastName}".Trim()
+            : (!string.IsNullOrWhiteSpace(detail.CourierFullName) ? detail.CourierFullName.Trim() : null);
+
+        if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+        {
+            detail.CourierFullName = driverFullName;
+        }
+
         var payload = new
         {
             starsTaskId = taskId,
             starsTaskNumber = taskDisplayId,
+            taskStatus = "Approved",
             taskTitle = task.Title,
             senderName = senderName,
             senderAddress = senderAddress,
@@ -245,6 +296,14 @@ public class DmsIntegrationService : IDmsIntegrationService
             updatedBy = reviewerName ?? creatorName,
             priorityLevel = task.PriorityLevel.ToString(),
             courierEmployeeId = detail.CourierEmployeeId,
+            driverEmployeeId = detail.CourierEmployeeId,
+            driverId = detail.CourierEmployeeId,
+            driverName = driverFullName,
+            courierName = driverFullName,
+            courierFullName = driverFullName,
+            expectedDelivery = deadlineDateOnly,
+            expectedDeliveryDate = deadlineDateOnly,
+            deadline = deadlineDateOnly,
             assigneeReference = assigneeRef,
             taskCompletedAt = DateTime.UtcNow,
             coordinatorId = reviewerId?.ToString() ?? task.CreatedById.ToString(),
@@ -289,6 +348,39 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.SyncStatus = "Synced";
             detail.SyncError = null;
             detail.UpdatedAt = DateTime.UtcNow;
+
+            string? drvId = null;
+            if (root.TryGetProperty("driverEmployeeId", out var deiProp) && deiProp.ValueKind == JsonValueKind.String)
+                drvId = deiProp.GetString();
+            else if (root.TryGetProperty("driverId", out var diProp) && diProp.ValueKind == JsonValueKind.String)
+                drvId = diProp.GetString();
+            else if (root.TryGetProperty("courierEmployeeId", out var ceiProp) && ceiProp.ValueKind == JsonValueKind.String)
+                drvId = ceiProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvId))
+                detail.CourierEmployeeId = drvId.Trim();
+
+            string? drvName = null;
+            if (root.TryGetProperty("driverName", out var dnProp) && dnProp.ValueKind == JsonValueKind.String)
+                drvName = dnProp.GetString();
+            else if (root.TryGetProperty("courierName", out var cnProp) && cnProp.ValueKind == JsonValueKind.String)
+                drvName = cnProp.GetString();
+            else if (root.TryGetProperty("courierFullName", out var cfnProp) && cfnProp.ValueKind == JsonValueKind.String)
+                drvName = cfnProp.GetString();
+            else if (root.TryGetProperty("driverFullName", out var dfnProp) && dfnProp.ValueKind == JsonValueKind.String)
+                drvName = dfnProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvName))
+                detail.CourierFullName = drvName.Trim();
+
+            if (driverUser == null && !string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+            {
+                driverUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+                if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+                {
+                    detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+                }
+            }
 
             var normStatus = (status ?? "").Trim().ToLowerInvariant();
             if (normStatus == "delivered" || normStatus == "completed")
@@ -360,7 +452,7 @@ public class DmsIntegrationService : IDmsIntegrationService
 
             _logger.LogInformation("Task {TaskId} mapped to DMS Waybill {WaybillNo}", taskId, waybillNo);
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
-                MapToDTO(detail), "Delivery order created successfully in DMS");
+                MapToDTO(detail, driverUser), "Delivery order created successfully in DMS");
         }
         catch (Exception ex)
         {
@@ -465,6 +557,40 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.SyncError = null;
             detail.UpdatedAt = DateTime.UtcNow;
 
+            string? drvId = null;
+            if (root.TryGetProperty("driverEmployeeId", out var deiProp) && deiProp.ValueKind == JsonValueKind.String)
+                drvId = deiProp.GetString();
+            else if (root.TryGetProperty("driverId", out var diProp) && diProp.ValueKind == JsonValueKind.String)
+                drvId = diProp.GetString();
+            else if (root.TryGetProperty("courierEmployeeId", out var ceiProp) && ceiProp.ValueKind == JsonValueKind.String)
+                drvId = ceiProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvId))
+                detail.CourierEmployeeId = drvId.Trim();
+
+            string? drvName = null;
+            if (root.TryGetProperty("driverName", out var dnProp) && dnProp.ValueKind == JsonValueKind.String)
+                drvName = dnProp.GetString();
+            else if (root.TryGetProperty("courierName", out var cnProp) && cnProp.ValueKind == JsonValueKind.String)
+                drvName = cnProp.GetString();
+            else if (root.TryGetProperty("courierFullName", out var cfnProp) && cfnProp.ValueKind == JsonValueKind.String)
+                drvName = cfnProp.GetString();
+            else if (root.TryGetProperty("driverFullName", out var dfnProp) && dfnProp.ValueKind == JsonValueKind.String)
+                drvName = dfnProp.GetString();
+
+            if (!string.IsNullOrWhiteSpace(drvName))
+                detail.CourierFullName = drvName.Trim();
+
+            User? driverUser = null;
+            if (!string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+            {
+                driverUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+                if (driverUser != null && string.IsNullOrWhiteSpace(detail.CourierFullName))
+                {
+                    detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+                }
+            }
+
             var normStatus = (status ?? "").Trim().ToLowerInvariant();
             if (normStatus == "delivered" || normStatus == "completed")
             {
@@ -493,6 +619,38 @@ public class DmsIntegrationService : IDmsIntegrationService
                 task.UpdatedAt = DateTime.UtcNow;
             }
 
+            // Sync Proof of Delivery (POD) if returned in DMS response
+            string? podCandidate = null;
+            if (root.TryGetProperty("podImage", out var podP) && podP.ValueKind == JsonValueKind.String)
+                podCandidate = podP.GetString();
+            else if (root.TryGetProperty("podUrl", out var podU) && podU.ValueKind == JsonValueKind.String)
+                podCandidate = podU.GetString();
+            else if (root.TryGetProperty("potImage", out var potP) && potP.ValueKind == JsonValueKind.String)
+                podCandidate = potP.GetString();
+
+            if (!string.IsNullOrWhiteSpace(podCandidate))
+            {
+                var existingPod = await _db.TaskAttachments
+                    .FirstOrDefaultAsync(a => a.TaskId == taskId && a.Description != null && a.Description.Contains("Proof of Delivery"));
+                if (existingPod == null)
+                {
+                    var fn = ExtractFileName(podCandidate, $"POD_{waybillNo ?? taskId.ToString()[..8]}.jpg");
+                    var ext = Path.GetExtension(fn);
+                    _db.TaskAttachments.Add(new TaskAttachment
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = taskId,
+                        FileName = fn,
+                        FilePath = podCandidate,
+                        FileSize = 0,
+                        FileType = string.IsNullOrWhiteSpace(ext) ? ".jpg" : ext,
+                        Description = "Proof of Delivery (POD) from DMS",
+                        UploadedById = task.CreatedById,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             await _auditLogService.LogAsync(
@@ -504,8 +662,14 @@ public class DmsIntegrationService : IDmsIntegrationService
                 $"DMS Delivery Order status synchronized: {status} (Waybill: {waybillNo})",
                 "DmsIntegration");
 
+            var podAttachment = await _db.TaskAttachments
+                .AsNoTracking()
+                .Where(a => a.TaskId == taskId && a.Description != null && a.Description.Contains("Proof of Delivery"))
+                .OrderByDescending(a => a.CreatedAt)
+                .FirstOrDefaultAsync();
+
             return ApiResponseDTO<TaskDeliveryDetailResponseDTO>.Success(
-                MapToDTO(detail), "Delivery status synchronized successfully from DMS");
+                MapToDTO(detail, driverUser, podAttachment), "Delivery status synchronized successfully from DMS");
         }
         catch (Exception ex)
         {
@@ -527,6 +691,16 @@ public class DmsIntegrationService : IDmsIntegrationService
 
     public async Task<ApiResponseDTO<bool>> ProcessStatusUpdateAsync(DmsStatusWebhookDTO dto)
     {
+        var incomingDriver = !string.IsNullOrWhiteSpace(dto.DriverId)
+            ? dto.DriverId.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverEmployeeId)
+                ? dto.DriverEmployeeId.Trim()
+                : (!string.IsNullOrWhiteSpace(dto.CourierEmployeeId) ? dto.CourierEmployeeId.Trim() : null));
+
+        var incomingDriverName = !string.IsNullOrWhiteSpace(dto.CourierFullName)
+            ? dto.CourierFullName.Trim()
+            : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName.Trim() : null);
+
         var detail = await _db.TaskDeliveryDetails
             .Include(d => d.Task)
             .FirstOrDefaultAsync(d => d.TaskId == dto.StarsTaskId || d.DmsWaybillNo == dto.WaybillNo);
@@ -578,6 +752,8 @@ public class DmsIntegrationService : IDmsIntegrationService
                 DeliveryAddress = initDeliveryAddress,
                 Area = initArea,
                 PackageDescription = initPackageDesc,
+                CourierEmployeeId = incomingDriver,
+                CourierFullName = incomingDriverName,
                 DmsWaybillNo = dto.WaybillNo,
                 DmsStatus = dto.DmsStatus ?? dto.Status,
                 DmsRawStatus = dto.DmsStatus ?? dto.Status,
@@ -611,7 +787,52 @@ public class DmsIntegrationService : IDmsIntegrationService
         if (!string.IsNullOrWhiteSpace(dto.PackageDescription))
             detail.PackageDescription = dto.PackageDescription.Trim();
 
+        if (!string.IsNullOrWhiteSpace(incomingDriver))
+            detail.CourierEmployeeId = incomingDriver;
+
+        if (!string.IsNullOrWhiteSpace(incomingDriverName))
+            detail.CourierFullName = incomingDriverName;
+
+        if (string.IsNullOrWhiteSpace(detail.CourierFullName) && !string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+        {
+            var driverUser = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+            if (driverUser != null)
+            {
+                detail.CourierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            }
+        }
+
         detail.UpdatedAt = DateTime.UtcNow;
+
+        // Auto-synchronize Proof of Delivery (POD) if provided in webhook payload
+        var podCandidate = !string.IsNullOrWhiteSpace(dto.PodUrl)
+            ? dto.PodUrl
+            : (!string.IsNullOrWhiteSpace(dto.PodImage) ? dto.PodImage : dto.PotImage);
+
+        if (!string.IsNullOrWhiteSpace(podCandidate))
+        {
+            var existingPod = await _db.TaskAttachments
+                .FirstOrDefaultAsync(a => a.TaskId == detail.TaskId && a.Description != null && a.Description.Contains("Proof of Delivery"));
+            if (existingPod == null)
+            {
+                var fn = ExtractFileName(podCandidate, $"POD_{dto.WaybillNo ?? detail.TaskId.ToString()[..8]}.jpg");
+                var ext = Path.GetExtension(fn);
+                _db.TaskAttachments.Add(new TaskAttachment
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = detail.TaskId,
+                    FileName = fn,
+                    FilePath = podCandidate,
+                    FileSize = 0,
+                    FileType = string.IsNullOrWhiteSpace(ext) ? ".jpg" : ext,
+                    Description = "Proof of Delivery (POD) from DMS",
+                    UploadedById = detail.Task?.CreatedById ?? Guid.Empty,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
 
         // Auto-synchronize STARS Task status with DMS status
         var task = detail.Task ?? await _db.Tasks.Include(t => t.Assignments).FirstOrDefaultAsync(t => t.Id == detail.TaskId);
@@ -831,6 +1052,48 @@ public class DmsIntegrationService : IDmsIntegrationService
         var late = total - onTime;
         var pct = total > 0 ? Math.Round((double)onTime / total * 100, 2) : 100.0;
 
+        // Resolve driver names in a single batch query (Zero N+1)
+        var distinctDriverIds = list
+            .Select(p => p.DriverId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .ToList();
+
+        var driverUsers = await _db.Users
+            .AsNoTracking()
+            .Where(u => distinctDriverIds.Contains(u.EmployeeNumber))
+            .ToListAsync();
+
+        var driverDict = driverUsers.ToDictionary(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase);
+
+        var records = list.Select(p =>
+        {
+            string? driverName = null;
+            bool? driverIsActive = null;
+
+            if (!string.IsNullOrWhiteSpace(p.DriverId) && driverDict.TryGetValue(p.DriverId, out var u))
+            {
+                driverName = $"{u.FirstName} {u.LastName}".Trim();
+                driverIsActive = u.IsActive && !u.IsDeactivated;
+            }
+            else if (!string.IsNullOrWhiteSpace(p.DriverId))
+            {
+                driverName = p.DriverId;
+            }
+
+            return new DmsPerformanceRecordDTO
+            {
+                WaybillNo = p.WaybillNo,
+                StarsTaskId = p.StarsTaskId ?? Guid.Empty,
+                DriverId = p.DriverId,
+                DriverName = driverName,
+                DriverIsActive = driverIsActive,
+                CompletedAt = p.CompletedAt,
+                SlaTargetAt = p.SlaTargetAt,
+                IsOnTime = p.IsOnTime
+            };
+        }).ToList();
+
         var dto = new DmsPerformanceSummaryDTO
         {
             TotalDeliveries = total,
@@ -838,15 +1101,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             LateCount = late,
             OnTimePercentage = pct,
             DriverFilter = driverId,
-            Records = list.Select(p => new DmsPerformanceRecordDTO
-            {
-                WaybillNo = p.WaybillNo,
-                StarsTaskId = p.StarsTaskId ?? Guid.Empty,
-                DriverId = p.DriverId,
-                CompletedAt = p.CompletedAt,
-                SlaTargetAt = p.SlaTargetAt,
-                IsOnTime = p.IsOnTime
-            }).ToList()
+            Records = records
         };
 
         return ApiResponseDTO<DmsPerformanceSummaryDTO>.Success(dto);
@@ -861,32 +1116,273 @@ public class DmsIntegrationService : IDmsIntegrationService
             .ThenByDescending(d => d.DmsOrderId ?? 0)
             .ToListAsync();
 
-        var list = details.Select(d => new DmsDeliveryItemDTO
+        var courierIds = details
+            .Select(d => d.CourierEmployeeId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .ToList();
+
+        var taskIds = details.Select(d => d.TaskId).ToList();
+
+        var driverUsers = await _db.Users
+            .AsNoTracking()
+            .Where(u => courierIds.Contains(u.EmployeeNumber))
+            .ToListAsync();
+        var driverDict = driverUsers
+            .Where(u => !string.IsNullOrWhiteSpace(u.EmployeeNumber))
+            .GroupBy(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var podAttachments = await _db.TaskAttachments
+            .AsNoTracking()
+            .Where(a => taskIds.Contains(a.TaskId) && a.Description != null && a.Description.Contains("Proof of Delivery"))
+            .ToListAsync();
+        var podDict = podAttachments
+            .GroupBy(a => a.TaskId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.CreatedAt).First());
+
+        var list = details.Select(d =>
         {
-            TaskId = d.TaskId,
-            TaskTitle = d.Task?.Title ?? "Delivery Task",
-            TaskNumber = d.Task?.TaskNumber,
-            TaskReferenceNumber = d.Task?.TaskNumber,
-            RecipientName = d.RecipientName,
-            RecipientContact = d.RecipientContact,
-            DeliveryAddress = d.DeliveryAddress,
-            Area = d.Area,
-            PackageDescription = d.PackageDescription,
-            SenderAddress = d.SenderAddress,
-            SpecialInstructions = d.SpecialInstructions,
-            CourierEmployeeId = d.CourierEmployeeId,
-            DmsWaybillNo = d.DmsWaybillNo,
-            DmsOrderId = d.DmsOrderId,
-            DmsStatus = d.DmsStatus ?? "Pending",
-            DmsRawStatus = d.DmsRawStatus ?? d.DmsStatus ?? "Pending",
-            DmsLastSyncedAt = d.DmsLastSyncedAt,
-            DmsFailureReason = d.DmsFailureReason,
-            DmsLatitude = (double?)d.DmsLatitude,
-            DmsLongitude = (double?)d.DmsLongitude,
-            SyncStatus = d.SyncStatus ?? "Synced",
-            CreatedAt = d.CreatedAt,
-            UpdatedAt = d.UpdatedAt,
+            string? courierFullName = null;
+            bool? courierIsActive = null;
+
+            if (!string.IsNullOrWhiteSpace(d.CourierEmployeeId) && driverDict.TryGetValue(d.CourierEmployeeId, out var u))
+            {
+                courierFullName = $"{u.FirstName} {u.LastName}".Trim();
+                courierIsActive = u.IsActive && !u.IsDeactivated;
+            }
+            else if (!string.IsNullOrWhiteSpace(d.CourierFullName))
+            {
+                courierFullName = d.CourierFullName.Trim();
+                courierIsActive = null;
+            }
+            else if (string.IsNullOrWhiteSpace(d.CourierEmployeeId))
+            {
+                courierFullName = "Unassigned";
+                courierIsActive = null;
+            }
+            else
+            {
+                courierFullName = d.CourierEmployeeId;
+                courierIsActive = null;
+            }
+
+            string? podUrl = null;
+            DateTime? podUploadedAt = null;
+            if (podDict.TryGetValue(d.TaskId, out var pod))
+            {
+                podUrl = $"/api/dms-integration/tasks/{d.TaskId}/pod/download?inline=true";
+                podUploadedAt = pod.CreatedAt;
+            }
+
+            var taskDeadline = d.Task?.RevisedDeadline ?? d.Task?.Deadline;
+
+            return new DmsDeliveryItemDTO
+            {
+                TaskId = d.TaskId,
+                TaskTitle = d.Task?.Title ?? "Delivery Task",
+                TaskNumber = d.Task?.TaskNumber,
+                TaskReferenceNumber = d.Task?.TaskNumber,
+                RecipientName = d.RecipientName,
+                RecipientContact = d.RecipientContact,
+                DeliveryAddress = d.DeliveryAddress,
+                Area = d.Area,
+                PackageDescription = d.PackageDescription,
+                SenderAddress = d.SenderAddress,
+                SpecialInstructions = d.SpecialInstructions,
+                CourierEmployeeId = d.CourierEmployeeId,
+                CourierFullName = courierFullName,
+                CourierIsActive = courierIsActive,
+                PodUrl = podUrl,
+                PodUploadedAt = podUploadedAt,
+                DmsWaybillNo = d.DmsWaybillNo,
+                DmsOrderId = d.DmsOrderId,
+                DmsStatus = d.DmsStatus ?? "Pending",
+                DmsRawStatus = d.DmsRawStatus ?? d.DmsStatus ?? "Pending",
+                DmsLastSyncedAt = d.DmsLastSyncedAt,
+                DmsFailureReason = d.DmsFailureReason,
+                DmsLatitude = (double?)d.DmsLatitude,
+                DmsLongitude = (double?)d.DmsLongitude,
+                SyncStatus = d.SyncStatus ?? "Synced",
+                CreatedAt = d.CreatedAt,
+                UpdatedAt = d.UpdatedAt,
+                ExpectedDelivery = taskDeadline,
+                ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null,
+            };
         }).ToList();
+
+        var existingWaybills = new HashSet<string>(
+            list.Where(x => !string.IsNullOrWhiteSpace(x.DmsWaybillNo)).Select(x => x.DmsWaybillNo!),
+            StringComparer.OrdinalIgnoreCase);
+        var existingDmsOrderIds = new HashSet<int>(
+            list.Where(x => x.DmsOrderId.HasValue).Select(x => x.DmsOrderId!.Value));
+        var existingTaskIds = new HashSet<Guid>(
+            list.Where(x => x.TaskId != Guid.Empty).Select(x => x.TaskId));
+
+        // 1. Augment with active pre-delivery orders from DMS so all shipments appear in Delivery Summary
+        try
+        {
+            var pendingRes = await GetPendingOrdersAsync();
+            if (pendingRes.IsSuccess && pendingRes.Data != null && pendingRes.Data.Count > 0)
+            {
+                var pendingOrders = pendingRes.Data;
+                var pendingWaybills = pendingOrders
+                    .Select(o => o.WaybillNo)
+                    .Where(w => !string.IsNullOrWhiteSpace(w))
+                    .Distinct()
+                    .ToList();
+
+                var candidateTasks = await _db.Tasks
+                    .AsNoTracking()
+                    .Where(t => t.Title.StartsWith("[Pre-Delivery]") || (t.Description != null && t.Description.Contains("Pre-delivery")))
+                    .ToListAsync();
+
+                var matchingTasks = candidateTasks
+                    .Where(t => pendingWaybills.Any(w =>
+                        (!string.IsNullOrEmpty(t.Title) && t.Title.Contains(w, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(t.Description) && t.Description.Contains(w, StringComparison.OrdinalIgnoreCase))))
+                    .ToList();
+
+                // Batch resolve drivers from pending orders if unmapped in driverDict
+                var pendingDriverIds = pendingOrders
+                    .Select(o => o.DriverEmployeeId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && !driverDict.ContainsKey(id))
+                    .Distinct()
+                    .ToList();
+
+                if (pendingDriverIds.Count > 0)
+                {
+                    var extraDrivers = await _db.Users
+                        .AsNoTracking()
+                        .Where(u => pendingDriverIds.Contains(u.EmployeeNumber))
+                        .ToListAsync();
+                    foreach (var ed in extraDrivers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(ed.EmployeeNumber) && !driverDict.ContainsKey(ed.EmployeeNumber))
+                        {
+                            driverDict[ed.EmployeeNumber] = ed;
+                        }
+                    }
+                }
+
+                foreach (var order in pendingOrders)
+                {
+                    if (existingDmsOrderIds.Contains(order.OrderId)) continue;
+                    if (!string.IsNullOrWhiteSpace(order.WaybillNo) && existingWaybills.Contains(order.WaybillNo)) continue;
+
+                    var matchedTask = matchingTasks.FirstOrDefault(t =>
+                        !string.IsNullOrWhiteSpace(order.WaybillNo) &&
+                        (t.Title.Contains(order.WaybillNo) || t.Description.Contains(order.WaybillNo)));
+
+                    string? courierName = !string.IsNullOrWhiteSpace(order.CourierFullName)
+                        ? order.CourierFullName.Trim()
+                        : (!string.IsNullOrWhiteSpace(order.DriverName) ? order.DriverName.Trim() : null);
+
+                    bool? courierActive = order.DriverIsActive;
+
+                    if (string.IsNullOrWhiteSpace(courierName) && !string.IsNullOrWhiteSpace(order.DriverEmployeeId))
+                    {
+                        if (driverDict.TryGetValue(order.DriverEmployeeId, out var u))
+                        {
+                            courierName = $"{u.FirstName} {u.LastName}".Trim();
+                            courierActive = u.IsActive && !u.IsDeactivated;
+                        }
+                    }
+
+                    DateTime createdAt = order.OrderDate != default ? order.OrderDate : DateTime.UtcNow;
+                    DateTime? expDel = order.ExpectedDelivery != default ? order.ExpectedDelivery : null;
+
+                    var item = new DmsDeliveryItemDTO
+                    {
+                        TaskId = matchedTask?.Id ?? Guid.Empty,
+                        TaskTitle = matchedTask?.Title ?? $"[Pre-Delivery] Delivery to {order.RecipientName} - Waybill {order.WaybillNo}",
+                        TaskNumber = matchedTask?.TaskNumber,
+                        TaskReferenceNumber = matchedTask?.TaskNumber,
+                        RecipientName = order.RecipientName,
+                        RecipientContact = order.RecipientContact,
+                        DeliveryAddress = order.RecipientAddress,
+                        Area = order.Area,
+                        PackageDescription = order.PackageDescription,
+                        SenderAddress = order.SenderAddress,
+                        SpecialInstructions = order.SpecialInstructions,
+                        CourierEmployeeId = order.DriverEmployeeId,
+                        CourierFullName = courierName,
+                        CourierIsActive = courierActive,
+                        DmsWaybillNo = order.WaybillNo,
+                        DmsOrderId = order.OrderId,
+                        DmsStatus = string.IsNullOrWhiteSpace(order.Status) ? "Pending" : order.Status,
+                        DmsRawStatus = order.Status ?? "Pending",
+                        SyncStatus = "Synced",
+                        CreatedAt = createdAt,
+                        ExpectedDelivery = matchedTask?.RevisedDeadline ?? matchedTask?.Deadline ?? expDel,
+                        ExpectedDeliveryDate = order.ExpectedDeliveryDate ?? (expDel.HasValue ? expDel.Value.ToString("yyyy-MM-dd") : null),
+                    };
+
+                    list.Add(item);
+                    if (!string.IsNullOrWhiteSpace(order.WaybillNo)) existingWaybills.Add(order.WaybillNo);
+                    existingDmsOrderIds.Add(order.OrderId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to augment deliveries with pending DMS orders in GetAllDeliveriesAsync");
+        }
+
+        // 2. Augment with any existing operational pre-delivery tasks in STARS that lack TaskDeliveryDetail rows
+        try
+        {
+            var deliveryTasks = await _db.Tasks
+                .AsNoTracking()
+                .Where(t => !existingTaskIds.Contains(t.Id) &&
+                            (t.Title.StartsWith("[Pre-Delivery]") || (t.Description != null && t.Description.Contains("Pre-delivery operational validation"))))
+                .ToListAsync();
+
+            foreach (var task in deliveryTasks)
+            {
+                string? waybill = null;
+                var wbMatch = System.Text.RegularExpressions.Regex.Match(task.Title, @"Waybill\s+([A-Za-z0-9\-_]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (wbMatch.Success) waybill = wbMatch.Groups[1].Value.Trim();
+
+                if (!string.IsNullOrEmpty(waybill) && existingWaybills.Contains(waybill)) continue;
+
+                string recipient = "Operations Dispatch";
+                var recMatch = System.Text.RegularExpressions.Regex.Match(task.Title, @"Delivery to\s+([^\-]+)\s+-", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (recMatch.Success) recipient = recMatch.Groups[1].Value.Trim();
+
+                var item = new DmsDeliveryItemDTO
+                {
+                    TaskId = task.Id,
+                    TaskTitle = task.Title,
+                    TaskNumber = task.TaskNumber,
+                    TaskReferenceNumber = task.TaskNumber,
+                    RecipientName = recipient,
+                    RecipientContact = "—",
+                    DeliveryAddress = "Metro Manila",
+                    PackageDescription = task.Title,
+                    DmsWaybillNo = waybill,
+                    DmsStatus = task.Status == Backend.Models.Enums.TaskStatus.Completed ? "Delivered" : "In Transit",
+                    DmsRawStatus = task.Status == Backend.Models.Enums.TaskStatus.Completed ? "Delivered" : "In Transit",
+                    SyncStatus = "Synced",
+                    CreatedAt = task.CreatedAt,
+                    ExpectedDelivery = task.RevisedDeadline ?? task.Deadline,
+                    ExpectedDeliveryDate = (task.RevisedDeadline ?? task.Deadline).ToString("yyyy-MM-dd"),
+                };
+
+                list.Add(item);
+                if (!string.IsNullOrEmpty(waybill)) existingWaybills.Add(waybill);
+                existingTaskIds.Add(task.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to augment deliveries with operational tasks in GetAllDeliveriesAsync");
+        }
+
+        list = list
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.DmsOrderId ?? 0)
+            .ToList();
 
         return ApiResponseDTO<List<DmsDeliveryItemDTO>>.Success(list);
     }
@@ -925,6 +1421,82 @@ public class DmsIntegrationService : IDmsIntegrationService
                 .OrderByDescending(o => o.OrderDate)
                 .ThenByDescending(o => o.OrderId)
                 .ToList();
+
+            // Normalize driver identification and date-only deadlines
+            var driverIds = pending
+                .Select(o => o.DriverEmployeeId ?? o.DriverId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Dictionary<string, User> driverDict = new(StringComparer.OrdinalIgnoreCase);
+            if (driverIds.Count > 0)
+            {
+                var driverUsers = await _db.Users
+                    .AsNoTracking()
+                    .Where(u => driverIds.Contains(u.EmployeeNumber))
+                    .ToListAsync();
+                driverDict = driverUsers.ToDictionary(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase);
+            }
+
+            foreach (var order in pending)
+            {
+                // Normalize date-only deadline to UTC midnight
+                if (order.ExpectedDelivery != default)
+                {
+                    order.ExpectedDelivery = DateTime.SpecifyKind(order.ExpectedDelivery.Date, DateTimeKind.Utc);
+                    order.ExpectedDeliveryDate = order.ExpectedDelivery.ToString("yyyy-MM-dd");
+                }
+                if (order.OrderDate != default)
+                {
+                    order.OrderDate = DateTime.SpecifyKind(order.OrderDate.Date, DateTimeKind.Utc);
+                }
+
+                // Driver mapping using employee ID as primary key
+                var driverEmpId = (!string.IsNullOrWhiteSpace(order.DriverEmployeeId) ? order.DriverEmployeeId : order.DriverId)?.Trim();
+                if (!string.IsNullOrWhiteSpace(driverEmpId))
+                {
+                    order.DriverEmployeeId = driverEmpId;
+                    order.DriverId = driverEmpId;
+
+                    if (driverDict.TryGetValue(driverEmpId, out var u))
+                    {
+                        order.DriverName = $"{u.FirstName} {u.LastName}".Trim();
+                        order.DriverIsActive = u.IsActive && !u.IsDeactivated;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(order.DriverName) && !string.Equals(order.DriverName.Trim(), driverEmpId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Preserve DMS driverName/CourierFullName if provided in payload and not just an echo of driverEmpId
+                        order.DriverName = order.DriverName.Trim();
+                        order.DriverIsActive = null;
+                    }
+                    else
+                    {
+                        // Fallback to employee ID alone when user name is not found in STARS
+                        order.DriverName = driverEmpId;
+                        order.DriverIsActive = null;
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(order.DriverName) && !order.DriverName.Trim().Equals("Unassigned", StringComparison.OrdinalIgnoreCase))
+                    {
+                        order.DriverEmployeeId = null;
+                        order.DriverId = null;
+                        order.DriverName = order.DriverName.Trim();
+                        order.DriverIsActive = null;
+                    }
+                    else
+                    {
+                        order.DriverEmployeeId = null;
+                        order.DriverId = null;
+                        order.DriverName = "Unassigned";
+                        order.DriverIsActive = null;
+                    }
+                }
+            }
+
             return ApiResponseDTO<List<DmsPendingOrderDTO>>.Success(pending);
         }
         catch (Exception ex)
@@ -946,31 +1518,88 @@ public class DmsIntegrationService : IDmsIntegrationService
                regex.IsMatch(o.SpecialInstructions ?? "");
     }
 
-    private static TaskDeliveryDetailResponseDTO MapToDTO(TaskDeliveryDetail d) => new()
+    private static TaskDeliveryDetailResponseDTO MapToDTO(
+        TaskDeliveryDetail d,
+        User? driverUser = null,
+        TaskAttachment? podAttachment = null)
     {
-        Id = d.Id,
-        TaskId = d.TaskId,
-        RecipientName = d.RecipientName,
-        RecipientContact = d.RecipientContact,
-        DeliveryAddress = d.DeliveryAddress,
-        Area = d.Area,
-        PackageDescription = d.PackageDescription,
-        SenderAddress = d.SenderAddress,
-        SpecialInstructions = d.SpecialInstructions,
-        CourierEmployeeId = d.CourierEmployeeId,
-        DmsWaybillNo = d.DmsWaybillNo,
-        DmsOrderId = d.DmsOrderId,
-        DmsStatus = d.DmsStatus,
-        DmsRawStatus = d.DmsRawStatus,
-        DmsLastSyncedAt = d.DmsLastSyncedAt,
-        DmsFailureReason = d.DmsFailureReason,
-        DmsLatitude = d.DmsLatitude,
-        DmsLongitude = d.DmsLongitude,
-        SyncStatus = d.SyncStatus,
-        SyncError = d.SyncError,
-        CreatedAt = d.CreatedAt,
-        UpdatedAt = d.UpdatedAt
-    };
+        string? courierFullName = null;
+        bool? courierIsActive = null;
+
+        if (driverUser != null)
+        {
+            courierFullName = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            courierIsActive = driverUser.IsActive && !driverUser.IsDeactivated;
+        }
+        else if (!string.IsNullOrWhiteSpace(d.CourierFullName))
+        {
+            courierFullName = d.CourierFullName.Trim();
+            courierIsActive = null;
+        }
+        else if (string.IsNullOrWhiteSpace(d.CourierEmployeeId))
+        {
+            courierFullName = "Unassigned";
+            courierIsActive = null;
+        }
+        else
+        {
+            courierFullName = d.CourierEmployeeId;
+            courierIsActive = null;
+        }
+
+        var taskDeadline = d.Task?.RevisedDeadline ?? d.Task?.Deadline;
+
+        var dto = new TaskDeliveryDetailResponseDTO
+        {
+            Id = d.Id,
+            TaskId = d.TaskId,
+            RecipientName = d.RecipientName,
+            RecipientContact = d.RecipientContact,
+            DeliveryAddress = d.DeliveryAddress,
+            Area = d.Area,
+            PackageDescription = d.PackageDescription,
+            SenderAddress = d.SenderAddress,
+            SpecialInstructions = d.SpecialInstructions,
+            CourierEmployeeId = d.CourierEmployeeId,
+            CourierFullName = courierFullName,
+            CourierIsActive = courierIsActive,
+            DmsWaybillNo = d.DmsWaybillNo,
+            DmsOrderId = d.DmsOrderId,
+            DmsStatus = d.DmsStatus,
+            DmsRawStatus = d.DmsRawStatus,
+            DmsLastSyncedAt = d.DmsLastSyncedAt,
+            DmsFailureReason = d.DmsFailureReason,
+            DmsLatitude = d.DmsLatitude,
+            DmsLongitude = d.DmsLongitude,
+            SyncStatus = d.SyncStatus,
+            SyncError = d.SyncError,
+            CreatedAt = d.CreatedAt,
+            UpdatedAt = d.UpdatedAt,
+            ExpectedDelivery = taskDeadline,
+            ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null
+        };
+
+        if (podAttachment != null)
+        {
+            dto.PodUrl = $"/api/dms-integration/tasks/{d.TaskId}/pod/download?inline=true";
+            dto.PodFileName = podAttachment.FileName;
+            dto.PodUploadedAt = podAttachment.CreatedAt;
+            if (podAttachment.UploadedBy != null)
+            {
+                dto.PodUploadedBy = $"{podAttachment.UploadedBy.FirstName} {podAttachment.UploadedBy.LastName}".Trim();
+            }
+            else if (driverUser != null)
+            {
+                dto.PodUploadedBy = $"{driverUser.FirstName} {driverUser.LastName}".Trim();
+            }
+            else
+            {
+                dto.PodUploadedBy = "Field Courier";
+            }
+        }
+
+        return dto;
+    }
 
     private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];
 
@@ -1076,5 +1705,319 @@ public class DmsIntegrationService : IDmsIntegrationService
             _logger.LogWarning(ex, "Failed to query DMS for employee existence check");
             return ApiResponseDTO<bool>.Success(false, $"DMS check skipped: {ex.Message}");
         }
+    }
+
+    public async Task<ApiResponseDTO<TaskPodResponseDTO>> GetTaskPodAsync(Guid taskId, Guid requestUserId, UserRole requestUserRole)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task == null)
+            return ApiResponseDTO<TaskPodResponseDTO>.Failure("Task not found");
+
+        // Enforce task RBAC matching TaskService.GetByIdAsync
+        if (requestUserRole == UserRole.Dispatcher ||
+            requestUserRole == UserRole.Encoder ||
+            requestUserRole == UserRole.Courier ||
+            requestUserRole == UserRole.Accountant)
+        {
+            if (task.IsConfidential)
+                return ApiResponseDTO<TaskPodResponseDTO>.Failure("Access denied: task is confidential");
+
+            var isAssigned = task.Assignments.Any(a => a.AssignedUserId == requestUserId);
+            if (!isAssigned)
+                return ApiResponseDTO<TaskPodResponseDTO>.Failure("Access denied: task is not assigned to you");
+        }
+
+        var detail = await _db.TaskDeliveryDetails
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        var attachment = await GetOrFetchPodAttachmentAsync(taskId, detail?.DmsWaybillNo);
+
+        if (attachment == null)
+        {
+            return ApiResponseDTO<TaskPodResponseDTO>.Success(new TaskPodResponseDTO
+            {
+                TaskId = taskId,
+                WaybillNo = detail?.DmsWaybillNo,
+                PodUrl = null,
+                DownloadUrl = null
+            }, "No Proof of Delivery found for this task");
+        }
+
+        User? uploader = null;
+        if (attachment.UploadedById != Guid.Empty)
+        {
+            uploader = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == attachment.UploadedById);
+        }
+
+        string uploadedByName;
+        if (uploader != null)
+        {
+            uploadedByName = $"{uploader.FirstName} {uploader.LastName}".Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(detail?.CourierEmployeeId))
+        {
+            var courier = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+            uploadedByName = courier != null
+                ? $"{courier.FirstName} {courier.LastName}".Trim()
+                : (!string.IsNullOrWhiteSpace(detail?.CourierFullName) ? detail.CourierFullName.Trim() : "Field Courier");
+        }
+        else if (!string.IsNullOrWhiteSpace(detail?.CourierFullName))
+        {
+            uploadedByName = detail.CourierFullName.Trim();
+        }
+        else
+        {
+            uploadedByName = "Field Courier";
+        }
+
+        var ext = !string.IsNullOrWhiteSpace(attachment.FileType) ? attachment.FileType : Path.GetExtension(attachment.FileName);
+
+        var dto = new TaskPodResponseDTO
+        {
+            TaskId = taskId,
+            WaybillNo = detail?.DmsWaybillNo,
+            PodUrl = $"/api/dms-integration/tasks/{taskId}/pod/download?inline=true",
+            DownloadUrl = $"/api/dms-integration/tasks/{taskId}/pod/download",
+            FileName = attachment.FileName,
+            FileType = ext,
+            FileSize = attachment.FileSize,
+            UploadedAt = attachment.CreatedAt,
+            UploadedByName = uploadedByName
+        };
+
+        return ApiResponseDTO<TaskPodResponseDTO>.Success(dto);
+    }
+
+    public async Task<(byte[]? FileBytes, string ContentType, string FileName)?> DownloadTaskPodAsync(
+        Guid taskId, Guid requestUserId, UserRole requestUserRole)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task == null) return null;
+
+        // Enforce task RBAC matching TaskService.GetByIdAsync
+        if (requestUserRole == UserRole.Dispatcher ||
+            requestUserRole == UserRole.Encoder ||
+            requestUserRole == UserRole.Courier ||
+            requestUserRole == UserRole.Accountant)
+        {
+            if (task.IsConfidential) return null;
+
+            var isAssigned = task.Assignments.Any(a => a.AssignedUserId == requestUserId);
+            if (!isAssigned) return null;
+        }
+
+        var detail = await _db.TaskDeliveryDetails
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        var attachment = await GetOrFetchPodAttachmentAsync(taskId, detail?.DmsWaybillNo);
+        if (attachment == null) return null;
+
+        var filePath = attachment.FilePath;
+        var fileName = attachment.FileName;
+        var contentType = GetContentType(fileName);
+
+        // 1. Data URI / base64
+        if (filePath.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var commaIdx = filePath.IndexOf(',');
+            if (commaIdx >= 0)
+            {
+                var header = filePath[..commaIdx];
+                var base64Data = filePath[(commaIdx + 1)..];
+                var mimeMatch = System.Text.RegularExpressions.Regex.Match(header, @"data:([^;]+);base64");
+                if (mimeMatch.Success) contentType = mimeMatch.Groups[1].Value;
+
+                var bytes = Convert.FromBase64String(base64Data);
+                return (bytes, contentType, fileName);
+            }
+        }
+
+        // 2. Local file path
+        if (File.Exists(filePath))
+        {
+            var bytes = await File.ReadAllBytesAsync(filePath);
+            return (bytes, contentType, fileName);
+        }
+
+        // 3. Remote URL or relative DMS path
+        string remoteUrl = filePath;
+        if (!filePath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !filePath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (IsConfigured)
+            {
+                remoteUrl = $"{_settings.BaseUrl.TrimEnd('/')}/{filePath.TrimStart('/')}";
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            client.Timeout = TimeSpan.FromSeconds(15);
+            using var request = new HttpRequestMessage(HttpMethod.Get, remoteUrl);
+            if (IsConfigured && remoteUrl.StartsWith(_settings.BaseUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+            }
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to download POD from remote URL {Url}: {Status}", remoteUrl, response.StatusCode);
+                return null;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.IsNullOrWhiteSpace(mediaType) && mediaType != "application/octet-stream")
+            {
+                contentType = mediaType;
+            }
+
+            return (bytes, contentType, fileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while downloading POD file from {Url}", remoteUrl);
+            return null;
+        }
+    }
+
+    private async Task<TaskAttachment?> GetOrFetchPodAttachmentAsync(Guid taskId, string? waybillNo = null)
+    {
+        var attachment = await _db.TaskAttachments
+            .Include(a => a.UploadedBy)
+            .Where(a => a.TaskId == taskId && a.Description != null && a.Description.Contains("Proof of Delivery"))
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (attachment != null) return attachment;
+
+        if (!IsConfigured) return null;
+
+        if (string.IsNullOrWhiteSpace(waybillNo))
+        {
+            var detail = await _db.TaskDeliveryDetails.AsNoTracking().FirstOrDefaultAsync(d => d.TaskId == taskId);
+            waybillNo = detail?.DmsWaybillNo;
+        }
+
+        if (string.IsNullOrWhiteSpace(waybillNo)) return null;
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            client.Timeout = TimeSpan.FromSeconds(10);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"{_settings.BaseUrl.TrimEnd('/')}/api/delivery-orders/track?waybill={Uri.EscapeDataString(waybillNo)}");
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            var root = doc.RootElement;
+
+            string? podImage = null;
+            if (root.TryGetProperty("podImage", out var podProp) && podProp.ValueKind == JsonValueKind.String)
+                podImage = podProp.GetString();
+            else if (root.TryGetProperty("podUrl", out var podUrlProp) && podUrlProp.ValueKind == JsonValueKind.String)
+                podImage = podUrlProp.GetString();
+            else if (root.TryGetProperty("potImage", out var potProp) && potProp.ValueKind == JsonValueKind.String)
+                podImage = potProp.GetString();
+
+            if (string.IsNullOrWhiteSpace(podImage)) return null;
+
+            var task = await _db.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == taskId);
+            var detail = await _db.TaskDeliveryDetails.AsNoTracking().FirstOrDefaultAsync(d => d.TaskId == taskId);
+            Guid uploaderId = task?.CreatedById ?? Guid.Empty;
+
+            if (detail != null && !string.IsNullOrWhiteSpace(detail.CourierEmployeeId))
+            {
+                var driver = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeNumber == detail.CourierEmployeeId);
+                if (driver != null) uploaderId = driver.Id;
+            }
+
+            var fileName = ExtractFileName(podImage, $"POD_{waybillNo}.jpg");
+            var ext = Path.GetExtension(fileName);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+
+            var newAttachment = new TaskAttachment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = taskId,
+                FileName = fileName,
+                FilePath = podImage,
+                FileSize = 0,
+                FileType = ext,
+                Description = "Proof of Delivery (POD) from DMS",
+                UploadedById = uploaderId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.TaskAttachments.Add(newAttachment);
+            await _db.SaveChangesAsync();
+
+            return newAttachment;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch POD on-demand from DMS for task {TaskId} / waybill {WaybillNo}", taskId, waybillNo);
+            return null;
+        }
+    }
+
+    private static string ExtractFileName(string pathOrUrl, string defaultName)
+    {
+        if (string.IsNullOrWhiteSpace(pathOrUrl)) return defaultName;
+        try
+        {
+            if (pathOrUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                return defaultName;
+
+            if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var uri))
+            {
+                var name = Path.GetFileName(uri.LocalPath);
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+            else
+            {
+                var name = Path.GetFileName(pathOrUrl);
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+        return defaultName;
+    }
+
+    private static string GetContentType(string fileName)
+    {
+        var ext = Path.GetExtension(fileName)?.ToLowerInvariant();
+        return ext switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".pdf" => "application/pdf",
+            ".svg" => "image/svg+xml",
+            _ => "application/octet-stream"
+        };
     }
 }

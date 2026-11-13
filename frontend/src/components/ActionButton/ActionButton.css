@@ -9,9 +9,9 @@
     font-family: var(--fb, 'Inter UI', 'Inter', sans-serif);
     font-weight: 600;
     font-size: 13px;
-    background: var(--teal, #008B8B);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border: 1.5px solid var(--teal, #008B8B);
+    border: 1.5px solid var(--teal, #00A99D);
     cursor: pointer;
     white-space: nowrap;
     transition: background .2s, color .2s, box-shadow .2s, transform .1s, border-color .2s;
@@ -21,9 +21,9 @@
 }
 
 .quick-action-btn-header:hover:not(:disabled) {
-    background: var(--teal-hover, #007676);
-    border-color: var(--teal-hover, #007676);
-    box-shadow: 0 4px 12px rgba(0, 139, 139, .28);
+    background: var(--teal-hover, #009189);
+    border-color: var(--teal-hover, #009189);
+    box-shadow: 0 4px 12px rgba(0, 169, 157, .28);
     transform: translateY(-1px);
 }
 

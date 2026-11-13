@@ -60,11 +60,12 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import './OpAdmin_Dashboard.css';
-import { useNavigate } from 'react-router-dom';
-import TaskView, { TaskViewTask } from '../../components/TaskView/TaskView';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import TaskView, { TaskViewTask, formatDriverDisplay } from '../../components/TaskView/TaskView';
+import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
 import { useToast } from '../../components/Toast/Toast';
 import { resolveIncrementalTitlePreview } from '../../services/taskTitleUtils';
-import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
+import { formatDeadlineWithRemaining, formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
 
 import { usePreventBackNav } from '../../components/Auth/usePreventBackNav';
 import GlobalHeader, { NotificationItem } from '../../components/GlobalHeader/GlobalHeader';
@@ -75,6 +76,7 @@ import FormModal from '../../components/FormModal/FormModal';
 import ActionButton from '../../components/ActionButton/ActionButton';
 import ConfirmationModal from '../../components/ConfirmationModal/ConfirmationModal';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { formatStatus, getStatusBadgeClass } from '../../utils/statusUtils';
 import EmptyState from '../../components/ui/EmptyState';
 import Pagination from '../../components/ui/Pagination';
 import SubTabNav from '../../components/ui/SubTabNav';
@@ -182,7 +184,24 @@ interface ApiResponse<T> {
 
 // --- Types --------------------------------------------------------------------
 
-type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';  // match backend casing
+export type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';  // match backend casing
+
+export const normalizeCoordinatorPriority = (val: any): Priority => {
+    if (val !== undefined && val !== null && val !== '') {
+        if (typeof val === 'number') {
+            const labels: Record<number, Priority> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
+            if (val in labels) return labels[val];
+        }
+        if (typeof val === 'string' && val.trim()) {
+            const s = val.trim().toLowerCase();
+            if (s === 'low') return 'Low';
+            if (s === 'medium') return 'Medium';
+            if (s === 'high') return 'High';
+            if (s === 'urgent') return 'Urgent';
+        }
+    }
+    return 'Medium';
+};
 type TaskStatus = 'Draft' | 'Assigned' | 'Pending' | 'In Progress' | 'Pending Admin Review' | 'Done' | 'Completed' | 'Overdue';
 type NavTab =
     | 'dashboard'
@@ -544,17 +563,7 @@ const getInitials = (name: string): string => {
     return name.slice(0, 2).toUpperCase();
 };
 
-const statusBadgeClass = (s: string): string =>
-({
-    'Draft': 'badge badge-gray',
-    'Assigned': 'badge badge-purple',
-    'Pending': 'badge badge-blue',
-    'In Progress': 'badge badge-amber',
-    'Pending Admin Review': 'badge badge-purple',
-    'Done': 'badge badge-blue',
-    'Completed': 'badge badge-green',
-    'Overdue': 'badge badge-red'
-}[s] ?? 'badge badge-blue');
+const statusBadgeClass = (s: string): string => getStatusBadgeClass(s);
 
 // --- FSM (Finite State Machine) Task Status Transitions ----------------------
 const FSM_TRANSITIONS: Record<string, string[]> = {
@@ -742,7 +751,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, onView, onEdit, showEditBtn = f
                     </span>
                     {task.taskTitle}
                 </span>
-                <span className={statusBadgeClass(effectiveStatus)}>{effectiveStatus}</span>
+                <StatusBadge status={effectiveStatus} />
                 {showEditBtn && onEdit && (
                     <ActionsDropdown
                         actions={[
@@ -935,22 +944,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const hasDmsDeadline = Boolean(initial.dueAt && initial.dueAt.trim());
     const isDmsDeadlineLocked = isPreDelivery && hasDmsDeadline && !isHistoricalDeadline;
 
+    const initialPriority = normalizeCoordinatorPriority(initial.priority ?? (initial as any).priorityLevel);
+
     const initialDueAt = useMemo(() => {
         if (!initial.dueAt) return '';
         const d = new Date(initial.dueAt);
         if (isNaN(d.getTime())) return '';
         if (isPreDelivery && d.getTime() <= Date.now()) {
-            const adjusted = getAdjustedSlaDeadline((initial.priority ?? 'Medium') as Priority);
+            const adjusted = getAdjustedSlaDeadline(initialPriority);
             return formatDateForInput(adjusted);
         }
         return initial.dueAt.slice(0, 16);
-    }, [initial.dueAt, initial.priority, isPreDelivery]);
+    }, [initial.dueAt, initialPriority, isPreDelivery]);
 
     const [form, setForm] = useState({
         taskTitle: initial.taskTitle ?? '',
         taskDescription: initial.taskDescription ?? '',
         taskCategory: initial.taskCategory ?? '',
-        priority: (initial.priority ?? 'Medium') as Priority,
+        priority: initialPriority,
         dueAt: initialDueAt,
         isConfidential: initial.isConfidential ?? false,
         assignmentScope: (initial.assignees && initial.assignees.length > 1 ? 'Team' : 'SingleEmployee') as 'SingleEmployee' | 'Team' | 'Department',
@@ -969,6 +980,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         senderAddress: (initial as any)?.deliveryDetails?.senderAddress ?? 'STARS Operations Office',
         specialInstructions: (initial as any)?.deliveryDetails?.specialInstructions ?? '',
         courierEmployeeId: (initial as any)?.deliveryDetails?.courierEmployeeId ?? '',
+        courierFullName: (initial as any)?.deliveryDetails?.courierFullName ?? (initial as any)?.driverName ?? '',
         dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
         dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
         dmsStatus: (initial as any)?.deliveryDetails?.dmsStatus ?? '',
@@ -1143,14 +1155,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             employeeNumber: best.employeeNumber || '',
                         });
 
-                        // If pre-delivery has a driver/courier ID and assignee is not yet selected, match it
-                        if (!form.assignedTo && deliveryForm.courierEmployeeId) {
+                        // If pre-delivery has a driver/courier ID and assignee/name is not yet selected, match it
+                        if (deliveryForm.courierEmployeeId) {
                             const matched = mapped.find(e =>
                                 e.accountId.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase() ||
                                 (e.employeeNumber && e.employeeNumber.toLowerCase() === deliveryForm.courierEmployeeId.toLowerCase())
                             );
                             if (matched) {
-                                setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                if (!form.assignedTo) {
+                                    setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
+                                }
+                                if (!deliveryForm.courierFullName) {
+                                    setDeliveryForm(prev => ({ ...prev, courierFullName: prev.courierFullName || matched.employeeName }));
+                                }
                             }
                         }
                     }
@@ -1400,6 +1417,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 packageDescription: deliveryForm.packageDescription?.trim() || form.taskTitle.trim(),
                 specialInstructions: deliveryForm.specialInstructions?.trim() || '',
                 courierEmployeeId: deliveryForm.courierEmployeeId?.trim() || '',
+                courierFullName: (deliveryForm as any).courierFullName?.trim() || undefined,
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
@@ -1572,9 +1590,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                         />
                                         <FieldErr name="dueAt" />
                                         {isDmsDeadlineLocked ? (
-                                            <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
-                                                Deadline is synchronized and pre-set from DMS.
-                                            </span>
+                                            <div>
+                                                <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                    Deadline is synchronized and pre-set from DMS.
+                                                </span>
+                                                <div className="dms-deadline-dateonly-display" data-testid="dms-dateonly-display" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
+                                                    <Calendar size={13} />
+                                                    <span>DMS Delivery Deadline: {formatDateOnly(form.dueAt)}</span>
+                                                </div>
+                                            </div>
                                         ) : isPreDelivery && isHistoricalDeadline ? (
                                             <span style={{ fontSize: 11, color: '#b45309', marginTop: 3, display: 'block' }}>
                                                 Original DMS expected delivery has passed. Automatically adjusted to a valid future SLA deadline.
@@ -1932,6 +1956,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             setDeliveryForm(prev => ({
                                                                 ...prev,
                                                                 courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                                courierFullName: recEmp?.employeeName || recommendation.employeeName,
                                                             }));
                                                             setErrors(prev => ({ ...prev, assignedTo: '' }));
                                                         }}
@@ -1968,6 +1993,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                             setDeliveryForm(prev => ({
                                                                 ...prev,
                                                                 courierEmployeeId: recEmp?.employeeNumber || recommendation.employeeNumber || recommendation.employeeName || recommendation.accountId,
+                                                                courierFullName: isCourierUnmapped
+                                                                    ? (recEmp?.employeeName || recommendation.employeeName)
+                                                                    : (prev.courierFullName || recEmp?.employeeName || recommendation.employeeName),
                                                             }));
                                                         }
                                                         setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2042,6 +2070,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                                     setDeliveryForm(prev => ({
                                                                         ...prev,
                                                                         courierEmployeeId: e.employeeNumber || e.employeeName || e.accountId,
+                                                                        courierFullName: isCourierUnmapped
+                                                                            ? e.employeeName
+                                                                            : (prev.courierFullName || e.employeeName),
                                                                     }));
                                                                 }
                                                                 setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2224,32 +2255,56 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                 style={{ fontSize: 12 }}
                                             />
                                         </div>
+                                        <div className="field" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: 11 }}>Package Description</label>
+                                            <input
+                                                value={deliveryForm.packageDescription}
+                                                onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                                placeholder="e.g. Confidential Project Dossier"
+                                                style={{ fontSize: 12 }}
+                                            />
+                                        </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                            <div className="field" style={{ margin: 0 }}>
-                                                <label style={{ fontSize: 11 }}>Package Description</label>
-                                                <input
-                                                    value={deliveryForm.packageDescription}
-                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
-                                                    placeholder="e.g. Confidential Project Dossier"
-                                                    style={{ fontSize: 12 }}
-                                                />
-                                            </div>
                                             <div className="field" style={{ margin: 0 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <label style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
                                                     {isPreDelivery && isCourierUnmapped && (
                                                         <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>Unmapped in STARS</span>
                                                     )}
+                                                    {deliveryForm.courierEmployeeId && !isCourierUnmapped && (() => {
+                                                        const courierId = deliveryForm.courierEmployeeId.trim().toLowerCase();
+                                                        const emp = eligibleEmployees.find(e =>
+                                                            e.accountId.toLowerCase() === courierId ||
+                                                            (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId)
+                                                        );
+                                                        const driverDisplay = formatDriverDisplayShared(
+                                                            (deliveryForm as any).courierFullName || emp?.employeeName,
+                                                            deliveryForm.courierEmployeeId,
+                                                            undefined,
+                                                            { layout: 'id-first' }
+                                                        );
+                                                        return (
+                                                            <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
+                                                                {driverDisplay.displayText}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <input
                                                     value={deliveryForm.courierEmployeeId}
                                                     onChange={e => {
                                                         const val = e.target.value;
-                                                        setDeliveryForm(prev => ({ ...prev, courierEmployeeId: val }));
                                                         const matched = eligibleEmployees.find(emp =>
                                                             emp.accountId.toLowerCase() === val.trim().toLowerCase() ||
                                                             (emp as any).employeeNumber?.toLowerCase() === val.trim().toLowerCase()
                                                         );
+                                                        setDeliveryForm(prev => {
+                                                            const next = { ...prev, courierEmployeeId: val };
+                                                            if (matched && !prev.courierFullName) {
+                                                                next.courierFullName = matched.employeeName;
+                                                            }
+                                                            return next;
+                                                        });
                                                         if (matched) {
                                                             setForm(prev => ({ ...prev, assignedTo: matched.accountId }));
                                                             setErrors(prev => ({ ...prev, assignedTo: '' }));
@@ -2257,6 +2312,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     }}
                                                     placeholder="e.g. DRV-001"
                                                     style={{ fontSize: 12 }}
+                                                    data-testid="pre-delivery-courier-id-input"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Courier Name (Optional)</label>
+                                                <input
+                                                    value={(deliveryForm as any).courierFullName || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, courierFullName: e.target.value }))}
+                                                    placeholder="e.g. Ricardo Bautista"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="pre-delivery-courier-name-input"
                                                 />
                                             </div>
                                         </div>
@@ -2351,7 +2417,7 @@ const ViewModal: React.FC<ViewModalProps> = ({ task, onEdit, onReopen, onStatusC
                     </div>
                     <div className="view-modal-meta-item">
                         <span className="view-modal-label">Status</span>
-                        <span className={statusBadgeClass(task.taskStatus)}>{task.taskStatus}</span>
+                        <StatusBadge status={task.taskStatus} />
                     </div>
                 </div>
 
@@ -2494,7 +2560,7 @@ const AdminOverrideModal: React.FC<AdminOverrideModalProps> = ({ task, onSubmit,
                 </div>
                 <div className="view-modal-meta-item">
                     <span className="view-modal-label">Current Status</span>
-                    <span className={statusBadgeClass(task.taskStatus)}>{task.taskStatus}</span>
+                    <StatusBadge status={task.taskStatus} />
                 </div>
                 <div className="view-modal-meta-item">
                     <span className="view-modal-label">Priority</span>
@@ -2506,7 +2572,7 @@ const AdminOverrideModal: React.FC<AdminOverrideModalProps> = ({ task, onSubmit,
                 <label>Requested Status *</label>
                 <select value={requestedStatus} onChange={e => setRequestedStatus(e.target.value)}
                     className={errors.requestedStatus ? 'report-input report-input-error' : 'report-input'}>
-                    {OVERRIDE_TARGETS.map(s => (<option key={s} value={s}>{s}</option>))}
+                    {OVERRIDE_TARGETS.map(s => (<option key={s} value={s}>{formatStatus(s)}</option>))}
                 </select>
                 {errors.requestedStatus && <span className="report-field-error">{errors.requestedStatus}</span>}
             </div>
@@ -3419,7 +3485,7 @@ const TasksTab: React.FC<{
                                             {t.taskTitle}
                                         </div>
                                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span className={statusBadgeClass(effectiveStatus)} style={{ fontSize: 10, padding: '1px 8px' }}>{effectiveStatus}</span>
+                                            <StatusBadge status={effectiveStatus} size="sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -5279,7 +5345,8 @@ export const ReportsTab: React.FC<{
     teamMembers: Array<{ accountId: string; employeeName: string; role?: string }>;
     onNavigateToTab?: (tab: NavTab) => void;
     onNavigateToConfig?: () => void;
-}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig }) => {
+    onViewTask?: (taskId: string) => void;
+}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
     const { success, error } = useToast();
     const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
@@ -5363,6 +5430,8 @@ export const ReportsTab: React.FC<{
             waybillNo: string;
             starsTaskId?: string;
             driverId?: string;
+            driverName?: string;
+            driverIsActive?: boolean;
             completedAt: string;
             slaTargetAt: string;
             isOnTime: boolean;
@@ -5397,11 +5466,28 @@ export const ReportsTab: React.FC<{
 
     const dmsDriverBreakdown = useMemo(() => {
         if (!dmsPerfData?.records) return [];
-        const driverMap: Record<string, { driverId: string; total: number; onTime: number; late: number }> = {};
+        const driverMap: Record<string, {
+            driverId: string;
+            driverName?: string;
+            driverIsActive?: boolean;
+            total: number;
+            onTime: number;
+            late: number;
+        }> = {};
         for (const r of dmsPerfData.records) {
             const dId = r.driverId || 'Unassigned / Field';
             if (!driverMap[dId]) {
-                driverMap[dId] = { driverId: dId, total: 0, onTime: 0, late: 0 };
+                driverMap[dId] = {
+                    driverId: dId,
+                    driverName: r.driverName,
+                    driverIsActive: r.driverIsActive,
+                    total: 0,
+                    onTime: 0,
+                    late: 0,
+                };
+            } else if (!driverMap[dId].driverName && r.driverName) {
+                driverMap[dId].driverName = r.driverName;
+                driverMap[dId].driverIsActive = r.driverIsActive;
             }
             driverMap[dId].total += 1;
             if (r.isOnTime) driverMap[dId].onTime += 1;
@@ -5416,6 +5502,9 @@ export const ReportsTab: React.FC<{
     const dmsFilteredRecords = useMemo(() => {
         if (!dmsPerfData?.records) return [];
         let list = dmsPerfData.records;
+        if (dmsDriverFilter) {
+            list = list.filter(r => r.driverId === dmsDriverFilter);
+        }
         if (dmsPerfSearch.trim()) {
             const q = dmsPerfSearch.toLowerCase().trim();
             const qClean = q.replace(/[\s-_]/g, '');
@@ -5423,17 +5512,19 @@ export const ReportsTab: React.FC<{
                 const wb = (r.waybillNo || '').toLowerCase();
                 const wbClean = wb.replace(/[\s-_]/g, '');
                 const driver = (r.driverId || '').toLowerCase();
+                const driverName = (r.driverName || '').toLowerCase();
                 const task = (r.starsTaskId || '').toLowerCase();
                 return (
                     wb.includes(q) ||
                     (qClean.length > 2 && wbClean.includes(qClean)) ||
                     driver.includes(q) ||
+                    driverName.includes(q) ||
                     task.includes(q)
                 );
             });
         }
         return list;
-    }, [dmsPerfData?.records, dmsPerfSearch]);
+    }, [dmsPerfData?.records, dmsDriverFilter, dmsPerfSearch]);
 
     const pagedDmsRecords = useMemo(() => {
         const start = (dmsPerfPage - 1) * REPORT_PAGE_SIZE;
@@ -5446,15 +5537,23 @@ export const ReportsTab: React.FC<{
             error('No DMS delivery performance records to export.');
             return;
         }
-        const headers = ['Waybill Number', 'Driver ID', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
-        const rows = dmsPerfData.records.map(r => [
-            `"${r.waybillNo || ''}"`,
-            `"${r.driverId || ''}"`,
-            `"${r.starsTaskId || ''}"`,
-            `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
-            `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
-            r.isOnTime ? 'On-Time (SLA Met)' : 'Late (SLA Missed)'
-        ]);
+        const headers = ['Waybill Number', 'Driver ID', 'Driver Name', 'Assigned Driver Label', 'STARS Task ID', 'Completed At', 'SLA Target At', 'SLA Status'];
+        const rows = dmsPerfData.records.map(r => {
+            const driverNameText = r.driverName
+                ? `${r.driverName}${r.driverIsActive === false ? ' [Inactive]' : ''}`
+                : (r.driverId || 'Unassigned');
+            const pairedLabel = formatDriverDisplayShared(r.driverName, r.driverId, r.driverIsActive, { layout: 'id-first' }).displayText;
+            return [
+                `"${r.waybillNo || ''}"`,
+                `"${r.driverId || ''}"`,
+                `"${driverNameText}"`,
+                `"${pairedLabel}"`,
+                `"${r.starsTaskId || ''}"`,
+                `"${r.completedAt ? new Date(r.completedAt).toLocaleString() : ''}"`,
+                `"${r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString() : ''}"`,
+                r.isOnTime ? 'On-Time (SLA Met)' : 'Late (SLA Missed)'
+            ];
+        });
         const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
         downloadBlob(
             csvContent,
@@ -6583,7 +6682,7 @@ export const ReportsTab: React.FC<{
                                         onChange={e => setTcFilter(p => ({ ...p, taskStatus: e.target.value }))}>
                                         <option value="">All Statuses</option>
                                         {TASK_STATUSES_FILTER.map(s => (
-                                            <option key={s} value={s}>{s}</option>
+                                            <option key={s} value={s}>{formatStatus(s)}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -6759,7 +6858,7 @@ export const ReportsTab: React.FC<{
                                                                     </span>
                                                                 </td>
                                                                 <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                                    <span className="report-pill teal">{task.status}</span>
+                                                                    <span className="report-pill teal">{formatStatus(task.status)}</span>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -7551,11 +7650,15 @@ export const ReportsTab: React.FC<{
                                         style={{ width: '100%', height: 34, fontSize: 12.5 }}
                                     >
                                         <option value="">All Drivers / Couriers</option>
-                                        {dmsDriverBreakdown.map(d => (
-                                            <option key={d.driverId} value={d.driverId}>
-                                                {d.driverId} ({d.total} deliveries • {d.onTimeRate}% on-time)
-                                            </option>
-                                        ))}
+                                        {dmsDriverBreakdown.map(d => {
+                                            const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                            const inactiveSuffix = driverInfo.isInactive ? ' [Inactive]' : '';
+                                            return (
+                                                <option key={d.driverId} value={d.driverId}>
+                                                    {driverInfo.displayText}{inactiveSuffix} ({d.total} deliveries • {d.onTimeRate}% on-time)
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                                 <div className="field" style={{ minWidth: 240 }}>
@@ -7567,7 +7670,7 @@ export const ReportsTab: React.FC<{
                                         <input
                                             type="text"
                                             className="report-input"
-                                            placeholder="Search Waybill, Driver, Task ID..."
+                                            placeholder="Search Waybill, Driver Name/ID, Task ID..."
                                             value={dmsPerfSearch}
                                             onChange={e => { setDmsPerfSearch(e.target.value); setDmsPerfPage(1); }}
                                             style={{ paddingLeft: 30, height: 34, fontSize: 12.5, width: '100%' }}
@@ -7683,11 +7786,15 @@ export const ReportsTab: React.FC<{
                                 <div className="report-chart-box">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
-                                            data={dmsDriverBreakdown.slice(0, 7).map(d => ({
-                                                name: d.driverId,
-                                                'On-Time': d.onTime,
-                                                'Late': d.late,
-                                            }))}
+                                            data={dmsDriverBreakdown.slice(0, 7).map(d => {
+                                                const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                                return {
+                                                    name: driverInfo.displayText.length > 18 ? driverInfo.displayText.substring(0, 16) + '..' : driverInfo.displayText,
+                                                    fullName: driverInfo.displayText,
+                                                    'On-Time': d.onTime,
+                                                    'Late': d.late,
+                                                };
+                                            })}
                                             margin={{ top: 10, right: 10, left: -15, bottom: 5 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -7711,16 +7818,28 @@ export const ReportsTab: React.FC<{
                                 <div>
                                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Courier / Driver SLA Compliance Breakdown</h4>
                                     <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Per-driver delivery completion rate, on-time SLA adherence, and performance ranking.
+                                        Per-driver delivery completion rate, on-time SLA adherence, and performance ranking. Click a driver row to filter records.
                                     </p>
                                 </div>
-                                <span className="report-pill blue">{dmsDriverBreakdown.length} Couriers</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {dmsDriverFilter && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-secondary"
+                                            onClick={() => { setDmsDriverFilter(''); setDmsPerfPage(1); }}
+                                            style={{ fontSize: 11, padding: '3px 8px', height: 26 }}
+                                        >
+                                            Clear Driver Filter
+                                        </button>
+                                    )}
+                                    <span className="report-pill blue">{dmsDriverBreakdown.length} Couriers</span>
+                                </div>
                             </div>
                             <div className="report-table-scroll-wrapper">
                                 <table className="table-card-data-table report-data-table" style={{ width: '100%', minWidth: 800 }}>
                                     <thead>
                                         <tr>
-                                            <th>Courier / Driver ID</th>
+                                            <th>Courier / Driver</th>
                                             <th style={{ textAlign: 'center' }}>Total Deliveries</th>
                                             <th style={{ textAlign: 'center' }}>On-Time (SLA Met)</th>
                                             <th style={{ textAlign: 'center' }}>Late (SLA Missed)</th>
@@ -7732,12 +7851,52 @@ export const ReportsTab: React.FC<{
                                         {dmsDriverBreakdown.map(d => {
                                             const isTop = d.onTimeRate >= 95;
                                             const isGood = d.onTimeRate >= 80 && d.onTimeRate < 95;
+                                            const driverInfo = formatDriverDisplay(d.driverName, d.driverId, d.driverIsActive);
+                                            const pairedInfo = formatDriverDisplayShared(d.driverName, d.driverId, d.driverIsActive, { layout: 'id-first' });
+                                            const isSelected = dmsDriverFilter === d.driverId;
                                             return (
-                                                <tr key={d.driverId} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                <tr
+                                                    key={d.driverId}
+                                                    tabIndex={0}
+                                                    role="button"
+                                                    aria-label={`Filter by driver ${driverInfo.displayText}`}
+                                                    onClick={() => {
+                                                        setDmsDriverFilter(prev => prev === d.driverId ? '' : d.driverId);
+                                                        setDmsPerfPage(1);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            setDmsDriverFilter(prev => prev === d.driverId ? '' : d.driverId);
+                                                            setDmsPerfPage(1);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        borderBottom: '1px solid var(--border)',
+                                                        cursor: 'pointer',
+                                                        backgroundColor: isSelected ? 'rgba(67, 24, 255, 0.08)' : undefined,
+                                                        outline: isSelected ? '1px solid #4318ff' : undefined,
+                                                        transition: 'background-color 0.15s ease',
+                                                    }}
+                                                    className={`dms-driver-row ${isSelected ? 'selected' : ''}`}
+                                                >
                                                     <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                            <Truck size={14} style={{ color: '#4318ff' }} />
-                                                            {d.driverId}
+                                                            <Truck size={14} style={{ color: isSelected ? '#00A99D' : '#4318ff', flexShrink: 0 }} />
+                                                            <span data-testid={`dms-driver-breakdown-${d.driverId}`}>
+                                                                <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                                <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                            </span>
+                                                            {driverInfo.isInactive && (
+                                                                <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
+                                                                    [Inactive]
+                                                                </span>
+                                                            )}
+                                                            {isSelected && (
+                                                                <span className="report-pill teal" style={{ fontSize: 10, padding: '1px 6px', fontWeight: 600, marginLeft: 4 }}>
+                                                                    Active Filter
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{d.total}</td>
@@ -7766,7 +7925,7 @@ export const ReportsTab: React.FC<{
                             <div>
                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>DMS Batch Delivery Completion Records</h4>
                                 <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    Live stream of delivery completion records exported from DMS with timestamps and SLA verdicts.
+                                    Live stream of delivery completion records exported from DMS with timestamps and SLA verdicts. Click a record to open task details.
                                 </p>
                             </div>
                             <span className="report-pill teal">{dmsFilteredRecords.length} Records</span>
@@ -7784,70 +7943,169 @@ export const ReportsTab: React.FC<{
                                                 <th>Completion Timestamp</th>
                                                 <th>SLA Target Timestamp</th>
                                                 <th style={{ textAlign: 'center' }}>SLA Result</th>
+                                                <th style={{ textAlign: 'right' }}>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {pagedDmsRecords.map(r => (
-                                                <tr key={r.waybillNo} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '8px 10px' }}>
-                                                        <span
-                                                            onClick={() => handleCopyWaybill(r.waybillNo)}
-                                                            title="Click to copy Waybill"
-                                                            style={{
-                                                                fontFamily: 'monospace',
-                                                                fontWeight: 700,
-                                                                fontSize: 12,
-                                                                color: '#4318ff',
-                                                                background: '#eff6ff',
-                                                                padding: '3px 8px',
-                                                                borderRadius: 4,
-                                                                cursor: 'pointer',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: 4
-                                                            }}
-                                                        >
-                                                            {dmsCopiedWb === r.waybillNo ? <Check size={11} style={{ color: 'var(--status-active)' }} /> : <Copy size={11} />}
-                                                            {r.waybillNo}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                        {r.driverId || '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                                                        {r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000' ? (
-                                                            <span style={{ background: '#f8fafc', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>
-                                                                #{r.starsTaskId.slice(0, 8)}…
+                                            {pagedDmsRecords.map(r => {
+                                                const hasTaskId = Boolean(r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000');
+                                                return (
+                                                    <tr
+                                                        key={r.waybillNo}
+                                                        tabIndex={hasTaskId ? 0 : undefined}
+                                                        role={hasTaskId ? 'button' : undefined}
+                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : undefined}
+                                                        onClick={() => {
+                                                            if (hasTaskId && onViewTask) {
+                                                                onViewTask(r.starsTaskId!);
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if ((e.key === 'Enter' || e.key === ' ') && hasTaskId && onViewTask) {
+                                                                e.preventDefault();
+                                                                onViewTask(r.starsTaskId!);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            borderBottom: '1px solid var(--border)',
+                                                            cursor: hasTaskId ? 'pointer' : 'default',
+                                                        }}
+                                                        className={`dms-completion-row ${hasTaskId ? 'clickable-row' : ''}`}
+                                                        data-testid={`dms-record-row-${r.waybillNo}`}
+                                                    >
+                                                        <td style={{ padding: '8px 10px' }}>
+                                                            <span
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleCopyWaybill(r.waybillNo);
+                                                                }}
+                                                                title="Click to copy Waybill"
+                                                                style={{
+                                                                    fontFamily: 'monospace',
+                                                                    fontWeight: 700,
+                                                                    fontSize: 12,
+                                                                    color: '#4318ff',
+                                                                    background: '#eff6ff',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: 4,
+                                                                    cursor: 'pointer',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 4
+                                                                }}
+                                                            >
+                                                                {dmsCopiedWb === r.waybillNo ? <Check size={11} style={{ color: 'var(--status-active)' }} /> : <Copy size={11} />}
+                                                                {r.waybillNo}
                                                             </span>
-                                                        ) : (
-                                                            '—'
-                                                        )}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                                        {r.completedAt ? new Date(r.completedAt).toLocaleString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                        }) : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                                        {r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                        }) : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                                        <span className={`report-pill ${r.isOnTime ? 'success' : 'danger'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                            {r.isOnTime ? <><CheckCircle2 size={11} /> On-Time (SLA Met)</> : <><AlertCircle size={11} /> Late (SLA Missed)</>}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                            {(() => {
+                                                                const driverInfo = formatDriverDisplay(r.driverName, r.driverId, r.driverIsActive);
+                                                                const pairedInfo = formatDriverDisplayShared(r.driverName, r.driverId, r.driverIsActive, { layout: 'id-first' });
+                                                                return (
+                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid={`dms-record-driver-${r.waybillNo}`}>
+                                                                        <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                                        <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                                        {driverInfo.isInactive && (
+                                                                            <span className="report-pill danger" style={{ fontSize: 10, padding: '1px 5px', fontWeight: 600 }} title="Driver account is inactive">
+                                                                                [Inactive]
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                                                            {hasTaskId ? (
+                                                                <a
+                                                                    href={`/OpAdmin_Dashboard?taskId=${r.starsTaskId}`}
+                                                                    className="dms-task-link"
+                                                                    data-testid={`dms-task-link-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            onViewTask?.(r.starsTaskId!);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        background: '#f8fafc',
+                                                                        padding: '2px 6px',
+                                                                        borderRadius: 4,
+                                                                        border: '1px solid var(--border)',
+                                                                        color: '#4318ff',
+                                                                        textDecoration: 'none',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                        fontWeight: 600,
+                                                                    }}
+                                                                    title="Open STARS Task Details (middle-click or right-click to open in new tab)"
+                                                                >
+                                                                    <span>#{r.starsTaskId!.slice(0, 8)}…</span>
+                                                                    <ExternalLink size={10} style={{ opacity: 0.7 }} />
+                                                                </a>
+                                                            ) : (
+                                                                '—'
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                                            {r.completedAt ? new Date(r.completedAt).toLocaleString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                            }) : '—'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                                            {r.slaTargetAt ? new Date(r.slaTargetAt).toLocaleString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                            }) : '—'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                            <span className={`report-pill ${r.isOnTime ? 'success' : 'danger'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                                {r.isOnTime ? <><CheckCircle2 size={11} /> On-Time (SLA Met)</> : <><AlertCircle size={11} /> Late (SLA Missed)</>}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                                                            {hasTaskId ? (
+                                                                <a
+                                                                    href={`/OpAdmin_Dashboard?taskId=${r.starsTaskId}`}
+                                                                    className="btn btn-sm btn-secondary"
+                                                                    data-testid={`dms-view-task-btn-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            onViewTask?.(r.starsTaskId!);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        fontSize: 11,
+                                                                        padding: '3px 8px',
+                                                                        height: 26,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                        textDecoration: 'none'
+                                                                    }}
+                                                                    title="Open Task Details"
+                                                                >
+                                                                    <span>View Task</span>
+                                                                    <ChevronRight size={12} />
+                                                                </a>
+                                                            ) : (
+                                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No Task</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -8909,7 +9167,7 @@ const ReopenApprovalModal: React.FC<ReopenApprovalModalProps> = ({ request, onAp
                 </div>
                 <div className="reopen-info-item">
                     <span className="reopen-info-label">Current Status</span>
-                    <span className={statusBadgeClass(request.currentStatus)} style={{ fontSize: 11 }}>{request.currentStatus}</span>
+                    <StatusBadge status={request.currentStatus} size="sm" />
                 </div>
                 <div className="reopen-info-item">
                     <span className="reopen-info-label">Submitted</span>
@@ -9109,13 +9367,13 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                     <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)', width: 130 }}>Similarity</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Existing Task</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Status</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Priority</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Deadline</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Assignee</th>
-                        <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-secondary)' }}>Description</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700, width: 130 }}>Similarity</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Existing Task</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Status</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Priority</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Deadline</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Assignee</th>
+                        <th style={{ padding: '8px 8px', fontWeight: 700 }}>Description</th>
                         <th style={{ padding: '8px 8px' }}></th>
                     </tr>
                 </thead>
@@ -9133,7 +9391,7 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
                                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{d.referenceNumber || (d.taskId.length > 8 ? d.taskId.slice(0, 8) + '…' : d.taskId)}</div>
                             </td>
                             <td style={{ padding: '10px 8px' }}>
-                                <span className={statusBadgeClass(d.status)} style={{ fontSize: 11 }}>{d.status}</span>
+                                <StatusBadge status={d.status} size="sm" />
                             </td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)' }}>{d.loading ? '…' : (d.priority || '—')}</td>
                             <td style={{ padding: '10px 8px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{d.loading ? '…' : formatDeadlineWithRemaining(d.deadline)}</td>
@@ -9159,14 +9417,23 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
     let isHistoricalDeadline = false;
     let originalExpectedDelivery = '';
 
-    if (order.expectedDelivery) {
+    if (order.expectedDelivery || (order as any).expectedDeliveryDate) {
         try {
-            const ed = new Date(order.expectedDelivery);
-            if (!isNaN(ed.getTime())) {
+            const raw = (order as any).expectedDeliveryDate || order.expectedDelivery;
+            const parsed = parseLocalDate(raw);
+            if (parsed && !isNaN(parsed.getTime())) {
                 const pad = (n: number) => String(n).padStart(2, '0');
-                originalExpectedDelivery = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                const isMidnightOrDateOnly = typeof raw === 'string' && (
+                    !raw.includes('T') ||
+                    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s]00:00(?::00(?:\.000)?)?(?:Z|[+-]00:?00)?)?$/.test(raw.trim())
+                );
+                if (isMidnightOrDateOnly) {
+                    originalExpectedDelivery = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T00:00`;
+                } else {
+                    originalExpectedDelivery = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+                }
                 const now = new Date();
-                if (ed.getTime() <= now.getTime()) {
+                if (parsed.getTime() <= now.getTime()) {
                     isHistoricalDeadline = true;
                     const adjusted = getAdjustedSlaDeadline(order.priority || 'Medium', now);
                     dmsDeadline = formatDateForInput(adjusted);
@@ -9193,6 +9460,7 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             senderAddress: order.senderAddress || 'STARS Operations Office',
             specialInstructions: order.specialInstructions || '',
             courierEmployeeId: order.driverEmployeeId || '',
+            courierFullName: (order as any).driverName || (order as any).courierFullName || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
@@ -9206,6 +9474,7 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
 
 export default function OpsAdminDashboard() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     usePreventBackNav();
 
     const employeeId = localStorage.getItem('employeeId') ?? '';
@@ -9542,7 +9811,7 @@ export default function OpsAdminDashboard() {
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     classification: t.classification ?? t.Classification ?? 0,
-                    priority: (PRIORITY_LABELS[t.priorityLevel] || t.priority || 'Medium') as Priority,
+                    priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
                     dueAt: deadlineStr,
                     taskStatus: STATUS_LABELS[statusNum] ?? t.taskStatus ?? '',
                     taskRemarks: t.progressNotes ?? t.taskRemarks ?? '',
@@ -9892,9 +10161,7 @@ export default function OpsAdminDashboard() {
                 } else {
                     statusStr = t.taskStatus || 'Assigned';
                 }
-                const priorityStr = typeof t.priorityLevel === 'number'
-                    ? (PRIORITY_LABELS[t.priorityLevel] || 'Medium')
-                    : (t.priority || 'Medium');
+                const priorityStr = normalizeCoordinatorPriority(t.priorityLevel ?? t.priority);
                 return {
                     taskId: t.id ?? t.taskId,
                     taskTitle: t.title ?? t.taskTitle ?? '',
@@ -10194,8 +10461,7 @@ export default function OpsAdminDashboard() {
 
             const assigneeId = data.assignedUserIds?.[0] || (data as any).assignedTo;
             const assigneeObj = teamMembers.find(m => m.accountId === assigneeId || (m as any).id === assigneeId || (m as any).employeeId === assigneeId);
-            const priorityLabels = ['Low', 'Medium', 'High', 'Urgent'];
-            const priorityStr = typeof data.priorityLevel === 'number' ? priorityLabels[data.priorityLevel] || 'Medium' : 'Medium';
+            const priorityStr = normalizeCoordinatorPriority(data.priorityLevel ?? (data as any).priority);
 
             setCreatedTaskSuccess({
                 taskId,
@@ -10264,7 +10530,7 @@ export default function OpsAdminDashboard() {
                 referenceNumber: dto.taskNumber ?? dto.taskReferenceNumber ?? dto.referenceNumber ?? '',
                 description: dto.description ?? '',
                 deadline: dto.deadline ?? null,
-                priority: (PRIORITY_LABELS[dto.priorityLevel] ?? dto.priority ?? '') as string,
+                priority: normalizeCoordinatorPriority(dto.priorityLevel ?? dto.priority),
                 assignee: dto.assignees?.length > 0 ? (dto.assignees[0].fullName ?? '') : '',
                 loading: false,
                 error: false,
@@ -10299,7 +10565,7 @@ export default function OpsAdminDashboard() {
             taskId: dto.id ?? '',
             taskTitle: dto.title ?? '',
             taskDescription: dto.description ?? '',
-            priority: PRIORITY_LABELS[dto.priorityLevel] ?? ((dto.priority as TaskViewTask['priority']) || 'Medium'),
+            priority: normalizeCoordinatorPriority(dto.priorityLevel ?? dto.priority),
             dueAt: dto.deadline ?? null,
             taskStatus,
             taskRemarks: dto.progressNotes ?? '',
@@ -10341,26 +10607,48 @@ export default function OpsAdminDashboard() {
         }
     };
 
-    // -- Open a task in coordinator TaskView by ID --
-    const openCoordinatorTaskById = async (taskId: string) => {
-        if (!taskId) return;
-        setActiveTab('tasks');
-        setTaskSubTab('list');
-        const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-        if (found) {
-            setDetailTask(found as any);
-            return;
-        }
+    // -- Open a task in coordinator TaskView by ID with RBAC Enforcement --
+    const handleOpenTaskById = useCallback(async (taskId: string) => {
+        if (!taskId || taskId === '00000000-0000-0000-0000-000000000000') return;
         try {
+            const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+            if (found) {
+                setActiveTab('tasks');
+                setTaskSubTab('list');
+                setDetailTask(found as any);
+                return;
+            }
             const res = await api.get(`/api/Task/${taskId}`);
             const data = res.data?.data ?? res.data;
             if (data) {
+                setActiveTab('tasks');
+                setTaskSubTab('list');
                 setDetailTask(mapTaskDetailToTaskView(data));
+            } else {
+                error('Task not found.');
             }
-        } catch (err) {
-            console.error('Failed to load task details for notification:', err);
+        } catch (err: any) {
+            const status = err?.response?.status;
+            if (status === 403 || status === 401) {
+                const message = err?.response?.data?.message || 'Access Denied: You do not have permission to view this task.';
+                error(message);
+            } else if (status === 404) {
+                error('Task not found.');
+            } else {
+                error(err?.response?.data?.message || err?.message || 'Failed to load task details.');
+            }
         }
-    };
+    }, [tasks, allTasks, error]);
+
+    const openCoordinatorTaskById = handleOpenTaskById;
+
+    // -- URL Deep-Linking: open task if ?taskId=... query param is present on mount --
+    useEffect(() => {
+        const taskIdParam = searchParams.get('taskId');
+        if (taskIdParam) {
+            handleOpenTaskById(taskIdParam);
+        }
+    }, [searchParams, handleOpenTaskById]);
 
     // -- Update Task --
     const handleEditTask = async (taskId: string, data: UpdateTaskDTO) => {
@@ -10842,7 +11130,13 @@ export default function OpsAdminDashboard() {
                 )}
                 {activeTab === 'templates' && <TemplateTab teamMembers={teamMembers} />}
                 {activeTab === 'approvals' && <ApprovalsWrapper />}
-                {activeTab === 'reports' && <ReportsTab teamMembers={teamMembers} onNavigateToTab={handleNavChange} />}
+                {activeTab === 'reports' && (
+                    <ReportsTab
+                        teamMembers={teamMembers}
+                        onNavigateToTab={handleNavChange}
+                        onViewTask={handleOpenTaskById}
+                    />
+                )}
                 {activeTab === 'profile' && <ProfileTab />}
                 {activeTab === 'reopen' && (
                     <ReopenTab
@@ -10998,13 +11292,7 @@ export default function OpsAdminDashboard() {
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tasks}
-                            onViewTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                }
-                            }}
+                            onViewTask={handleOpenTaskById}
                         />
                     </div>
                 )}
@@ -11014,13 +11302,7 @@ export default function OpsAdminDashboard() {
                         <PreDeliveryTab
                             tasks={tasks}
                             onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
-                            onViewTask={(taskId) => {
-                                const found = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
-                                if (found) {
-                                    setActiveTab('tasks');
-                                    setDetailTask(found as any);
-                                }
-                            }}
+                            onViewTask={handleOpenTaskById}
                         />
                     </div>
                 )}

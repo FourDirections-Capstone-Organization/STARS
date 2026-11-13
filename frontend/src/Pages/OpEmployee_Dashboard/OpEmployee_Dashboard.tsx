@@ -86,11 +86,11 @@ const getAccountIdFromToken = (): string => {
 
 // --- Types --------------------------------------------------------------------
 
-type Priority = 'high' | 'medium' | 'low';
+export type Priority = 'urgent' | 'high' | 'medium' | 'low';
 type TaskStatus = 'pending' | 'assigned' | 'in-progress' | 'pending-review' | 'done' | 'completed' | 'on-hold' | 'overdue' | 'cancelled';
 type NavTab = 'dashboard' | 'my-tasks' | 'task-progress-review' | 'scorecard' | 'profile' | 'activity_logs' | 'announcements' | 'notifications';
 
-interface Task {
+export interface Task {
     id: string;
     name: string;
     description: string;
@@ -112,7 +112,7 @@ interface Task {
     isApproved?: boolean;
 }
 
-interface TaskResponseDTO {
+export interface TaskResponseDTO {
     id?: string;
     taskId?: string;
     title?: string;
@@ -121,7 +121,7 @@ interface TaskResponseDTO {
     taskDescription?: string;
     classification?: number;
     taskCategory?: string;
-    priorityLevel?: number;
+    priorityLevel?: number | string;
     priority?: string;
     deadline?: string;
     dueAt?: string;
@@ -183,23 +183,38 @@ const normalizeStatusString = (rawStatus: any): string => {
     return 'Assigned';
 };
 
-const dtoToTask = (dto: TaskResponseDTO): Task => {
+export const normalizeEmployeePriority = (priorityLevel: any, priority?: any): Priority => {
+    const raw = (priorityLevel !== undefined && priorityLevel !== null && priorityLevel !== '')
+        ? priorityLevel
+        : priority;
+
+    if (raw !== undefined && raw !== null) {
+        if (typeof raw === 'number') {
+            const labels: Record<number, Priority> = { 0: 'low', 1: 'medium', 2: 'high', 3: 'urgent' };
+            if (raw in labels) return labels[raw];
+        }
+        if (typeof raw === 'string' && raw.trim()) {
+            const s = raw.trim().toLowerCase();
+            if (s === 'low') return 'low';
+            if (s === 'medium') return 'medium';
+            if (s === 'high') return 'high';
+            if (s === 'urgent') return 'urgent';
+        }
+    }
+    return 'medium';
+};
+
+export const dtoToTask = (dto: TaskResponseDTO): Task => {
     const taskId = dto.id ?? dto.taskId ?? '';
     const title = dto.title ?? dto.taskTitle ?? '';
     const description = dto.description ?? dto.taskDescription ?? '';
-    const priorityStr = typeof dto.priorityLevel === 'number'
-        ? (PRIORITY_LABELS[dto.priorityLevel] ?? 'Medium')
-        : (dto.priority || 'Medium');
+    const priority = normalizeEmployeePriority(dto.priorityLevel, dto.priority);
     const dueAt = dto.deadline ?? dto.dueAt ?? '';
     const rawStatus = dto.status !== undefined ? dto.status : dto.taskStatus;
     const statusStr = normalizeStatusString(rawStatus);
     const assignedEmployee = dto.assignees?.length ? dto.assignees[0].fullName ?? '' : (dto.assignedEmployee ?? '');
     const createdByEmployee = dto.createdByName ?? dto.createdByEmployee ?? '';
 
-    const priorityMap: Record<string, Priority> = {
-        High: 'high', Medium: 'medium', Low: 'low', Urgent: 'high',
-        high: 'high', medium: 'medium', low: 'low', urgent: 'high',
-    };
     const statusMap: Record<string, TaskStatus> = {
         Draft: 'pending', Pending: 'pending', Assigned: 'assigned',
         'In Progress': 'in-progress', 'Pending Admin Review': 'pending-review',
@@ -215,7 +230,7 @@ const dtoToTask = (dto: TaskResponseDTO): Task => {
         name: title,
         description: description,
         deadline: dueAt ? dueAt.split('T')[0] : '',
-        priority: priorityMap[priorityStr] ?? 'medium',
+        priority,
         status,
         // Use the employee's own reported completion percentage when the
         // backend provides it; fall back to the status-derived default.
@@ -322,7 +337,7 @@ const statusMeta: Record<string, { label: string; cls: string; icon: React.React
     assigned: { label: 'Assigned', cls: 'badge-purple', icon: <Clock size={11} /> },
     'in-progress': { label: 'In Progress', cls: 'badge-amber', icon: <Loader2 size={11} /> },
     'pending-review': { label: 'Pending Review', cls: 'badge-purple', icon: <Eye size={11} /> },
-    done: { label: 'Done', cls: 'badge-blue', icon: <CheckCircle2 size={11} /> },
+    done: { label: 'Pending Review', cls: 'badge-purple', icon: <CheckCircle2 size={11} /> },
     completed: { label: 'Completed', cls: 'badge-green', icon: <CheckCircle2 size={11} /> },
     'on-hold': { label: 'On Hold', cls: 'badge-gray', icon: <PauseCircle size={11} /> },
     overdue: { label: 'Overdue', cls: 'badge-red', icon: <AlertCircle size={11} /> },
@@ -339,7 +354,8 @@ const FSM_EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
     cancelled: [],
 };
 
-const priorityMeta: Record<Priority, { cls: string; bar: string }> = {
+export const priorityMeta: Record<Priority, { cls: string; bar: string }> = {
+    urgent: { cls: 'prio-urgent', bar: 'bar-red' },
     high: { cls: 'prio-high', bar: 'bar-red' },
     medium: { cls: 'prio-medium', bar: 'bar-amber' },
     low: { cls: 'prio-low', bar: 'bar-green' },
@@ -936,9 +952,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ tasks, user, onView, onUpda
     const safeProgressPage = Math.min(progressPage, progressTotalPages);
     const progressItems = progressFiltered.slice((safeProgressPage - 1) * PROGRESS_PAGE_SIZE, safeProgressPage * PROGRESS_PAGE_SIZE);
 
-    // High Priority - not completed, cancelled, or on hold, searchable + status filter, paginated.
+    // High & Urgent Priority - not completed, cancelled, or on hold, searchable + status filter, paginated.
     const urgentFiltered = tasks
-        .filter(t => t.priority === 'high' && t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'on-hold')
+        .filter(t => (t.priority === 'urgent' || t.priority === 'high') && t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'on-hold')
         .filter(t => !urgentSearch || t.name.toLowerCase().includes(urgentSearch.toLowerCase()))
         .filter(t => !urgentStatus || effectiveStatus(t) === urgentStatus);
     const urgentTotalPages = Math.max(1, Math.ceil(urgentFiltered.length / URGENT_PAGE_SIZE));
@@ -1484,6 +1500,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                     }}
                 >
                     <option value="all">All Urgency</option>
+                    <option value="urgent">Urgent</option>
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
@@ -1503,7 +1520,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                     <option value="on-hold">On Hold</option>
                     <option value="completed">Completed</option>
                     <option value="overdue">Overdue</option>
-                    <option value="cancelled">Bin</option>
+                    <option value="cancelled">Cancelled</option>
                 </select>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{filtered.length} task{filtered.length === 1 ? '' : 's'}</span>
             </div>
@@ -1515,7 +1532,7 @@ const MyTasksTab: React.FC<MyTasksTabProps> = ({ tasks, loading, error, onView, 
                         <p>
                             {filter === 'on-hold' ? 'No tasks on hold' :
                              filter === 'completed' ? 'No completed tasks' :
-                             filter === 'cancelled' ? 'Bin is empty' :
+                             filter === 'cancelled' ? 'No cancelled tasks' :
                              'No tasks match your filters'}
                         </p>
                     </div>

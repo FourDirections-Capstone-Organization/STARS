@@ -28,6 +28,7 @@ import {
     Eye,
     EyeOff,
     Clock,
+    Calendar,
     Filter,
     Copy,
     LogOut,
@@ -72,7 +73,7 @@ import DataTable, { ActionsDropdown } from '../../components/ui/DataTable';
 import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
-import { ReportsTab, TeamTab, TeamMember } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
+import { ReportsTab, TeamTab, TeamMember, normalizeCoordinatorPriority } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import { EvaluationTemplateTab, PerformanceReviewTab } from '../OpAdmin_Dashboard/PerformanceEvaluation';
 import { KpiConfigurationTab } from '../OpAdmin_Dashboard/KpiConfiguration';
 import TaskManager from '../../components/TaskManager/TaskManager';
@@ -88,6 +89,8 @@ import BiomarkerDashboard from '../EmergingTechAI/BiomarkerDashboard';
 import AIAssignmentView from '../EmergingTechAI/AIAssignmentView';
 import { AI_ANALYTICS_ENABLED } from '../../config/features';
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
+import { formatDateOnly, parseLocalDate } from '../../utils/dateUtils';
+import { formatDriverDisplay } from '../../utils/driverUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1295,8 +1298,8 @@ function AddEmployeeModal({ onClose, onSuccess }: AddEmployeeModalProps) {
                             onClick={handleConfirmRegister}
                             disabled={gateLoading || !gatePassword}
                             style={{
-                                background: 'var(--teal, #008B8B)',
-                                borderColor: 'var(--teal, #008B8B)',
+                                background: 'var(--teal, #00A99D)',
+                                borderColor: 'var(--teal, #00A99D)',
                                 color: '#ffffff',
                                 cursor: (gateLoading || !gatePassword) ? 'not-allowed' : 'pointer',
                                 opacity: (gateLoading || !gatePassword) ? 0.6 : 1,
@@ -2212,7 +2215,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
         Unknown: '#94A3B8',
     };
 
-    const BAR_COLORS = ['#008B8B', '#0284C7', '#4F46E5', '#D97706', '#DC2626', '#FF7B42', '#8B5CF6'];
+    const BAR_COLORS = ['#00A99D', '#0284C7', '#4F46E5', '#D97706', '#DC2626', '#FF7B42', '#8B5CF6'];
 
     const avgWorkloadByRole = Object.entries(
         employees.reduce<Record<string, { count: number; tasks: number }>>((acc, emp) => {
@@ -2301,8 +2304,8 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                             justifyContent: 'space-between',
                             padding: '9px 16px',
                             marginBottom: 16,
-                            background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 139, 139, 0.07) 100%)',
-                            border: '1px solid rgba(0, 139, 139, 0.22)',
+                            background: 'linear-gradient(135deg, rgba(27, 37, 75, 0.03) 0%, rgba(0, 169, 157, 0.07) 100%)',
+                            border: '1px solid rgba(0, 169, 157, 0.22)',
                             borderRadius: 10,
                             fontSize: 12,
                             flexWrap: 'wrap',
@@ -2310,7 +2313,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                         }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #008B8B)' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--teal, #00A99D)' }}>
                                 <Activity size={14} /> FOMS Real-Time Stream
                             </span>
                             <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -2325,7 +2328,7 @@ function DashboardTab({ employees, recentEmployees, activityLogs, loading, onSel
                                 style={{
                                     background: 'transparent',
                                     border: 'none',
-                                    color: 'var(--teal, #008B8B)',
+                                    color: 'var(--teal, #00A99D)',
                                     fontWeight: 600,
                                     cursor: 'pointer',
                                     fontSize: 12,
@@ -3718,6 +3721,7 @@ export default function Dashboard() {
         senderAddress: string;
         packageDescription: string;
         courierEmployeeId: string;
+        courierFullName?: string;
         specialInstructions: string;
         dmsOrderId?: number;
         dmsWaybillNo?: string;
@@ -3729,6 +3733,7 @@ export default function Dashboard() {
         senderAddress: '',
         packageDescription: '',
         courierEmployeeId: '',
+        courierFullName: '',
         specialInstructions: '',
         dmsOrderId: undefined,
         dmsWaybillNo: undefined,
@@ -3845,7 +3850,7 @@ export default function Dashboard() {
             taskId: t.id ?? t.taskId ?? '',
             taskTitle: t.title ?? t.taskTitle ?? t.name ?? '',
             taskDescription: t.description ?? t.taskDescription ?? '',
-            priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) ?? 'Medium',
+            priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
             dueAt: t.deadline ?? t.dueAt ?? t.dueDate ?? null,
             taskStatus: mappedStatus,
             taskRemarks: t.remarks ?? t.taskRemarks ?? '',
@@ -3932,7 +3937,7 @@ export default function Dashboard() {
                     project: t.taskCategory ?? (t.classification === 1 ? 'SpecialTask' : ''),
                     assignee: firstAssignee,
                     assignees: rawAssignees,
-                    priority: (typeof t.priorityLevel === 'number' ? ({ 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' } as Record<number, any>)[t.priorityLevel] : t.priority) || 'Medium',
+                    priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
                     status: statusVal,
                     dueDate: t.deadline ?? t.dueAt ?? undefined,
                     progress: statusVal === 'Done' ? 100 : statusVal === 'In progress' ? 50 : statusVal === 'In review' ? 80 : statusVal === 'To do' ? 10 : 0,
@@ -4279,6 +4284,7 @@ export default function Dashboard() {
                 senderAddress: '',
                 packageDescription: '',
                 courierEmployeeId: '',
+                courierFullName: '',
                 specialInstructions: '',
                 dmsOrderId: undefined,
                 dmsWaybillNo: undefined,
@@ -4293,29 +4299,40 @@ export default function Dashboard() {
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
         let dmsDeadline = '';
-        if (order.expectedDelivery) {
+        if (order.expectedDelivery || (order as any).expectedDeliveryDate) {
             try {
-                const ed = new Date(order.expectedDelivery);
-                if (!isNaN(ed.getTime())) {
+                const raw = (order as any).expectedDeliveryDate || order.expectedDelivery;
+                const parsed = parseLocalDate(raw);
+                if (parsed && !isNaN(parsed.getTime())) {
                     const pad = (n: number) => String(n).padStart(2, '0');
                     const now = new Date();
-                    if (ed.getTime() <= now.getTime()) {
+                    if (parsed.getTime() <= now.getTime()) {
                         const prio = (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium');
                         const hours = prio === 'Urgent' ? 24 : prio === 'High' ? 48 : prio === 'Medium' ? 72 : 168;
                         const adjusted = new Date(now.getTime() + hours * 60 * 60 * 1000);
                         dmsDeadline = `${adjusted.getFullYear()}-${pad(adjusted.getMonth() + 1)}-${pad(adjusted.getDate())}T${pad(adjusted.getHours())}:${pad(adjusted.getMinutes())}`;
                     } else {
-                        dmsDeadline = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}T${pad(ed.getHours())}:${pad(ed.getMinutes())}`;
+                        dmsDeadline = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T00:00`;
                     }
                 }
             } catch { }
         }
+        const courierIdVal = (order.driverEmployeeId || '').trim();
+        const matchedCourierEmp = courierIdVal
+            ? employees.find(e =>
+                (e.employeeNumber && e.employeeNumber.toLowerCase() === courierIdVal.toLowerCase()) ||
+                (e.id && e.id.toLowerCase() === courierIdVal.toLowerCase())
+            )
+            : undefined;
+        const resolvedCourierName = (order as any).driverName || (order as any).courierFullName || matchedCourierEmp?.employeeName || '';
+
         setNewTaskForm(prev => ({
             ...prev,
             title: `[Pre-Delivery] Delivery to ${order.recipientName} - Waybill ${order.waybillNo}`,
             description: `Pre-delivery operational validation for DMS Waybill ${order.waybillNo}.\nRecipient: ${order.recipientName} (${order.recipientContact})\nAddress: ${order.recipientAddress}, ${order.area}\nPackage: ${order.packageDescription}\nSpecial Instructions: ${order.specialInstructions || 'N/A'}`,
             priority: (['Urgent', 'High', 'Medium', 'Low'].includes(order.priority) ? order.priority : 'Medium'),
             deadline: dmsDeadline,
+            assignedTo: prev.assignedTo || matchedCourierEmp?.id || '',
         }));
         setNewDeliveryForm({
             recipientName: order.recipientName,
@@ -4324,7 +4341,8 @@ export default function Dashboard() {
             area: order.area || '',
             senderAddress: order.senderAddress || 'STARS Operations Office',
             packageDescription: order.packageDescription || '',
-            courierEmployeeId: order.driverEmployeeId || '',
+            courierEmployeeId: courierIdVal,
+            courierFullName: resolvedCourierName,
             specialInstructions: order.specialInstructions || '',
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
@@ -4458,6 +4476,7 @@ export default function Dashboard() {
                         packageDescription: newDeliveryForm.packageDescription?.trim() || t,
                         specialInstructions: newDeliveryForm.specialInstructions?.trim() || null,
                         courierEmployeeId: newDeliveryForm.courierEmployeeId?.trim() || null,
+                        courierFullName: (newDeliveryForm as any).courierFullName?.trim() || null,
                         dmsOrderId: (newDeliveryForm as any).dmsOrderId,
                         dmsWaybillNo: (newDeliveryForm as any).dmsWaybillNo || null,
                         dmsStatus: (newDeliveryForm as any).dmsStatus || null,
@@ -4519,6 +4538,7 @@ export default function Dashboard() {
                 senderAddress: '',
                 packageDescription: '',
                 courierEmployeeId: '',
+                courierFullName: '',
                 specialInstructions: '',
             });
             fetchManagerTasks();
@@ -5789,6 +5809,17 @@ export default function Dashboard() {
                                                 max={newEnableDelivery ? undefined : range.max}
                                                 style={(newTaskForm.priority === 'Urgent' || newEnableDelivery) ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8, marginTop: 4 } : { marginTop: 4 }}
                                             />
+                                            {newEnableDelivery && newTaskForm.deadline && (
+                                                <div>
+                                                    <span style={{ fontSize: 11, color: '#0369a1', marginTop: 3, display: 'block' }}>
+                                                        Deadline is synchronized and pre-set from DMS.
+                                                    </span>
+                                                    <div className="dms-deadline-dateonly-display" data-testid="dms-dateonly-display" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
+                                                        <Calendar size={13} />
+                                                        <span>DMS Delivery Deadline: {formatDateOnly(newTaskForm.deadline)}</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                             {quickPicks.length > 0 && newTaskForm.priority !== 'Urgent' && !newEnableDelivery && (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: 10, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>Quick Pick:</span>
@@ -6189,25 +6220,70 @@ export default function Dashboard() {
                                         <span style={{ fontSize: 10, color: '#ee5d50', marginTop: 2, display: 'block' }}>{newTaskErrors.deliveryAddress}</span>
                                     )}
                                 </div>
+                                <div className="fm-field" style={{ margin: 0 }}>
+                                    <label className="fm-label" style={{ fontSize: 11 }}>Package Description</label>
+                                    <input
+                                        className="fm-input"
+                                        value={newDeliveryForm.packageDescription}
+                                        onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
+                                        placeholder="e.g. Confidential Project Dossier"
+                                        style={{ fontSize: 12 }}
+                                    />
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                                     <div className="fm-field" style={{ margin: 0 }}>
-                                        <label className="fm-label" style={{ fontSize: 11 }}>Package Description</label>
-                                        <input
-                                            className="fm-input"
-                                            value={newDeliveryForm.packageDescription}
-                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageDescription: e.target.value }))}
-                                            placeholder="e.g. Confidential Project Dossier"
-                                            style={{ fontSize: 12 }}
-                                        />
-                                    </div>
-                                    <div className="fm-field" style={{ margin: 0 }}>
-                                        <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <label className="fm-label" style={{ fontSize: 11 }}>Courier Employee ID (Optional)</label>
+                                            {newDeliveryForm.courierEmployeeId && (() => {
+                                                const courierId = newDeliveryForm.courierEmployeeId.trim().toLowerCase();
+                                                const emp = employees.find(e =>
+                                                    (e.employeeNumber && e.employeeNumber.toLowerCase() === courierId) ||
+                                                    (e.id && e.id.toLowerCase() === courierId)
+                                                );
+                                                const driverName = (newDeliveryForm as any).courierFullName || emp?.employeeName;
+                                                const driverDisplay = formatDriverDisplay(driverName, newDeliveryForm.courierEmployeeId, undefined, { layout: 'id-first' });
+                                                return (
+                                                    <span style={{ fontSize: 10, color: '#0369a1', fontWeight: 600 }} data-testid="dms-paired-driver-label">
+                                                        {driverDisplay.displayText}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
                                         <input
                                             className="fm-input"
                                             value={newDeliveryForm.courierEmployeeId}
-                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, courierEmployeeId: e.target.value }))}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                const matched = employees.find(emp =>
+                                                    (emp.employeeNumber && emp.employeeNumber.toLowerCase() === val.trim().toLowerCase()) ||
+                                                    (emp.id && emp.id.toLowerCase() === val.trim().toLowerCase())
+                                                );
+                                                setNewDeliveryForm(prev => {
+                                                    const next = { ...prev, courierEmployeeId: val };
+                                                    if (matched && !prev.courierFullName) {
+                                                        next.courierFullName = matched.employeeName;
+                                                    }
+                                                    return next;
+                                                });
+                                                if (matched) {
+                                                    setNewTaskForm(prev => ({ ...prev, assignedTo: matched.id }));
+                                                    setNewTaskErrors(prev => ({ ...prev, assignedTo: '' }));
+                                                }
+                                            }}
                                             placeholder="e.g. DRV-001"
                                             style={{ fontSize: 12 }}
+                                            data-testid="pre-delivery-courier-id-input"
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Courier Name (Optional)</label>
+                                        <input
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).courierFullName || ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, courierFullName: e.target.value }))}
+                                            placeholder="e.g. Ricardo Bautista"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="pre-delivery-courier-name-input"
                                         />
                                     </div>
                                 </div>

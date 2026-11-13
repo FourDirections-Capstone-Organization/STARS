@@ -17,11 +17,11 @@
     line-height: 1.5;
 
     /* Speedex OneUI Brand Tokens */
-    --teal: #008B8B;
-    --teal-hover: #007676;
-    --teal-dark: #006060;
-    --teal-bg: rgba(0, 139, 139, 0.08);
-    --teal-ring: rgba(0, 139, 139, 0.22);
+    --teal: #00A99D;
+    --teal-hover: #009189;
+    --teal-dark: #007A72;
+    --teal-bg: rgba(0, 169, 157, 0.08);
+    --teal-ring: rgba(0, 169, 157, 0.22);
     --navy: #1A2238;
     --navy-hover: #293652;
     --sidebar-bg: #0B1437;
@@ -108,10 +108,10 @@
     --chart-teal-200: #99EAE0;
     --chart-teal-300: #66E0D1;
     --chart-teal-400: #33D5C2;
-    --chart-teal-500: #008B8B;
-    /* Primary Action Cyan */
-    --chart-teal-600: #007676;
-    --chart-teal-700: #006060;
+    --chart-teal-500: #00A99D;
+    /* Primary Action Teal */
+    --chart-teal-600: #009189;
+    --chart-teal-700: #007A72;
     --chart-teal-800: #004D4D;
     --chart-teal-900: #003838;
 
@@ -140,6 +140,23 @@
     --radius-lg: var(--r-lg);
     --radius-xl: 20px;
     --radius-full: var(--r-full);
+
+    /* ── Button Radius Tokens ── */
+    --btn-radius: 8px;
+    --radius-btn: 8px;
+    --r-btn: 8px;
+
+    /* ── Table Header Tokens ── */
+    --th-color: #64748B;
+    --th-bg: var(--s1, #F7F9FF);
+    --th-font-size: 0.75rem;
+    --th-font-weight: 700;
+    --th-letter-spacing: 0.05em;
+    --th-text-transform: uppercase;
+    --table-header-color: var(--th-color);
+    --table-header-bg: var(--th-bg);
+    --table-th-color: var(--th-color);
+    --table-th-bg: var(--th-bg);
 
     /* backward-compatible aliases for --text-* tokens (used throughout but never defined) */
     --text-primary: var(--tp, #0F172A);
@@ -182,10 +199,10 @@
     /* ── Backward-compatible aliases (migrated from index.css) ── */
     --primary-dark: var(--navy, #1A2238);
     --primary-dark-hover: var(--navy-hover, #293652);
-    --primary-hover: var(--teal-hover, #007676);
-    --primary: var(--teal, #008B8B);
-    --action-btn: #008B8B;
-    --action-btn-hover: #007676;
+    --primary-hover: var(--teal-hover, #009189);
+    --primary: var(--teal, #00A99D);
+    --action-btn: #00A99D;
+    --action-btn-hover: #009189;
     --text-white: #FFFFFF;
     --bg-main: var(--s2, #F0F4FF);
     --bg-card: var(--s0, #FFFFFF);
@@ -196,7 +213,7 @@
     --card-padding: 22px;
     --gap: 20px;
     --sidebar-bg-hover: rgba(255, 255, 255, 0.05);
-    --sidebar-active-accent: var(--teal, #008B8B);
+    --sidebar-active-accent: var(--teal, #00A99D);
     --sidebar-text: #A3AED0;
     --sidebar-text-active: #FFFFFF;
 
@@ -221,14 +238,22 @@
     color-scheme: dark;
 
     /* Brand */
-    --teal: #00A3A3;
-    --teal-hover: #008B8B;
-    --teal-dark: #007373;
-    --teal-bg: rgba(0, 139, 139, 0.16);
-    --teal-ring: rgba(0, 139, 139, 0.35);
+    --teal: #00A99D;
+    --teal-hover: #009189;
+    --teal-dark: #007A72;
+    --teal-bg: rgba(0, 169, 157, 0.16);
+    --teal-ring: rgba(0, 169, 157, 0.35);
     --navy: #1A2238;
     --navy-hover: #293652;
     --sidebar-bg: #060D22;
+
+    /* ── Table Header Tokens (dark) ── */
+    --th-color: #94A3B8;
+    --th-bg: var(--s1, #1E293B);
+    --table-header-color: var(--th-color);
+    --table-header-bg: var(--th-bg);
+    --table-th-color: var(--th-color);
+    --table-th-bg: var(--th-bg);
 
     /* Surfaces (dark elevation scale) */
     --s0: #0F172A;
@@ -387,7 +412,7 @@
   textarea:focus-visible,
   [tabindex]:focus-visible,
   summary:focus-visible {
-    outline: 2px solid var(--teal, #008B8B);
+    outline: 2px solid var(--teal, #00A99D);
     outline-offset: 2px;
     border-radius: var(--r-xs, 4px);
   }
@@ -484,6 +509,34 @@
     align-items: center;
   }
 
+  /* ── Shared Table Header Styles ── */
+  th,
+  .table th,
+  .table-header,
+  .table-th,
+  .data-table th,
+  .th {
+    color: var(--th-color, #64748B);
+    background: var(--th-bg, #F7F9FF);
+    font-size: var(--th-font-size, 0.75rem);
+    font-weight: var(--th-font-weight, 700);
+    letter-spacing: var(--th-letter-spacing, 0.05em);
+    text-transform: var(--th-text-transform, uppercase);
+  }
+
+  /* ── Standardized Form & Modal Button Radius ── */
+  .modal-btn,
+  .modal-actions button,
+  .modal-actions .btn,
+  .fm-btn,
+  .cm-btn,
+  .dt-dialog-actions button,
+  .dt-dialog-actions .btn,
+  .tv-modal-actions button,
+  .tv-modal-actions .tv-btn {
+    border-radius: var(--btn-radius, 8px);
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;
@@ -491,7 +544,7 @@
     gap: 7px;
     height: 38px;
     padding: 0 18px;
-    border-radius: var(--r-sm, 8px);
+    border-radius: var(--btn-radius, var(--r-sm, 8px));
     font-family: var(--fb, 'Inter', sans-serif);
     font-weight: 600;
     font-size: 13px;
@@ -517,15 +570,15 @@
     width: 100%;
   }
 
-  /* 1. Primary (Action Buttons - Dark Cyan #008B8B) */
+  /* 1. Primary (Action Buttons - Teal #00A99D) */
   .btn-primary,
   .btn--primary,
   .btn-teal,
   .btn-action,
   .action-button {
-    background: var(--teal, #008B8B);
+    background: var(--teal, #00A99D);
     color: #fff;
-    border-color: var(--teal, #008B8B);
+    border-color: var(--teal, #00A99D);
   }
 
   .btn-primary:hover:not(:disabled),
@@ -533,9 +586,9 @@
   .btn-teal:hover:not(:disabled),
   .btn-action:hover:not(:disabled),
   .action-button:hover:not(:disabled) {
-    background: var(--teal-hover, #007676);
-    border-color: var(--teal-hover, #007676);
-    box-shadow: 0 4px 12px rgba(0, 139, 139, .25);
+    background: var(--teal-hover, #009189);
+    border-color: var(--teal-hover, #009189);
+    box-shadow: 0 4px 12px rgba(0, 169, 157, .25);
     transform: translateY(-1px);
   }
 
@@ -568,8 +621,8 @@
   .btn-secondary:hover:not(:disabled),
   .btn--secondary:hover:not(:disabled) {
     background: var(--s1, #F7F9FF);
-    border-color: var(--teal, #008B8B);
-    color: var(--teal, #008B8B);
+    border-color: var(--teal, #00A99D);
+    color: var(--teal, #00A99D);
   }
 
   /* 4. Ghost (Transparent, light gray on hover) */
@@ -663,11 +716,11 @@
     font-weight: 700;
   }
 
-  /* 8. Link (Inline text button — no background, cyan underline on hover) */
+  /* 8. Link (Inline text button — no background, teal underline on hover) */
   .btn-link,
   .btn--link {
     background: transparent;
-    color: var(--teal, #008B8B);
+    color: var(--teal, #00A99D);
     border-color: transparent;
     padding: 0;
     height: auto;
@@ -678,7 +731,7 @@
   .btn-link:hover:not(:disabled),
   .btn--link:hover:not(:disabled) {
     background: transparent;
-    color: var(--teal-dark, #006060);
+    color: var(--teal-dark, #007A72);
     text-decoration: underline;
     box-shadow: none;
     transform: none;
@@ -847,8 +900,8 @@
   }
 
   .dd-search-input:focus {
-    border-color: var(--teal, #008B8B);
-    box-shadow: 0 0 0 2px var(--teal-ring, rgba(0, 139, 139, 0.22));
+    border-color: var(--teal, #00A99D);
+    box-shadow: 0 0 0 2px var(--teal-ring, rgba(0, 169, 157, 0.22));
   }
 
   /* ── Dropdown: Scrollable items list ──────────────────────────────── */
@@ -1345,7 +1398,7 @@
 
   .dropdown-option:hover {
     background-color: var(--s1, #F7F9FF);
-    color: var(--teal, #008B8B);
+    color: var(--teal, #00A99D);
   }
 
   .dropdown-option i {

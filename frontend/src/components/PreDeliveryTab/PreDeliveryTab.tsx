@@ -23,7 +23,9 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
-import { formatDeadlineWithRemaining } from '../../utils/dateUtils';
+import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
+import { formatDriverDisplay } from '../../utils/driverUtils';
+import { formatStatus } from '../../utils/statusUtils';
 import './PreDeliveryTab.css';
 
 export interface DmsPendingOrder {
@@ -48,7 +50,11 @@ export interface DmsPendingOrder {
     specialInstructions?: string;
     orderDate: string;
     expectedDelivery: string;
+    expectedDeliveryDate?: string;
     driverEmployeeId?: string;
+    driverName?: string;
+    courierFullName?: string;
+    driverIsActive?: boolean;
 }
 
 interface PreDeliveryTabProps {
@@ -439,11 +445,16 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                             </td>
                                             <td>
                                                 <div style={{ fontSize: '0.8125rem' }}>
-                                                    {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
+                                                    {order.orderDate ? formatDateOnly(order.orderDate) : 'N/A'}
                                                 </div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                    Due: {order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }} data-testid="pre-delivery-due-date">
+                                                    Due: {order.expectedDeliveryDate || order.expectedDelivery ? formatDateOnly(order.expectedDeliveryDate || order.expectedDelivery) : 'N/A'}
                                                 </div>
+                                                {(order.driverEmployeeId || order.driverName || order.courierFullName) && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }} data-testid="pre-delivery-driver">
+                                                        Driver: {formatDriverDisplay(order.driverName || order.courierFullName, order.driverEmployeeId, order.driverIsActive, { layout: 'id-first' }).displayText}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td>
                                                 <span className="status-badge-pending">
@@ -531,11 +542,18 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                 </td>
                                                 <td>
                                                     <span className="status-badge-active">
-                                                        {t.status || 'Active'}
+                                                        {formatStatus(t.status || 'Active')}
                                                     </span>
                                                 </td>
                                                 <td style={{ fontSize: '0.8125rem' }}>
-                                                    {t.dueAt ? formatDeadlineWithRemaining(t.dueAt, { isCompleted: t.status === 'Completed' || t.status === 'Done' }) : 'N/A'}
+                                                    {t.dueAt ? (
+                                                        <div>
+                                                            <div>{formatDeadlineWithRemaining(t.dueAt, { isCompleted: t.status === 'Completed' || t.status === 'Done' })}</div>
+                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                Target: {formatDateOnly(t.dueAt)}
+                                                            </div>
+                                                        </div>
+                                                    ) : 'N/A'}
                                                 </td>
                                                 <td>
                                                     {onViewTask && (

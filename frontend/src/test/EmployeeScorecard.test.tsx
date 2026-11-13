@@ -30,6 +30,9 @@ const mockScorecardData: EmployeeKpiEvaluationResultDTO = {
     totalHandlingHours: 42.5,
     overallScore: 88.5,
     overallRating: 'Green',
+    overallGreenThreshold: 85.0,
+    overallAmberThreshold: 70.0,
+    overallRedThreshold: 60.0,
     metrics: [
         {
             metricCode: 'OTIF',
@@ -117,7 +120,7 @@ describe('EmployeeScorecardView Component', () => {
         global.URL.revokeObjectURL = vi.fn();
     });
 
-    it('renders the employee scorecard view with overall performance score and status pill', async () => {
+    it('renders the employee scorecard view with overall performance score and specific status pill', async () => {
         render(
             <ToastProvider>
                 <EmployeeScorecardView />
@@ -134,13 +137,82 @@ describe('EmployeeScorecardView Component', () => {
 
         expect(screen.getByText('My KPI Scorecard')).toBeInTheDocument();
         expect(screen.getByTestId('scorecard-overall-score')).toHaveTextContent('88.5%');
-        expect(screen.getByTestId('scorecard-overall-rating')).toHaveTextContent('Green Status');
+
+        // Specific meaningful status label with color category
+        const ratingPill = screen.getByTestId('scorecard-overall-rating');
+        expect(ratingPill).toHaveTextContent('On Target');
+        expect(ratingPill).toHaveTextContent('(Green)');
+
+        // Status basis displaying actual value and target threshold
+        const statusBasis = screen.getByTestId('scorecard-status-basis');
+        expect(statusBasis).toHaveTextContent(/Score:\s*88.5%/);
+        expect(statusBasis).toHaveTextContent(/Target:\s*≥\s*85/);
 
         // Meta details
         expect(screen.getByText('Carlos Courier')).toBeInTheDocument();
         expect(screen.getByText('#EMP001')).toBeInTheDocument();
         expect(screen.getByText('Logistics Operations')).toBeInTheDocument();
-        expect(screen.getByText('Standard Courier Evaluation')).toBeInTheDocument();
+        expect(screen.getAllByText('Standard Courier Evaluation').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('displays threshold info tooltip when info button is clicked', async () => {
+        render(
+            <ToastProvider>
+                <EmployeeScorecardView />
+            </ToastProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scorecard-hero-card')).toBeInTheDocument();
+        });
+
+        const infoBtn = screen.getByTestId('scorecard-threshold-info-btn');
+        fireEvent.click(infoBtn);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scorecard-threshold-tooltip')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(/On Target \(Green\):/)).toBeInTheDocument();
+        expect(screen.getByText(/≥ 85% overall score/)).toBeInTheDocument();
+        expect(screen.getByText(/Needs Attention \(Amber\):/)).toBeInTheDocument();
+        expect(screen.getByText(/70% to 84.9% score/)).toBeInTheDocument();
+        expect(screen.getByText(/Below Target \(Red\):/)).toBeInTheDocument();
+    });
+
+    it('renders the How is your Scorecard calculated guide with dynamic scale values', async () => {
+        render(
+            <ToastProvider>
+                <EmployeeScorecardView />
+            </ToastProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scorecard-guide-card')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('How is your Scorecard calculated?')).toBeInTheDocument();
+
+        // 3 tier cards
+        const greenTier = screen.getByTestId('guide-tier-green');
+        expect(greenTier).toHaveTextContent('On Target (Green)');
+        expect(greenTier).toHaveTextContent('Overall Score: ≥ 85%');
+
+        const amberTier = screen.getByTestId('guide-tier-amber');
+        expect(amberTier).toHaveTextContent('Needs Attention (Amber)');
+        expect(amberTier).toHaveTextContent('Overall Score: 70% – 84.9%');
+
+        const redTier = screen.getByTestId('guide-tier-red');
+        expect(redTier).toHaveTextContent('Below Target (Red)');
+        expect(redTier).toHaveTextContent('Overall Score: < 70%');
+
+        // Toggle guide visibility
+        const toggleBtn = screen.getByTestId('scorecard-guide-toggle');
+        fireEvent.click(toggleBtn);
+        expect(screen.queryByTestId('scorecard-guide-body')).not.toBeInTheDocument();
+
+        fireEvent.click(toggleBtn);
+        expect(screen.getByTestId('scorecard-guide-body')).toBeInTheDocument();
     });
 
     it('renders task volume and quality snapshot cards accurately', async () => {
@@ -172,7 +244,7 @@ describe('EmployeeScorecardView Component', () => {
         expect(screen.getByText('42.5 hrs')).toBeInTheDocument();
     });
 
-    it('renders the detailed metrics breakdown table with weights and ratings', async () => {
+    it('renders the detailed metrics breakdown table with weights, specific statuses, and thresholds', async () => {
         render(
             <ToastProvider>
                 <EmployeeScorecardView />
@@ -195,12 +267,81 @@ describe('EmployeeScorecardView Component', () => {
         expect(screen.getByText('90.0 %')).toBeInTheDocument();
         expect(screen.getByText('2.4 hrs')).toBeInTheDocument();
 
-        // Ratings
-        const amberBadges = screen.getAllByText('Amber');
-        expect(amberBadges.length).toBeGreaterThanOrEqual(2);
+        // Specific rating labels in table
+        const needsAttentionBadges = screen.getAllByText('Needs Attention');
+        expect(needsAttentionBadges.length).toBeGreaterThanOrEqual(2);
 
-        const greenBadges = screen.getAllByText('Green');
-        expect(greenBadges.length).toBeGreaterThanOrEqual(2);
+        const onTargetBadges = screen.getAllByText('On Target');
+        expect(onTargetBadges.length).toBeGreaterThanOrEqual(2);
+
+        // Actual vs Target comparisons in status cells
+        expect(screen.getByText('83.3 / 95 %')).toBeInTheDocument();
+        expect(screen.getByText('2.4 / 4 hrs')).toBeInTheDocument();
+    });
+
+    it('handles Red status correctly and displays Below Target', async () => {
+        const redScorecardData: EmployeeKpiEvaluationResultDTO = {
+            ...mockScorecardData,
+            overallScore: 58.2,
+            overallRating: 'Red',
+            metrics: mockScorecardData.metrics.map(m => ({
+                ...m,
+                actualValue: 50.0,
+                rating: 'Red'
+            }))
+        };
+
+        (api.get as any).mockResolvedValueOnce({
+            data: { isSuccess: true, data: redScorecardData }
+        });
+
+        render(
+            <ToastProvider>
+                <EmployeeScorecardView />
+            </ToastProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scorecard-hero-card')).toBeInTheDocument();
+        });
+
+        const ratingPill = screen.getByTestId('scorecard-overall-rating');
+        expect(ratingPill).toHaveTextContent('Below Target');
+        expect(ratingPill).toHaveTextContent('(Red)');
+        expect(screen.getByTestId('scorecard-status-basis')).toHaveTextContent(/Score:\s*58.2%/);
+    });
+
+    it('renders empty state banner when an employee has 0 assigned tasks', async () => {
+        const emptyScorecardData: EmployeeKpiEvaluationResultDTO = {
+            ...mockScorecardData,
+            totalAssignedTasks: 0,
+            completedTasksCount: 0,
+            onTimeTasksCount: 0,
+            inFullTasksCount: 0,
+            otifTasksCount: 0,
+            reworkTasksCount: 0,
+            accurateTasksCount: 0,
+            totalHandlingHours: 0.0,
+            overallScore: 0.0,
+            overallRating: 'Amber'
+        };
+
+        (api.get as any).mockResolvedValueOnce({
+            data: { isSuccess: true, data: emptyScorecardData }
+        });
+
+        render(
+            <ToastProvider>
+                <EmployeeScorecardView />
+            </ToastProvider>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scorecard-empty-state')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('No Task Activity Recorded in this Period')).toBeInTheDocument();
+        expect(screen.getByText(/Your performance score and status will calculate automatically/)).toBeInTheDocument();
     });
 
     it('handles timeframe preset button clicks and refreshes scorecard query', async () => {

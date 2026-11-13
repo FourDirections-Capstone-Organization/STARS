@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -14,17 +16,20 @@ public class TaskWorkflowService : ITaskWorkflowService
     private readonly INotificationService _notificationService;
     private readonly IAuditLogService _auditLogService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<TaskWorkflowService>? _logger;
 
     public TaskWorkflowService(
         AppDbContext db,
         INotificationService notificationService,
         IAuditLogService auditLogService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ILogger<TaskWorkflowService>? logger = null)
     {
         _db = db;
         _notificationService = notificationService;
         _auditLogService = auditLogService;
         _serviceProvider = serviceProvider;
+        _logger = logger;
     }
 
     public async Task<ApiResponseDTO<TaskResponseDTO>> UpdateStatusAsync(
@@ -212,17 +217,24 @@ public class TaskWorkflowService : ITaskWorkflowService
             }
 
             // Trigger Integration 1: Task Completion -> Delivery Order Creation
+            string? dmsSyncWarning = null;
             try
             {
                 var dmsService = _serviceProvider.GetService<Backend.Modules.DmsIntegration.IDmsIntegrationService>();
                 if (dmsService != null && dmsService.IsConfigured)
                 {
-                    await dmsService.CreateDeliveryOrderForTaskAsync(taskId, reviewerId);
+                    var syncResult = await dmsService.CreateDeliveryOrderForTaskAsync(taskId, reviewerId);
+                    if (!syncResult.IsSuccess)
+                    {
+                        dmsSyncWarning = $"Task approved internally, but DMS sync failed: {syncResult.Message}";
+                        _logger?.LogWarning("DMS sync warning for Task {TaskId}: {Warning}", taskId, dmsSyncWarning);
+                    }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Task approval must never fail if DMS is temporarily unreachable
+                dmsSyncWarning = "Task approved internally, but DMS sync encountered a connection error.";
+                _logger?.LogError(ex, "Unexpected error dispatching Task {TaskId} to DMS during approval", taskId);
             }
 
             // Trigger FOMS Integration 1: Task Completion -> Invoice Endorsement Completion Callback
@@ -241,7 +253,7 @@ public class TaskWorkflowService : ITaskWorkflowService
 
             return ApiResponseDTO<TaskResponseDTO>.Success(
                 await MapToResponseDTOAsync(task),
-                "Task approved and officially closed");
+                dmsSyncWarning ?? "Task approved and officially closed");
         }
         else
         {

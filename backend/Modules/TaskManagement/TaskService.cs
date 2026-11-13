@@ -44,11 +44,12 @@ public class TaskService : ITaskService
             if (string.IsNullOrWhiteSpace(dto.Description))
                 return ApiResponseDTO<TaskResponseDTO>.Failure("Task description is required");
 
+            var effectivePriority = dto.PriorityLevel ?? dto.Priority ?? PriorityLevel.Medium;
             var now = DateTime.UtcNow;
             var deadline = dto.Deadline;
             var isSLALocked = false;
 
-            if (dto.PriorityLevel == PriorityLevel.Urgent)
+            if (effectivePriority == PriorityLevel.Urgent)
         {
             deadline = now.AddHours(24);
             isSLALocked = true;
@@ -96,7 +97,7 @@ public class TaskService : ITaskService
             TaskNumber = taskNumber,
             Title = uniqueTitle,
             Description = dto.Description.Trim(),
-            PriorityLevel = dto.PriorityLevel,
+            PriorityLevel = effectivePriority,
             Classification = dto.Classification,
             Status = Models.Enums.TaskStatus.NotStarted,
             AssignmentScope = dto.AssignmentScope,
@@ -443,11 +444,12 @@ public class TaskService : ITaskService
         if (!string.IsNullOrWhiteSpace(dto.Description))
             task.Description = dto.Description.Trim();
 
-        if (dto.PriorityLevel.HasValue)
+        var newPriority = dto.PriorityLevel ?? dto.Priority;
+        if (newPriority.HasValue)
         {
-            task.PriorityLevel = dto.PriorityLevel.Value;
+            task.PriorityLevel = newPriority.Value;
 
-            if (dto.PriorityLevel.Value == PriorityLevel.Urgent)
+            if (newPriority.Value == PriorityLevel.Urgent)
             {
                 task.Deadline = task.CreatedAt.AddHours(24);
                 task.IsSLALocked = true;

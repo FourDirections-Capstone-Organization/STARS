@@ -172,4 +172,63 @@ describe('PreDeliveryTab Component', () => {
 
         expect(screen.queryByText('Sample Dummy Mock Task')).not.toBeInTheDocument();
     });
+
+    it('passes driverEmployeeId and driverName when clicking Create Operational Task', async () => {
+        const dmsOrders: DmsPendingOrder[] = [
+            {
+                orderId: 501,
+                waybillNo: 'WB-2026-000501',
+                clientName: 'Speedex VIP',
+                clientType: 'Enterprise',
+                contactNumber: '09171234567',
+                senderAddress: 'Makati Hub',
+                recipientName: 'Luisa Reyes',
+                recipientContact: '09181234567',
+                recipientAddress: 'BGC, Taguig',
+                area: 'Taguig',
+                route: 'BGC Loop',
+                status: 'Pending',
+                taskType: 'Delivery',
+                packageType: 'Parcel',
+                packageDescription: 'Legal Documents',
+                itemCount: 1,
+                weight: '1.0 kg',
+                priority: 'High',
+                orderDate: '2026-11-11T09:00:00Z',
+                expectedDelivery: '2026-11-15T00:00:00Z',
+                driverEmployeeId: 'EMP-008',
+                driverName: 'Ricardo Bautista',
+            },
+        ];
+
+        (api.get as any).mockResolvedValue({
+            data: { isSuccess: true, data: dmsOrders },
+        });
+
+        const handleCreateTask = vi.fn();
+
+        render(
+            <PreDeliveryTab
+                tasks={[]}
+                onCreateTaskForOrder={handleCreateTask}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Luisa Reyes')).toBeInTheDocument();
+        });
+
+        const createBtn = screen.getByRole('button', { name: /Create STARS Task/i });
+        createBtn.click();
+
+        expect(handleCreateTask).toHaveBeenCalledTimes(1);
+        expect(handleCreateTask).toHaveBeenCalledWith(
+            expect.objectContaining({
+                orderId: 501,
+                waybillNo: 'WB-2026-000501',
+                driverEmployeeId: 'EMP-008',
+                driverName: 'Ricardo Bautista',
+            })
+        );
+    });
 });

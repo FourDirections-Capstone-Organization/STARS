@@ -43,6 +43,9 @@ export interface EmployeeKpiEvaluationResultDTO {
     totalHandlingHours: number;
     overallScore: number;
     overallRating: TrafficLightRating;
+    overallGreenThreshold?: number;
+    overallAmberThreshold?: number;
+    overallRedThreshold?: number;
     metrics: KpiMetricValueDTO[];
 }
 
