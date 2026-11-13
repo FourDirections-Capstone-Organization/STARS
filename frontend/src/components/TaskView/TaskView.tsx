@@ -441,7 +441,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     const attachInputRef = useRef<HTMLInputElement>(null);
     const [confidentialConfirm, setConfidentialConfirm] = useState<{ open: boolean; pendingValue: boolean }>({ open: false, pendingValue: false });
     const [confidentialSaving, setConfidentialSaving] = useState(false);
-    const { success: toastSuccess, error: toastError } = useToast();
+    const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
 
     const token = localStorage.getItem('authToken');
 
@@ -1003,10 +1003,11 @@ const TaskView: React.FC<TaskViewProps> = ({
 
     const handleApprove = async () => {
         try {
+            let res: any;
             if (onApprove) {
-                await onApprove(task.taskId);
+                res = await onApprove(task.taskId);
             } else {
-                await api.patch(`/api/Task/${task.taskId}/review`, { isApproved: true });
+                res = await api.patch(`/api/Task/${task.taskId}/review`, { isApproved: true });
             }
             setReviewState('approved');
             setLocalStatus('Completed');
@@ -1016,6 +1017,13 @@ const TaskView: React.FC<TaskViewProps> = ({
             }]);
             onUpdate?.({ ...task, taskStatus: 'Completed' });
             await fetchDeliveryDetail();
+
+            const msg = res?.data?.message || res?.message;
+            if (msg && (msg.includes('DMS sync failed') || msg.includes('DMS sync encountered'))) {
+                toastWarning(msg, { duration: 6000 });
+            } else {
+                toastSuccess('Task approved and completed.');
+            }
         } catch (err: any) {
             toastError(err?.response?.data?.message || err?.message || 'Failed to approve task.');
         }

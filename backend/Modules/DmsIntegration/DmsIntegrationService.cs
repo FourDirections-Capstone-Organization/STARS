@@ -281,6 +281,7 @@ public class DmsIntegrationService : IDmsIntegrationService
         {
             starsTaskId = taskId,
             starsTaskNumber = taskDisplayId,
+            taskStatus = "Approved",
             taskTitle = task.Title,
             senderName = senderName,
             senderAddress = senderAddress,

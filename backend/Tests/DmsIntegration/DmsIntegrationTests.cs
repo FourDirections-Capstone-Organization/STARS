@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -1606,5 +1607,239 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("WB-TASK-ONLY-01", item.DmsWaybillNo);
         Assert.Equal("Marco Polo", item.RecipientName);
         Assert.Equal("In Transit", item.DmsStatus);
+    }
+
+    [Fact]
+    public async Task ReviewTaskAsync_WhenApproved_CallsDmsAndUpdatesSyncStatus()
+    {
+        var reviewer = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-REVIEW",
+            FirstName = "Chief",
+            LastName = "Coordinator",
+            Email = "chief@example.com",
+            PasswordHash = "hash",
+            Role = UserRole.Coordinator
+        };
+        _db.Users.Add(reviewer);
+
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Pre-delivery Validation for Juan",
+            Description = "Validate package details",
+            Status = Backend.Models.Enums.TaskStatus.DonePendingReview,
+            CreatedById = reviewer.Id,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Juan Santos",
+            RecipientContact = "09170001234",
+            DeliveryAddress = "Taguig City",
+            DmsOrderId = 55,
+            SyncStatus = "Pending"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.Created,
+                Content = JsonContent.Create(new
+                {
+                    waybillNo = "WB-2026-999001",
+                    orderId = 55,
+                    status = "Pending",
+                    starsTaskId = taskId,
+                    alreadyExisted = false
+                })
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var dmsService = CreateService(client);
+
+        var services = new ServiceCollection();
+        services.AddScoped<IDmsIntegrationService>(_ => dmsService);
+        var sp = services.BuildServiceProvider();
+
+        var workflowService = new TaskWorkflowService(
+            _db,
+            _mockNotification.Object,
+            _mockAudit.Object,
+            sp);
+
+        var result = await workflowService.ReviewTaskAsync(taskId, new ReviewTaskDTO { IsApproved = true }, reviewer.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Task approved and officially closed", result.Message);
+
+        var updatedTask = await _db.Tasks.FindAsync(taskId);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, updatedTask.Status);
+        Assert.True(updatedTask.IsApproved);
+
+        var updatedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("Synced", updatedDetail.SyncStatus);
+        Assert.Equal("WB-2026-999001", updatedDetail.DmsWaybillNo);
+    }
+
+    [Fact]
+    public async Task ReviewTaskAsync_WhenDmsUnreachable_CompletesTaskWithWarning()
+    {
+        var reviewer = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-FAIL",
+            FirstName = "Ops",
+            LastName = "Lead",
+            Email = "lead@example.com",
+            PasswordHash = "hash",
+            Role = UserRole.Coordinator
+        };
+        _db.Users.Add(reviewer);
+
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Pre-delivery Validation with Downstream Outage",
+            Description = "DMS server offline",
+            Status = Backend.Models.Enums.TaskStatus.DonePendingReview,
+            CreatedById = reviewer.Id,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Offline Recipient",
+            RecipientContact = "09170009999",
+            DeliveryAddress = "Makati City",
+            DmsOrderId = 77,
+            SyncStatus = "Pending"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.InternalServerError,
+                Content = new StringContent("Server Error")
+            });
+
+        var client = new HttpClient(mockHandler.Object);
+        var dmsService = CreateService(client);
+
+        var services = new ServiceCollection();
+        services.AddScoped<IDmsIntegrationService>(_ => dmsService);
+        var sp = services.BuildServiceProvider();
+
+        var workflowService = new TaskWorkflowService(
+            _db,
+            _mockNotification.Object,
+            _mockAudit.Object,
+            sp);
+
+        var result = await workflowService.ReviewTaskAsync(taskId, new ReviewTaskDTO { IsApproved = true }, reviewer.Id);
+
+        // Non-blocking: task approval succeeds
+        Assert.True(result.IsSuccess);
+        Assert.Contains("Task approved internally, but DMS sync failed", result.Message);
+
+        var updatedTask = await _db.Tasks.FindAsync(taskId);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, updatedTask.Status);
+        Assert.True(updatedTask.IsApproved);
+
+        var updatedDetail = await _db.TaskDeliveryDetails.FirstAsync(d => d.TaskId == taskId);
+        Assert.Equal("Failed", updatedDetail.SyncStatus);
+    }
+
+    [Fact]
+    public async Task ReviewTaskAsync_WhenRejected_DoesNotCallDms()
+    {
+        var reviewer = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-REJ",
+            FirstName = "Strict",
+            LastName = "Reviewer",
+            Email = "strict@example.com",
+            PasswordHash = "hash",
+            Role = UserRole.Coordinator
+        };
+        _db.Users.Add(reviewer);
+
+        var taskId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = taskId,
+            Title = "Task with Invalid Documents",
+            Description = "Rework needed",
+            Status = Backend.Models.Enums.TaskStatus.DonePendingReview,
+            CreatedById = reviewer.Id,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskDeliveryDetail
+        {
+            TaskId = taskId,
+            RecipientName = "Rework Recipient",
+            RecipientContact = "09170008888",
+            DeliveryAddress = "Pasig City",
+            DmsOrderId = 88,
+            SyncStatus = "Pending"
+        };
+        _db.TaskDeliveryDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var mockHandler = new Mock<HttpMessageHandler>();
+        var client = new HttpClient(mockHandler.Object);
+        var dmsService = CreateService(client);
+
+        var services = new ServiceCollection();
+        services.AddScoped<IDmsIntegrationService>(_ => dmsService);
+        var sp = services.BuildServiceProvider();
+
+        var workflowService = new TaskWorkflowService(
+            _db,
+            _mockNotification.Object,
+            _mockAudit.Object,
+            sp);
+
+        var result = await workflowService.ReviewTaskAsync(taskId, new ReviewTaskDTO { IsApproved = false, Remarks = "Please attach valid ID" }, reviewer.Id);
+
+        Assert.True(result.IsSuccess);
+        var updatedTask = await _db.Tasks.FindAsync(taskId);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.InProgress, updatedTask.Status);
+        Assert.False(updatedTask.IsApproved);
+
+        // Http was never called
+        mockHandler.Protected().Verify(
+            "SendAsync",
+            Times.Never(),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>());
     }
 }
