@@ -99,6 +99,10 @@ public class DmsIntegrationService : IDmsIntegrationService
             }
             detail.SenderAddress = dto.SenderAddress?.Trim();
             detail.SpecialInstructions = dto.SpecialInstructions?.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.TaskType)) detail.TaskType = dto.TaskType.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.PackageType)) detail.PackageType = dto.PackageType.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Weight)) detail.Weight = dto.Weight.Trim();
+            if (dto.ItemCount.HasValue && dto.ItemCount > 0) detail.ItemCount = dto.ItemCount.Value;
             if (dto.DmsOrderId.HasValue) detail.DmsOrderId = dto.DmsOrderId;
             if (!string.IsNullOrWhiteSpace(dto.DmsWaybillNo)) detail.DmsWaybillNo = dto.DmsWaybillNo.Trim();
             detail.UpdatedAt = DateTime.UtcNow;
@@ -752,6 +756,10 @@ public class DmsIntegrationService : IDmsIntegrationService
                 DeliveryAddress = initDeliveryAddress,
                 Area = initArea,
                 PackageDescription = initPackageDesc,
+                TaskType = !string.IsNullOrWhiteSpace(dto.TaskType) ? dto.TaskType.Trim() : "Standard Delivery",
+                PackageType = !string.IsNullOrWhiteSpace(dto.PackageType) ? dto.PackageType.Trim() : "Parcel",
+                Weight = !string.IsNullOrWhiteSpace(dto.Weight) ? dto.Weight.Trim() : "—",
+                ItemCount = dto.ItemCount.HasValue && dto.ItemCount > 0 ? dto.ItemCount.Value : 1,
                 CourierEmployeeId = incomingDriver,
                 CourierFullName = incomingDriverName,
                 DmsWaybillNo = dto.WaybillNo,
@@ -786,6 +794,14 @@ public class DmsIntegrationService : IDmsIntegrationService
             detail.Area = dto.Area.Trim();
         if (!string.IsNullOrWhiteSpace(dto.PackageDescription))
             detail.PackageDescription = dto.PackageDescription.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.TaskType))
+            detail.TaskType = dto.TaskType.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.PackageType))
+            detail.PackageType = dto.PackageType.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Weight))
+            detail.Weight = dto.Weight.Trim();
+        if (dto.ItemCount.HasValue && dto.ItemCount > 0)
+            detail.ItemCount = dto.ItemCount.Value;
 
         if (!string.IsNullOrWhiteSpace(incomingDriver))
             detail.CourierEmployeeId = incomingDriver;
@@ -1208,6 +1224,10 @@ public class DmsIntegrationService : IDmsIntegrationService
                 UpdatedAt = d.UpdatedAt,
                 ExpectedDelivery = taskDeadline,
                 ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null,
+                TaskType = !string.IsNullOrWhiteSpace(d.TaskType) ? d.TaskType : "Standard Delivery",
+                PackageType = !string.IsNullOrWhiteSpace(d.PackageType) ? d.PackageType : "Parcel",
+                Weight = !string.IsNullOrWhiteSpace(d.Weight) ? d.Weight : "—",
+                ItemCount = d.ItemCount.HasValue && d.ItemCount.Value > 0 ? d.ItemCount.Value : 1,
             };
         }).ToList();
 
@@ -1316,6 +1336,10 @@ public class DmsIntegrationService : IDmsIntegrationService
                         CreatedAt = createdAt,
                         ExpectedDelivery = matchedTask?.RevisedDeadline ?? matchedTask?.Deadline ?? expDel,
                         ExpectedDeliveryDate = order.ExpectedDeliveryDate ?? (expDel.HasValue ? expDel.Value.ToString("yyyy-MM-dd") : null),
+                        TaskType = !string.IsNullOrWhiteSpace(order.TaskType) ? order.TaskType : "Standard Delivery",
+                        PackageType = !string.IsNullOrWhiteSpace(order.PackageType) ? order.PackageType : "Parcel",
+                        Weight = !string.IsNullOrWhiteSpace(order.Weight) ? order.Weight : "—",
+                        ItemCount = order.ItemCount > 0 ? order.ItemCount : 1,
                     };
 
                     list.Add(item);
@@ -1367,6 +1391,10 @@ public class DmsIntegrationService : IDmsIntegrationService
                     CreatedAt = task.CreatedAt,
                     ExpectedDelivery = task.RevisedDeadline ?? task.Deadline,
                     ExpectedDeliveryDate = (task.RevisedDeadline ?? task.Deadline).ToString("yyyy-MM-dd"),
+                    TaskType = "Standard Delivery",
+                    PackageType = "Parcel",
+                    Weight = "—",
+                    ItemCount = 1,
                 };
 
                 list.Add(item);
@@ -1576,7 +1604,11 @@ public class DmsIntegrationService : IDmsIntegrationService
             CreatedAt = d.CreatedAt,
             UpdatedAt = d.UpdatedAt,
             ExpectedDelivery = taskDeadline,
-            ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null
+            ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null,
+            TaskType = !string.IsNullOrWhiteSpace(d.TaskType) ? d.TaskType : "Standard Delivery",
+            PackageType = !string.IsNullOrWhiteSpace(d.PackageType) ? d.PackageType : "Parcel",
+            Weight = !string.IsNullOrWhiteSpace(d.Weight) ? d.Weight : "—",
+            ItemCount = d.ItemCount.HasValue && d.ItemCount.Value > 0 ? d.ItemCount.Value : 1
         };
 
         if (podAttachment != null)

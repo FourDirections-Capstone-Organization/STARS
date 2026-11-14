@@ -51,6 +51,10 @@ export interface TaskDeliveryDetailData {
     updatedAt?: string;
     expectedDelivery?: string;
     expectedDeliveryDate?: string;
+    taskType?: string;
+    packageType?: string;
+    weight?: string;
+    itemCount?: number;
 }
 
 export interface TaskPodData {
@@ -149,6 +153,7 @@ interface TaskViewProps {
     onReject?: (taskId: string, reason: string) => void;
     onDeleteAttachment?: (attachmentId: string) => void | Promise<void>;
     onUpdate?: (updatedTask: TaskViewTask) => void;
+    onNavigateToDmsTracker?: (waybillNo?: string, taskId?: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -421,6 +426,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     onReject,
     onDeleteAttachment,
     onUpdate,
+    onNavigateToDmsTracker,
 }) => {
     const [reopening, setReopening] = useState(false);
     const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
@@ -464,14 +470,18 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [resendingDms, setResendingDms] = useState(false);
     const [copiedWaybill, setCopiedWaybill] = useState(false);
 
-    // ─── Proof of Delivery (POD) State ──────────────────────────────────────────
-    const [podData, setPodData] = useState<TaskPodData | null>(null);
-    const [podLoading, setPodLoading] = useState(false);
-    const [podError, setPodError] = useState<string | null>(null);
-    const [podDownloading, setPodDownloading] = useState(false);
-    const [podPreviewOpen, setPodPreviewOpen] = useState(false);
-    const [podImageError, setPodImageError] = useState(false);
-    const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
+    const handleNavigateToDmsTracker = useCallback(() => {
+        if (onNavigateToDmsTracker) {
+            onNavigateToDmsTracker(deliveryDetail?.dmsWaybillNo, task.taskId);
+        } else {
+            window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                detail: {
+                    waybillNo: deliveryDetail?.dmsWaybillNo,
+                    taskId: task.taskId,
+                }
+            }));
+        }
+    }, [onNavigateToDmsTracker, deliveryDetail?.dmsWaybillNo, task.taskId]);
 
     // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
     const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
@@ -612,141 +622,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         fetchDeliveryDetail(false);
     }, [fetchDeliveryDetail]);
 
-    const fetchPodData = useCallback(async (silent: boolean = false) => {
-        if (!task.taskId) return;
-        if (!silent) setPodLoading(true);
-        setPodError(null);
-        try {
-            const res = await api.get<any>(`/api/dms-integration/tasks/${task.taskId}/pod`);
-            const json = res.data;
-            const data: TaskPodData | undefined = json?.data ?? json;
-            if (data) {
-                setPodData({
-                    ...data,
-                    hasPod: Boolean(data.hasPod || data.podUrl || data.downloadUrl),
-                });
-            } else {
-                setPodData(null);
-            }
-        } catch (err: any) {
-            if (err?.response?.status === 403) {
-                setPodError('Access denied: You do not have permission to view Proof of Delivery for this task.');
-            } else if (err?.response?.status !== 404) {
-                setPodError('Unable to load Proof of Delivery details.');
-            } else {
-                setPodData(null);
-            }
-        } finally {
-            if (!silent) setPodLoading(false);
-        }
-    }, [task.taskId]);
-
-    useEffect(() => {
-        fetchPodData(false);
-    }, [fetchPodData]);
-
-    const effectivePod: TaskPodData | null = useMemo(() => {
-        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
-            return podData;
-        }
-        if (deliveryDetail?.podUrl) {
-            const fileName = deliveryDetail.podFileName || `POD_${deliveryDetail.dmsWaybillNo || task.taskReferenceNumber || 'delivery'}.jpg`;
-            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg';
-            return {
-                taskId: task.taskId,
-                waybillNo: deliveryDetail.dmsWaybillNo,
-                podUrl: deliveryDetail.podUrl,
-                downloadUrl: `/api/dms-integration/tasks/${task.taskId}/pod/download`,
-                fileName,
-                fileType: ext,
-                uploadedAt: deliveryDetail.podUploadedAt,
-                uploadedByName: deliveryDetail.podUploadedBy || deliveryDetail.courierFullName || 'Field Courier',
-                hasPod: true,
-            };
-        }
-        return podData;
-    }, [podData, deliveryDetail, task.taskId, task.taskReferenceNumber]);
-
-    useEffect(() => {
-        let active = true;
-        let createdUrl: string | null = null;
-
-        const loadPreview = async () => {
-            const url = effectivePod?.podUrl || effectivePod?.downloadUrl;
-            if (!url) {
-                setPodPreviewUrl(null);
-                return;
-            }
-
-            if (url.startsWith('data:') || url.startsWith('blob:')) {
-                setPodPreviewUrl(url);
-                return;
-            }
-
-            try {
-                const res = await api.get(url, { responseType: 'blob' });
-                if (active) {
-                    createdUrl = URL.createObjectURL(res.data);
-                    setPodPreviewUrl(createdUrl);
-                }
-            } catch {
-                if (active) {
-                    setPodPreviewUrl(url);
-                }
-            }
-        };
-
-        if (effectivePod?.hasPod) {
-            setPodImageError(false);
-            loadPreview();
-        } else {
-            setPodPreviewUrl(null);
-        }
-
-        return () => {
-            active = false;
-            if (createdUrl) {
-                URL.revokeObjectURL(createdUrl);
-            }
-        };
-    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.hasPod]);
-
-    const handleDownloadPod = async (inline: boolean = false) => {
-        if (!task.taskId) return;
-        setPodDownloading(true);
-        setPodError(null);
-        try {
-            const endpoint = `/api/dms-integration/tasks/${task.taskId}/pod/download${inline ? '?inline=true' : ''}`;
-            const res = await api.get(endpoint, { responseType: 'blob' });
-            const blob = res.data;
-            const fileName = effectivePod?.fileName || `POD_${effectivePod?.waybillNo || task.taskReferenceNumber || task.taskId}.jpg`;
-            const blobUrl = URL.createObjectURL(blob);
-
-            if (inline) {
-                window.open(blobUrl, '_blank');
-            } else {
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        } catch (err: any) {
-            if (err?.response?.status === 403) {
-                setPodError('Access denied: You do not have permission to download this Proof of Delivery.');
-            } else if (err?.response?.status === 404) {
-                setPodError('Proof of Delivery file not found.');
-            } else {
-                setPodError('Failed to download Proof of Delivery. Please try again.');
-            }
-        } finally {
-            setPodDownloading(false);
-        }
-    };
-
-    // Live Auto-Refresh polling while task modal is open and delivery is in progress
+    // Live Auto-Refresh polling while task modal is open and delivery is in progress (8s polling, halts on terminal status)
     useEffect(() => {
         if (!task?.taskId || !deliveryDetail?.dmsWaybillNo) return;
         const currentSt = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
@@ -756,11 +632,10 @@ const TaskView: React.FC<TaskViewProps> = ({
 
         const interval = setInterval(() => {
             fetchDeliveryDetail(true);
-            fetchPodData(true);
         }, 8000);
 
         return () => clearInterval(interval);
-    }, [task?.taskId, deliveryDetail?.dmsWaybillNo, deliveryDetail?.dmsStatus, deliveryDetail?.dmsRawStatus, fetchDeliveryDetail, fetchPodData]);
+    }, [task?.taskId, deliveryDetail?.dmsWaybillNo, deliveryDetail?.dmsStatus, deliveryDetail?.dmsRawStatus, fetchDeliveryDetail]);
 
     const handleSaveDelivery = async () => {
         if (!editingDelivery.recipientName.trim() || !editingDelivery.recipientContact.trim() || !editingDelivery.deliveryAddress.trim()) {
@@ -1774,6 +1649,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-dms-waybill-actions">
                                             <button
                                                 type="button"
+                                                className="tv-btn tv-btn-primary tv-btn-sm tv-dms-tracker-btn"
+                                                data-testid="tv-dms-tracker-btn"
+                                                onClick={handleNavigateToDmsTracker}
+                                                title="Open Live Delivery Tracker in DMS Tab"
+                                            >
+                                                <Truck size={12} />
+                                                <span>Live Delivery Tracker</span>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 className="tv-btn tv-btn-outline-sm tv-dms-copy-btn"
                                                 onClick={() => handleCopyWaybill(deliveryDetail.dmsWaybillNo!)}
                                                 title="Copy Waybill Number"
@@ -1895,6 +1780,22 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
                                             </span>
                                         </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-task-type">
+                                            <span className="tv-dms-grid-label">Task Type</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.taskType || 'Standard Delivery'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-package-type">
+                                            <span className="tv-dms-grid-label">Package Type</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.packageType || 'Parcel'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-weight">
+                                            <span className="tv-dms-grid-label">Weight</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.weight || '—'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-item-count">
+                                            <span className="tv-dms-grid-label">Item Count</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.itemCount ? `${deliveryDetail.itemCount} item(s)` : '1 item'}</span>
+                                        </div>
                                         {(deliveryDetail.courierEmployeeId || deliveryDetail.courierFullName) && (
                                             <div className="tv-dms-grid-item" data-testid="tv-dms-assigned-driver">
                                                 <span className="tv-dms-grid-label">Assigned Driver</span>
@@ -1902,18 +1803,12 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     const driverInfo = formatDriverDisplay(
                                                         deliveryDetail.courierFullName,
                                                         deliveryDetail.courierEmployeeId,
-                                                        deliveryDetail.courierIsActive
-                                                    );
-                                                    const pairedInfo = formatDriverDisplayShared(
-                                                        deliveryDetail.courierFullName,
-                                                        deliveryDetail.courierEmployeeId,
                                                         deliveryDetail.courierIsActive,
-                                                        { layout: 'id-first' }
+                                                        { layout: 'name-only' }
                                                     );
                                                     return (
                                                         <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                            <span className="tv-dms-driver-name tv-dms-paired-driver" data-testid="tv-dms-paired-driver">{pairedInfo.displayText}</span>
-                                                            <span className="tv-dms-legacy-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                            <span className="tv-dms-driver-name" data-testid="tv-dms-driver-name">{driverInfo.displayText}</span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
                                                                     [Inactive]
@@ -2056,6 +1951,22 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     <span className="tv-dms-grid-value">{deliveryDetail.specialInstructions}</span>
                                                 </div>
                                             )}
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-task-type">
+                                                <span className="tv-dms-grid-label">Task Type</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.taskType || 'Standard Delivery'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-package-type">
+                                                <span className="tv-dms-grid-label">Package Type</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.packageType || 'Parcel'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-weight">
+                                                <span className="tv-dms-grid-label">Weight</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.weight || '—'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-item-count">
+                                                <span className="tv-dms-grid-label">Item Count</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.itemCount ? `${deliveryDetail.itemCount} item(s)` : '1 item'}</span>
+                                            </div>
                                             {(deliveryDetail.courierEmployeeId || deliveryDetail.courierFullName) && (
                                                 <div className="tv-dms-grid-item" data-testid="tv-dms-pending-driver">
                                                     <span className="tv-dms-grid-label">Assigned Driver</span>
@@ -2063,18 +1974,12 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         const driverInfo = formatDriverDisplay(
                                                             deliveryDetail.courierFullName,
                                                             deliveryDetail.courierEmployeeId,
-                                                            deliveryDetail.courierIsActive
-                                                        );
-                                                        const pairedInfo = formatDriverDisplayShared(
-                                                            deliveryDetail.courierFullName,
-                                                            deliveryDetail.courierEmployeeId,
                                                             deliveryDetail.courierIsActive,
-                                                            { layout: 'id-first' }
+                                                            { layout: 'name-only' }
                                                         );
                                                         return (
                                                             <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                                <span className="tv-dms-driver-name tv-dms-paired-driver" data-testid="tv-dms-pending-paired-driver">{pairedInfo.displayText}</span>
-                                                                <span className="tv-dms-legacy-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                                <span className="tv-dms-driver-name" data-testid="tv-dms-pending-driver-name">{driverInfo.displayText}</span>
                                                                 {driverInfo.isInactive && (
                                                                     <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
                                                                         [Inactive]
@@ -2133,180 +2038,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
-
-                        {/* ── Proof of Delivery (POD) Section ── */}
-                        <div className="tv-section tv-pod-section" data-testid="tv-pod-section">
-                            <div className="tv-pod-header">
-                                <div className="tv-pod-title">
-                                    <FileCheck size={15} className="tv-pod-title-icon" />
-                                    <span>Proof of Delivery (POD)</span>
-                                </div>
-                                {effectivePod?.hasPod && (
-                                    <div className="tv-pod-header-actions">
-                                        <button
-                                            type="button"
-                                            className="tv-btn tv-btn-outline-sm tv-pod-download-btn"
-                                            onClick={() => handleDownloadPod(false)}
-                                            disabled={podDownloading}
-                                            title="Download Proof of Delivery file"
-                                        >
-                                            {podDownloading ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
-                                            <span>Download POD</span>
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            {podLoading && (
-                                <div className="tv-pod-loading" data-testid="tv-pod-loading">
-                                    <Loader2 size={16} className="spin" />
-                                    <span>Checking Proof of Delivery status…</span>
-                                </div>
-                            )}
-
-                            {podError && (
-                                <div className="tv-pod-error-box" data-testid="tv-pod-error">
-                                    <AlertCircle size={14} className="tv-pod-error-icon" />
-                                    <span>{podError}</span>
-                                </div>
-                            )}
-
-                            {!podLoading && !podError && (
-                                <>
-                                    {effectivePod?.hasPod ? (
-                                        <div className="tv-pod-card" data-testid="tv-pod-card">
-                                            {/* Media preview/thumbnail */}
-                                            {isPdfFile(effectivePod.fileName, effectivePod.fileType) ? (
-                                                <div className="tv-pod-pdf-card" data-testid="tv-pod-pdf-card">
-                                                    <div className="tv-pod-pdf-icon-wrap">
-                                                        <FileText size={32} />
-                                                    </div>
-                                                    <div className="tv-pod-pdf-info">
-                                                        <span className="tv-pod-pdf-filename">{effectivePod.fileName || 'Proof_of_Delivery.pdf'}</span>
-                                                        <span className="tv-pod-pdf-subtitle">PDF Document • {formatFileSize(effectivePod.fileSize)}</span>
-                                                    </div>
-                                                    <div className="tv-pod-pdf-actions">
-                                                        <button
-                                                            type="button"
-                                                            className="tv-btn tv-btn-secondary tv-btn-sm tv-pod-preview-btn"
-                                                            onClick={() => setPodPreviewOpen(true)}
-                                                        >
-                                                            <ExternalLink size={12} /> Preview PDF
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="tv-btn tv-btn-outline-sm"
-                                                            onClick={() => handleDownloadPod(false)}
-                                                            disabled={podDownloading}
-                                                        >
-                                                            <Download size={12} /> Download
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : isImageFile(effectivePod.fileName, effectivePod.fileType) ? (
-                                                <div className="tv-pod-media-container">
-                                                    {!podImageError ? (
-                                                        <div
-                                                            className="tv-pod-thumbnail-wrapper"
-                                                            onClick={() => setPodPreviewOpen(true)}
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setPodPreviewOpen(true); }}
-                                                            title="Click to preview full Proof of Delivery"
-                                                            aria-label="Click to preview full Proof of Delivery"
-                                                        >
-                                                            <img
-                                                                src={podPreviewUrl || effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                                                alt={`Proof of Delivery for ${effectivePod.waybillNo || task.taskReferenceNumber || 'task'}`}
-                                                                className="tv-pod-thumbnail-img"
-                                                                onError={() => setPodImageError(true)}
-                                                            />
-                                                            <div className="tv-pod-thumbnail-overlay">
-                                                                <ExternalLink size={14} />
-                                                                <span>Click to Preview</span>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="tv-pod-broken-wrapper" data-testid="tv-pod-broken">
-                                                            <AlertTriangle size={24} className="tv-pod-broken-icon" />
-                                                            <span className="tv-pod-broken-text">Image preview unavailable or broken</span>
-                                                            <button
-                                                                type="button"
-                                                                className="tv-btn tv-btn-outline-sm"
-                                                                onClick={() => handleDownloadPod(false)}
-                                                            >
-                                                                <Download size={12} /> Download File
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="tv-pod-unsupported-wrapper" data-testid="tv-pod-unsupported">
-                                                    <AlertCircle size={24} className="tv-pod-unsupported-icon" />
-                                                    <div className="tv-pod-unsupported-content">
-                                                        <div className="tv-pod-unsupported-title">Preview not supported for this file type ({effectivePod.fileType || 'binary'})</div>
-                                                        <div className="tv-pod-unsupported-sub">You can download the original file to view it on your device.</div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        className="tv-btn tv-btn-primary tv-btn-sm"
-                                                        onClick={() => handleDownloadPod(false)}
-                                                    >
-                                                        <Download size={12} /> Download File
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {/* Metadata */}
-                                            <div className="tv-pod-meta-grid">
-                                                {effectivePod.fileName && (
-                                                    <div className="tv-pod-meta-item">
-                                                        <span className="tv-pod-meta-label">File Name</span>
-                                                        <span className="tv-pod-meta-value tv-pod-filename" title={effectivePod.fileName}>
-                                                            {effectivePod.fileName}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <div className="tv-pod-meta-item">
-                                                    <span className="tv-pod-meta-label">Uploaded At</span>
-                                                    <span className="tv-pod-meta-value">
-                                                        {fmtDateTime(effectivePod.uploadedAt || deliveryDetail?.podUploadedAt || '')}
-                                                    </span>
-                                                </div>
-                                                <div className="tv-pod-meta-item">
-                                                    <span className="tv-pod-meta-label">Uploaded By / Courier</span>
-                                                    <span className="tv-pod-meta-value">
-                                                        {effectivePod.uploadedByName || deliveryDetail?.podUploadedBy || deliveryDetail?.courierFullName || 'Field Courier'}
-                                                    </span>
-                                                </div>
-                                                {effectivePod.fileSize && (
-                                                    <div className="tv-pod-meta-item">
-                                                        <span className="tv-pod-meta-label">File Size</span>
-                                                        <span className="tv-pod-meta-value">{formatFileSize(effectivePod.fileSize)}</span>
-                                                    </div>
-                                                )}
-                                                {effectivePod.waybillNo && (
-                                                    <div className="tv-pod-meta-item">
-                                                        <span className="tv-pod-meta-label">Waybill</span>
-                                                        <span className="tv-pod-meta-value tv-pod-waybill" style={{ fontFamily: 'monospace' }}>
-                                                            {effectivePod.waybillNo}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="tv-pod-empty-state" data-testid="tv-pod-empty">
-                                            <FileCheck size={28} className="tv-pod-empty-icon" />
-                                            <div className="tv-pod-empty-title">No Proof of Delivery (POD) Uploaded Yet</div>
-                                            <div className="tv-pod-empty-desc">
-                                                Proof of Delivery (photo or signed receipt) will appear here once the courier marks the delivery completed in DMS.
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
                             )}
                         </div>
 
@@ -2829,86 +2560,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 {savingDelivery ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
                                 {savingDelivery ? 'Saving…' : 'Save Delivery Details'}
                             </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Proof of Delivery (POD) Preview Modal ── */}
-            {podPreviewOpen && effectivePod && (
-                <div
-                    className="tv-modal-overlay tv-pod-preview-overlay"
-                    onClick={() => setPodPreviewOpen(false)}
-                    data-testid="tv-pod-preview-modal"
-                >
-                    <div className="tv-modal-content tv-pod-preview-modal" onClick={e => e.stopPropagation()}>
-                        <div className="tv-modal-header">
-                            <div className="tv-pod-modal-title-row">
-                                <FileCheck size={16} />
-                                <h4 className="tv-modal-title">Proof of Delivery Preview</h4>
-                                {effectivePod.fileName && <span className="tv-pod-modal-file-badge">{effectivePod.fileName}</span>}
-                            </div>
-                            <button
-                                type="button"
-                                className="tv-modal-close"
-                                onClick={() => setPodPreviewOpen(false)}
-                                aria-label="Close Preview"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-                        <div className="tv-pod-preview-body">
-                            {isPdfFile(effectivePod.fileName, effectivePod.fileType) ? (
-                                <div className="tv-pod-pdf-embed-wrapper">
-                                    <iframe
-                                        src={podPreviewUrl || effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                        title="POD PDF Viewer"
-                                        className="tv-pod-modal-pdf-frame"
-                                    />
-                                </div>
-                            ) : isImageFile(effectivePod.fileName, effectivePod.fileType) ? (
-                                <img
-                                    src={podPreviewUrl || effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                    alt="Proof of Delivery Full Preview"
-                                    className="tv-pod-modal-img"
-                                    onError={() => setPodImageError(true)}
-                                />
-                            ) : (
-                                <div className="tv-pod-unsupported-preview">
-                                    <AlertCircle size={32} />
-                                    <p>Inline preview is not supported for this file type.</p>
-                                    <button
-                                        type="button"
-                                        className="tv-btn tv-btn-primary"
-                                        onClick={() => handleDownloadPod(false)}
-                                    >
-                                        <Download size={13} /> Download File to View
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="tv-modal-footer tv-pod-modal-footer">
-                            <span className="tv-pod-modal-meta">
-                                Uploaded: {fmtDateTime(effectivePod.uploadedAt || '')} by {effectivePod.uploadedByName || 'Field Courier'}
-                            </span>
-                            <div className="tv-pod-modal-btn-row">
-                                <button
-                                    type="button"
-                                    className="tv-btn tv-btn-secondary"
-                                    onClick={() => setPodPreviewOpen(false)}
-                                >
-                                    Close
-                                </button>
-                                <button
-                                    type="button"
-                                    className="tv-btn tv-btn-primary"
-                                    onClick={() => handleDownloadPod(false)}
-                                    disabled={podDownloading}
-                                >
-                                    {podDownloading ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
-                                    <span>Download Original</span>
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>

@@ -23,6 +23,9 @@ import {
     Download,
     FileText,
     ChevronDown,
+    FileCheck,
+    AlertTriangle,
+    Eye,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
@@ -34,7 +37,7 @@ import {
     downloadDeliveryPdfReport,
     downloadDeliveryCsvReport,
 } from './DeliveryReportExport';
-import { formatDriverDisplay } from '../TaskView/TaskView';
+import { formatDriverDisplay, isImageFile, isPdfFile, formatFileSize } from '../TaskView/TaskView';
 import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
 import { formatDateOnly } from '../../utils/dateUtils';
 import './DmsDeliveryTab.css';
@@ -56,6 +59,10 @@ export interface DmsDeliveryItem {
     courierIsActive?: boolean;
     podUrl?: string;
     podUploadedAt?: string;
+    podFileName?: string;
+    podFileSize?: number;
+    podFileType?: string;
+    podUploadedBy?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
     dmsStatus: string;
@@ -68,6 +75,10 @@ export interface DmsDeliveryItem {
     createdAt?: string;
     expectedDelivery?: string;
     expectedDeliveryDate?: string;
+    taskType?: string;
+    packageType?: string;
+    weight?: string;
+    itemCount?: number;
 }
 
 interface PerformanceSummary {
@@ -80,11 +91,18 @@ interface PerformanceSummary {
 interface DmsDeliveryTabProps {
     tasks?: any[];
     onViewTask: (taskId: string) => void;
+    initialWaybillNo?: string;
+    initialTaskId?: string;
 }
 
 const EMPTY_TASKS: any[] = [];
 
-export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TASKS, onViewTask }) => {
+export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
+    tasks = EMPTY_TASKS,
+    onViewTask,
+    initialWaybillNo,
+    initialTaskId,
+}) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [performance, setPerformance] = useState<PerformanceSummary>({
@@ -125,6 +143,212 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
     }, [showExportMenu]);
 
     const { success: toastSuccess, error: toastError } = useToast();
+
+    // POD state
+    const [podData, setPodData] = useState<any | null>(null);
+    const [podLoading, setPodLoading] = useState(false);
+    const [podError, setPodError] = useState<string | null>(null);
+    const [podDownloading, setPodDownloading] = useState(false);
+    const [showPodModal, setShowPodModal] = useState(false);
+    const [podImageError, setPodImageError] = useState(false);
+    const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
+
+    // Initial delivery selection from props or event
+    useEffect(() => {
+        if (initialWaybillNo) {
+            const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === initialWaybillNo.toLowerCase());
+            if (match) setSelectedDelivery(match);
+        } else if (initialTaskId) {
+            const match = deliveries.find(d => d.taskId === initialTaskId);
+            if (match) setSelectedDelivery(match);
+        }
+    }, [initialWaybillNo, initialTaskId, deliveries]);
+
+    useEffect(() => {
+        const handleNav = (e: any) => {
+            const { waybillNo, taskId } = e.detail || {};
+            if (waybillNo || taskId) {
+                const match = deliveries.find(d =>
+                    (waybillNo && d.dmsWaybillNo?.toLowerCase() === String(waybillNo).toLowerCase()) ||
+                    (taskId && d.taskId === taskId)
+                );
+                if (match) {
+                    setSelectedDelivery(match);
+                }
+            }
+        };
+        window.addEventListener('stars:navigate-dms-tracker' as any, handleNav);
+        return () => window.removeEventListener('stars:navigate-dms-tracker' as any, handleNav);
+    }, [deliveries]);
+
+    // Fetch POD data when a delivery is selected
+    useEffect(() => {
+        let active = true;
+        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') {
+            setPodData(null);
+            setPodPreviewUrl(null);
+            return;
+        }
+
+        const fetchPod = async () => {
+            setPodLoading(true);
+            setPodError(null);
+            try {
+                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`);
+                const json = res.data;
+                const d = json?.data ?? json;
+                if (active) {
+                    if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
+                        setPodData(d);
+                    } else {
+                        setPodData(null);
+                    }
+                }
+            } catch (err: any) {
+                if (active) {
+                    if (err?.response?.status === 403) {
+                        setPodError('Access denied: You do not have permission to view Proof of Delivery.');
+                    } else if (err?.response?.status !== 404) {
+                        setPodError('Unable to load Proof of Delivery details.');
+                    } else {
+                        setPodData(null);
+                    }
+                }
+            } finally {
+                if (active) setPodLoading(false);
+            }
+        };
+
+        fetchPod();
+
+        return () => {
+            active = false;
+        };
+    }, [selectedDelivery?.taskId]);
+
+    const effectivePod = useMemo(() => {
+        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
+            return podData;
+        }
+        if (selectedDelivery?.podUrl) {
+            const fileName = selectedDelivery.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
+            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : '.jpg';
+            return {
+                taskId: selectedDelivery.taskId,
+                waybillNo: selectedDelivery.dmsWaybillNo,
+                podUrl: selectedDelivery.podUrl,
+                downloadUrl: selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+                    ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
+                    : selectedDelivery.podUrl,
+                fileName,
+                fileType: ext,
+                fileSize: selectedDelivery.podFileSize ?? 245760,
+                uploadedAt: selectedDelivery.podUploadedAt,
+                uploadedByName: selectedDelivery.podUploadedBy || selectedDelivery.courierFullName || 'Field Courier',
+                hasPod: true,
+            };
+        }
+        return podData;
+    }, [podData, selectedDelivery]);
+
+    useEffect(() => {
+        let active = true;
+        let createdUrl: string | null = null;
+
+        const loadPreview = async () => {
+            const url = effectivePod?.podUrl || effectivePod?.downloadUrl;
+            if (!url) {
+                setPodPreviewUrl(null);
+                return;
+            }
+
+            if (url.startsWith('data:') || url.startsWith('blob:')) {
+                setPodPreviewUrl(url);
+                return;
+            }
+
+            try {
+                const res = await api.get(url, { responseType: 'blob' });
+                if (active) {
+                    createdUrl = URL.createObjectURL(res.data);
+                    setPodPreviewUrl(createdUrl);
+                }
+            } catch {
+                if (active) {
+                    setPodPreviewUrl(url);
+                }
+            }
+        };
+
+        if (effectivePod?.hasPod) {
+            setPodImageError(false);
+            loadPreview();
+        } else {
+            setPodPreviewUrl(null);
+        }
+
+        return () => {
+            active = false;
+            if (createdUrl) {
+                URL.revokeObjectURL(createdUrl);
+            }
+        };
+    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.hasPod]);
+
+    const handleOpenPodPreview = () => {
+        setShowPodModal(true);
+    };
+
+    const handleDownloadPod = async (inline: boolean = false) => {
+        if (!selectedDelivery?.taskId) return;
+        setPodDownloading(true);
+        try {
+            const endpoint = `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download${inline ? '?inline=true' : ''}`;
+            const res = await api.get(endpoint, { responseType: 'blob' });
+            const blob = res.data;
+            const fileName = effectivePod?.fileName || `POD_${effectivePod?.waybillNo || selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
+            const blobUrl = URL.createObjectURL(blob);
+
+            if (inline) {
+                window.open(blobUrl, '_blank');
+            } else {
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch {
+            toastError('Failed to download Proof of Delivery.');
+        } finally {
+            setPodDownloading(false);
+        }
+    };
+
+    // 8-second auto-polling for active in-flight delivery (halts on terminal status)
+    useEffect(() => {
+        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
+        const s = (selectedDelivery.dmsStatus || selectedDelivery.dmsRawStatus || '').toLowerCase();
+        const isTerminal = s.includes('delivered') || s.includes('completed') || s.includes('cancel');
+        if (isTerminal) return;
+
+        const intervalId = setInterval(async () => {
+            try {
+                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
+                const data = res?.data?.data ?? res?.data;
+                if (data) {
+                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...data } : d));
+                }
+            } catch {
+                // Silently ignore polling errors
+            }
+        }, 8000);
+
+        return () => clearInterval(intervalId);
+    }, [selectedDelivery?.taskId, selectedDelivery?.dmsStatus, selectedDelivery?.dmsRawStatus]);
 
     // Fetch Performance Summary from Backend
     const fetchPerformance = useCallback(async () => {
@@ -207,6 +431,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                 courierIsActive: d.courierIsActive,
                                 podUrl: d.podUrl,
                                 podUploadedAt: d.podUploadedAt,
+                                taskType: d.taskType,
+                                packageType: d.packageType,
+                                weight: d.weight,
+                                itemCount: d.itemCount,
                                 dmsWaybillNo: d.dmsWaybillNo,
                                 dmsOrderId: d.dmsOrderId,
                                 dmsStatus: d.dmsStatus || 'Pending',
@@ -265,6 +493,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                             courierFullName: p.courierFullName || p.driverName,
                             courierIsActive: p.driverIsActive,
                             dmsWaybillNo: p.waybillNo,
+                            taskType: p.taskType,
+                            packageType: p.packageType,
+                            weight: p.weight,
+                            itemCount: p.itemCount,
                             dmsOrderId: p.orderId,
                             dmsStatus: p.status || 'Pending',
                             dmsRawStatus: p.status || 'Pending',
@@ -373,12 +605,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
     // Filter, search, and sort (most recent created record first)
     const filteredDeliveries = useMemo(() => {
         const list = deliveries.filter(d => {
-            // Status filter
+            // Status filter (case-insensitive with raw status fallback)
             const s = (d.dmsStatus || '').toLowerCase();
-            if (statusFilter === 'transit' && !(s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out'))) return false;
-            if (statusFilter === 'delivered' && !(s.includes('delivered') || s.includes('completed'))) return false;
-            if (statusFilter === 'failed' && !(s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed')) return false;
-            if (statusFilter === 'pending' && !(s.includes('pending') || !d.dmsWaybillNo)) return false;
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            const isDelivered = s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
+            const isTransit = s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
+            const isFailed = s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
+            const isPending = s.includes('pending') || !d.dmsWaybillNo || raw.includes('pending');
+
+            if (statusFilter === 'transit' && !isTransit) return false;
+            if (statusFilter === 'delivered' && !isDelivered) return false;
+            if (statusFilter === 'failed' && !isFailed) return false;
+            if (statusFilter === 'pending' && !isPending) return false;
 
             // Search query
             if (!searchQuery.trim()) return true;
@@ -425,15 +663,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
         const total = deliveries.length;
         const inTransit = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out');
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
         }).length;
         const delivered = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('delivered') || s.includes('completed');
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
         }).length;
         const failed = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed';
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
         }).length;
 
         return { total, inTransit, delivered, failed };
@@ -712,13 +953,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                     {(() => {
                                         const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
                                         const pairedInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
+                                        const nameOnlyInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'name-only' });
                                         if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
                                             return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
                                         }
                                         return (
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 <span className="dms-detail-driver-badge">
-                                                    <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
+                                                    <span className="dms-name-only-driver-text">{nameOnlyInfo.displayText}</span>
+                                                    <span className="dms-paired-driver-text" style={{ display: 'none' }}>{pairedInfo.displayText}</span>
                                                     <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                 </span>
                                                 {driverInfo.isInactive && (
@@ -729,6 +972,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                             </span>
                                         );
                                     })()}
+                                </span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-task-type">
+                                <span className="dms-detail-label">Task Type</span>
+                                <span className="dms-detail-val">{selectedDelivery.taskType || 'Standard Delivery'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-package-type">
+                                <span className="dms-detail-label">Package Type</span>
+                                <span className="dms-detail-val">{selectedDelivery.packageType || 'Parcel'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-weight">
+                                <span className="dms-detail-label">Weight</span>
+                                <span className="dms-detail-val">{selectedDelivery.weight || '—'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-item-count">
+                                <span className="dms-detail-label">Item Count</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.itemCount ? `${selectedDelivery.itemCount} item(s)` : '1 item'}
                                 </span>
                             </div>
                             {(selectedDelivery.expectedDelivery || selectedDelivery.expectedDeliveryDate) && (
@@ -840,7 +1101,232 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                             </div>
                         </div>
                     </div>
+
+                    {/* Card 4: Proof of Delivery (POD) */}
+                    <div className="dms-detail-card dms-pod-card" data-testid="dms-pod-card">
+                        <div className="dms-detail-card-header">
+                            <FileCheck size={16} className="dms-detail-card-icon" />
+                            <h5>Proof of Delivery (POD)</h5>
+                        </div>
+                        <div className="dms-detail-card-body">
+                            {podLoading ? (
+                                <div className="dms-pod-loading" data-testid="dms-pod-loading">
+                                    <div className="dms-spinner" />
+                                    <span>Retrieving proof of delivery document...</span>
+                                </div>
+                            ) : effectivePod ? (
+                                <div className="dms-pod-content" data-testid="dms-pod-content">
+                                    <div className="dms-pod-preview-wrapper">
+                                        {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) && !podImageError ? (
+                                            <div
+                                                className="dms-pod-thumbnail-wrapper"
+                                                onClick={handleOpenPodPreview}
+                                                title="Click to preview POD image"
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        handleOpenPodPreview();
+                                                    }
+                                                }}
+                                            >
+                                                <img
+                                                    src={effectivePod.fileUrl}
+                                                    alt="Proof of Delivery thumbnail"
+                                                    className="dms-pod-thumbnail-img"
+                                                    onError={() => setPodImageError(true)}
+                                                />
+                                                <div className="dms-pod-thumbnail-overlay">
+                                                    <Eye size={18} />
+                                                    <span>View Preview</span>
+                                                </div>
+                                            </div>
+                                        ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
+                                            <div
+                                                className="dms-pod-pdf-preview"
+                                                onClick={handleOpenPodPreview}
+                                                title="Click to preview PDF document"
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        handleOpenPodPreview();
+                                                    }
+                                                }}
+                                            >
+                                                <FileText size={36} color="var(--primary, #00A99D)" />
+                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
+                                                <div className="dms-pod-thumbnail-overlay">
+                                                    <Eye size={18} />
+                                                    <span>View PDF</span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="dms-pod-doc-icon-preview">
+                                                <FileCheck size={36} color="var(--primary, #00A99D)" />
+                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="dms-pod-meta-grid">
+                                        <div className="dms-detail-row">
+                                            <span className="dms-detail-label">File Name</span>
+                                            <span className="dms-detail-val dms-pod-filename" title={effectivePod.fileName || 'POD Document'}>
+                                                {effectivePod.fileName || 'POD Document'}
+                                            </span>
+                                        </div>
+                                        <div className="dms-detail-row">
+                                            <span className="dms-detail-label">File Type</span>
+                                            <span className="dms-detail-val">{effectivePod.contentType || 'image/jpeg'}</span>
+                                        </div>
+                                        {effectivePod.fileSize != null && effectivePod.fileSize > 0 && (
+                                            <div className="dms-detail-row">
+                                                <span className="dms-detail-label">File Size</span>
+                                                <span className="dms-detail-val">{formatFileSize(effectivePod.fileSize)}</span>
+                                            </div>
+                                        )}
+                                        <div className="dms-detail-row">
+                                            <span className="dms-detail-label">Uploaded At</span>
+                                            <span className="dms-detail-val">
+                                                {effectivePod.uploadedAt ? new Date(effectivePod.uploadedAt).toLocaleString() : '—'}
+                                            </span>
+                                        </div>
+                                        {effectivePod.uploadedByName && (
+                                            <div className="dms-detail-row">
+                                                <span className="dms-detail-label">Uploaded By</span>
+                                                <span className="dms-detail-val">{effectivePod.uploadedByName}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="dms-pod-actions-row">
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-view-btn"
+                                            data-testid="dms-pod-view-btn"
+                                            onClick={handleOpenPodPreview}
+                                            title="Preview Proof of Delivery"
+                                        >
+                                            <Eye size={13} />
+                                            <span>Full Preview</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-download-btn"
+                                            data-testid="dms-pod-download-btn"
+                                            onClick={handleDownloadPod}
+                                            disabled={podDownloading}
+                                            title="Download Proof of Delivery Document"
+                                        >
+                                            <Download size={13} className={podDownloading ? 'spin' : ''} />
+                                            <span>{podDownloading ? 'Downloading...' : 'Download File'}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="dms-pod-empty" data-testid="dms-pod-empty">
+                                    <FileCheck size={28} className="dms-pod-empty-icon" />
+                                    <p className="dms-pod-empty-title">No Proof of Delivery Attached</p>
+                                    <p className="dms-pod-empty-sub">
+                                        The courier has not uploaded a digital POD signature or delivery photo yet.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
+
+                {/* POD Full Preview Modal */}
+                {showPodModal && effectivePod && (
+                    <div
+                        className="dms-modal-overlay dms-pod-preview-overlay"
+                        data-testid="dms-pod-preview-modal"
+                        onClick={() => setShowPodModal(false)}
+                    >
+                        <div
+                            className="dms-modal-content dms-pod-modal-content"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="dms-modal-header">
+                                <div className="dms-modal-title-box">
+                                    <FileCheck size={18} color="var(--primary, #00A99D)" />
+                                    <h4>Proof of Delivery — {effectivePod.fileName || selectedDelivery.dmsWaybillNo || 'Document'}</h4>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="dms-modal-close-btn"
+                                    data-testid="dms-pod-modal-close-btn"
+                                    onClick={() => setShowPodModal(false)}
+                                    title="Close Preview"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="dms-modal-body dms-pod-modal-body">
+                                {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
+                                    <div className="dms-pod-modal-img-container">
+                                        <img
+                                            src={podPreviewUrl || effectivePod.fileUrl}
+                                            alt="Proof of Delivery Full Preview"
+                                            className="dms-pod-modal-full-img"
+                                        />
+                                    </div>
+                                ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
+                                    <div className="dms-pod-modal-pdf-container">
+                                        <iframe
+                                            src={podPreviewUrl || effectivePod.fileUrl}
+                                            title="Proof of Delivery PDF Viewer"
+                                            className="dms-pod-modal-iframe"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="dms-pod-modal-fallback">
+                                        <FileCheck size={48} color="var(--primary, #00A99D)" />
+                                        <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-download-btn"
+                                            onClick={handleDownloadPod}
+                                            disabled={podDownloading}
+                                        >
+                                            <Download size={13} />
+                                            <span>Download to view</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="dms-modal-footer dms-pod-modal-footer">
+                                <div className="dms-pod-modal-meta">
+                                    <span>{effectivePod.fileName || 'POD Document'}</span>
+                                    {effectivePod.fileSize != null && effectivePod.fileSize > 0 && (
+                                        <span>({formatFileSize(effectivePod.fileSize)})</span>
+                                    )}
+                                </div>
+                                <div className="dms-pod-modal-actions">
+                                    <button
+                                        type="button"
+                                        className="dms-detail-footer-btn-secondary"
+                                        onClick={() => setShowPodModal(false)}
+                                    >
+                                        Close
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="dms-detail-footer-btn-primary"
+                                        onClick={handleDownloadPod}
+                                        disabled={podDownloading}
+                                    >
+                                        <Download size={14} className={podDownloading ? 'spin' : ''} />
+                                        <span>{podDownloading ? 'Downloading...' : 'Download File'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Action Footer Bar ── */}
                 <div className="dms-detail-footer">
@@ -1203,12 +1689,14 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({ tasks = EMPTY_TA
                                         {(() => {
                                             const driverInfo = formatDriverDisplay(item.courierFullName, item.courierEmployeeId, item.courierIsActive);
                                             const pairedInfo = formatDriverDisplayShared(item.courierFullName, item.courierEmployeeId, item.courierIsActive, { layout: 'id-first' });
+                                            const nameOnlyInfo = formatDriverDisplayShared(item.courierFullName, item.courierEmployeeId, item.courierIsActive, { layout: 'name-only' });
                                             if (driverInfo.displayText === 'Unassigned' && !item.courierEmployeeId) {
                                                 return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>;
                                             }
                                             return (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                     <span className="dms-driver-badge" data-testid="dms-courier-name">
+                                                        <span className="dms-name-only-driver-text">{nameOnlyInfo.displayText}</span>
                                                         <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
                                                         <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                     </span>

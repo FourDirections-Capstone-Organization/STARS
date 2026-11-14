@@ -38,6 +38,17 @@ public class TaskDeliveryDetail
     [MaxLength(1000)]
     public string? SpecialInstructions { get; set; }
 
+    [MaxLength(100)]
+    public string? TaskType { get; set; }
+
+    [MaxLength(100)]
+    public string? PackageType { get; set; }
+
+    [MaxLength(50)]
+    public string? Weight { get; set; }
+
+    public int? ItemCount { get; set; }
+
     /// <summary>
     /// Optional DMS employee id (e.g. DRV-001) for assigning a driver in DMS.
     /// </summary>
