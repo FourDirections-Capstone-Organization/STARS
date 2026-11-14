@@ -208,23 +208,41 @@ public class DmsIntegrationController : ControllerBase
 
     /// <summary>
     /// Merged performance summary reporting on-time vs late delivery rates.
-    /// Accessible via API Key (machine-to-machine) or Manager/Coordinator JWT.
+    /// Accessible via API Key (machine-to-machine) or Manager/Coordinator/Admin/SystemAdmin JWT.
     /// </summary>
     [HttpGet("api/integration/dms/performance-summary")]
     [AllowAnonymous]
     public async Task<IActionResult> GetPerformanceSummary([FromQuery] string? driverId)
     {
-        // Allow access if valid API key is present OR user is authenticated as Coordinator/Manager
+        // 1. Check for valid M2M API key
         var apiKey = Request.Headers[DmsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
         bool hasApiKey = DmsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
 
         if (!hasApiKey)
         {
-            var isUserAuth = User.Identity?.IsAuthenticated == true &&
-                (User.IsInRole("Manager") || User.IsInRole("Coordinator"));
+            // 2. Resilient check for authenticated user session
+            var isAuth = User.Identity?.IsAuthenticated == true;
+            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value 
+                         ?? User.FindFirst("role")?.Value 
+                         ?? User.Claims.FirstOrDefault(c => c.Type.EndsWith("/role", StringComparison.OrdinalIgnoreCase))?.Value;
 
-            if (!isUserAuth)
-                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required (valid API key or Coordinator/Manager session)."));
+            bool isAuthorizedRole = !string.IsNullOrWhiteSpace(roleClaim) && (
+                string.Equals(roleClaim, "Manager", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(roleClaim, "Coordinator", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(roleClaim, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(roleClaim, "SystemAdmin", StringComparison.OrdinalIgnoreCase)
+            );
+
+            bool hasRoleMembership = User.IsInRole("Manager") || 
+                                     User.IsInRole("Coordinator") || 
+                                     User.IsInRole("Admin") || 
+                                     User.IsInRole("SystemAdmin");
+
+            if (!isAuth || (!isAuthorizedRole && !hasRoleMembership))
+            {
+                return Unauthorized(ApiResponseDTO<object>.Failure(
+                    "Authentication required (valid API key or Coordinator/Manager session)."));
+            }
         }
 
         var result = await _dmsService.GetPerformanceSummaryAsync(driverId);

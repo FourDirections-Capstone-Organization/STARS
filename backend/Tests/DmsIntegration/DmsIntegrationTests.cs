@@ -1,11 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Moq.Protected;
+using Backend.Controllers;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -1841,5 +1845,353 @@ public class DmsIntegrationTests : IDisposable
             Times.Never(),
             ItExpr.IsAny<HttpRequestMessage>(),
             ItExpr.IsAny<CancellationToken>());
+    }
+
+    private DmsIntegrationController CreateController(DmsIntegrationService? service = null, ClaimsPrincipal? user = null, string? apiKey = null)
+    {
+        var dmsService = service ?? CreateService();
+        var loggerMock = new Mock<ILogger<DmsIntegrationController>>();
+        var controller = new DmsIntegrationController(dmsService, _db, Options.Create(_settings), loggerMock.Object);
+
+        var httpContext = new DefaultHttpContext();
+        if (user != null)
+        {
+            httpContext.User = user;
+        }
+        if (!string.IsNullOrEmpty(apiKey))
+        {
+            httpContext.Request.Headers[DmsIntegrationService.ApiKeyHeaderName] = apiKey;
+        }
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = httpContext
+        };
+
+        return controller;
+    }
+
+    private static ClaimsPrincipal CreateUserPrincipal(string roleName, string? roleClaimType = null)
+    {
+        var claimType = roleClaimType ?? ClaimTypes.Role;
+        var identity = new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(claimType, roleName)
+        }, "TestAuth");
+        return new ClaimsPrincipal(identity);
+    }
+
+    [Fact]
+    public async Task D59_TC01_GetPerformanceSummary_AllowsCoordinatorUser()
+    {
+        var user = CreateUserPrincipal("Coordinator");
+        var controller = CreateController(user: user);
+
+        var response = await controller.GetPerformanceSummary(null);
+
+        var okResult = Assert.IsType<OkObjectResult>(response);
+        var apiRes = Assert.IsType<ApiResponseDTO<DmsPerformanceSummaryDTO>>(okResult.Value);
+        Assert.True(apiRes.IsSuccess);
+    }
+
+    [Fact]
+    public async Task D59_TC02_GetPerformanceSummary_AllowsManagerUser()
+    {
+        var user = CreateUserPrincipal("Manager");
+        var controller = CreateController(user: user);
+
+        var response = await controller.GetPerformanceSummary(null);
+
+        var okResult = Assert.IsType<OkObjectResult>(response);
+        var apiRes = Assert.IsType<ApiResponseDTO<DmsPerformanceSummaryDTO>>(okResult.Value);
+        Assert.True(apiRes.IsSuccess);
+    }
+
+    [Fact]
+    public async Task D59_TC01_GetPerformanceSummary_AllowsAdminAndSystemAdminUsers()
+    {
+        var adminUser = CreateUserPrincipal("Admin");
+        var controllerAdmin = CreateController(user: adminUser);
+        var resAdmin = await controllerAdmin.GetPerformanceSummary(null);
+        Assert.IsType<OkObjectResult>(resAdmin);
+
+        var sysAdminUser = CreateUserPrincipal("SystemAdmin", "role");
+        var controllerSysAdmin = CreateController(user: sysAdminUser);
+        var resSysAdmin = await controllerSysAdmin.GetPerformanceSummary(null);
+        Assert.IsType<OkObjectResult>(resSysAdmin);
+    }
+
+    [Fact]
+    public async Task D59_TC03_GetPerformanceSummary_AllowsM2MApiKey()
+    {
+        var controller = CreateController(apiKey: "test-inbound-key");
+
+        var response = await controller.GetPerformanceSummary(null);
+
+        var okResult = Assert.IsType<OkObjectResult>(response);
+        var apiRes = Assert.IsType<ApiResponseDTO<DmsPerformanceSummaryDTO>>(okResult.Value);
+        Assert.True(apiRes.IsSuccess);
+    }
+
+    [Fact]
+    public async Task D59_GetPerformanceSummary_RejectsUnauthorizedUser()
+    {
+        var courierUser = CreateUserPrincipal("Courier");
+        var controllerCourier = CreateController(user: courierUser);
+        var resCourier = await controllerCourier.GetPerformanceSummary(null);
+        Assert.IsType<UnauthorizedObjectResult>(resCourier);
+
+        var controllerAnon = CreateController();
+        var resAnon = await controllerAnon.GetPerformanceSummary(null);
+        Assert.IsType<UnauthorizedObjectResult>(resAnon);
+    }
+
+    [Fact]
+    public async Task D59_TC04_TC05_TC06_GetPerformanceSummary_CaseInsensitiveStatuses_DeliveredAndCompleted()
+    {
+        var service = CreateService();
+
+        var statuses = new[] { "delivered", "DELIVERED", "completed", "COMPLETED" };
+        int idx = 1;
+        foreach (var st in statuses)
+        {
+            var tid = Guid.NewGuid();
+            var task = new Backend.Models.Task
+            {
+                Id = tid,
+                Title = $"Task {idx}",
+                Deadline = DateTime.UtcNow.AddHours(2),
+                Status = Backend.Models.Enums.TaskStatus.InProgress,
+                CreatedAt = DateTime.UtcNow.AddHours(-1)
+            };
+            var delivery = new TaskDeliveryDetail
+            {
+                Id = Guid.NewGuid(),
+                TaskId = tid,
+                Task = task,
+                RecipientName = $"Recipient {idx}",
+                RecipientContact = "09171234567",
+                DeliveryAddress = "Metro Manila",
+                DmsWaybillNo = $"WB-CASE-0{idx}",
+                DmsStatus = st,
+                CourierEmployeeId = $"DRV-00{idx}",
+                CreatedAt = DateTime.UtcNow.AddHours(-1),
+                DmsLastSyncedAt = DateTime.UtcNow.AddMinutes(-10)
+            };
+            _db.Tasks.Add(task);
+            _db.TaskDeliveryDetails.Add(delivery);
+            idx++;
+        }
+
+        // Add non-delivered task that should NOT match
+        var ignoredTid = Guid.NewGuid();
+        var ignoredTask = new Backend.Models.Task
+        {
+            Id = ignoredTid,
+            Title = "In Transit Task",
+            Deadline = DateTime.UtcNow.AddHours(2),
+            Status = Backend.Models.Enums.TaskStatus.InProgress
+        };
+        var ignoredDelivery = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = ignoredTid,
+            Task = ignoredTask,
+            RecipientName = "Pending Person",
+            RecipientContact = "09170000000",
+            DeliveryAddress = "Metro Manila",
+            DmsWaybillNo = "WB-IGNORED-01",
+            DmsStatus = "In_Transit",
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(ignoredTask);
+        _db.TaskDeliveryDetails.Add(ignoredDelivery);
+
+        await _db.SaveChangesAsync();
+
+        var summary = await service.GetPerformanceSummaryAsync();
+        Assert.True(summary.IsSuccess);
+        Assert.Equal(4, summary.Data!.TotalDeliveries);
+        Assert.Contains(summary.Data.Records, r => r.WaybillNo == "WB-CASE-01");
+        Assert.Contains(summary.Data.Records, r => r.WaybillNo == "WB-CASE-02");
+        Assert.Contains(summary.Data.Records, r => r.WaybillNo == "WB-CASE-03");
+        Assert.Contains(summary.Data.Records, r => r.WaybillNo == "WB-CASE-04");
+        Assert.DoesNotContain(summary.Data.Records, r => r.WaybillNo == "WB-IGNORED-01");
+    }
+
+    [Fact]
+    public async Task D59_TC07_GetPerformanceSummary_DeduplicatesWaybillsBetweenBatchAndLiveTasks()
+    {
+        var service = CreateService();
+
+        _db.DmsDeliveryPerformances.Add(new DmsDeliveryPerformance
+        {
+            WaybillNo = "WB-DUP-01",
+            DriverId = "EMP-001",
+            CompletedAt = DateTime.UtcNow.AddHours(-1),
+            SlaTargetAt = DateTime.UtcNow.AddHours(1),
+            IsOnTime = true,
+            ReceivedAt = DateTime.UtcNow
+        });
+
+        var tid = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = tid,
+            Title = "Duplicate Task",
+            Deadline = DateTime.UtcNow.AddHours(2),
+            Status = Backend.Models.Enums.TaskStatus.Completed
+        };
+        _db.Tasks.Add(task);
+        _db.TaskDeliveryDetails.Add(new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = tid,
+            Task = task,
+            RecipientName = "Maria Dup",
+            RecipientContact = "09170001111",
+            DeliveryAddress = "Quezon City",
+            DmsWaybillNo = "WB-DUP-01", // Duplicate waybill
+            DmsStatus = "delivered",
+            CourierEmployeeId = "EMP-001"
+        });
+
+        await _db.SaveChangesAsync();
+
+        var summary = await service.GetPerformanceSummaryAsync();
+        Assert.True(summary.IsSuccess);
+        Assert.Equal(1, summary.Data!.TotalDeliveries);
+        Assert.Single(summary.Data.Records, r => r.WaybillNo == "WB-DUP-01");
+    }
+
+    [Fact]
+    public async Task D59_TC08_GetPerformanceSummary_ResolvesDriverNamesWithFallback()
+    {
+        var service = CreateService();
+
+        var driverUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-MATCH-01",
+            FirstName = "Carlos",
+            LastName = "Santos",
+            Email = "csantos@example.com",
+            Username = "csantos",
+            PasswordHash = "hash",
+            Role = UserRole.Courier,
+            IsActive = true,
+            IsDeactivated = false
+        };
+        _db.Users.Add(driverUser);
+
+        // Record with driver in Users
+        _db.DmsDeliveryPerformances.Add(new DmsDeliveryPerformance
+        {
+            WaybillNo = "WB-DRV-01",
+            DriverId = "EMP-MATCH-01",
+            CompletedAt = DateTime.UtcNow.AddHours(-1),
+            SlaTargetAt = DateTime.UtcNow.AddHours(1),
+            IsOnTime = true,
+            ReceivedAt = DateTime.UtcNow
+        });
+
+        // Record from TaskDeliveryDetails with CourierFullName
+        var tid = Guid.NewGuid();
+        var task = new Backend.Models.Task
+        {
+            Id = tid,
+            Title = "Named Courier Task",
+            Deadline = DateTime.UtcNow.AddHours(2),
+            Status = Backend.Models.Enums.TaskStatus.Completed
+        };
+        _db.Tasks.Add(task);
+        _db.TaskDeliveryDetails.Add(new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = tid,
+            Task = task,
+            RecipientName = "Test Recipient",
+            RecipientContact = "09172223333",
+            DeliveryAddress = "Taguig",
+            DmsWaybillNo = "WB-DRV-02",
+            DmsStatus = "delivered",
+            CourierFullName = "Ramon Magsaysay",
+            CourierEmployeeId = "EXT-COURIER-99"
+        });
+
+        // Record with raw driver ID only
+        _db.DmsDeliveryPerformances.Add(new DmsDeliveryPerformance
+        {
+            WaybillNo = "WB-DRV-03",
+            DriverId = "UNKNOWN-COURIER-77",
+            CompletedAt = DateTime.UtcNow.AddHours(-1),
+            SlaTargetAt = DateTime.UtcNow.AddHours(1),
+            IsOnTime = true,
+            ReceivedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync();
+
+        var summary = await service.GetPerformanceSummaryAsync();
+        Assert.True(summary.IsSuccess);
+
+        var r1 = summary.Data!.Records.First(r => r.WaybillNo == "WB-DRV-01");
+        Assert.Equal("Carlos Santos", r1.DriverName);
+        Assert.True(r1.DriverIsActive);
+
+        var r2 = summary.Data.Records.First(r => r.WaybillNo == "WB-DRV-02");
+        Assert.Equal("Ramon Magsaysay", r2.DriverName);
+
+        var r3 = summary.Data.Records.First(r => r.WaybillNo == "WB-DRV-03");
+        Assert.Equal("UNKNOWN-COURIER-77", r3.DriverName);
+    }
+
+    [Fact]
+    public async Task D59_TC09_ReceivePerformanceBatch_PersistsAndUpsertsRecords()
+    {
+        var controller = CreateController(apiKey: "test-inbound-key");
+
+        var batch = new DmsPerformanceBatchDTO
+        {
+            GeneratedAt = DateTime.UtcNow,
+            Records = new List<DmsPerformanceRecordDTO>
+            {
+                new DmsPerformanceRecordDTO
+                {
+                    WaybillNo = "WB-BATCH-01",
+                    DriverId = "EMP-008",
+                    StarsTaskId = Guid.NewGuid(),
+                    CompletedAt = DateTime.UtcNow.AddHours(-2),
+                    SlaTargetAt = DateTime.UtcNow.AddHours(1),
+                    IsOnTime = true
+                },
+                new DmsPerformanceRecordDTO
+                {
+                    WaybillNo = "WB-BATCH-02",
+                    DriverId = "EMP-009",
+                    StarsTaskId = Guid.NewGuid(),
+                    CompletedAt = DateTime.UtcNow.AddHours(2),
+                    SlaTargetAt = DateTime.UtcNow.AddHours(1),
+                    IsOnTime = false
+                }
+            }
+        };
+
+        var response = await controller.ReceivePerformanceBatch(batch);
+        var okResult = Assert.IsType<OkObjectResult>(response);
+        var apiRes = Assert.IsType<ApiResponseDTO<int>>(okResult.Value);
+        Assert.True(apiRes.IsSuccess);
+        Assert.Equal(2, apiRes.Data);
+
+        var saved1 = await _db.DmsDeliveryPerformances.FirstOrDefaultAsync(p => p.WaybillNo == "WB-BATCH-01");
+        Assert.NotNull(saved1);
+        Assert.Equal("EMP-008", saved1.DriverId);
+        Assert.True(saved1.IsOnTime);
+
+        var saved2 = await _db.DmsDeliveryPerformances.FirstOrDefaultAsync(p => p.WaybillNo == "WB-BATCH-02");
+        Assert.NotNull(saved2);
+        Assert.Equal("EMP-009", saved2.DriverId);
+        Assert.False(saved2.IsOnTime);
     }
 }

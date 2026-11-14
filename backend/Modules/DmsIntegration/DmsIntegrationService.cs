@@ -1029,7 +1029,9 @@ public class DmsIntegrationService : IDmsIntegrationService
             .Include(d => d.Task)
             .AsNoTracking()
             .Where(d => !string.IsNullOrEmpty(d.DmsWaybillNo))
-            .Where(d => d.DmsStatus == "Delivered" || d.DmsStatus == "Completed" ||
+            .Where(d => (d.DmsStatus != null && (
+                            d.DmsStatus.ToLower() == "delivered" ||
+                            d.DmsStatus.ToLower() == "completed")) ||
                         (d.Task != null && d.Task.Status == Backend.Models.Enums.TaskStatus.Completed))
             .ToListAsync();
 
@@ -1040,8 +1042,13 @@ public class DmsIntegrationService : IDmsIntegrationService
             if (string.IsNullOrWhiteSpace(d.DmsWaybillNo)) continue;
             if (existingWaybills.Contains(d.DmsWaybillNo)) continue;
 
-            var dDriver = !string.IsNullOrWhiteSpace(d.CourierEmployeeId) ? d.CourierEmployeeId : "Field Courier";
-            if (!string.IsNullOrWhiteSpace(driverId) && !string.Equals(dDriver, driverId.Trim(), StringComparison.OrdinalIgnoreCase))
+            var dDriver = !string.IsNullOrWhiteSpace(d.CourierEmployeeId)
+                ? d.CourierEmployeeId
+                : (!string.IsNullOrWhiteSpace(d.CourierFullName) ? d.CourierFullName : "Field Courier");
+
+            if (!string.IsNullOrWhiteSpace(driverId) &&
+                !string.Equals(dDriver, driverId.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(d.CourierEmployeeId, driverId.Trim(), StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var completedAt = d.DmsLastSyncedAt ?? d.UpdatedAt ?? d.CreatedAt;
@@ -1071,8 +1078,9 @@ public class DmsIntegrationService : IDmsIntegrationService
         // Resolve driver names in a single batch query (Zero N+1)
         var distinctDriverIds = list
             .Select(p => p.DriverId)
+            .Concat(deliveredDetails.Select(d => d.CourierEmployeeId))
             .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var driverUsers = await _db.Users
@@ -1080,7 +1088,15 @@ public class DmsIntegrationService : IDmsIntegrationService
             .Where(u => distinctDriverIds.Contains(u.EmployeeNumber))
             .ToListAsync();
 
-        var driverDict = driverUsers.ToDictionary(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase);
+        var driverDict = driverUsers
+            .Where(u => !string.IsNullOrWhiteSpace(u.EmployeeNumber))
+            .GroupBy(u => u.EmployeeNumber, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var detailsByWaybill = deliveredDetails
+            .Where(d => !string.IsNullOrWhiteSpace(d.DmsWaybillNo))
+            .GroupBy(d => d.DmsWaybillNo!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         var records = list.Select(p =>
         {
@@ -1091,6 +1107,18 @@ public class DmsIntegrationService : IDmsIntegrationService
             {
                 driverName = $"{u.FirstName} {u.LastName}".Trim();
                 driverIsActive = u.IsActive && !u.IsDeactivated;
+            }
+            else if (detailsByWaybill.TryGetValue(p.WaybillNo, out var matchedDetail) &&
+                     !string.IsNullOrWhiteSpace(matchedDetail.CourierEmployeeId) &&
+                     driverDict.TryGetValue(matchedDetail.CourierEmployeeId, out var cu))
+            {
+                driverName = $"{cu.FirstName} {cu.LastName}".Trim();
+                driverIsActive = cu.IsActive && !cu.IsDeactivated;
+            }
+            else if (detailsByWaybill.TryGetValue(p.WaybillNo, out var detailWithName) &&
+                     !string.IsNullOrWhiteSpace(detailWithName.CourierFullName))
+            {
+                driverName = detailWithName.CourierFullName.Trim();
             }
             else if (!string.IsNullOrWhiteSpace(p.DriverId))
             {
