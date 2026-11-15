@@ -45,7 +45,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Branch: `step-3-dms-delivery-taskview`
   - Verify: Run `npm --prefix frontend test -- src/test/TaskViewDmsPod.test.tsx src/test/DmsDeadlineDriverUI.test.tsx src/test/DeliveryAnalyticsAndCompletedStatusFix.test.tsx`
 
-- [ ] Step 4: Harmonize PreDeliveryTab and Dashboards
+- [x] Step 4: Harmonize PreDeliveryTab and Dashboards
   - Files: `frontend/src/components/PreDeliveryTab/PreDeliveryTab.tsx`, `frontend/src/Pages/SystemAdmin_Dashboard/SystemAdmin_Dashboard.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/OpAdmin_Dashboard.tsx`, `frontend/src/test/PreDeliveryTab.test.tsx`, `frontend/src/test/PreDeliveryDefectResolution.test.tsx`
   - Branch: `step-4-predelivery-dashboards`
   - Verify: Run `npm --prefix frontend test -- src/test/PreDeliveryTab.test.tsx src/test/PreDeliveryDefectResolution.test.tsx`
