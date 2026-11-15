@@ -93,6 +93,7 @@ interface DmsDeliveryTabProps {
     onViewTask: (taskId: string) => void;
     initialWaybillNo?: string;
     initialTaskId?: string;
+    initialWaybill?: string;
 }
 
 const EMPTY_TASKS: any[] = [];
@@ -102,6 +103,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     onViewTask,
     initialWaybillNo,
     initialTaskId,
+    initialWaybill,
 }) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -122,6 +124,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const exportMenuRef = React.useRef<HTMLDivElement>(null);
+    const deliveredOrdersRef = React.useRef<Map<string, DmsDeliveryItem>>(new Map());
 
     useEffect(() => {
         setCurrentPage(1);
@@ -153,16 +156,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     const [podImageError, setPodImageError] = useState(false);
     const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
 
+    const targetWaybill = initialWaybill || initialWaybillNo;
+
     // Initial delivery selection from props or event
     useEffect(() => {
-        if (initialWaybillNo) {
-            const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === initialWaybillNo.toLowerCase());
+        if (targetWaybill) {
+            const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === targetWaybill.toLowerCase());
             if (match) setSelectedDelivery(match);
         } else if (initialTaskId) {
             const match = deliveries.find(d => d.taskId === initialTaskId);
             if (match) setSelectedDelivery(match);
         }
-    }, [initialWaybillNo, initialTaskId, deliveries]);
+    }, [targetWaybill, initialTaskId, deliveries]);
 
     useEffect(() => {
         const handleNav = (e: any) => {
@@ -379,6 +384,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const res = await api.get('/api/dms-integration/deliveries');
                 const list = res?.data?.data ?? res?.data;
                 if (Array.isArray(list) && list.length > 0) {
+                    list.forEach((item: DmsDeliveryItem) => {
+                        const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                        if (s.includes('delivered') || s.includes('completed')) {
+                            const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                            if (key) deliveredOrdersRef.current.set(key, item);
+                        }
+                    });
+                    deliveredOrdersRef.current.forEach((savedDelivered) => {
+                        const exists = list.some((d: any) =>
+                            (d.taskId && d.taskId === savedDelivered.taskId) ||
+                            (d.dmsWaybillNo && d.dmsWaybillNo?.toLowerCase() === savedDelivered.dmsWaybillNo?.toLowerCase()) ||
+                            (d.dmsOrderId && d.dmsOrderId === savedDelivered.dmsOrderId)
+                        );
+                        if (!exists) {
+                            list.push(savedDelivered);
+                        }
+                    });
+
                     const sorted = [...list].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -511,6 +534,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 // Ignore
             }
 
+            fetchedDeliveries.forEach(item => {
+                const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                if (s.includes('delivered') || s.includes('completed')) {
+                    const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                    if (key) deliveredOrdersRef.current.set(key, item);
+                }
+            });
+            deliveredOrdersRef.current.forEach((savedDelivered) => {
+                const exists = fetchedDeliveries.some((d: any) =>
+                    (d.taskId && d.taskId === savedDelivered.taskId) ||
+                    (d.dmsWaybillNo && d.dmsWaybillNo?.toLowerCase() === savedDelivered.dmsWaybillNo?.toLowerCase()) ||
+                    (d.dmsOrderId && d.dmsOrderId === savedDelivered.dmsOrderId)
+                );
+                if (!exists) {
+                    fetchedDeliveries.push(savedDelivered);
+                }
+            });
+
             fetchedDeliveries.sort((a, b) => {
                 const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                 const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -528,6 +569,19 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     useEffect(() => {
         fetchDeliveries();
+    }, [fetchDeliveries]);
+
+    // Re-sync delivery list on DMS task lifecycle events
+    useEffect(() => {
+        const handleSyncUpdate = () => {
+            fetchDeliveries();
+        };
+        window.addEventListener('stars:dms-task-created', handleSyncUpdate);
+        window.addEventListener('stars:dms-task-updated', handleSyncUpdate);
+        return () => {
+            window.removeEventListener('stars:dms-task-created', handleSyncUpdate);
+            window.removeEventListener('stars:dms-task-updated', handleSyncUpdate);
+        };
     }, [fetchDeliveries]);
 
     // Live Auto-Refresh polling (every 20s if enabled)
