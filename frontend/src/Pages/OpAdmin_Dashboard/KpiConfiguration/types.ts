@@ -56,6 +56,147 @@ export interface DepartmentOption {
     name: string;
 }
 
+export interface DepartmentRosterOption {
+    departmentId: string;
+    departmentName: string;
+    members: Array<{
+        role?: string;
+        jobPositionName?: string;
+    }>;
+}
+
+export interface JobPositionOption {
+    id: string;
+    name: string;
+    departmentId: string;
+}
+
+export const ALL_OPERATIONAL_ROLES = [
+    'Courier',
+    'Encoder',
+    'Dispatcher',
+    'Coordinator',
+    'Manager',
+    'Accountant'
+] as const;
+
+export const ROLE_DISPLAY_LABELS: Record<string, string> = {
+    Courier: 'Courier / Driver',
+    Dispatcher: 'Dispatcher',
+    Encoder: 'Encoder',
+    Coordinator: 'Coordinator',
+    Manager: 'Manager',
+    Accountant: 'Accountant'
+};
+
+export const getRoleDisplayLabel = (role: string): string => {
+    return ROLE_DISPLAY_LABELS[role] || role;
+};
+
+export const normalizeRoleName = (role?: string): string => {
+    if (!role) return '';
+    const trimmed = role.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower === 'courier/driver' || lower === 'courier / driver' || lower === 'driver') {
+        return 'Courier';
+    }
+    const matched = ALL_OPERATIONAL_ROLES.find(r => r.toLowerCase() === lower);
+    return matched || trimmed;
+};
+
+const getRolesFromPositionName = (positionName?: string): string[] => {
+    if (!positionName || !positionName.trim()) return [];
+    const pos = positionName.toLowerCase().trim();
+    const roles: string[] = [];
+
+    if (pos.includes('courier') || pos.includes('driver') || pos.includes('rider')) {
+        roles.push('Courier');
+    }
+    if (pos.includes('encoder') || pos.includes('clerk')) {
+        roles.push('Encoder');
+    }
+    if (pos.includes('dispatcher')) {
+        roles.push('Dispatcher');
+    }
+    if (pos.includes('coordinator') || pos.includes('customer service')) {
+        roles.push('Coordinator');
+    }
+    if (pos.includes('manager')) {
+        roles.push('Manager');
+    }
+    if (pos.includes('account') || pos.includes('finance') || pos.includes('billing')) {
+        roles.push('Accountant');
+    }
+
+    return roles;
+};
+
+const getRolesFromDepartmentName = (departmentName?: string): string[] => {
+    if (!departmentName || !departmentName.trim()) return [];
+    const name = departmentName.toLowerCase().trim();
+
+    if (name.includes('dispatch')) {
+        return ['Dispatcher', 'Coordinator'];
+    }
+    if (name.includes('forwarding')) {
+        return ['Courier', 'Encoder'];
+    }
+    if (name.includes('delivery') || name.includes('logistics') || name.includes('fleet') || name.includes('transport')) {
+        return ['Courier', 'Dispatcher', 'Encoder'];
+    }
+    if (name.includes('sorting') || name.includes('hub') || name.includes('warehouse')) {
+        return ['Encoder', 'Dispatcher', 'Courier'];
+    }
+    if (name.includes('coordinator') || name.includes('customer service') || name.includes('support')) {
+        return ['Coordinator', 'Manager'];
+    }
+    if (name.includes('finance') || name.includes('accounting') || name.includes('billing')) {
+        return ['Accountant', 'Manager'];
+    }
+    if (name.includes('management') || name.includes('executive') || name.includes('admin')) {
+        return ['Manager', 'Coordinator'];
+    }
+
+    return [];
+};
+
+export const getRolesForDepartment = (
+    departmentId?: string,
+    departmentName?: string,
+    rosters: DepartmentRosterOption[] = [],
+    jobPositions: JobPositionOption[] = []
+): string[] => {
+    if (!departmentId) return [];
+
+    const normDeptId = departmentId.toLowerCase();
+    const matchedRoster = rosters.find(r => r.departmentId?.toLowerCase() === normDeptId);
+
+    const memberRoles = (matchedRoster?.members || [])
+        .map(m => normalizeRoleName(m.role))
+        .filter(Boolean);
+
+    const positionRoles = jobPositions
+        .filter(p => p.departmentId?.toLowerCase() === normDeptId)
+        .flatMap(p => getRolesFromPositionName(p.name));
+
+    const deptNameRoles = getRolesFromDepartmentName(departmentName || matchedRoster?.departmentName);
+
+    const combined = Array.from(new Set([...deptNameRoles, ...positionRoles, ...memberRoles]));
+    if (combined.length > 0) {
+        return combined;
+    }
+
+    return ['Coordinator', 'Dispatcher', 'Encoder', 'Courier'];
+};
+
+export const normalizeStandardMetricCode = (metricCode?: string): string => {
+    if (!metricCode) return '';
+    const upper = metricCode.trim().toUpperCase();
+    if (upper === 'COMPLETION_RATE') return 'TASK_COMPLETION_RATE';
+    if (upper === 'AHT') return 'AVERAGE_HANDLING_TIME';
+    return upper;
+};
+
 export interface KpiVariableDefinition {
     name: string;
     displayName: string;
