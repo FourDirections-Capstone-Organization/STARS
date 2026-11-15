@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 
 namespace Backend.Modules.Analytics;
 
@@ -32,6 +33,20 @@ public static class KpiConfigurationValidator
             }
         }
 
+        if (!dto.DepartmentId.HasValue || dto.DepartmentId.Value == Guid.Empty)
+        {
+            errors.Add("Department is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.TargetRole))
+        {
+            errors.Add("Target role is required.");
+        }
+        else if (!Enum.TryParse<UserRole>(dto.TargetRole.Trim(), ignoreCase: true, out _))
+        {
+            errors.Add($"Invalid target role '{dto.TargetRole}'.");
+        }
+
         // Prospective dates validation
         var now = referenceUtcNow ?? DateTime.UtcNow;
         if (requireProspectiveFutureStart && dto.EffectiveStartDate < now.Date)
@@ -55,6 +70,11 @@ public static class KpiConfigurationValidator
         {
             errors.Add("At least one KPI item is required in the configuration.");
             return (errors.Count == 0, errors);
+        }
+
+        if (dto.Items.Count > 1)
+        {
+            errors.Add("Only one KPI metric can be configured per role.");
         }
 
         // 100% weight sum validation
