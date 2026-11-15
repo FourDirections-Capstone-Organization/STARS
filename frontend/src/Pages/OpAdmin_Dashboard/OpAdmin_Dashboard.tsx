@@ -98,6 +98,7 @@ import NotificationsTab from '../../components/NotificationsTab/NotificationsTab
 import { FomsFinancialMetricsView, FomsEndorsementItem } from '../../components/FomsFinancialMetrics';
 import { aiService, SuitabilityResponseDTO } from '../../services/aiService';
 import { suitabilityCache, reRankSuitabilityItems } from '../../services/suitabilityCache';
+import { recordCreatedDmsOrder, syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 
 const NOTIF_TYPE_MAP: Record<number, string> = {
     0: 'TaskAssigned', 1: 'TaskUpdated', 2: 'TaskOverdue', 3: 'DeadlineWarning',
@@ -5343,10 +5344,11 @@ const DateRangeEngineField: React.FC<{
 
 export const ReportsTab: React.FC<{
     teamMembers: Array<{ accountId: string; employeeName: string; role?: string }>;
+    tasks?: Task[];
     onNavigateToTab?: (tab: NavTab) => void;
     onNavigateToConfig?: () => void;
     onViewTask?: (taskId: string) => void;
-}> = ({ teamMembers, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
+}> = ({ teamMembers, tasks, onNavigateToTab, onNavigateToConfig, onViewTask }) => {
     const { success, error } = useToast();
     const [reportSubTab, setReportSubTab] = useState<'kpi-tracking' | 'performance-report' | 'foms-export' | 'task-completion' | 'operational-summary' | 'dms-performance'>('kpi-tracking');
 
@@ -5450,15 +5452,148 @@ export const ReportsTab: React.FC<{
             if (driver) params.set('driverId', driver);
             const res = await api.get(`/api/integration/dms/performance-summary?${params.toString()}`);
             const json = res.data;
-            if (json?.isSuccess && json?.data) {
+            if (json?.isSuccess && json?.data && Array.isArray(json.data.records) && json.data.records.length > 0) {
                 setDmsPerfData(json.data);
+                return;
             }
         } catch {
-            // Keep fallback
+            // Backend endpoint may return 401 (for non-Manager roles) or fail; proceed to fallback
+        }
+
+        // Fallback: derive delivery performance from /api/dms-integration/deliveries, pending orders, and tasks
+        try {
+            let deliveryList: any[] = [];
+            try {
+                const delRes = await api.get('/api/dms-integration/deliveries');
+                const list = delRes?.data?.data ?? delRes?.data;
+                if (Array.isArray(list) && list.length > 0) {
+                    deliveryList = list;
+                }
+            } catch {
+                // Ignore
+            }
+
+            // Check pending orders from DMS
+            try {
+                const pendRes = await api.get('/api/dms-integration/pending-orders');
+                const pList = pendRes?.data?.data ?? pendRes?.data;
+                if (Array.isArray(pList) && pList.length > 0) {
+                    const knownWbs = new Set(
+                        deliveryList
+                            .map((d: any) => String(d.dmsWaybillNo || d.waybillNo || '').toLowerCase().trim())
+                            .filter(Boolean)
+                    );
+                    pList.forEach((p: any) => {
+                        const wb = String(p.waybillNo || '').toLowerCase().trim();
+                        if (wb && !knownWbs.has(wb)) {
+                            deliveryList.push({
+                                taskId: '',
+                                taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
+                                recipientName: p.recipientName,
+                                dmsWaybillNo: p.waybillNo,
+                                dmsOrderId: p.orderId,
+                                dmsStatus: p.status || 'Pending',
+                                courierEmployeeId: p.driverEmployeeId || p.driverId,
+                                courierFullName: p.driverName || p.courierFullName,
+                                courierIsActive: p.driverIsActive,
+                                createdAt: p.orderDate || p.createdAt,
+                                expectedDelivery: p.expectedDelivery,
+                            });
+                            knownWbs.add(wb);
+                        }
+                    });
+                }
+            } catch {
+                // Ignore
+            }
+
+            // Also check tasks prop or /api/Task if deliveryList is still empty
+            if (deliveryList.length === 0) {
+                let candidateTasks = tasks || [];
+                if (!candidateTasks || candidateTasks.length === 0) {
+                    try {
+                        const taskRes = await api.get('/api/Task?pageNumber=1&pageSize=50');
+                        const tItems = taskRes?.data?.data?.items ?? taskRes?.data?.items ?? taskRes?.data ?? [];
+                        if (Array.isArray(tItems)) candidateTasks = tItems;
+                    } catch {
+                        candidateTasks = [];
+                    }
+                }
+
+                if (Array.isArray(candidateTasks) && candidateTasks.length > 0) {
+                    const sampleTasks = candidateTasks.slice(0, 20);
+                    for (const t of sampleTasks) {
+                        const taskId = (t as any).id || (t as any).taskId;
+                        if (taskId) {
+                            try {
+                                const ddRes = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
+                                const dd = ddRes?.data?.data ?? ddRes?.data;
+                                if (dd && (dd.dmsWaybillNo || dd.recipientName)) {
+                                    deliveryList.push({
+                                        taskId,
+                                        taskTitle: (t as any).title || (t as any).taskTitle,
+                                        dmsWaybillNo: dd.dmsWaybillNo,
+                                        dmsOrderId: dd.dmsOrderId,
+                                        dmsStatus: dd.dmsStatus,
+                                        recipientName: dd.recipientName,
+                                        courierEmployeeId: dd.courierEmployeeId,
+                                        courierFullName: dd.courierFullName,
+                                        courierIsActive: dd.courierIsActive,
+                                        createdAt: dd.createdAt || (t as any).createdAt,
+                                        expectedDelivery: dd.expectedDelivery || (t as any).deadline,
+                                    });
+                                }
+                            } catch { }
+                        }
+                    }
+                }
+            }
+
+            if (driver && driver.trim()) {
+                const targetDriver = driver.toLowerCase().trim();
+                deliveryList = deliveryList.filter(d => {
+                    const emp = String(d.courierEmployeeId || '').toLowerCase().trim();
+                    const name = String(d.courierFullName || '').toLowerCase().trim();
+                    return emp === targetDriver || name.includes(targetDriver);
+                });
+            }
+
+            const records = deliveryList.map((d: any, idx: number) => {
+                const wb = d.dmsWaybillNo || d.waybillNo || `WB-GEN-${String(idx + 1).padStart(4, '0')}`;
+                const completedAt = d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString();
+                const targetDate = d.expectedDelivery ? new Date(d.expectedDelivery) : new Date(Date.now() + 86400000);
+                const isLate = targetDate.getTime() < new Date(completedAt).getTime();
+                return {
+                    waybillNo: wb,
+                    starsTaskId: d.taskId || undefined,
+                    driverId: d.courierEmployeeId || d.driverId || 'Unassigned',
+                    driverName: d.courierFullName || d.driverName,
+                    driverIsActive: d.courierIsActive !== false,
+                    completedAt,
+                    slaTargetAt: targetDate.toISOString(),
+                    isOnTime: !isLate,
+                };
+            });
+
+            const total = records.length;
+            const onTime = records.filter(r => r.isOnTime).length;
+            const late = total - onTime;
+            const pct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
+
+            setDmsPerfData({
+                totalDeliveries: total,
+                onTimeCount: onTime,
+                lateCount: late,
+                onTimePercentage: pct,
+                driverFilter: driver || null,
+                records,
+            });
+        } catch (err: any) {
+            console.error('Failed to compute delivery performance fallback:', err);
         } finally {
             setDmsPerfLoading(false);
         }
-    }, []);
+    }, [tasks]);
 
     useEffect(() => {
         fetchDmsPerfData(dmsDriverFilter);
@@ -9691,6 +9826,8 @@ export default function OpsAdminDashboard() {
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
     const [preDeliveryRefreshTrigger, setPreDeliveryRefreshTrigger] = useState(0);
+    const [trackerTargetTaskId, setTrackerTargetTaskId] = useState<string | undefined>(undefined);
+    const [trackerTargetWaybill, setTrackerTargetWaybill] = useState<string | undefined>(undefined);
     const refetchPendingOrders = useCallback(() => {
         setPreDeliveryRefreshTrigger(prev => prev + 1);
     }, []);
@@ -10430,6 +10567,13 @@ export default function OpsAdminDashboard() {
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
                 }
+                const delObj = (data as any).deliveryDetails;
+                if (delObj?.dmsOrderId || delObj?.dmsWaybillNo) {
+                    recordCreatedDmsOrder(delObj.dmsOrderId, delObj.dmsWaybillNo);
+                    window.dispatchEvent(new CustomEvent('stars:dms-task-created', {
+                        detail: { orderId: delObj.dmsOrderId, waybillNo: delObj.dmsWaybillNo, taskId }
+                    }));
+                }
             }
 
             // Link FOMS invoice endorsement if task was created from endorsement
@@ -10728,6 +10872,8 @@ export default function OpsAdminDashboard() {
             await api.patch(`/api/Task/${taskId}/status`, { newStatus: STATUS_TO_BACKEND[newStatus] || newStatus });
             if (newStatus === 'Completed') {
                 setTaskTab('completed');
+                syncDmsTaskCompleted(taskId).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
             await doFetchDashboard();
@@ -10747,6 +10893,8 @@ export default function OpsAdminDashboard() {
             });
             if (adminDecision === 'Approve & Close') {
                 setTaskTab('completed');
+                syncDmsTaskCompleted(taskId).catch(() => {});
+                window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
             await fetchAwaitingReview();
@@ -11061,6 +11209,12 @@ export default function OpsAdminDashboard() {
                                         setDetailTask(updated);
                                         fetchTasks();
                                     }}
+                                    onNavigateToDeliveryTracker={(taskId, waybillNo) => {
+                                        setDetailTask(null);
+                                        setTrackerTargetTaskId(taskId);
+                                        setTrackerTargetWaybill(waybillNo);
+                                        handleNavChange('delivery');
+                                    }}
                                 />
                             </div>
                         ) : (
@@ -11137,6 +11291,7 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'approvals' && <ApprovalsWrapper />}
                 {activeTab === 'reports' && (
                     <ReportsTab
+                        tasks={tasks}
                         teamMembers={teamMembers}
                         onNavigateToTab={handleNavChange}
                         onViewTask={handleOpenTaskById}
@@ -11297,6 +11452,8 @@ export default function OpsAdminDashboard() {
                     <div className="dashboard-content">
                         <DmsDeliveryTab
                             tasks={tasks}
+                            initialTaskId={trackerTargetTaskId}
+                            initialWaybill={trackerTargetWaybill}
                             onViewTask={handleOpenTaskById}
                         />
                     </div>
@@ -11310,6 +11467,7 @@ export default function OpsAdminDashboard() {
                             onViewTask={handleOpenTaskById}
                             refreshPendingTrigger={preDeliveryRefreshTrigger}
                             onRefreshPending={refetchPendingOrders}
+                            onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>
                 )}
