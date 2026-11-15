@@ -30,7 +30,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
 
 ## Steps
 
-- [ ] Step 1: Backend KPI Department/Role Requirement Integration
+- [x] Step 1: Backend KPI Department/Role Requirement Integration
   - Files: `backend/Controllers/KpiController.cs`, `backend/Models/DTOs/KpiConfigurationDTOs.cs`, `backend/Modules/Analytics/KpiConfigurationValidator.cs`, `backend/Modules/Analytics/KpiDepartmentRoleHelper.cs`, `backend/Tests/Analytics/KpiConfigurationValidationTests.cs`, `backend/Tests/Analytics/KpiControllerTests.cs`
   - Branch: `step-1-backend-kpi`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~Analytics --configuration Release` and `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`
