@@ -50,7 +50,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Branch: `step-4-predelivery-dashboards`
   - Verify: Run `npm --prefix frontend test -- src/test/PreDeliveryTab.test.tsx src/test/PreDeliveryDefectResolution.test.tsx`
 
-- [ ] Step 5: Full Regression Testing & Gate Check
+- [x] Step 5: Full Regression Testing & Gate Check
   - Files: N/A (Full suite validation)
   - Branch: `step-5-full-regression`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`, `npm --prefix frontend test -- --run`, and `npm --prefix frontend run build`
