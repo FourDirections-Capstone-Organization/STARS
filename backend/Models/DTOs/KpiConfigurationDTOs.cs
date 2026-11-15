@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Backend.Models.Enums;
 
 namespace Backend.Models.DTOs;
 
@@ -148,6 +149,26 @@ public class KpiConfigurationRequestDTO : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (!DepartmentId.HasValue || DepartmentId.Value == Guid.Empty)
+        {
+            yield return new ValidationResult(
+                "Department is required.",
+                new[] { nameof(DepartmentId) });
+        }
+
+        if (string.IsNullOrWhiteSpace(TargetRole))
+        {
+            yield return new ValidationResult(
+                "Target role is required.",
+                new[] { nameof(TargetRole) });
+        }
+        else if (!Enum.TryParse<UserRole>(TargetRole.Trim(), ignoreCase: true, out _))
+        {
+            yield return new ValidationResult(
+                $"Invalid target role '{TargetRole}'.",
+                new[] { nameof(TargetRole) });
+        }
+
         // 1. Prospective dates validation
         if (EffectiveEndDate.HasValue && EffectiveEndDate.Value <= EffectiveStartDate)
         {
@@ -173,6 +194,13 @@ public class KpiConfigurationRequestDTO : IValidatableObject
         }
         else
         {
+            if (Items.Count > 1)
+            {
+                yield return new ValidationResult(
+                    "Only one KPI metric can be configured per role.",
+                    new[] { nameof(Items) });
+            }
+
             // 4. Weight sum validation (must sum to 100%)
             double totalWeight = Math.Round(Items.Sum(i => i.Weight), 2);
             if (Math.Abs(totalWeight - 100.0) > 0.01)
@@ -210,6 +238,12 @@ public class KpiConfigurationRequestDTO : IValidatableObject
             }
         }
     }
+}
+
+public class KpiDepartmentRoleOptionDTO
+{
+    public string Role { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 public class KpiConfigurationResponseDTO
