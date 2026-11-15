@@ -35,7 +35,7 @@ export const TASK_STATUS_MAP: Record<string, TaskStatusDisplay> = {
     'in-progress': 'In Progress',
     'in_progress': 'In Progress',
 
-    // 2 / Pending Review / DonePendingReview / Done / In review
+    // 2 / Pending Review / DonePendingReview / In review
     '2': 'Pending Review',
     'donependingreview': 'Pending Review',
     'done pending review': 'Pending Review',
@@ -54,11 +54,11 @@ export const TASK_STATUS_MAP: Record<string, TaskStatusDisplay> = {
     'in review': 'Pending Review',
     'in-review': 'Pending Review',
     'in_review': 'Pending Review',
-    'done': 'Pending Review',
 
     // 3 / Completed
     '3': 'Completed',
     'completed': 'Completed',
+    'done': 'Completed',
 
     // 4 / On Hold
     '4': 'On Hold',
@@ -103,7 +103,7 @@ export const STATUS_BADGE_CLASSES: Record<string, string> = {
     Pending: 'badge badge-blue',
     Assigned: 'badge badge-purple',
     'Not Started': 'badge badge-purple',
-    Done: 'badge badge-blue',
+    Done: 'badge badge-green',
     Backlog: 'badge badge-gray',
 
     // Account & System Statuses

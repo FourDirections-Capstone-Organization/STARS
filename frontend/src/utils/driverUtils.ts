@@ -140,3 +140,15 @@ export function formatDriverDisplay(
     };
 }
 
+/**
+ * Convenience helper to format driver display showing name only without employee ID prefix.
+ */
+export function formatDriverNameOnly(
+    fullNameOrObj?: string | null | DriverObjectInput,
+    employeeId?: string | null,
+    isActive?: boolean | null,
+    options?: Omit<FormatDriverOptions, 'layout'>
+): DriverDisplayInfo {
+    return formatDriverDisplay(fullNameOrObj, employeeId, isActive, { ...options, layout: 'name-only' });
+}
+

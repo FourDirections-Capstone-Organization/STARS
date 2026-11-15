@@ -22,7 +22,12 @@ import ConfirmationModal from '../../../components/ConfirmationModal/Confirmatio
 import {
     KpiConfiguration,
     KpiConfigurationFormData,
-    DepartmentOption
+    DepartmentOption,
+    DepartmentRosterOption,
+    JobPositionOption,
+    ALL_OPERATIONAL_ROLES,
+    getRolesForDepartment,
+    getRoleDisplayLabel
 } from './types';
 import { KpiConfigurationEditor } from './KpiConfigurationEditor';
 import './KpiConfiguration.css';
@@ -49,6 +54,8 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
     const [configurations, setConfigurations] = useState<KpiConfiguration[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [apiError, setApiError] = useState<string>('');
+    const [departmentRosters, setDepartmentRosters] = useState<DepartmentRosterOption[]>([]);
+    const [jobPositions, setJobPositions] = useState<JobPositionOption[]>([]);
 
     // Editor mode
     const [editorMode, setEditorMode] = useState<boolean>(false);
@@ -63,6 +70,72 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
     const [filterDepartment, setFilterDepartment] = useState<string>('');
     const [filterRole, setFilterRole] = useState<string>('');
     const [filterActive, setFilterActive] = useState<string>('all');
+
+    // Fetch department rosters and job positions to tie roles to departments
+    useEffect(() => {
+        let isMounted = true;
+        Promise.allSettled([
+            api.get('/api/Department/rosters'),
+            api.get('/api/job-positions', { pageNumber: 1, pageSize: 100 })
+        ]).then(([rosterRes, posRes]) => {
+            if (!isMounted) return;
+
+            if (rosterRes.status === 'fulfilled' && rosterRes.value?.data) {
+                const rawRosters = rosterRes.value.data?.data ?? rosterRes.value.data;
+                if (Array.isArray(rawRosters)) {
+                    setDepartmentRosters(rawRosters.map((r: any) => ({
+                        departmentId: String(r.departmentId ?? r.id ?? ''),
+                        departmentName: String(r.departmentName ?? r.name ?? ''),
+                        members: Array.isArray(r.members) ? r.members.map((m: any) => ({
+                            role: m.role,
+                            jobPositionName: m.jobPositionName
+                        })) : []
+                    })).filter(r => r.departmentId));
+                }
+            }
+
+            if (posRes.status === 'fulfilled' && posRes.value?.data) {
+                const rawJson = posRes.value.data;
+                const rawPositions = Array.isArray(rawJson)
+                    ? rawJson
+                    : (rawJson?.data?.items ?? (Array.isArray(rawJson?.data) ? rawJson.data : []));
+                if (Array.isArray(rawPositions)) {
+                    setJobPositions(rawPositions.map((p: any) => ({
+                        id: String(p.id ?? p.jobPositionId ?? ''),
+                        name: String(p.name ?? ''),
+                        departmentId: String(p.departmentId ?? '')
+                    })).filter(p => p.id && p.departmentId));
+                }
+            }
+        });
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const resolvedDepartments = useMemo<DepartmentOption[]>(() => {
+        if (departments.length > 0) return departments;
+        return departmentRosters.map(r => ({
+            id: r.departmentId,
+            name: r.departmentName
+        }));
+    }, [departments, departmentRosters]);
+
+    const filterRoleOptions = useMemo(() => {
+        if (!filterDepartment) {
+            return [...ALL_OPERATIONAL_ROLES];
+        }
+        const selectedDept = resolvedDepartments.find(
+            d => d.id.toLowerCase() === filterDepartment.toLowerCase()
+        );
+        return getRolesForDepartment(
+            filterDepartment,
+            selectedDept?.name,
+            departmentRosters,
+            jobPositions
+        );
+    }, [filterDepartment, resolvedDepartments, departmentRosters, jobPositions]);
 
     // Fetch configurations
     const fetchConfigurations = useCallback(async () => {
@@ -276,7 +349,9 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
             <div className="kpi-config-container">
                 <KpiConfigurationEditor
                     initialData={editingConfig}
-                    departments={departments}
+                    departments={resolvedDepartments}
+                    departmentRosters={departmentRosters}
+                    jobPositions={jobPositions}
                     onSave={handleSave}
                     onCancel={() => {
                         setEditorMode(false);
@@ -329,11 +404,28 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                     <select
                         className="kpi-config-select"
                         value={filterDepartment}
-                        onChange={e => setFilterDepartment(e.target.value)}
+                        onChange={e => {
+                            const nextDeptId = e.target.value;
+                            setFilterDepartment(nextDeptId);
+                            if (nextDeptId) {
+                                const selectedDept = resolvedDepartments.find(
+                                    d => d.id.toLowerCase() === nextDeptId.toLowerCase()
+                                );
+                                const allowed = getRolesForDepartment(
+                                    nextDeptId,
+                                    selectedDept?.name,
+                                    departmentRosters,
+                                    jobPositions
+                                );
+                                if (filterRole && !allowed.includes(filterRole)) {
+                                    setFilterRole('');
+                                }
+                            }
+                        }}
                         data-testid="kpi-filter-department"
                     >
                         <option value="">All Departments</option>
-                        {departments.map(d => (
+                        {resolvedDepartments.map(d => (
                             <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                     </select>
@@ -343,11 +435,10 @@ export const KpiConfigurationTab: React.FC<KpiConfigurationTabProps> = ({
                         onChange={e => setFilterRole(e.target.value)}
                         data-testid="kpi-filter-role"
                     >
-                        <option value="">All Roles</option>
-                        <option value="Courier">Courier</option>
-                        <option value="Encoder">Encoder</option>
-                        <option value="Dispatcher">Dispatcher</option>
-                        <option value="Coordinator">Coordinator</option>
+                        <option value="">{filterDepartment ? 'All Roles in Department' : 'All Roles'}</option>
+                        {filterRoleOptions.map(role => (
+                            <option key={role} value={role}>{getRoleDisplayLabel(role)}</option>
+                        ))}
                     </select>
                     <select
                         className="kpi-config-select"
