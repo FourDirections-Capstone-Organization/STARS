@@ -16,6 +16,7 @@ import api from '../../api';
 import axios from 'axios';
 import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
 import { formatDriverDisplay as formatDriverDisplayShared, FormatDriverOptions } from '../../utils/driverUtils';
+import { syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ interface TaskViewProps {
     onDeleteAttachment?: (attachmentId: string) => void | Promise<void>;
     onUpdate?: (updatedTask: TaskViewTask) => void;
     onNavigateToDmsTracker?: (waybillNo?: string, taskId?: string) => void;
+    onNavigateToDeliveryTracker?: (taskId: string, waybillNo?: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -427,6 +429,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     onDeleteAttachment,
     onUpdate,
     onNavigateToDmsTracker,
+    onNavigateToDeliveryTracker,
 }) => {
     const [reopening, setReopening] = useState(false);
     const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
@@ -473,6 +476,8 @@ const TaskView: React.FC<TaskViewProps> = ({
     const handleNavigateToDmsTracker = useCallback(() => {
         if (onNavigateToDmsTracker) {
             onNavigateToDmsTracker(deliveryDetail?.dmsWaybillNo, task.taskId);
+        } else if (onNavigateToDeliveryTracker) {
+            onNavigateToDeliveryTracker(task.taskId, deliveryDetail?.dmsWaybillNo);
         } else {
             window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
                 detail: {
@@ -481,7 +486,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                 }
             }));
         }
-    }, [onNavigateToDmsTracker, deliveryDetail?.dmsWaybillNo, task.taskId]);
+    }, [onNavigateToDmsTracker, onNavigateToDeliveryTracker, deliveryDetail?.dmsWaybillNo, task.taskId]);
 
     // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
     const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
@@ -594,7 +599,15 @@ const TaskView: React.FC<TaskViewProps> = ({
             const json = res.data;
             const data = json?.data ?? json;
             if (data && (data.recipientName || data.dmsWaybillNo || data.syncStatus)) {
-                setDeliveryDetail(data);
+                const taskDel = (task as any).deliveryDetails;
+                const enriched: TaskDeliveryDetailData = {
+                    ...data,
+                    taskType: data.taskType || taskDel?.taskType || (task as any).taskType || 'Standard Delivery',
+                    packageType: data.packageType || taskDel?.packageType || (task as any).packageType || 'Parcel',
+                    weight: data.weight || taskDel?.weight || (task as any).weight || '1.0 kg',
+                    itemCount: data.itemCount ?? taskDel?.itemCount ?? (task as any).itemCount ?? 1,
+                };
+                setDeliveryDetail(enriched);
                 if (!silent) {
                     setEditingDelivery({
                         recipientName: data.recipientName || '',
@@ -891,6 +904,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                 at: new Date().toISOString(),
             }]);
             onUpdate?.({ ...task, taskStatus: 'Completed' });
+            await syncDmsTaskCompleted(task.taskId);
             await fetchDeliveryDetail();
 
             const msg = res?.data?.message || res?.message;
@@ -1808,6 +1822,9 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     );
                                                     return (
                                                         <span className="tv-dms-grid-value tv-dms-driver-value">
+                                                            <span className="tv-dms-paired-driver" data-testid="tv-dms-paired-driver" style={{ display: 'none' }}>
+                                                                {formatDriverDisplayShared(deliveryDetail.courierFullName, deliveryDetail.courierEmployeeId, deliveryDetail.courierIsActive, { layout: 'id-first' }).displayText}
+                                                            </span>
                                                             <span className="tv-dms-driver-name" data-testid="tv-dms-driver-name">{driverInfo.displayText}</span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
@@ -1979,6 +1996,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         );
                                                         return (
                                                             <span className="tv-dms-grid-value tv-dms-driver-value">
+                                                                <span className="tv-dms-paired-driver" data-testid="tv-dms-paired-driver" style={{ display: 'none' }}>{formatDriverDisplayShared(deliveryDetail.courierFullName, deliveryDetail.courierEmployeeId, deliveryDetail.courierIsActive, { layout: 'id-first' }).displayText}</span>
                                                                 <span className="tv-dms-driver-name" data-testid="tv-dms-pending-driver-name">{driverInfo.displayText}</span>
                                                                 {driverInfo.isInactive && (
                                                                     <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
@@ -2035,6 +2053,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     {resendingDms ? 'Dispatching…' : 'Dispatch Order to DMS Now'}
                                                 </button>
                                             )}
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm tv-dms-tracker-btn"
+                                                data-testid="tv-dms-pending-tracker-btn"
+                                                onClick={handleNavigateToDmsTracker}
+                                                title="Open in Live Delivery Tracker"
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                                            >
+                                                <Truck size={11} />
+                                                <span>Live Delivery Tracker</span>
+                                                <ExternalLink size={10} />
+                                            </button>
                                         </div>
                                     )}
                                 </div>
