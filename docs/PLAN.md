@@ -35,7 +35,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Branch: `step-1-backend-kpi`
   - Verify: Run `dotnet test backend/Tests/Backend.Tests.csproj --filter FullyQualifiedName~Analytics --configuration Release` and `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`
 
-- [ ] Step 2: Frontend Utilities & KPI Configuration Components
+- [x] Step 2: Frontend Utilities & KPI Configuration Components
   - Files: `frontend/src/utils/dmsSyncUtils.ts`, `frontend/src/utils/statusUtils.ts`, `frontend/src/test/statusUtils.test.tsx`, `frontend/src/utils/driverUtils.ts`, `frontend/src/components/TaskManager/TaskManager.tsx`, `frontend/src/Pages/OpAdmin_Dashboard/KpiConfiguration/*`, `frontend/src/test/KpiConfiguration.test.tsx`
   - Branch: `step-2-frontend-kpi-utils`
   - Verify: Run `npm --prefix frontend test -- src/test/statusUtils.test.tsx src/test/KpiConfiguration.test.tsx`
