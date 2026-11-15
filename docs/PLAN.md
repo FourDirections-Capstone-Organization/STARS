@@ -40,7 +40,7 @@ Never push directly to `refactoring/bug-fix`. Commit each step on a step branch 
   - Branch: `step-2-frontend-kpi-utils`
   - Verify: Run `npm --prefix frontend test -- src/test/statusUtils.test.tsx src/test/KpiConfiguration.test.tsx`
 
-- [ ] Step 3: Harmonize DMS Delivery Tab & TaskView
+- [x] Step 3: Harmonize DMS Delivery Tab & TaskView
   - Files: `frontend/src/components/TaskView/TaskView.tsx`, `frontend/src/components/DmsDeliveryTab/DmsDeliveryTab.tsx`, `frontend/src/test/TaskViewDmsPod.test.tsx`, `frontend/src/test/DeliveryAnalyticsAndCompletedStatusFix.test.tsx`
   - Branch: `step-3-dms-delivery-taskview`
   - Verify: Run `npm --prefix frontend test -- src/test/TaskViewDmsPod.test.tsx src/test/DmsDeadlineDriverUI.test.tsx src/test/DeliveryAnalyticsAndCompletedStatusFix.test.tsx`
