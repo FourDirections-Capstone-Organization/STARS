@@ -379,6 +379,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         try {
             await fetchPerformance();
 
+            const completedTaskIds = new Set<string>();
+            (tasks || []).forEach(t => {
+                const s = String(t.taskStatus ?? t.status ?? '').toLowerCase();
+                if (s === 'completed' || s === 'done' || t.status === 3) {
+                    const id = String(t.taskId || t.id || '');
+                    if (id) completedTaskIds.add(id);
+                }
+            });
+
             // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
             try {
                 const res = await api.get('/api/dms-integration/deliveries');
@@ -386,7 +395,13 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 if (Array.isArray(list) && list.length > 0) {
                     list.forEach((item: DmsDeliveryItem) => {
                         const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                        if (s.includes('delivered') || s.includes('completed')) {
+                        const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
+                        if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
+                            item.dmsStatus = 'Delivered';
+                            item.dmsRawStatus = 'Delivered';
+                        }
+                        const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                        if (curS.includes('delivered') || curS.includes('completed')) {
                             const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
                             if (key) deliveredOrdersRef.current.set(key, item);
                         }
@@ -536,7 +551,13 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
             fetchedDeliveries.forEach(item => {
                 const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                if (s.includes('delivered') || s.includes('completed')) {
+                const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
+                if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
+                    item.dmsStatus = 'Delivered';
+                    item.dmsRawStatus = 'Delivered';
+                }
+                const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                if (curS.includes('delivered') || curS.includes('completed')) {
                     const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
                     if (key) deliveredOrdersRef.current.set(key, item);
                 }
