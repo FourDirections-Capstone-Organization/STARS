@@ -13,7 +13,7 @@ import {
     ClipboardList,
     ToggleLeft,
     ToggleRight,
-    Trash2,
+    Archive,
     ChevronLeft,
     Eye,
     EyeOff,
@@ -693,6 +693,7 @@ function EditProfileModal({ profile, onClose, onSaved, rolesList }: EditModalPro
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                                 <option value="Deactivated">Deactivated</option>
+                                <option value="Archived">Archived</option>
                                 {profile.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
                                 {profile.accountStatus === 'Emergency Overriden' && <option value="Emergency Overriden">Emergency Overriden</option>}
                             </select>
@@ -1037,7 +1038,9 @@ export default function EmployeeDetailPanel({
                         try {
                             await api.patch(`/api/User/${userId}/deactivate`);
                             success(`Successfully archived ${profile.employeeName}.`);
-                            onEmployeeUpdated({ ...profile, accountStatus: '__deleted__' });
+                            const updatedProfile = { ...profile, accountStatus: 'Archived', isActive: false, isDeactivated: true };
+                            setProfile(updatedProfile);
+                            onEmployeeUpdated(updatedProfile);
                         } catch (err: any) {
                             const msg = err?.response?.data?.message || err.message;
                             error(msg);
@@ -1069,8 +1072,8 @@ export default function EmployeeDetailPanel({
     };
 
     // Archive Employee
-    const handleDelete = () => {
-        showPasswordGate('Archive Employee', `Are you sure you want to permanently archive ${profile.employeeName}? This action cannot be undone.`, 'danger', { type: 'archive' });
+    const handleArchive = () => {
+        showPasswordGate('Archive Employee Account', `Are you sure you want to archive ${profile.employeeName}? The account will be moved to an archived read-only state.`, 'warning', { type: 'archive' });
     };
 
     // Toggle status (Activate/Deactivate)
@@ -1092,48 +1095,52 @@ export default function EmployeeDetailPanel({
                     <ChevronLeft size={16} /> Back to Employees
                 </button>
                 <div className="ed-topbar-actions">
-                    <button
-                        className={`ed-btn ed-btn-ghost ${['Active', 'On Leave', 'Emergency Overriden'].includes(profile.accountStatus) ? 'deactivate' : 'activate'}`}
-                        onClick={handleToggleStatus}
-                    >
-                        {['Active', 'On Leave', 'Emergency Overriden'].includes(profile.accountStatus) ? (
-                            <>
-                                <ToggleLeft size={15} /> Deactivate
-                            </>
-                        ) : (
-                            <>
-                                <ToggleRight size={15} /> Activate
-                            </>
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        className="ed-btn ed-btn-secondary"
-                        onClick={handleSendVerification}
-                        disabled={resendCooldown > 0 || sendingVerification}
-                        title={resendCooldown > 0 ? `Please wait ${resendCooldown}s before sending another verification email` : 'Send verification email'}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    >
-                        {sendingVerification ? (
-                            <>
-                                <Loader2 size={14} className="spin" /> Sending...
-                            </>
-                        ) : resendCooldown > 0 ? (
-                            <>
-                                <Clock size={14} /> Resend in {resendCooldown}s
-                            </>
-                        ) : (
-                            <>
-                                <Mail size={14} /> Send Verification
-                            </>
-                        )}
-                    </button>
-                    <button className="ed-btn ed-btn-secondary" onClick={() => setShowEdit(true)}>
-                        <Pencil size={14} /> Edit Profile
-                    </button>
-                    <button className="ed-btn ed-btn-danger" onClick={handleDelete} disabled={deleting}>
-                        {deleting ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Delete
-                    </button>
+                    {profile.accountStatus !== 'Archived' && (
+                        <>
+                            <button
+                                className={`ed-btn ed-btn-ghost ${['Active', 'On Leave', 'Emergency Overriden'].includes(profile.accountStatus) ? 'deactivate' : 'activate'}`}
+                                onClick={handleToggleStatus}
+                            >
+                                {['Active', 'On Leave', 'Emergency Overriden'].includes(profile.accountStatus) ? (
+                                    <>
+                                        <ToggleLeft size={15} /> Deactivate
+                                    </>
+                                ) : (
+                                    <>
+                                        <ToggleRight size={15} /> Activate
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                className="ed-btn ed-btn-secondary"
+                                onClick={handleSendVerification}
+                                disabled={resendCooldown > 0 || sendingVerification}
+                                title={resendCooldown > 0 ? `Please wait ${resendCooldown}s before sending another verification email` : 'Send verification email'}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                                {sendingVerification ? (
+                                    <>
+                                        <Loader2 size={14} className="spin" /> Sending...
+                                    </>
+                                ) : resendCooldown > 0 ? (
+                                    <>
+                                        <Clock size={14} /> Resend in {resendCooldown}s
+                                    </>
+                                ) : (
+                                    <>
+                                        <Mail size={14} /> Send Verification
+                                    </>
+                                )}
+                            </button>
+                            <button className="ed-btn ed-btn-secondary" onClick={() => setShowEdit(true)}>
+                                <Pencil size={14} /> Edit Profile
+                            </button>
+                            <button className="ed-btn ed-btn-warning" onClick={handleArchive} disabled={deleting}>
+                                {deleting ? <Loader2 size={14} className="spin" /> : <Archive size={14} />} Archive
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 

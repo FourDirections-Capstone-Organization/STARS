@@ -540,6 +540,11 @@
     color: var(--status-failed);
 }
 
+.status-badge.archived {
+    background: rgba(148, 163, 184, 0.15);
+    color: #64748b;
+}
+
 .status-badge.locked {
     background: var(--status-warning-bg);
     color: var(--status-warning);
