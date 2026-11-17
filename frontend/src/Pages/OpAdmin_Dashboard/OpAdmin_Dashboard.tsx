@@ -7024,7 +7024,7 @@ export const ReportsTab: React.FC<{
                                 <DataTable title="Employee Performance Summary"
                                     headers={['Employee', 'Assigned', 'Completed', 'Rate', 'Avg Time (h)']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
-                                    totalRecords={tcReport.employeePerformanceSummary.length}
+                                    totalRecords={tcReport.employeePerformanceSummary?.length || 0}
                                     currentPage={tcEmpPage}
                                     totalPages={totalTcEmpPages}
                                     onPageChange={setTcEmpPage}
@@ -7279,7 +7279,7 @@ export const ReportsTab: React.FC<{
                                 <DataTable title=""
                                     headers={['Employee', 'Assigned Load', 'Completed', 'Overdue / At Risk', 'Completion Rate', 'Workload & Capacity Status']}
                                     loading={false} emptyMessage="No employee data for selected criteria."
-                                    totalRecords={opReport.employeePerformanceSummary.length}
+                                    totalRecords={opReport.employeePerformanceSummary?.length || 0}
                                     currentPage={opEmpPage}
                                     totalPages={totalOpEmpPages}
                                     onPageChange={setOpEmpPage}

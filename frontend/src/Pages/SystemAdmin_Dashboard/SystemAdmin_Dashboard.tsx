@@ -74,6 +74,7 @@ import DataTable, { ActionsDropdown } from '../../components/ui/DataTable';
 import DateRangePicker from '../../components/ui/DateRangePicker';
 import SubTabNav from '../../components/ui/SubTabNav';
 import OrgStructureTab from './OrgStructureTab/OrgStructureTab';
+import ReportsErrorBoundary from '../../components/ReportsErrorBoundary/ReportsErrorBoundary';
 import { ReportsTab, TeamTab, TeamMember, normalizeCoordinatorPriority } from '../OpAdmin_Dashboard/OpAdmin_Dashboard';
 import { EvaluationTemplateTab, PerformanceReviewTab } from '../OpAdmin_Dashboard/PerformanceEvaluation';
 import { KpiConfigurationTab } from '../OpAdmin_Dashboard/KpiConfiguration';
@@ -4006,7 +4007,7 @@ export default function Dashboard() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'tasks' || activeTab === 'team') {
+        if (activeTab === 'tasks' || activeTab === 'team' || activeTab === 'reports') {
             fetchManagerTasks();
             fetchManagerTeamMembers();
         }
@@ -5370,7 +5371,14 @@ export default function Dashboard() {
                     </>
                 )}
                 {activeTab === 'reports' && (
-                    <ReportsTab tasks={tasks} teamMembers={reportTeamMembers} onNavigateToTab={handleNavChange} />
+                    <ReportsErrorBoundary onReset={() => fetchManagerTasks()}>
+                        <ReportsTab
+                            tasks={tmTasks as any}
+                            teamMembers={reportTeamMembers}
+                            onNavigateToTab={(tab) => handleNavChange(tab as any)}
+                            onViewTask={openManagerTaskById}
+                        />
+                    </ReportsErrorBoundary>
                 )}
 
                 {activeTab === 'delivery' && (
