@@ -40,7 +40,7 @@ describe('EmployeeTaskLists Component', () => {
             description: 'Inspect refrigerator logs for zone B and report variances.',
             priorityLevel: 2, // High
             status: 1, // In Progress
-            deadline: '2026-11-15T18:00:00Z',
+            deadline: '2029-11-15T18:00:00Z',
             myCompletionPercentage: 65,
             assignees: [
                 {

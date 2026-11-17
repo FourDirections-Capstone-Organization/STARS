@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import {
     Megaphone, X, Clock, Users, Calendar, MessageSquare, ThumbsUp,
     Send, Paperclip, Download, FileText, Image as ImageIcon, CheckCircle2,
-    AlertCircle, AlertTriangle, Globe, Lock, Copy, Check, UserCheck, Loader2
+    AlertCircle, AlertTriangle, Globe, Lock, Copy, Check, UserCheck, Loader2,
+    Archive, RotateCcw
 } from 'lucide-react';
 import FormModal from '../FormModal/FormModal';
 import api from '../../api';
@@ -50,6 +51,8 @@ interface AnnouncementDetailModalProps {
     announcement: AnnouncementItem;
     onClose: () => void;
     onUpdated?: () => void;
+    isArchived?: boolean;
+    onToggleArchive?: (id: string, isCurrentlyArchived: boolean) => void;
 }
 
 const fmtDate = (d: string) => {
@@ -119,7 +122,7 @@ const renderFormattedText = (text: string) => {
     });
 };
 
-export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = ({ announcement, onClose, onUpdated }) => {
+export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = ({ announcement, onClose, onUpdated, isArchived, onToggleArchive }) => {
     const [item, setItem] = useState<AnnouncementItem>(announcement);
     const [commentContent, setCommentContent] = useState('');
     const [submittingComment, setSubmittingComment] = useState(false);
@@ -256,9 +259,32 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
                         </button>
                     </div>
 
-                    <button className="btn" onClick={onClose}>
-                        Close
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {(!item.expiryDate || isArchived) && onToggleArchive && (
+                            <button
+                                type="button"
+                                className="btn"
+                                onClick={() => onToggleArchive(item.id, !!isArchived)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    fontSize: 12,
+                                    background: isArchived ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.08)',
+                                    color: isArchived ? '#059669' : '#dc2626',
+                                    border: `1px solid ${isArchived ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                                    cursor: 'pointer',
+                                }}
+                                title={isArchived ? "Restore this announcement" : "Archive this announcement"}
+                            >
+                                {isArchived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                                {isArchived ? 'Restore Notice' : 'Archive Notice'}
+                            </button>
+                        )}
+                        <button className="btn" onClick={onClose}>
+                            Close
+                        </button>
+                    </div>
                 </div>
             }
         >
@@ -298,6 +324,12 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
                         ) : (
                             <span className="badge badge-green" style={{ fontSize: 10 }}>All Users</span>
                         )}
+
+                        {isArchived && (
+                            <span className="badge" style={{ background: 'rgba(100, 116, 139, 0.15)', color: '#475569', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <Archive size={10} /> Archived
+                            </span>
+                        )}
                     </div>
 
                     <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -311,7 +343,7 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Calendar size={12} /> Effective: {fmtDate(item.effectiveDate)}
                         </span>
-                        {item.expiryDate && (
+                        {item.expiryDate ? (
                             <span
                                 style={{
                                     display: 'flex',
@@ -322,6 +354,18 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
                                 }}
                             >
                                 <Clock size={12} /> Expires: {fmtDate(item.expiryDate)}
+                            </span>
+                        ) : (
+                            <span
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    color: 'var(--text-muted)',
+                                    fontStyle: 'italic',
+                                }}
+                            >
+                                <Clock size={12} /> No Expiry Date
                             </span>
                         )}
                     </div>
