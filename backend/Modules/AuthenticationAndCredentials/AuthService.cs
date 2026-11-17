@@ -655,8 +655,13 @@ public class AuthService : IAuthService
 
         var fullName = GetFullName(user);
 
-        // Cascade permanent password to DMS
-        if (_dmsService != null && _dmsService.IsConfigured)
+        var allowedSystems = (user.AllowedSystems ?? "STARS")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToUpperInvariant())
+            .ToList();
+
+        // Cascade permanent password to DMS only if user has DMS access
+        if (allowedSystems.Contains("DMS") && _dmsService != null && _dmsService.IsConfigured)
         {
             try
             {
@@ -675,8 +680,8 @@ public class AuthService : IAuthService
             }
         }
 
-        // Cascade permanent password to FOMS
-        if (_fomsService != null && _fomsService.IsConfigured)
+        // Cascade permanent password to FOMS only if user has FOMS access
+        if (allowedSystems.Contains("FOMS") && _fomsService != null && _fomsService.IsConfigured)
         {
             try
             {

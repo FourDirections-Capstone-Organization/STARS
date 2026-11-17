@@ -602,6 +602,50 @@ public class UserService : IUserService
 
         _logger.LogInformation("User deactivated: {EmployeeNumber}", user.EmployeeNumber);
 
+        // Sync Deactivated status to companion systems if configured
+        if (_dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                await _dmsService.ProvisionEmployeeAsync(
+                    user.EmployeeNumber,
+                    fullName,
+                    user.DmsRole ?? "Encoder",
+                    null,
+                    null,
+                    null,
+                    status: "Deactivated");
+                _logger.LogInformation("Synchronized Deactivated status to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync Deactivated status to DMS for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
+        if (_fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                await _fomsService.ProvisionUserAsync(
+                    user.EmployeeNumber,
+                    user.EmployeeNumber,
+                    fullName,
+                    user.Email,
+                    null,
+                    user.FomsRole ?? "Accountant",
+                    user.ContactNumber,
+                    null,
+                    user.HireDate,
+                    status: "Inactive");
+                _logger.LogInformation("Synchronized Inactive status to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync Inactive status to FOMS for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
         await _auditLogService.LogAsync(
             requestUserId,
             AuditActionType.Update,
@@ -640,6 +684,59 @@ public class UserService : IUserService
         var fullName = $"{user.FirstName} {user.MiddleName} {user.LastName} {user.Suffix}".Replace("  ", " ").Trim();
 
         _logger.LogInformation("User activated: {EmployeeNumber}", user.EmployeeNumber);
+
+        var allowedSystems = (user.AllowedSystems ?? "STARS")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToUpperInvariant())
+            .ToList();
+
+        // Sync Active status to companion systems if the user is authorized for them
+        if (allowedSystems.Contains("DMS") && _dmsService != null && _dmsService.IsConfigured)
+        {
+            try
+            {
+                var dmsAreasList = !string.IsNullOrWhiteSpace(user.DmsAreas)
+                    ? user.DmsAreas.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                    : new List<string> { "Manila" };
+
+                await _dmsService.ProvisionEmployeeAsync(
+                    user.EmployeeNumber,
+                    fullName,
+                    user.DmsRole ?? "Encoder",
+                    null,
+                    null,
+                    dmsAreasList,
+                    status: "Active");
+                _logger.LogInformation("Synchronized Active status to DMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync Active status to DMS for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
+
+        if (allowedSystems.Contains("FOMS") && _fomsService != null && _fomsService.IsConfigured)
+        {
+            try
+            {
+                await _fomsService.ProvisionUserAsync(
+                    user.EmployeeNumber,
+                    user.EmployeeNumber,
+                    fullName,
+                    user.Email,
+                    null,
+                    user.FomsRole ?? "Accountant",
+                    user.ContactNumber,
+                    null,
+                    user.HireDate,
+                    status: "Active");
+                _logger.LogInformation("Synchronized Active status to FOMS for employee {EmployeeNumber}", user.EmployeeNumber);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync Active status to FOMS for user {EmployeeNumber}", user.EmployeeNumber);
+            }
+        }
 
         await _auditLogService.LogAsync(
             requestUserId,
