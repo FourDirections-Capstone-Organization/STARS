@@ -58,7 +58,46 @@ describe('Manage Employee Status Filter & Inactive Status', () => {
 
         expect(statusSelect).toBeDefined();
         const optionValues = Array.from(statusSelect!.querySelectorAll('option')).map(o => o.value);
-        expect(optionValues).toEqual(['', 'Active', 'Inactive', 'Deactivated']);
+        expect(optionValues).toEqual(['', 'Active', 'Inactive', 'Deactivated', 'Archived']);
+    });
+
+    it('triggers onEmpPageChange with status "Archived" when Archived is selected', () => {
+        const onEmpPageChange = vi.fn();
+        render(
+            <ManageEmployeesTab
+                employees={mockEmployees}
+                loading={false}
+                onSelectEmployee={vi.fn()}
+                onAddEmployee={vi.fn()}
+                empPage={1}
+                empTotalPages={1}
+                onEmpPageChange={onEmpPageChange}
+                onEditEmployee={vi.fn()}
+                onArchiveEmployee={vi.fn()}
+                onViewEmployee={vi.fn()}
+            />
+        );
+
+        const selectElements = screen.getAllByRole('combobox');
+        const statusSelect = selectElements.find(el => {
+            const options = Array.from(el.querySelectorAll('option')).map(o => o.value);
+            return options.includes('Archived');
+        })!;
+
+        fireEvent.change(statusSelect, { target: { value: 'Archived' } });
+
+        expect(onEmpPageChange).toHaveBeenCalledWith(1, {
+            search: '',
+            role: '',
+            status: 'Archived',
+        });
+    });
+
+    it('renders StatusBadge with archived class for Archived status', () => {
+        const { container } = render(<StatusBadge status="Archived" />);
+        const badge = container.querySelector('.status-badge.archived');
+        expect(badge).not.toBeNull();
+        expect(badge?.textContent).toContain('Archived');
     });
 
     it('triggers onEmpPageChange with status "Inactive" when Inactive is selected', () => {
