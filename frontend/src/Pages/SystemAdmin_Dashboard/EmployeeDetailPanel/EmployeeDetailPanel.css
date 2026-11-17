@@ -106,6 +106,18 @@
     color: #991b1b;
 }
 
+.ed-btn-warning {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #d97706;
+}
+
+.ed-btn-warning:hover:not(:disabled) {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    color: #b45309;
+}
+
 .ed-btn-ghost {
     background: transparent;
     border-color: transparent;
@@ -238,6 +250,12 @@
     background: rgba(245, 158, 11, 0.15);
     color: #fbbf24;
     border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.ed-status-pill.archived {
+    background: rgba(148, 163, 184, 0.15);
+    color: #64748b;
+    border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
 .ed-hero-meta {
@@ -433,6 +451,14 @@
 .ed-info-value.status-deactivated {
     color: var(--status-failed);
     background: var(--status-failed-bg);
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.ed-info-value.status-archived {
+    color: #64748b;
+    background: rgba(148, 163, 184, 0.15);
     padding: 3px 10px;
     border-radius: 12px;
     font-size: 12px;

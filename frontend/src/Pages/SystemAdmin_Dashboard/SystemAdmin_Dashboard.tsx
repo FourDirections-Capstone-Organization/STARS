@@ -15,6 +15,7 @@ import {
     Loader2,
     Plus,
     Pencil,
+    Archive,
     Trash2,
     Search,
     Phone,
@@ -1783,18 +1784,17 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
         setReviewModalOpen(true);
     };
 
-    const handleDelete = () => {
+    const handleArchive = () => {
         setConfirmModal({
             isOpen: true,
-            variant: 'danger',
+            variant: 'warning',
             title: 'Archive employee account?',
             description: (
                 <>
-                    This will permanently remove <strong>{displayName}</strong> and all associated
-                    data. This action cannot be undone.
+                    Are you sure you want to archive <strong>{displayName}</strong>? The account will be moved to an archived read-only state.
                 </>
             ),
-            notice: 'All leave records, tasks, and activity logs for this employee will also be archived.',
+            notice: 'Historical leave records, tasks, and activity logs for this employee will be preserved in a read-only state.',
             confirmLabel: 'Archive employee',
             onConfirm: async () => {
                 setSubmitting(true);
@@ -1806,7 +1806,7 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
                     if (!userId) throw new Error('Employee not found.');
                     await api.patch(`/api/User/${userId}/deactivate`);
                     success(`${displayName} has been archived.`);
-                    onUpdated({ ...employee, accountStatus: '__deleted__' });
+                    onUpdated({ ...employee, accountStatus: 'Archived', isActive: false, isDeactivated: true });
                     onClose();
                 } catch (err: any) {
                     setApiError(err.response?.data?.message || err.response?.data?.Message || err.message || 'Something went wrong. Please try again.');
@@ -1859,7 +1859,9 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
                         </>
                     ) : (
                         <>
-                            <button type="button" className="fm-btn fm-btn-danger" onClick={handleDelete} disabled={submitting}>Delete</button>
+                            {employee.accountStatus !== 'Archived' && (
+                                <button type="button" className="fm-btn fm-btn-warning" onClick={handleArchive} disabled={submitting}>Archive</button>
+                            )}
                             <button type="button" className="fm-btn fm-btn-primary" onClick={enterEditMode}>Edit</button>
                         </>
                     )
@@ -2002,6 +2004,7 @@ function EmployeeDetailModal({ employee, onClose, onUpdated, initialEditMode = f
                                         <option value="Active">Active</option>
                                         <option value="Inactive">Inactive</option>
                                         <option value="Deactivated">Deactivated</option>
+                                        <option value="Archived">Archived</option>
                                         {employee.accountStatus === 'On Leave' && <option value="On Leave">On Leave</option>}
                                     </select>
                                 </div>
@@ -2923,7 +2926,8 @@ export function ManageEmployeesTab({
                                     options={[
                                         { value: 'Active', label: 'Active' },
                                         { value: 'Inactive', label: 'Inactive' },
-                                        { value: 'Deactivated', label: 'Deactivated' }
+                                        { value: 'Deactivated', label: 'Deactivated' },
+                                        { value: 'Archived', label: 'Archived' }
                                     ]} />
                                 {onNavigateToTeams && (
                                     <button
@@ -2967,8 +2971,10 @@ export function ManageEmployeesTab({
                                     <td onClick={e => e.stopPropagation()}>
                                         <ActionsDropdown actions={[
                                             { label: 'View Details', icon: <Eye size={12} />, onClick: () => onViewEmployee(emp) },
-                                            { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
-                                            { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'danger' },
+                                            ...(emp.accountStatus !== 'Archived' ? [
+                                                { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
+                                                { label: 'Archive', icon: <Archive size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'warning' as const },
+                                            ] : []),
                                         ]} />
                                     </td>
                                 </tr>
@@ -2996,7 +3002,8 @@ export function ManageEmployeesTab({
                                     options={[
                                         { value: 'Active', label: 'Active' },
                                         { value: 'Inactive', label: 'Inactive' },
-                                        { value: 'Deactivated', label: 'Deactivated' }
+                                        { value: 'Deactivated', label: 'Deactivated' },
+                                        { value: 'Archived', label: 'Archived' }
                                     ]}
                                 />
                                 {onNavigateToTeams && (
@@ -3064,8 +3071,10 @@ export function ManageEmployeesTab({
                                                     <ActionsDropdown
                                                         actions={[
                                                             { label: 'View Details', icon: <Eye size={12} />, onClick: () => onViewEmployee(emp) },
-                                                            { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
-                                                            { label: 'Archive', icon: <Trash2 size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'danger' },
+                                                            ...(emp.accountStatus !== 'Archived' ? [
+                                                                { label: 'Edit', icon: <Pencil size={12} />, onClick: () => onEditEmployee(emp) },
+                                                                { label: 'Archive', icon: <Archive size={12} />, onClick: () => onArchiveEmployee(emp), variant: 'warning' as const },
+                                                            ] : []),
                                                         ]}
                                                     />
                                                 </div>
@@ -4979,7 +4988,7 @@ export default function Dashboard() {
         const params: Record<string, any> = { PageNumber: String(page), PageSize: String(PAGE_SIZE) };
         if (filters.search) params.search = filters.search;
         if (filters.role) params.role = toBackendRole(filters.role);
-        if (filters.status) params.status = filters.status;
+        if (filters.status) params.status = filters.status === 'Archived' ? 'Deactivated' : filters.status;
         api.get('/api/User', params)
             .then(res => {
                 const result = res.data;
@@ -4994,7 +5003,7 @@ export default function Dashboard() {
                     employeeName: e.employeeName ?? buildDisplayName(e.firstName ?? '', e.middleName ?? '', e.lastName ?? '', e.suffix ?? ''),
                     contactNumber: e.contactNumber,
                     role: e.role,
-                    accountStatus: e.accountStatus || (e.isDeactivated ? 'Deactivated' : (e.isActive ? 'Active' : 'Inactive')),
+                    accountStatus: e.accountStatus || (e.isDeactivated ? 'Archived' : (e.isActive ? 'Active' : 'Inactive')),
                     presenceStatus: e.presenceStatus ?? 'Offline',
                     email: e.email ?? '',
                     departmentName: e.departmentName ?? e.DepartmentName ?? '',
@@ -5011,8 +5020,14 @@ export default function Dashboard() {
                     attachments: e.attachments ?? [],
                 })).filter((e: RecentEmployee) => {
                     if (e.accountStatus === 'Deleted' || e.employeeNumber === currentEmployeeId) return false;
-                    if (filters.status && e.accountStatus.toLowerCase() !== filters.status.toLowerCase()) {
-                        return false;
+                    if (filters.status) {
+                        const filterLower = filters.status.toLowerCase();
+                        const statusLower = (e.accountStatus || '').toLowerCase();
+                        if (filterLower === 'archived' || filterLower === 'deactivated') {
+                            if (statusLower !== 'archived' && statusLower !== 'deactivated') return false;
+                        } else if (statusLower !== filterLower) {
+                            return false;
+                        }
                     }
                     return true;
                 });
@@ -5655,17 +5670,16 @@ export default function Dashboard() {
             {/* ── Archive employee Confirmation Modal ── */}
             <ConfirmationModal
                 isOpen={!!archiveConfirmEmp}
-                variant="danger"
+                variant="warning"
                 title="Archive employee account?"
                 description={
                     archiveConfirmEmp ? (
                         <>
-                            This will permanently remove <strong>{getEmployeeDisplayName(archiveConfirmEmp)}</strong> and all associated
-                            data. This action cannot be undone.
+                            Are you sure you want to archive <strong>{getEmployeeDisplayName(archiveConfirmEmp)}</strong>? The account will be moved to an archived read-only state.
                         </>
                     ) : null
                 }
-                notice="All leave records, tasks, and activity logs for this employee will also be archived."
+                notice="Historical leave records, tasks, and activity logs for this employee will be preserved in a read-only state."
                 confirmLabel="Archive employee"
                 cancelLabel="Cancel"
                 isLoading={archiveSubmitting}
@@ -5679,8 +5693,9 @@ export default function Dashboard() {
                         if (!userId) throw new Error('Employee not found.');
                         await api.patch(`/api/User/${userId}/deactivate`);
                         success(`${getEmployeeDisplayName(archiveConfirmEmp)} has been archived.`);
-                        setEmployees(prev => prev.filter(e => e.employeeNumber !== archiveConfirmEmp.employeeNumber));
-                        setRecentEmployees(prev => prev.filter(e => e.employeeNumber !== archiveConfirmEmp.employeeNumber));
+                        const updatedEmp = { ...archiveConfirmEmp, accountStatus: 'Archived', isActive: false, isDeactivated: true };
+                        setEmployees(prev => prev.map(e => e.employeeNumber === archiveConfirmEmp.employeeNumber ? updatedEmp : e));
+                        setRecentEmployees(prev => prev.map(e => e.employeeNumber === archiveConfirmEmp.employeeNumber ? updatedEmp : e));
                     } catch (err: any) {
                         error(err.response?.data?.message || err.response?.data?.Message || err.message || 'Failed to Archive employee.');
                     } finally {

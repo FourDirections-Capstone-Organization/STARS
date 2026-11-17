@@ -389,6 +389,28 @@
     background: var(--bg-main);
 }
 
+.fm-btn-warning {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    color: #b45309;
+}
+
+.fm-btn-warning:hover:not(:disabled) {
+    background: #fde68a;
+    color: #92400e;
+}
+
+.fm-btn-danger {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.fm-btn-danger:hover:not(:disabled) {
+    background: #fecaca;
+    color: #991b1b;
+}
+
 /* Loader Spin */
 .fm-spin {
     animation: fmSpin 1s linear infinite;

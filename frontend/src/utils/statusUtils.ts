@@ -126,7 +126,7 @@ export const STATUS_BADGE_CLASSES: Record<string, string> = {
     Probationary: 'badge badge-amber',
     Contractual: 'badge badge-blue',
     'Part-time': 'badge badge-gray',
-    Archived: 'badge badge-gray',
+    Archived: 'status-badge archived',
     Verified: 'badge badge-green',
     Unverified: 'badge badge-red',
     Synced: 'badge badge-green',
