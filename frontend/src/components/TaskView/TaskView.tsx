@@ -28,10 +28,6 @@ export interface TaskDeliveryDetailData {
     recipientContact: string;
     deliveryAddress: string;
     area?: string;
-    taskType?: string;
-    packageType?: string;
-    weight?: string;
-    itemCount?: number;
     packageDescription?: string;
     senderAddress?: string;
     specialInstructions?: string;
@@ -56,6 +52,10 @@ export interface TaskDeliveryDetailData {
     updatedAt?: string;
     expectedDelivery?: string;
     expectedDeliveryDate?: string;
+    taskType?: string;
+    packageType?: string;
+    weight?: string;
+    itemCount?: number;
 }
 
 export interface TaskPodData {
@@ -154,6 +154,7 @@ interface TaskViewProps {
     onReject?: (taskId: string, reason: string) => void;
     onDeleteAttachment?: (attachmentId: string) => void | Promise<void>;
     onUpdate?: (updatedTask: TaskViewTask) => void;
+    onNavigateToDmsTracker?: (waybillNo?: string, taskId?: string) => void;
     onNavigateToDeliveryTracker?: (taskId: string, waybillNo?: string) => void;
 }
 
@@ -427,6 +428,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     onReject,
     onDeleteAttachment,
     onUpdate,
+    onNavigateToDmsTracker,
     onNavigateToDeliveryTracker,
 }) => {
     const [reopening, setReopening] = useState(false);
@@ -448,7 +450,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     const attachInputRef = useRef<HTMLInputElement>(null);
     const [confidentialConfirm, setConfidentialConfirm] = useState<{ open: boolean; pendingValue: boolean }>({ open: false, pendingValue: false });
     const [confidentialSaving, setConfidentialSaving] = useState(false);
-    const { success: toastSuccess, error: toastError } = useToast();
+    const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
 
     const token = localStorage.getItem('authToken');
 
@@ -471,7 +473,20 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [resendingDms, setResendingDms] = useState(false);
     const [copiedWaybill, setCopiedWaybill] = useState(false);
 
-
+    const handleNavigateToDmsTracker = useCallback(() => {
+        if (onNavigateToDmsTracker) {
+            onNavigateToDmsTracker(deliveryDetail?.dmsWaybillNo, task.taskId);
+        } else if (onNavigateToDeliveryTracker) {
+            onNavigateToDeliveryTracker(task.taskId, deliveryDetail?.dmsWaybillNo);
+        } else {
+            window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                detail: {
+                    waybillNo: deliveryDetail?.dmsWaybillNo,
+                    taskId: task.taskId,
+                }
+            }));
+        }
+    }, [onNavigateToDmsTracker, onNavigateToDeliveryTracker, deliveryDetail?.dmsWaybillNo, task.taskId]);
 
     // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
     const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
@@ -591,7 +606,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                     packageType: data.packageType || taskDel?.packageType || (task as any).packageType || 'Parcel',
                     weight: data.weight || taskDel?.weight || (task as any).weight || '1.0 kg',
                     itemCount: data.itemCount ?? taskDel?.itemCount ?? (task as any).itemCount ?? 1,
-                    courierFullName: data.courierFullName || taskDel?.courierFullName || (task as any).courierFullName || '',
                 };
                 setDeliveryDetail(enriched);
                 if (!silent) {
@@ -604,30 +618,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                         senderAddress: data.senderAddress || 'STARS Operations Office',
                         specialInstructions: data.specialInstructions || '',
                         courierEmployeeId: data.courierEmployeeId || '',
-                        courierFullName: enriched.courierFullName || '',
+                        courierFullName: data.courierFullName || '',
                     });
-                }
-                // Best effort lookup from DMS pending orders if specific metadata fields are missing
-                if (data.dmsOrderId || data.dmsWaybillNo) {
-                    api.get('/api/dms-integration/pending-orders').then(pRes => {
-                        const pList = pRes?.data?.data ?? pRes?.data;
-                        if (Array.isArray(pList)) {
-                            const match = pList.find((p: any) =>
-                                (data.dmsOrderId && p.orderId === data.dmsOrderId) ||
-                                (data.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(data.dmsWaybillNo).toLowerCase())
-                            );
-                            if (match) {
-                                setDeliveryDetail(prev => prev ? {
-                                    ...prev,
-                                    taskType: match.taskType || prev.taskType,
-                                    packageType: match.packageType || prev.packageType,
-                                    weight: match.weight || prev.weight,
-                                    itemCount: match.itemCount ?? prev.itemCount,
-                                    courierFullName: prev.courierFullName || match.driverName || match.courierFullName,
-                                } : prev);
-                            }
-                        }
-                    }).catch(() => {});
                 }
             } else if (!silent) {
                 setDeliveryDetail(null);
@@ -643,7 +635,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         fetchDeliveryDetail(false);
     }, [fetchDeliveryDetail]);
 
-    // Live Auto-Refresh polling while task modal is open and delivery is in progress
+    // Live Auto-Refresh polling while task modal is open and delivery is in progress (8s polling, halts on terminal status)
     useEffect(() => {
         if (!task?.taskId || !deliveryDetail?.dmsWaybillNo) return;
         const currentSt = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
@@ -696,6 +688,7 @@ const TaskView: React.FC<TaskViewProps> = ({
             const res = await api.post(endpoint, {});
             const savedData = res?.data?.data ?? res?.data;
             setDeliveryDetail(savedData);
+            await fetchPodData(true);
 
             const normSt = (savedData?.dmsRawStatus || savedData?.dmsStatus || '').toLowerCase();
             if (normSt.includes('delivered') || normSt.includes('completed')) {
@@ -708,6 +701,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         } catch (err: any) {
             // Re-fetch latest delivery state silently to check if order reached Delivered
             await fetchDeliveryDetail(true);
+            await fetchPodData(true);
             const latestStatus = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
             if (latestStatus.includes('delivered') || latestStatus.includes('completed')) {
                 toastSuccess('Delivery is already confirmed as Delivered in DMS.');
@@ -897,10 +891,11 @@ const TaskView: React.FC<TaskViewProps> = ({
 
     const handleApprove = async () => {
         try {
+            let res: any;
             if (onApprove) {
-                await onApprove(task.taskId);
+                res = await onApprove(task.taskId);
             } else {
-                await api.patch(`/api/Task/${task.taskId}/review`, { isApproved: true });
+                res = await api.patch(`/api/Task/${task.taskId}/review`, { isApproved: true });
             }
             setReviewState('approved');
             setLocalStatus('Completed');
@@ -910,8 +905,14 @@ const TaskView: React.FC<TaskViewProps> = ({
             }]);
             onUpdate?.({ ...task, taskStatus: 'Completed' });
             await syncDmsTaskCompleted(task.taskId);
-            window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: task.taskId } }));
             await fetchDeliveryDetail();
+
+            const msg = res?.data?.message || res?.message;
+            if (msg && (msg.includes('DMS sync failed') || msg.includes('DMS sync encountered'))) {
+                toastWarning(msg, { duration: 6000 });
+            } else {
+                toastSuccess('Task approved and completed.');
+            }
         } catch (err: any) {
             toastError(err?.response?.data?.message || err?.message || 'Failed to approve task.');
         }
@@ -1662,6 +1663,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-dms-waybill-actions">
                                             <button
                                                 type="button"
+                                                className="tv-btn tv-btn-primary tv-btn-sm tv-dms-tracker-btn"
+                                                data-testid="tv-dms-tracker-btn"
+                                                onClick={handleNavigateToDmsTracker}
+                                                title="Open Live Delivery Tracker in DMS Tab"
+                                            >
+                                                <Truck size={12} />
+                                                <span>Live Delivery Tracker</span>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 className="tv-btn tv-btn-outline-sm tv-dms-copy-btn"
                                                 onClick={() => handleCopyWaybill(deliveryDetail.dmsWaybillNo!)}
                                                 title="Copy Waybill Number"
@@ -1669,36 +1680,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {copiedWaybill ? <Check size={12} color="#059669" /> : <Copy size={12} />}
                                                 {copiedWaybill ? 'Copied!' : 'Copy Waybill'}
                                             </button>
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm tv-dms-tracker-btn"
-                                                data-testid="tv-dms-tracker-btn"
-                                                onClick={() => {
-                                                    if (onNavigateToDeliveryTracker) {
-                                                        onNavigateToDeliveryTracker(task.taskId, deliveryDetail.dmsWaybillNo);
-                                                    } else {
-                                                        window.location.href = `/OpAdmin_Dashboard?tab=delivery&taskId=${task.taskId}`;
-                                                    }
-                                                }}
-                                                title="Open in Live Delivery Tracker"
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                                            >
-                                                <Truck size={12} />
-                                                <span>Live Delivery Tracker</span>
-                                                <ExternalLink size={10} />
-                                            </button>
-                                            {deliveryDetail.dmsStatus && (() => {
-                                                const isCompletedTask = localStatus === 'Completed' || task.taskStatus === 'Completed';
-                                                const sRaw = (deliveryDetail.dmsStatus || '').toLowerCase();
-                                                const displaySt = (isCompletedTask && (sRaw.includes('pending') || sRaw === 'awaiting'))
-                                                    ? 'Delivered'
-                                                    : deliveryDetail.dmsStatus;
-                                                return (
-                                                    <span className="tv-dms-status-tag">
-                                                        Status: <strong>{formatStatus(displaySt)}</strong>
-                                                    </span>
-                                                );
-                                            })()}
+                                            {deliveryDetail.dmsStatus && (
+                                                <span className="tv-dms-status-tag">
+                                                    Status: <strong>{formatStatus(deliveryDetail.dmsStatus)}</strong>
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -1714,10 +1700,9 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 { key: 'out_for_delivery', label: 'OUT FOR DELIVERY' },
                                                 { key: 'delivered', label: 'DELIVERED' },
                                             ];
-                                            const isCompletedTask = localStatus === 'Completed' || task.taskStatus === 'Completed';
                                             const s = `${deliveryDetail.dmsRawStatus || ''} ${deliveryDetail.dmsStatus || ''}`.toLowerCase();
                                             let activeIdx = 0;
-                                            if (s.includes('delivered') || s.includes('completed') || isCompletedTask) activeIdx = 6;
+                                            if (s.includes('delivered') || s.includes('completed')) activeIdx = 6;
                                             else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 5;
                                             else if (s.includes('transit')) activeIdx = 4;
                                             else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 3;
@@ -1809,29 +1794,38 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {deliveryDetail.area && <span className="tv-dms-area-tag">({deliveryDetail.area})</span>}
                                             </span>
                                         </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-task-type">
+                                            <span className="tv-dms-grid-label">Task Type</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.taskType || 'Standard Delivery'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-package-type">
+                                            <span className="tv-dms-grid-label">Package Type</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.packageType || 'Parcel'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-weight">
+                                            <span className="tv-dms-grid-label">Weight</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.weight || '—'}</span>
+                                        </div>
+                                        <div className="tv-dms-grid-item" data-testid="tv-dms-item-count">
+                                            <span className="tv-dms-grid-label">Item Count</span>
+                                            <span className="tv-dms-grid-value">{deliveryDetail.itemCount ? `${deliveryDetail.itemCount} item(s)` : '1 item'}</span>
+                                        </div>
                                         {(deliveryDetail.courierEmployeeId || deliveryDetail.courierFullName) && (
                                             <div className="tv-dms-grid-item" data-testid="tv-dms-assigned-driver">
                                                 <span className="tv-dms-grid-label">Assigned Driver</span>
                                                 {(() => {
-                                                    const driverInfo = formatDriverDisplayShared(
-                                                        deliveryDetail.courierFullName,
-                                                        deliveryDetail.courierEmployeeId,
-                                                        deliveryDetail.courierIsActive,
-                                                        { layout: 'id-first' }
-                                                    );
-                                                    const nameOnlyInfo = formatDriverDisplayShared(
+                                                    const driverInfo = formatDriverDisplay(
                                                         deliveryDetail.courierFullName,
                                                         deliveryDetail.courierEmployeeId,
                                                         deliveryDetail.courierIsActive,
                                                         { layout: 'name-only' }
                                                     );
-                                                    const driverDisplayName = nameOnlyInfo.displayText !== 'Unassigned'
-                                                        ? nameOnlyInfo.displayText
-                                                        : (deliveryDetail.courierFullName || 'Unassigned');
                                                     return (
                                                         <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                            <span className="tv-dms-driver-name" data-testid="tv-dms-driver-name">{driverDisplayName}</span>
-                                                            <span className="tv-dms-paired-driver" data-testid="tv-dms-paired-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
+                                                            <span className="tv-dms-paired-driver" data-testid="tv-dms-paired-driver" style={{ display: 'none' }}>
+                                                                {formatDriverDisplayShared(deliveryDetail.courierFullName, deliveryDetail.courierEmployeeId, deliveryDetail.courierIsActive, { layout: 'id-first' }).displayText}
+                                                            </span>
+                                                            <span className="tv-dms-driver-name" data-testid="tv-dms-driver-name">{driverInfo.displayText}</span>
                                                             {driverInfo.isInactive && (
                                                                 <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
                                                                     [Inactive]
@@ -1840,38 +1834,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         </span>
                                                     );
                                                 })()}
-                                            </div>
-                                        )}
-                                        {(deliveryDetail.taskType || (task as any).deliveryDetails?.taskType || (task as any).taskType) && (
-                                            <div className="tv-dms-grid-item" data-testid="tv-dms-task-type">
-                                                <span className="tv-dms-grid-label">Task Type</span>
-                                                <span className="tv-dms-grid-value">
-                                                    {deliveryDetail.taskType || (task as any).deliveryDetails?.taskType || (task as any).taskType || 'Standard Delivery'}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {(deliveryDetail.packageType || (task as any).deliveryDetails?.packageType || (task as any).packageType) && (
-                                            <div className="tv-dms-grid-item" data-testid="tv-dms-package-type">
-                                                <span className="tv-dms-grid-label">Package Type</span>
-                                                <span className="tv-dms-grid-value">
-                                                    {deliveryDetail.packageType || (task as any).deliveryDetails?.packageType || (task as any).packageType || 'Parcel'}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {(deliveryDetail.weight || (task as any).deliveryDetails?.weight || (task as any).weight) && (
-                                            <div className="tv-dms-grid-item" data-testid="tv-dms-weight">
-                                                <span className="tv-dms-grid-label">Weight</span>
-                                                <span className="tv-dms-grid-value">
-                                                    {deliveryDetail.weight || (task as any).deliveryDetails?.weight || (task as any).weight}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {(deliveryDetail.itemCount != null || (task as any).deliveryDetails?.itemCount != null || (task as any).itemCount != null) && (
-                                            <div className="tv-dms-grid-item" data-testid="tv-dms-item-count">
-                                                <span className="tv-dms-grid-label">Item Count</span>
-                                                <span className="tv-dms-grid-value">
-                                                    {deliveryDetail.itemCount ?? (task as any).deliveryDetails?.itemCount ?? (task as any).itemCount ?? 1} item{((deliveryDetail.itemCount ?? (task as any).deliveryDetails?.itemCount ?? (task as any).itemCount ?? 1) > 1 ? 's' : '')}
-                                                </span>
                                             </div>
                                         )}
                                         {(deliveryDetail.expectedDelivery || deliveryDetail.expectedDeliveryDate) && (
@@ -1980,80 +1942,15 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 </span>
                                             </div>
                                             {(deliveryDetail.expectedDelivery || deliveryDetail.expectedDeliveryDate) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-expected-delivery">
-                                                    <span className="tv-dms-grid-label">Expected Delivery</span>
-                                                    <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                        <Calendar size={12} color="var(--primary)" />
-                                                        {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {(deliveryDetail.courierEmployeeId || deliveryDetail.courierFullName) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-driver">
-                                                    <span className="tv-dms-grid-label">Assigned Driver</span>
-                                                    {(() => {
-                                                        const driverInfo = formatDriverDisplayShared(
-                                                            deliveryDetail.courierFullName,
-                                                            deliveryDetail.courierEmployeeId,
-                                                            deliveryDetail.courierIsActive,
-                                                            { layout: 'id-first' }
-                                                        );
-                                                        const nameOnlyInfo = formatDriverDisplayShared(
-                                                            deliveryDetail.courierFullName,
-                                                            deliveryDetail.courierEmployeeId,
-                                                            deliveryDetail.courierIsActive,
-                                                            { layout: 'name-only' }
-                                                        );
-                                                        const driverDisplayName = nameOnlyInfo.displayText !== 'Unassigned'
-                                                            ? nameOnlyInfo.displayText
-                                                            : (deliveryDetail.courierFullName || 'Unassigned');
-                                                        return (
-                                                            <span className="tv-dms-grid-value tv-dms-driver-value">
-                                                                <span className="tv-dms-driver-name" data-testid="tv-dms-pending-driver-name">{driverDisplayName}</span>
-                                                                <span className="tv-dms-paired-driver" data-testid="tv-dms-pending-paired-driver" style={{ display: 'none' }}>{driverInfo.displayText}</span>
-                                                                {driverInfo.isInactive && (
-                                                                    <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
-                                                                        [Inactive]
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            )}
-                                            {(deliveryDetail.taskType || (task as any).deliveryDetails?.taskType || (task as any).taskType) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-task-type">
-                                                    <span className="tv-dms-grid-label">Task Type</span>
-                                                    <span className="tv-dms-grid-value">
-                                                        {deliveryDetail.taskType || (task as any).deliveryDetails?.taskType || (task as any).taskType || 'Standard Delivery'}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {(deliveryDetail.packageType || (task as any).deliveryDetails?.packageType || (task as any).packageType) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-package-type">
-                                                    <span className="tv-dms-grid-label">Package Type</span>
-                                                    <span className="tv-dms-grid-value">
-                                                        {deliveryDetail.packageType || (task as any).deliveryDetails?.packageType || (task as any).packageType || 'Parcel'}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {(deliveryDetail.weight || (task as any).deliveryDetails?.weight || (task as any).weight) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-weight">
-                                                    <span className="tv-dms-grid-label">Weight</span>
-                                                    <span className="tv-dms-grid-value">
-                                                        {deliveryDetail.weight || (task as any).deliveryDetails?.weight || (task as any).weight}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {(deliveryDetail.itemCount != null || (task as any).deliveryDetails?.itemCount != null || (task as any).itemCount != null) && (
-                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-item-count">
-                                                    <span className="tv-dms-grid-label">Item Count</span>
-                                                    <span className="tv-dms-grid-value">
-                                                        {deliveryDetail.itemCount ?? (task as any).deliveryDetails?.itemCount ?? (task as any).itemCount ?? 1} item{((deliveryDetail.itemCount ?? (task as any).deliveryDetails?.itemCount ?? (task as any).itemCount ?? 1) > 1 ? 's' : '')}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {deliveryDetail.packageDescription && (
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-expected-delivery">
+                                                <span className="tv-dms-grid-label">Expected Delivery</span>
+                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Calendar size={12} color="var(--primary)" />
+                                                    {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {deliveryDetail.packageDescription && (
                                                 <div className="tv-dms-grid-item tv-dms-grid-full">
                                                     <span className="tv-dms-grid-label">Package Description</span>
                                                     <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
@@ -2069,6 +1966,46 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 <div className="tv-dms-grid-item tv-dms-grid-full">
                                                     <span className="tv-dms-grid-label">Special Instructions</span>
                                                     <span className="tv-dms-grid-value">{deliveryDetail.specialInstructions}</span>
+                                                </div>
+                                            )}
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-task-type">
+                                                <span className="tv-dms-grid-label">Task Type</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.taskType || 'Standard Delivery'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-package-type">
+                                                <span className="tv-dms-grid-label">Package Type</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.packageType || 'Parcel'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-weight">
+                                                <span className="tv-dms-grid-label">Weight</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.weight || '—'}</span>
+                                            </div>
+                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-item-count">
+                                                <span className="tv-dms-grid-label">Item Count</span>
+                                                <span className="tv-dms-grid-value">{deliveryDetail.itemCount ? `${deliveryDetail.itemCount} item(s)` : '1 item'}</span>
+                                            </div>
+                                            {(deliveryDetail.courierEmployeeId || deliveryDetail.courierFullName) && (
+                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-driver">
+                                                    <span className="tv-dms-grid-label">Assigned Driver</span>
+                                                    {(() => {
+                                                        const driverInfo = formatDriverDisplay(
+                                                            deliveryDetail.courierFullName,
+                                                            deliveryDetail.courierEmployeeId,
+                                                            deliveryDetail.courierIsActive,
+                                                            { layout: 'name-only' }
+                                                        );
+                                                        return (
+                                                            <span className="tv-dms-grid-value tv-dms-driver-value">
+                                                                <span className="tv-dms-paired-driver" data-testid="tv-dms-paired-driver" style={{ display: 'none' }}>{formatDriverDisplayShared(deliveryDetail.courierFullName, deliveryDetail.courierEmployeeId, deliveryDetail.courierIsActive, { layout: 'id-first' }).displayText}</span>
+                                                                <span className="tv-dms-driver-name" data-testid="tv-dms-pending-driver-name">{driverInfo.displayText}</span>
+                                                                {driverInfo.isInactive && (
+                                                                    <span className="tv-driver-inactive-badge" title="Driver account is inactive or deactivated">
+                                                                        [Inactive]
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
                                         </div>
@@ -2120,13 +2057,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 type="button"
                                                 className="tv-btn tv-btn-outline-sm tv-dms-tracker-btn"
                                                 data-testid="tv-dms-pending-tracker-btn"
-                                                onClick={() => {
-                                                    if (onNavigateToDeliveryTracker) {
-                                                        onNavigateToDeliveryTracker(task.taskId, deliveryDetail?.dmsWaybillNo);
-                                                    } else {
-                                                        window.location.href = `/OpAdmin_Dashboard?tab=delivery&taskId=${task.taskId}`;
-                                                    }
-                                                }}
+                                                onClick={handleNavigateToDmsTracker}
                                                 title="Open in Live Delivery Tracker"
                                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
                                             >
@@ -2139,7 +2070,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 </div>
                             )}
                         </div>
-
 
                         {/* Attachments */}
                         <div className="tv-section">
@@ -2664,7 +2594,6 @@ const TaskView: React.FC<TaskViewProps> = ({
                     </div>
                 </div>
             )}
-
 
             {/* ── Record Client Wet-Signed Endorsement Modal (FOMS Integration 1) ── */}
             {showSignModal && fomsEndorsement && (

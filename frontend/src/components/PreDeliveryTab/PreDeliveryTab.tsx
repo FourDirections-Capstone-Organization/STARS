@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     ClipboardCheck,
     Search,
@@ -59,6 +59,8 @@ interface PreDeliveryTabProps {
     onCreateTaskForOrder: (order: DmsPendingOrder) => void;
     onViewTask?: (taskId: string) => void;
     onNavigateToDeliveryTracker?: () => void;
+    onRefreshPending?: () => void;
+    refreshPendingTrigger?: number;
 }
 
 // Helpers to detect mock data and sort newly created records to the top
@@ -167,6 +169,8 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
     onCreateTaskForOrder,
     onViewTask,
     onNavigateToDeliveryTracker,
+    onRefreshPending,
+    refreshPendingTrigger,
 }) => {
     const { success: toastSuccess } = useToast();
     const [pendingOrders, setPendingOrders] = useState<DmsPendingOrder[]>([]);
@@ -234,8 +238,22 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
 
     useEffect(() => {
         fetchPendingOrders();
-        fetchLiveOperationalTasks();
-    }, [fetchPendingOrders, fetchLiveOperationalTasks]);
+    }, [fetchPendingOrders]);
+
+    useEffect(() => {
+        if (activeSubTab !== 'pending') {
+            fetchLiveOperationalTasks();
+        }
+    }, [activeSubTab, fetchLiveOperationalTasks]);
+
+    const isInitialMount = useRef(true);
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+        fetchPendingOrders();
+    }, [refreshPendingTrigger, fetchPendingOrders]);
 
     // Listen for DMS task creation or completion events to keep tabs immediately in sync
     useEffect(() => {
@@ -265,6 +283,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
             window.removeEventListener('stars:dms-task-updated', handleDmsTaskUpdated);
         };
     }, [fetchPendingOrders, fetchLiveOperationalTasks]);
+
 
     const handleCopy = (waybill: string) => {
         navigator.clipboard.writeText(waybill);

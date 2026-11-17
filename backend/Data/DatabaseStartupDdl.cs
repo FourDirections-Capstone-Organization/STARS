@@ -20,6 +20,21 @@ public static class DatabaseStartupDdl
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='SpecialInstructions') THEN
                 ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""SpecialInstructions"" character varying(1000);
             END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='CourierFullName') THEN
+                ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""CourierFullName"" character varying(200);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='TaskType') THEN
+                ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""TaskType"" character varying(100);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='PackageType') THEN
+                ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""PackageType"" character varying(100);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='Weight') THEN
+                ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""Weight"" character varying(50);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='TaskDeliveryDetails' AND column_name='ItemCount') THEN
+                ALTER TABLE ""TaskDeliveryDetails"" ADD COLUMN ""ItemCount"" integer;
+            END IF;
         END $$;
 
         CREATE TABLE IF NOT EXISTS ""FomsClientFinancialStatuses"" (
@@ -295,7 +310,8 @@ public static class DatabaseStartupDdl
         VALUES 
             ('20261029101146_AddKpiConfigurationAndItems', '9.0.0'),
             ('20261029111153_AddOverallThresholdsToKpiConfiguration', '9.0.0'),
-            ('20261030052606_AddPerformanceEvaluation', '9.0.0')
+            ('20261030052606_AddPerformanceEvaluation', '9.0.0'),
+            ('20261114031305_AddDeliveryLogisticsAndCourierFullName', '9.0.0')
         ON CONFLICT (""MigrationId"") DO NOTHING;
     ";
 

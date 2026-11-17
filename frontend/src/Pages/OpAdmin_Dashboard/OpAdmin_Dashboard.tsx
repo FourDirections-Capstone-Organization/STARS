@@ -5533,66 +5533,63 @@ export const ReportsTab: React.FC<{
                                         taskId,
                                         taskTitle: (t as any).title || (t as any).taskTitle,
                                         dmsWaybillNo: dd.dmsWaybillNo,
-                                        dmsStatus: dd.dmsStatus || 'Delivered',
+                                        dmsOrderId: dd.dmsOrderId,
+                                        dmsStatus: dd.dmsStatus,
+                                        recipientName: dd.recipientName,
                                         courierEmployeeId: dd.courierEmployeeId,
                                         courierFullName: dd.courierFullName,
                                         courierIsActive: dd.courierIsActive,
                                         createdAt: dd.createdAt || (t as any).createdAt,
                                         expectedDelivery: dd.expectedDelivery || (t as any).deadline,
-                                        dmsLastSyncedAt: dd.dmsLastSyncedAt,
                                     });
                                 }
-                            } catch {
-                                // Ignore
-                            }
+                            } catch { }
                         }
                     }
                 }
             }
 
-            if (deliveryList.length > 0) {
-                let records = deliveryList.map((d: any) => {
-                    const completedAt = d.dmsLastSyncedAt || d.updatedAt || d.createdAt || new Date().toISOString();
-                    const slaTarget = d.expectedDelivery || d.slaTargetAt || (d.createdAt ? new Date(new Date(d.createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString() : new Date().toISOString());
-                    const isOnTime = d.isOnTime !== undefined
-                        ? Boolean(d.isOnTime)
-                        : (completedAt && slaTarget ? new Date(completedAt).getTime() <= new Date(slaTarget).getTime() : true);
-                    const dDriver = d.courierEmployeeId || d.driverEmployeeId || d.driverId || 'Field Courier';
-                    const dDriverName = d.courierFullName || d.driverName || dDriver;
-
-                    return {
-                        waybillNo: d.dmsWaybillNo || d.waybillNo || (d.dmsOrderId ? `WB-ORD-${d.dmsOrderId}` : `WB-${String(d.taskId || '').slice(0, 8)}`),
-                        starsTaskId: d.taskId && d.taskId !== '00000000-0000-0000-0000-000000000000' ? d.taskId : undefined,
-                        driverId: dDriver,
-                        driverName: dDriverName,
-                        driverIsActive: d.courierIsActive ?? d.driverIsActive ?? true,
-                        completedAt,
-                        slaTargetAt: slaTarget,
-                        isOnTime,
-                        receivedAt: d.createdAt || completedAt,
-                    };
-                });
-
-                if (driver) {
-                    records = records.filter(r => r.driverId === driver.trim() || r.driverName === driver.trim());
-                }
-
-                const total = records.length;
-                const onTime = records.filter(r => r.isOnTime).length;
-                const late = total - onTime;
-                const pct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
-
-                setDmsPerfData({
-                    totalDeliveries: total,
-                    onTimeCount: onTime,
-                    lateCount: late,
-                    onTimePercentage: pct,
-                    driverFilter: driver,
-                    records,
+            if (driver && driver.trim()) {
+                const targetDriver = driver.toLowerCase().trim();
+                deliveryList = deliveryList.filter(d => {
+                    const emp = String(d.courierEmployeeId || '').toLowerCase().trim();
+                    const name = String(d.courierFullName || '').toLowerCase().trim();
+                    return emp === targetDriver || name.includes(targetDriver);
                 });
             }
-        } catch {
-            // Keep fallback
+
+            const records = deliveryList.map((d: any, idx: number) => {
+                const wb = d.dmsWaybillNo || d.waybillNo || `WB-GEN-${String(idx + 1).padStart(4, '0')}`;
+                const completedAt = d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString();
+                const targetDate = d.expectedDelivery ? new Date(d.expectedDelivery) : new Date(Date.now() + 86400000);
+                const isLate = targetDate.getTime() < new Date(completedAt).getTime();
+                return {
+                    waybillNo: wb,
+                    starsTaskId: d.taskId || undefined,
+                    driverId: d.courierEmployeeId || d.driverId || 'Unassigned',
+                    driverName: d.courierFullName || d.driverName,
+                    driverIsActive: d.courierIsActive !== false,
+                    completedAt,
+                    slaTargetAt: targetDate.toISOString(),
+                    isOnTime: !isLate,
+                };
+            });
+
+            const total = records.length;
+            const onTime = records.filter(r => r.isOnTime).length;
+            const late = total - onTime;
+            const pct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
+
+            setDmsPerfData({
+                totalDeliveries: total,
+                onTimeCount: onTime,
+                lateCount: late,
+                onTimePercentage: pct,
+                driverFilter: driver || null,
+                records,
+            });
+        } catch (err: any) {
+            console.error('Failed to compute delivery performance fallback:', err);
         } finally {
             setDmsPerfLoading(false);
         }
@@ -9604,10 +9601,6 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             dmsStatus: order.status,
             isHistoricalDeadline,
             originalExpectedDelivery,
-            taskType: order.taskType,
-            packageType: order.packageType,
-            weight: order.weight,
-            itemCount: order.itemCount,
         }
     };
 };
@@ -9724,7 +9717,7 @@ export default function OpsAdminDashboard() {
             Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', NotStarted: 'To do',
             'In Progress': 'In progress', InProgress: 'In progress',
             'Pending Admin Review': 'In review', DonePendingReview: 'In review',
-            Done: 'Completed', Completed: 'Completed',
+            Done: 'Done', Completed: 'Done',
             'On Hold': 'On hold', OnHold: 'On hold',
             Cancelled: 'Cancelled', Canceled: 'Cancelled', Overdue: 'In progress'
         } as Record<string, TMTask['status']>)[t.taskStatus] || (t.taskStatus === 'Cancelled' ? 'Cancelled' : 'Backlog'),
@@ -9832,6 +9825,12 @@ export default function OpsAdminDashboard() {
     const [isSavingTask, setIsSavingTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
     const [initialTaskData, setInitialTaskData] = useState<any>(null);
+    const [preDeliveryRefreshTrigger, setPreDeliveryRefreshTrigger] = useState(0);
+    const [trackerTargetTaskId, setTrackerTargetTaskId] = useState<string | undefined>(undefined);
+    const [trackerTargetWaybill, setTrackerTargetWaybill] = useState<string | undefined>(undefined);
+    const refetchPendingOrders = useCallback(() => {
+        setPreDeliveryRefreshTrigger(prev => prev + 1);
+    }, []);
 
     const handleCreateTaskFromPreDeliveryOrder = (order: DmsPendingOrder) => {
         setInitialTaskData(buildPreDeliveryTaskInitialData(order));
@@ -9865,8 +9864,6 @@ export default function OpsAdminDashboard() {
     const [detailTask, setDetailTask] = useState<TaskViewTask | null>(null);
     const [overrideTask, setOverrideTask] = useState<Task | null>(null);
     const [reviewTask, setReviewTask] = useState<Task | null>(null);
-    const [trackerTargetTaskId, setTrackerTargetTaskId] = useState<string | undefined>(undefined);
-    const [trackerTargetWaybill, setTrackerTargetWaybill] = useState<string | undefined>(undefined);
 
     // -- Fetch Tasks --
     const [allTasks, setAllTasks] = useState<Task[]>([]);
@@ -10571,7 +10568,7 @@ export default function OpsAdminDashboard() {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
                 }
                 const delObj = (data as any).deliveryDetails;
-                if (delObj.dmsOrderId || delObj.dmsWaybillNo) {
+                if (delObj?.dmsOrderId || delObj?.dmsWaybillNo) {
                     recordCreatedDmsOrder(delObj.dmsOrderId, delObj.dmsWaybillNo);
                     window.dispatchEvent(new CustomEvent('stars:dms-task-created', {
                         detail: { orderId: delObj.dmsOrderId, waybillNo: delObj.dmsWaybillNo, taskId }
@@ -10631,6 +10628,7 @@ export default function OpsAdminDashboard() {
             setPendingTaskData(null);
             fetchTasks().catch(() => { });
             doFetchDashboard().catch(() => { });
+            refetchPendingOrders();
         } catch (err: any) {
             const status = err.response?.status;
             const respData = err.response?.data;
@@ -11453,10 +11451,10 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'delivery' && (
                     <div className="dashboard-content">
                         <DmsDeliveryTab
-                            tasks={allTasks.length > 0 ? allTasks : tasks}
-                            onViewTask={handleOpenTaskById}
+                            tasks={tasks}
                             initialTaskId={trackerTargetTaskId}
                             initialWaybill={trackerTargetWaybill}
+                            onViewTask={handleOpenTaskById}
                         />
                     </div>
                 )}
@@ -11464,9 +11462,11 @@ export default function OpsAdminDashboard() {
                 {activeTab === 'pre_delivery' && (
                     <div className="dashboard-content">
                         <PreDeliveryTab
-                            tasks={allTasks.length > 0 ? allTasks : tasks}
+                            tasks={tasks}
                             onCreateTaskForOrder={handleCreateTaskFromPreDeliveryOrder}
                             onViewTask={handleOpenTaskById}
+                            refreshPendingTrigger={preDeliveryRefreshTrigger}
+                            onRefreshPending={refetchPendingOrders}
                             onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>

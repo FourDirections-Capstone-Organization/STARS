@@ -86,6 +86,17 @@ public class UpsertTaskDeliveryDetailDTO
 
     [MaxLength(50)]
     public string? DmsStatus { get; set; }
+
+    [MaxLength(100)]
+    public string? TaskType { get; set; }
+
+    [MaxLength(100)]
+    public string? PackageType { get; set; }
+
+    [MaxLength(50)]
+    public string? Weight { get; set; }
+
+    public int? ItemCount { get; set; }
 }
 
 public class DmsPendingOrderDTO
@@ -236,6 +247,10 @@ public class TaskDeliveryDetailResponseDTO
     public DateTime? UpdatedAt { get; set; }
     public DateTime? ExpectedDelivery { get; set; }
     public string? ExpectedDeliveryDate { get; set; }
+    public string? TaskType { get; set; }
+    public string? PackageType { get; set; }
+    public string? Weight { get; set; }
+    public int? ItemCount { get; set; }
 }
 
 public class DmsStatusWebhookDTO
@@ -315,6 +330,11 @@ public class DmsStatusWebhookDTO
     public string? PodUrl { get; set; }
     public string? PodImage { get; set; }
     public string? PotImage { get; set; }
+
+    public string? TaskType { get; set; }
+    public string? PackageType { get; set; }
+    public string? Weight { get; set; }
+    public int? ItemCount { get; set; }
 }
 
 public class DmsPerformanceRecordDTO
@@ -384,6 +404,10 @@ public class DmsDeliveryItemDTO
     public DateTime? UpdatedAt { get; set; }
     public DateTime? ExpectedDelivery { get; set; }
     public string? ExpectedDeliveryDate { get; set; }
+    public string? TaskType { get; set; }
+    public string? PackageType { get; set; }
+    public string? Weight { get; set; }
+    public int? ItemCount { get; set; }
 }
 
 public class TaskPodResponseDTO

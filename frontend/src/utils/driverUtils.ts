@@ -16,7 +16,7 @@ export interface FormatDriverOptions {
      * Formatting layout:
      * - 'id-first': "EMP-008 · Ricardo Bautista" (standard across STARS/DMS)
      * - 'name-first': "Ricardo Bautista (EMP-008)" (legacy layout)
-     * - 'name-only': "Ricardo Bautista" (displays courier/driver full name instead of employee ID)
+     * - 'name-only': "Ricardo Bautista" (clean courier name with fallback to employee ID/Unassigned)
      * Defaults to 'id-first'.
      */
     layout?: 'id-first' | 'name-first' | 'name-only';
@@ -95,17 +95,24 @@ export function formatDriverDisplay(
 
     let displayText = fallback;
 
-    if (hasEmp && hasName) {
-        if (layout === 'name-only') {
+    if (layout === 'name-only') {
+        if (hasName) {
             if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
                 const parts = cleanName.split(DRIVER_DISPLAY_SEPARATOR);
                 displayText = parts[parts.length - 1].trim();
-            } else if (cleanName.startsWith(`${cleanEmpId} - `) || cleanName.startsWith(`${cleanEmpId}: `)) {
+            } else if (cleanEmpId && cleanName.startsWith(`${cleanEmpId} - `)) {
                 displayText = cleanName.substring(cleanEmpId.length + 3).trim();
             } else {
                 displayText = cleanName;
             }
-        } else if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
+        } else if (hasEmp) {
+            displayText = cleanEmpId;
+        } else {
+            displayText = fallback;
+        }
+    } else if (hasEmp && hasName) {
+        // If the name already contains the paired layout, avoid duplication
+        if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR)) {
             displayText = cleanName;
         } else if (cleanName.startsWith(`${cleanEmpId} - `) || cleanName.startsWith(`${cleanEmpId}: `)) {
             const stripped = cleanName.substring(cleanEmpId.length + 3).trim();
@@ -115,15 +122,10 @@ export function formatDriverDisplay(
         } else {
             displayText = `${cleanEmpId}${DRIVER_DISPLAY_SEPARATOR}${cleanName}`;
         }
-    } else if (hasName) {
-        if (cleanName.includes(DRIVER_DISPLAY_SEPARATOR) && layout === 'name-only') {
-            const parts = cleanName.split(DRIVER_DISPLAY_SEPARATOR);
-            displayText = parts[parts.length - 1].trim();
-        } else {
-            displayText = cleanName;
-        }
     } else if (hasEmp) {
         displayText = cleanEmpId;
+    } else if (hasName) {
+        displayText = cleanName;
     } else {
         displayText = fallback;
     }

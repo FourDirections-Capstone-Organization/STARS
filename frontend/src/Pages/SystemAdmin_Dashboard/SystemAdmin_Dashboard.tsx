@@ -3684,6 +3684,10 @@ export default function Dashboard() {
     const [tmLoading, setTmLoading] = useState(false);
     const [showNewTask, setShowNewTask] = useState(false);
     const [createdTaskSuccess, setCreatedTaskSuccess] = useState<any | null>(null);
+    const [preDeliveryRefreshTrigger, setPreDeliveryRefreshTrigger] = useState(0);
+    const refetchPendingOrders = useCallback(() => {
+        setPreDeliveryRefreshTrigger(prev => prev + 1);
+    }, []);
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [tmDetailTask, setTmDetailTask] = useState<TaskViewTask | null>(null);
     const [tmEditingTask, setTmEditingTask] = useState<TaskViewTask | null>(null);
@@ -4555,6 +4559,7 @@ export default function Dashboard() {
                 specialInstructions: '',
             });
             fetchManagerTasks();
+            refetchPendingOrders();
         } catch (err: any) {
             setNewTaskApiError(err.response?.data?.message || err.response?.data?.Message || err.message || 'Failed to create task.');
         } finally {
@@ -5385,6 +5390,8 @@ export default function Dashboard() {
                                     openManagerTaskById(taskId);
                                 }
                             }}
+                            refreshPendingTrigger={preDeliveryRefreshTrigger}
+                            onRefreshPending={refetchPendingOrders}
                             onNavigateToDeliveryTracker={() => handleNavChange('delivery')}
                         />
                     </div>

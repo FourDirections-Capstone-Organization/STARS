@@ -1417,6 +1417,27 @@
     gap: 8px;
 }
 
+.tv-dms-tracker-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    background: var(--primary, #00A99D);
+    color: #ffffff;
+    border: 1px solid var(--primary, #00A99D);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tv-dms-tracker-btn:hover {
+    background: #008f85;
+    border-color: #008f85;
+    color: #ffffff;
+}
+
 .tv-dms-copy-btn {
     display: inline-flex;
     align-items: center;

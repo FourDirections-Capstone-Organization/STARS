@@ -22,8 +22,10 @@ import {
     Activity,
     Download,
     FileText,
-    FileCheck,
     ChevronDown,
+    FileCheck,
+    AlertTriangle,
+    Eye,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
@@ -35,7 +37,7 @@ import {
     downloadDeliveryPdfReport,
     downloadDeliveryCsvReport,
 } from './DeliveryReportExport';
-import { formatDriverDisplay } from '../TaskView/TaskView';
+import { formatDriverDisplay, isImageFile, isPdfFile, formatFileSize } from '../TaskView/TaskView';
 import { formatDriverDisplay as formatDriverDisplayShared } from '../../utils/driverUtils';
 import { formatDateOnly } from '../../utils/dateUtils';
 import './DmsDeliveryTab.css';
@@ -57,6 +59,10 @@ export interface DmsDeliveryItem {
     courierIsActive?: boolean;
     podUrl?: string;
     podUploadedAt?: string;
+    podFileName?: string;
+    podFileSize?: number;
+    podFileType?: string;
+    podUploadedBy?: string;
     dmsWaybillNo?: string;
     dmsOrderId?: number;
     dmsStatus: string;
@@ -85,6 +91,7 @@ interface PerformanceSummary {
 interface DmsDeliveryTabProps {
     tasks?: any[];
     onViewTask: (taskId: string) => void;
+    initialWaybillNo?: string;
     initialTaskId?: string;
     initialWaybill?: string;
 }
@@ -94,6 +101,7 @@ const EMPTY_TASKS: any[] = [];
 export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     tasks = EMPTY_TASKS,
     onViewTask,
+    initialWaybillNo,
     initialTaskId,
     initialWaybill,
 }) => {
@@ -116,13 +124,6 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const exportMenuRef = React.useRef<HTMLDivElement>(null);
-
-    // POD state for selected delivery in Live Delivery Tracker
-    const [podData, setPodData] = useState<any | null>(null);
-    const [podLoading, setPodLoading] = useState(false);
-    const [podDownloading, setPodDownloading] = useState(false);
-    const [podPreviewOpen, setPodPreviewOpen] = useState(false);
-    const [podImageError, setPodImageError] = useState(false);
     const deliveredOrdersRef = React.useRef<Map<string, DmsDeliveryItem>>(new Map());
 
     useEffect(() => {
@@ -145,6 +146,214 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     }, [showExportMenu]);
 
     const { success: toastSuccess, error: toastError } = useToast();
+
+    // POD state
+    const [podData, setPodData] = useState<any | null>(null);
+    const [podLoading, setPodLoading] = useState(false);
+    const [podError, setPodError] = useState<string | null>(null);
+    const [podDownloading, setPodDownloading] = useState(false);
+    const [showPodModal, setShowPodModal] = useState(false);
+    const [podImageError, setPodImageError] = useState(false);
+    const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
+
+    const targetWaybill = initialWaybill || initialWaybillNo;
+
+    // Initial delivery selection from props or event
+    useEffect(() => {
+        if (targetWaybill) {
+            const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === targetWaybill.toLowerCase());
+            if (match) setSelectedDelivery(match);
+        } else if (initialTaskId) {
+            const match = deliveries.find(d => d.taskId === initialTaskId);
+            if (match) setSelectedDelivery(match);
+        }
+    }, [targetWaybill, initialTaskId, deliveries]);
+
+    useEffect(() => {
+        const handleNav = (e: any) => {
+            const { waybillNo, taskId } = e.detail || {};
+            if (waybillNo || taskId) {
+                const match = deliveries.find(d =>
+                    (waybillNo && d.dmsWaybillNo?.toLowerCase() === String(waybillNo).toLowerCase()) ||
+                    (taskId && d.taskId === taskId)
+                );
+                if (match) {
+                    setSelectedDelivery(match);
+                }
+            }
+        };
+        window.addEventListener('stars:navigate-dms-tracker' as any, handleNav);
+        return () => window.removeEventListener('stars:navigate-dms-tracker' as any, handleNav);
+    }, [deliveries]);
+
+    // Fetch POD data when a delivery is selected
+    useEffect(() => {
+        let active = true;
+        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') {
+            setPodData(null);
+            setPodPreviewUrl(null);
+            return;
+        }
+
+        const fetchPod = async () => {
+            setPodLoading(true);
+            setPodError(null);
+            try {
+                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`);
+                const json = res.data;
+                const d = json?.data ?? json;
+                if (active) {
+                    if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
+                        setPodData(d);
+                    } else {
+                        setPodData(null);
+                    }
+                }
+            } catch (err: any) {
+                if (active) {
+                    if (err?.response?.status === 403) {
+                        setPodError('Access denied: You do not have permission to view Proof of Delivery.');
+                    } else if (err?.response?.status !== 404) {
+                        setPodError('Unable to load Proof of Delivery details.');
+                    } else {
+                        setPodData(null);
+                    }
+                }
+            } finally {
+                if (active) setPodLoading(false);
+            }
+        };
+
+        fetchPod();
+
+        return () => {
+            active = false;
+        };
+    }, [selectedDelivery?.taskId]);
+
+    const effectivePod = useMemo(() => {
+        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
+            return podData;
+        }
+        if (selectedDelivery?.podUrl) {
+            const fileName = selectedDelivery.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
+            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : '.jpg';
+            return {
+                taskId: selectedDelivery.taskId,
+                waybillNo: selectedDelivery.dmsWaybillNo,
+                podUrl: selectedDelivery.podUrl,
+                downloadUrl: selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+                    ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
+                    : selectedDelivery.podUrl,
+                fileName,
+                fileType: ext,
+                fileSize: selectedDelivery.podFileSize ?? 245760,
+                uploadedAt: selectedDelivery.podUploadedAt,
+                uploadedByName: selectedDelivery.podUploadedBy || selectedDelivery.courierFullName || 'Field Courier',
+                hasPod: true,
+            };
+        }
+        return podData;
+    }, [podData, selectedDelivery]);
+
+    useEffect(() => {
+        let active = true;
+        let createdUrl: string | null = null;
+
+        const loadPreview = async () => {
+            const url = effectivePod?.podUrl || effectivePod?.downloadUrl;
+            if (!url) {
+                setPodPreviewUrl(null);
+                return;
+            }
+
+            if (url.startsWith('data:') || url.startsWith('blob:')) {
+                setPodPreviewUrl(url);
+                return;
+            }
+
+            try {
+                const res = await api.get(url, { responseType: 'blob' });
+                if (active) {
+                    createdUrl = URL.createObjectURL(res.data);
+                    setPodPreviewUrl(createdUrl);
+                }
+            } catch {
+                if (active) {
+                    setPodPreviewUrl(url);
+                }
+            }
+        };
+
+        if (effectivePod?.hasPod) {
+            setPodImageError(false);
+            loadPreview();
+        } else {
+            setPodPreviewUrl(null);
+        }
+
+        return () => {
+            active = false;
+            if (createdUrl) {
+                URL.revokeObjectURL(createdUrl);
+            }
+        };
+    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.hasPod]);
+
+    const handleOpenPodPreview = () => {
+        setShowPodModal(true);
+    };
+
+    const handleDownloadPod = async (inline: boolean = false) => {
+        if (!selectedDelivery?.taskId) return;
+        setPodDownloading(true);
+        try {
+            const endpoint = `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download${inline ? '?inline=true' : ''}`;
+            const res = await api.get(endpoint, { responseType: 'blob' });
+            const blob = res.data;
+            const fileName = effectivePod?.fileName || `POD_${effectivePod?.waybillNo || selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
+            const blobUrl = URL.createObjectURL(blob);
+
+            if (inline) {
+                window.open(blobUrl, '_blank');
+            } else {
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch {
+            toastError('Failed to download Proof of Delivery.');
+        } finally {
+            setPodDownloading(false);
+        }
+    };
+
+    // 8-second auto-polling for active in-flight delivery (halts on terminal status)
+    useEffect(() => {
+        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
+        const s = (selectedDelivery.dmsStatus || selectedDelivery.dmsRawStatus || '').toLowerCase();
+        const isTerminal = s.includes('delivered') || s.includes('completed') || s.includes('cancel');
+        if (isTerminal) return;
+
+        const intervalId = setInterval(async () => {
+            try {
+                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
+                const data = res?.data?.data ?? res?.data;
+                if (data) {
+                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...data } : d));
+                }
+            } catch {
+                // Silently ignore polling errors
+            }
+        }, 8000);
+
+        return () => clearInterval(intervalId);
+    }, [selectedDelivery?.taskId, selectedDelivery?.dmsStatus, selectedDelivery?.dmsRawStatus]);
 
     // Fetch Performance Summary from Backend
     const fetchPerformance = useCallback(async () => {
@@ -179,205 +388,199 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 }
             });
 
-            // 1. Fetch pending orders from DMS to extract Task Type, Package Type, Weight, Item Count, and Driver Name
-            const pendingMap = new Map<string, any>();
-            let pendingList: any[] = [];
+            // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
+            try {
+                const res = await api.get('/api/dms-integration/deliveries');
+                const list = res?.data?.data ?? res?.data;
+                if (Array.isArray(list) && list.length > 0) {
+                    list.forEach((item: DmsDeliveryItem) => {
+                        const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                        const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
+                        if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
+                            item.dmsStatus = 'Delivered';
+                            item.dmsRawStatus = 'Delivered';
+                        }
+                        const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                        if (curS.includes('delivered') || curS.includes('completed')) {
+                            const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                            if (key) deliveredOrdersRef.current.set(key, item);
+                        }
+                    });
+                    deliveredOrdersRef.current.forEach((savedDelivered) => {
+                        const exists = list.some((d: any) =>
+                            (d.taskId && d.taskId === savedDelivered.taskId) ||
+                            (d.dmsWaybillNo && d.dmsWaybillNo?.toLowerCase() === savedDelivered.dmsWaybillNo?.toLowerCase()) ||
+                            (d.dmsOrderId && d.dmsOrderId === savedDelivered.dmsOrderId)
+                        );
+                        if (!exists) {
+                            list.push(savedDelivered);
+                        }
+                    });
+
+                    const sorted = [...list].sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        if (dateB !== dateA) return dateB - dateA;
+                        return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
+                    });
+                    setDeliveries(sorted);
+                    return;
+                }
+            } catch {
+                // Fall back to candidate tasks or pending orders if endpoint unavailable
+            }
+
+            // Fallback: candidate tasks from props or fetch from task list
+            let sourceTasks = tasks;
+            if (!sourceTasks || sourceTasks.length === 0) {
+                try {
+                    const res = await api.get('/api/Task?pageNumber=1&pageSize=100');
+                    const json = res.data;
+                    sourceTasks = json?.data?.items ?? json?.data ?? (Array.isArray(json) ? json : []);
+                } catch {
+                    sourceTasks = [];
+                }
+            }
+
+            // Fetch delivery details for tasks in parallel
+            const targetTasks = (sourceTasks || []).slice(0, 50); // Fetch top 50 tasks
+            const results = await Promise.allSettled(
+                targetTasks.map(async (t: any) => {
+                    const taskId = t.taskId || t.id;
+                    if (!taskId) return null;
+                    try {
+                        const res = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
+                        const d = res?.data?.data ?? res?.data;
+                        if (d && (d.dmsWaybillNo || d.recipientName || d.dmsStatus)) {
+                            return {
+                                taskId: taskId,
+                                taskTitle: t.taskTitle || t.title || t.name || 'Delivery Task',
+                                taskNumber: (t as any).taskNumber || (t as any).taskReferenceNumber,
+                                taskReferenceNumber: (t as any).taskNumber || t.taskReferenceNumber || t.referenceNumber,
+                                recipientName: d.recipientName || 'Operations Dispatch',
+                                recipientContact: d.recipientContact || '—',
+                                deliveryAddress: d.deliveryAddress || 'Metro Manila',
+                                area: d.area || '',
+                                packageDescription: d.packageDescription || t.taskTitle || '',
+                                senderAddress: d.senderAddress,
+                                specialInstructions: d.specialInstructions,
+                                courierEmployeeId: d.courierEmployeeId || '',
+                                courierFullName: d.courierFullName,
+                                courierIsActive: d.courierIsActive,
+                                podUrl: d.podUrl,
+                                podUploadedAt: d.podUploadedAt,
+                                taskType: d.taskType,
+                                packageType: d.packageType,
+                                weight: d.weight,
+                                itemCount: d.itemCount,
+                                dmsWaybillNo: d.dmsWaybillNo,
+                                dmsOrderId: d.dmsOrderId,
+                                dmsStatus: d.dmsStatus || 'Pending',
+                                dmsRawStatus: d.dmsRawStatus || d.dmsStatus || 'Pending',
+                                dmsLastSyncedAt: d.dmsLastSyncedAt,
+                                dmsFailureReason: d.dmsFailureReason,
+                                dmsLatitude: d.dmsLatitude,
+                                dmsLongitude: d.dmsLongitude,
+                                syncStatus: d.syncStatus || 'Synced',
+                                createdAt: d.createdAt || t.createdAt,
+                                expectedDelivery: d.expectedDelivery || t.revisedDeadline || t.deadline,
+                                expectedDeliveryDate: d.expectedDeliveryDate || (d.expectedDelivery ? String(d.expectedDelivery).slice(0, 10) : undefined),
+                            } as DmsDeliveryItem;
+                        }
+                    } catch {
+                        return null;
+                    }
+                    return null;
+                })
+            );
+
+            let fetchedDeliveries = results
+                .filter(r => r.status === 'fulfilled' && r.value !== null)
+                .map(r => (r as PromiseFulfilledResult<DmsDeliveryItem>).value);
+
+            // Also check pending orders from DMS and merge any unlinked shipments
             try {
                 const pendingRes = await api.get('/api/dms-integration/pending-orders');
-                pendingList = pendingRes?.data?.data ?? pendingRes?.data ?? [];
-                if (Array.isArray(pendingList)) {
-                    pendingList.forEach((p: any) => {
-                        if (p.waybillNo) pendingMap.set(String(p.waybillNo).toLowerCase().trim(), p);
-                        if (p.orderId) pendingMap.set(String(p.orderId), p);
-                    });
+                const pendingList = pendingRes?.data?.data ?? pendingRes?.data;
+                if (Array.isArray(pendingList) && pendingList.length > 0) {
+                    const existingWaybills = new Set(
+                        fetchedDeliveries.map(d => d.dmsWaybillNo?.toLowerCase()).filter(Boolean)
+                    );
+                    const existingOrderIds = new Set(
+                        fetchedDeliveries.map(d => d.dmsOrderId).filter(id => id != null)
+                    );
+                    const mappedPending: DmsDeliveryItem[] = pendingList
+                        .filter((p: any) => {
+                            if (p.orderId && existingOrderIds.has(p.orderId)) return false;
+                            if (p.waybillNo && existingWaybills.has(String(p.waybillNo).toLowerCase())) return false;
+                            return true;
+                        })
+                        .map((p: any) => ({
+                            taskId: '',
+                            taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
+                            taskNumber: undefined,
+                            taskReferenceNumber: undefined,
+                            recipientName: p.recipientName || 'Operations Dispatch',
+                            recipientContact: p.recipientContact || p.contactNumber || '—',
+                            deliveryAddress: p.recipientAddress || 'Metro Manila',
+                            area: p.area || '',
+                            packageDescription: p.packageDescription || '',
+                            senderAddress: p.senderAddress,
+                            specialInstructions: p.specialInstructions,
+                            courierEmployeeId: p.driverEmployeeId || p.driverId || '',
+                            courierFullName: p.courierFullName || p.driverName,
+                            courierIsActive: p.driverIsActive,
+                            dmsWaybillNo: p.waybillNo,
+                            taskType: p.taskType,
+                            packageType: p.packageType,
+                            weight: p.weight,
+                            itemCount: p.itemCount,
+                            dmsOrderId: p.orderId,
+                            dmsStatus: p.status || 'Pending',
+                            dmsRawStatus: p.status || 'Pending',
+                            syncStatus: 'Synced',
+                            createdAt: p.orderDate || p.createdAt,
+                            expectedDelivery: p.expectedDelivery,
+                            expectedDeliveryDate: p.expectedDeliveryDate,
+                        }));
+                    fetchedDeliveries = [...fetchedDeliveries, ...mappedPending];
                 }
             } catch {
                 // Ignore
             }
 
-            // 2. Fetch deliveries from dedicated deliveries endpoint
-            let fetchedList: DmsDeliveryItem[] = [];
-            try {
-                const res = await api.get('/api/dms-integration/deliveries');
-                const list = res?.data?.data ?? res?.data;
-                if (Array.isArray(list) && list.length > 0) {
-                    fetchedList = list;
-                }
-            } catch {
-                // Fall back to candidate tasks
-            }
-
-            // Fallback: candidate tasks from props or fetch from task list if deliveries endpoint was empty
-            if (fetchedList.length === 0) {
-                let sourceTasks = tasks;
-                if (!sourceTasks || sourceTasks.length === 0) {
-                    try {
-                        const res = await api.get('/api/Task?pageNumber=1&pageSize=100');
-                        const json = res.data;
-                        sourceTasks = json?.data?.items ?? json?.data ?? (Array.isArray(json) ? json : []);
-                    } catch {
-                        sourceTasks = [];
-                    }
-                }
-
-                const targetTasks = (sourceTasks || []).slice(0, 50);
-                const results = await Promise.allSettled(
-                    targetTasks.map(async (t: any) => {
-                        const taskId = t.taskId || t.id;
-                        if (!taskId) return null;
-                        try {
-                            const res = await api.get(`/api/dms-integration/tasks/${taskId}/delivery-details`);
-                            const d = res?.data?.data ?? res?.data;
-                            if (d && (d.dmsWaybillNo || d.recipientName || d.dmsStatus)) {
-                                return {
-                                    taskId: taskId,
-                                    taskTitle: t.taskTitle || t.title || t.name || 'Delivery Task',
-                                    taskNumber: (t as any).taskNumber || (t as any).taskReferenceNumber,
-                                    taskReferenceNumber: (t as any).taskNumber || t.taskReferenceNumber || t.referenceNumber,
-                                    recipientName: d.recipientName || 'Operations Dispatch',
-                                    recipientContact: d.recipientContact || '—',
-                                    deliveryAddress: d.deliveryAddress || 'Metro Manila',
-                                    area: d.area || '',
-                                    packageDescription: d.packageDescription || t.taskTitle || '',
-                                    senderAddress: d.senderAddress,
-                                    specialInstructions: d.specialInstructions,
-                                    courierEmployeeId: d.courierEmployeeId || '',
-                                    courierFullName: d.courierFullName,
-                                    courierIsActive: d.courierIsActive,
-                                    podUrl: d.podUrl,
-                                    podUploadedAt: d.podUploadedAt,
-                                    dmsWaybillNo: d.dmsWaybillNo,
-                                    dmsOrderId: d.dmsOrderId,
-                                    dmsStatus: d.dmsStatus || 'Pending',
-                                    dmsRawStatus: d.dmsRawStatus || d.dmsStatus || 'Pending',
-                                    syncStatus: d.syncStatus || 'Synced',
-                                    createdAt: d.createdAt || t.createdAt,
-                                    expectedDelivery: d.expectedDelivery || t.revisedDeadline || t.deadline,
-                                    expectedDeliveryDate: d.expectedDeliveryDate || (d.expectedDelivery ? String(d.expectedDelivery).slice(0, 10) : undefined),
-                                } as DmsDeliveryItem;
-                            }
-                        } catch {
-                            return null;
-                        }
-                        return null;
-                    })
-                );
-                fetchedList = results
-                    .filter(r => r.status === 'fulfilled' && r.value !== null)
-                    .map(r => (r as PromiseFulfilledResult<DmsDeliveryItem>).value);
-            }
-
-            // Check completed tasks from backend
-            try {
-                const compRes = await api.get('/api/Task?status=3&pageNumber=1&pageSize=100');
-                const compJson = compRes?.data;
-                const compItems = compJson?.data?.items ?? compJson?.data ?? (Array.isArray(compJson) ? compJson : []);
-                if (Array.isArray(compItems)) {
-                    compItems.forEach((ct: any) => {
-                        if (ct && (ct.id || ct.taskId) && (ct.title || ct.taskTitle)) {
-                            completedTaskIds.add(String(ct.id || ct.taskId));
-                        }
-                    });
-                }
-            } catch {
-                // Best-effort check
-            }
-
-            // Reconcile delivery status and augment with DMS metadata
-            const augmentedDeliveries: DmsDeliveryItem[] = fetchedList.map((item: DmsDeliveryItem) => {
-                const s = String(item.dmsStatus || '').toLowerCase();
-                const isPendingOrApproval = !s || s === 'pending' || s.includes('pending approval') || s === 'awaiting';
+            fetchedDeliveries.forEach(item => {
+                const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                 const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
-                const isDelivered = (isPendingOrApproval && isTaskCompleted) || s.includes('delivered') || s.includes('completed');
-                const resolvedStatus = isDelivered ? 'Delivered' : item.dmsStatus;
-
-                const match = (item.dmsWaybillNo ? pendingMap.get(item.dmsWaybillNo.toLowerCase().trim()) : null) ||
-                              (item.dmsOrderId ? pendingMap.get(String(item.dmsOrderId)) : null);
-
-                return {
-                    ...item,
-                    dmsStatus: resolvedStatus,
-                    dmsRawStatus: resolvedStatus,
-                    syncStatus: isDelivered ? 'Synced' : (item.syncStatus || 'Synced'),
-                    taskType: item.taskType || match?.taskType || 'Standard Delivery',
-                    packageType: item.packageType || match?.packageType || 'Parcel',
-                    weight: item.weight || match?.weight || '—',
-                    itemCount: item.itemCount ?? match?.itemCount ?? 1,
-                    courierFullName: item.courierFullName || match?.courierFullName || match?.driverName,
-                };
+                if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
+                    item.dmsStatus = 'Delivered';
+                    item.dmsRawStatus = 'Delivered';
+                }
+                const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
+                if (curS.includes('delivered') || curS.includes('completed')) {
+                    const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                    if (key) deliveredOrdersRef.current.set(key, item);
+                }
             });
-
-            // Merge unlinked pending orders from DMS
-            const existingWaybills = new Set(augmentedDeliveries.map(d => d.dmsWaybillNo?.toLowerCase().trim()).filter(Boolean));
-            const existingOrderIds = new Set(augmentedDeliveries.map(d => d.dmsOrderId).filter(id => id != null));
-
-            const unlinkedPending: DmsDeliveryItem[] = (Array.isArray(pendingList) ? pendingList : [])
-                .filter((p: any) => {
-                    if (p.orderId && existingOrderIds.has(p.orderId)) return false;
-                    if (p.waybillNo && existingWaybills.has(String(p.waybillNo).toLowerCase().trim())) return false;
-                    return true;
-                })
-                .map((p: any) => ({
-                    taskId: '',
-                    taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
-                    taskNumber: undefined,
-                    taskReferenceNumber: undefined,
-                    recipientName: p.recipientName || 'Operations Dispatch',
-                    recipientContact: p.recipientContact || p.contactNumber || '—',
-                    deliveryAddress: p.recipientAddress || 'Metro Manila',
-                    area: p.area || '',
-                    packageDescription: p.packageDescription || '',
-                    senderAddress: p.senderAddress,
-                    specialInstructions: p.specialInstructions,
-                    courierEmployeeId: p.driverEmployeeId || p.driverId || '',
-                    courierFullName: p.courierFullName || p.driverName,
-                    courierIsActive: p.driverIsActive,
-                    dmsWaybillNo: p.waybillNo,
-                    dmsOrderId: p.orderId,
-                    dmsStatus: p.status || 'Pending',
-                    dmsRawStatus: p.status || 'Pending',
-                    syncStatus: 'Synced',
-                    createdAt: p.orderDate || p.createdAt,
-                    expectedDelivery: p.expectedDelivery,
-                    expectedDeliveryDate: p.expectedDeliveryDate,
-                    taskType: p.taskType || 'Standard Delivery',
-                    packageType: p.packageType || 'Parcel',
-                    weight: p.weight || '—',
-                    itemCount: p.itemCount ?? 1,
-                }));
-
-            // Merge with cached delivered orders so delivered orders NEVER disappear from the Delivered view
-            const allItems = [...augmentedDeliveries, ...unlinkedPending];
-            const presentKeys = new Set(
-                allItems.map(d => d.dmsWaybillNo?.toLowerCase().trim() || (d.dmsOrderId ? String(d.dmsOrderId) : '') || d.taskId).filter(Boolean)
-            );
-
-            deliveredOrdersRef.current.forEach((sd, key) => {
-                if (key && !presentKeys.has(key)) {
-                    allItems.push(sd);
-                    presentKeys.add(key);
+            deliveredOrdersRef.current.forEach((savedDelivered) => {
+                const exists = fetchedDeliveries.some((d: any) =>
+                    (d.taskId && d.taskId === savedDelivered.taskId) ||
+                    (d.dmsWaybillNo && d.dmsWaybillNo?.toLowerCase() === savedDelivered.dmsWaybillNo?.toLowerCase()) ||
+                    (d.dmsOrderId && d.dmsOrderId === savedDelivered.dmsOrderId)
+                );
+                if (!exists) {
+                    fetchedDeliveries.push(savedDelivered);
                 }
             });
 
-            // Cache newly delivered orders
-            allItems.forEach(d => {
-                const s = String(d.dmsStatus || '').toLowerCase();
-                if (s.includes('delivered') || s.includes('completed')) {
-                    const key = d.dmsWaybillNo?.toLowerCase().trim() || (d.dmsOrderId ? String(d.dmsOrderId) : '') || d.taskId;
-                    if (key) {
-                        deliveredOrdersRef.current.set(key, d);
-                    }
-                }
-            });
-
-            allItems.sort((a, b) => {
+            fetchedDeliveries.sort((a, b) => {
                 const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                 const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                 if (dateB !== dateA) return dateB - dateA;
                 return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
             });
 
-            setDeliveries(allItems);
+            setDeliveries(fetchedDeliveries);
         } catch {
             // Silently handle
         } finally {
@@ -389,176 +592,27 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         fetchDeliveries();
     }, [fetchDeliveries]);
 
-    // Live Auto-Refresh polling (every 10s if enabled)
+    // Re-sync delivery list on DMS task lifecycle events
+    useEffect(() => {
+        const handleSyncUpdate = () => {
+            fetchDeliveries();
+        };
+        window.addEventListener('stars:dms-task-created', handleSyncUpdate);
+        window.addEventListener('stars:dms-task-updated', handleSyncUpdate);
+        return () => {
+            window.removeEventListener('stars:dms-task-created', handleSyncUpdate);
+            window.removeEventListener('stars:dms-task-updated', handleSyncUpdate);
+        };
+    }, [fetchDeliveries]);
+
+    // Live Auto-Refresh polling (every 20s if enabled)
     useEffect(() => {
         if (!autoSync) return;
         const interval = setInterval(() => {
             fetchDeliveries();
-        }, 10000);
+        }, 20000);
         return () => clearInterval(interval);
     }, [autoSync, fetchDeliveries]);
-
-    // Auto-select shipment when initialTaskId or initialWaybill is passed
-    useEffect(() => {
-        if (!initialTaskId && !initialWaybill) return;
-        const targetWb = initialWaybill?.toLowerCase().trim();
-        const found = deliveries.find(d =>
-            (initialTaskId && d.taskId === initialTaskId) ||
-            (targetWb && d.dmsWaybillNo?.toLowerCase().trim() === targetWb)
-        );
-        if (found) {
-            setSelectedDelivery(found);
-        } else if (initialTaskId && initialTaskId !== '00000000-0000-0000-0000-000000000000') {
-            api.get(`/api/dms-integration/tasks/${initialTaskId}/delivery-details`)
-                .then(res => {
-                    const d = res?.data?.data ?? res?.data;
-                    if (d) {
-                        setSelectedDelivery({
-                            taskId: initialTaskId,
-                            taskTitle: d.taskTitle || 'Delivery Task',
-                            recipientName: d.recipientName || 'Operations Dispatch',
-                            recipientContact: d.recipientContact || '—',
-                            deliveryAddress: d.deliveryAddress || 'Metro Manila',
-                            area: d.area || '',
-                            packageDescription: d.packageDescription || '',
-                            senderAddress: d.senderAddress,
-                            specialInstructions: d.specialInstructions,
-                            courierEmployeeId: d.courierEmployeeId || '',
-                            courierFullName: d.courierFullName,
-                            courierIsActive: d.courierIsActive,
-                            podUrl: d.podUrl,
-                            podUploadedAt: d.podUploadedAt,
-                            dmsWaybillNo: d.dmsWaybillNo,
-                            dmsOrderId: d.dmsOrderId,
-                            dmsStatus: d.dmsStatus || 'In Transit',
-                            dmsRawStatus: d.dmsRawStatus || d.dmsStatus || 'In Transit',
-                            syncStatus: d.syncStatus || 'Synced',
-                            taskType: d.taskType || 'Standard Delivery',
-                            packageType: d.packageType || 'Parcel',
-                            weight: d.weight || '—',
-                            itemCount: d.itemCount ?? 1,
-                        });
-                    }
-                })
-                .catch(() => {});
-        }
-    }, [initialTaskId, initialWaybill, deliveries]);
-
-    // Automatic real-time status sync for open delivery tracker
-    useEffect(() => {
-        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
-        const currentSt = String(selectedDelivery.dmsStatus || '').toLowerCase();
-        if (currentSt.includes('delivered') || currentSt.includes('completed') || currentSt.includes('cancel')) {
-            return;
-        }
-
-        const syncDelivery = async () => {
-            try {
-                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
-                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-                const latest = res?.data?.data ?? res?.data;
-                if (latest) {
-                    setSelectedDelivery(prev => prev && prev.taskId === selectedDelivery.taskId ? { ...prev, ...latest } : prev);
-                    setDeliveries(prev => prev.map(item => item.taskId === selectedDelivery.taskId ? { ...item, ...latest } : item));
-                }
-            } catch {
-                // Background sync
-            }
-        };
-
-        const interval = setInterval(syncDelivery, 8000);
-        return () => clearInterval(interval);
-    }, [selectedDelivery?.taskId, selectedDelivery?.dmsStatus]);
-
-    // Fetch POD data when selected delivery is open
-    useEffect(() => {
-        if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') {
-            setPodData(null);
-            return;
-        }
-        let active = true;
-        setPodLoading(true);
-        api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`)
-            .then(res => {
-                if (!active) return;
-                const d = res?.data?.data ?? res?.data;
-                if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
-                    setPodData(d);
-                } else {
-                    setPodData(null);
-                }
-            })
-            .catch(() => {
-                if (active) setPodData(null);
-            })
-            .finally(() => {
-                if (active) setPodLoading(false);
-            });
-
-        return () => {
-            active = false;
-        };
-    }, [selectedDelivery?.taskId]);
-
-    const effectivePod = useMemo(() => {
-        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
-            return podData;
-        }
-        if (selectedDelivery?.podUrl) {
-            const fileName = `POD_${selectedDelivery.dmsWaybillNo || selectedDelivery.taskId || 'shipment'}.jpg`;
-            return {
-                taskId: selectedDelivery.taskId,
-                waybillNo: selectedDelivery.dmsWaybillNo,
-                podUrl: selectedDelivery.podUrl,
-                downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
-                fileName,
-                fileType: '.jpg',
-                uploadedAt: selectedDelivery.podUploadedAt,
-                uploadedByName: selectedDelivery.courierFullName || 'Field Courier',
-                hasPod: true,
-            };
-        }
-        return null;
-    }, [podData, selectedDelivery]);
-
-    const handleDownloadSelectedPod = async (inline: boolean = false) => {
-        if (!selectedDelivery?.taskId && !effectivePod?.podUrl) return;
-        setPodDownloading(true);
-        try {
-            const endpoint = effectivePod?.downloadUrl || `/api/dms-integration/tasks/${selectedDelivery?.taskId}/pod/download${inline ? '?inline=true' : ''}`;
-            const res = await api.get(endpoint, { responseType: 'blob' });
-            const blob = res.data;
-            const blobUrl = URL.createObjectURL(blob);
-            if (inline) {
-                window.open(blobUrl, '_blank');
-            } else {
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = effectivePod?.fileName || `POD_${selectedDelivery?.dmsWaybillNo || 'delivery'}.jpg`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        } catch {
-            toastError('Failed to download Proof of Delivery.');
-        } finally {
-            setPodDownloading(false);
-        }
-    };
-
-    // Refresh immediately when a STARS delivery task is created or completed
-    useEffect(() => {
-        const handleSyncEvent = () => {
-            fetchDeliveries();
-        };
-        window.addEventListener('stars:dms-task-created', handleSyncEvent);
-        window.addEventListener('stars:dms-task-updated', handleSyncEvent);
-        return () => {
-            window.removeEventListener('stars:dms-task-created', handleSyncEvent);
-            window.removeEventListener('stars:dms-task-updated', handleSyncEvent);
-        };
-    }, [fetchDeliveries]);
 
     const handleCopy = (waybill: string) => {
         navigator.clipboard.writeText(waybill);
@@ -626,12 +680,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     // Filter, search, and sort (most recent created record first)
     const filteredDeliveries = useMemo(() => {
         const list = deliveries.filter(d => {
-            // Status filter
+            // Status filter (case-insensitive with raw status fallback)
             const s = (d.dmsStatus || '').toLowerCase();
-            if (statusFilter === 'transit' && !(s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out'))) return false;
-            if (statusFilter === 'delivered' && !(s.includes('delivered') || s.includes('completed'))) return false;
-            if (statusFilter === 'failed' && !(s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed')) return false;
-            if (statusFilter === 'pending' && !(s.includes('pending') || !d.dmsWaybillNo)) return false;
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            const isDelivered = s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
+            const isTransit = s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
+            const isFailed = s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
+            const isPending = s.includes('pending') || !d.dmsWaybillNo || raw.includes('pending');
+
+            if (statusFilter === 'transit' && !isTransit) return false;
+            if (statusFilter === 'delivered' && !isDelivered) return false;
+            if (statusFilter === 'failed' && !isFailed) return false;
+            if (statusFilter === 'pending' && !isPending) return false;
 
             // Search query
             if (!searchQuery.trim()) return true;
@@ -678,15 +738,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         const total = deliveries.length;
         const inTransit = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out');
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
         }).length;
         const delivered = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('delivered') || s.includes('completed');
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
         }).length;
         const failed = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
-            return s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed';
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            return s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
         }).length;
 
         return { total, inTransit, delivered, failed };
@@ -937,22 +1000,6 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                     </span>
                                 </span>
                             </div>
-                            <div className="dms-detail-row">
-                                <span className="dms-detail-label">Task Type</span>
-                                <span className="dms-detail-val" data-testid="dms-detail-task-type">{selectedDelivery.taskType || 'Standard Delivery'}</span>
-                            </div>
-                            <div className="dms-detail-row">
-                                <span className="dms-detail-label">Package Type</span>
-                                <span className="dms-detail-val" data-testid="dms-detail-package-type">{selectedDelivery.packageType || 'Parcel'}</span>
-                            </div>
-                            <div className="dms-detail-row">
-                                <span className="dms-detail-label">Weight</span>
-                                <span className="dms-detail-val" data-testid="dms-detail-weight">{selectedDelivery.weight || '—'}</span>
-                            </div>
-                            <div className="dms-detail-row">
-                                <span className="dms-detail-label">Item Count</span>
-                                <span className="dms-detail-val" data-testid="dms-detail-item-count">{selectedDelivery.itemCount != null ? selectedDelivery.itemCount : 1}</span>
-                            </div>
                             {selectedDelivery.packageDescription && (
                                 <div className="dms-detail-row dms-detail-row-full">
                                     <span className="dms-detail-label">Package Description</span>
@@ -988,7 +1035,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                         return (
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                 <span className="dms-detail-driver-badge">
-                                                    <span className="dms-driver-name" data-testid="dms-detail-driver-name">{nameOnlyInfo.displayText}</span>
+                                                    <span className="dms-name-only-driver-text">{nameOnlyInfo.displayText}</span>
                                                     <span className="dms-paired-driver-text" style={{ display: 'none' }}>{pairedInfo.displayText}</span>
                                                     <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                 </span>
@@ -1000,6 +1047,24 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                             </span>
                                         );
                                     })()}
+                                </span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-task-type">
+                                <span className="dms-detail-label">Task Type</span>
+                                <span className="dms-detail-val">{selectedDelivery.taskType || 'Standard Delivery'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-package-type">
+                                <span className="dms-detail-label">Package Type</span>
+                                <span className="dms-detail-val">{selectedDelivery.packageType || 'Parcel'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-weight">
+                                <span className="dms-detail-label">Weight</span>
+                                <span className="dms-detail-val">{selectedDelivery.weight || '—'}</span>
+                            </div>
+                            <div className="dms-detail-row" data-testid="dms-detail-item-count">
+                                <span className="dms-detail-label">Item Count</span>
+                                <span className="dms-detail-val">
+                                    {selectedDelivery.itemCount ? `${selectedDelivery.itemCount} item(s)` : '1 item'}
                                 </span>
                             </div>
                             {(selectedDelivery.expectedDelivery || selectedDelivery.expectedDeliveryDate) && (
@@ -1112,98 +1177,231 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         </div>
                     </div>
 
-                    {/* Card 4: Proof of Delivery (POD) Attachment */}
+                    {/* Card 4: Proof of Delivery (POD) */}
                     <div className="dms-detail-card dms-pod-card" data-testid="dms-pod-card">
-                        <div className="dms-detail-card-header" style={{ justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <FileCheck size={16} className="dms-detail-card-icon" />
-                                <h5>Proof of Delivery (POD)</h5>
-                            </div>
-                            {effectivePod && (
-                                <button
-                                    type="button"
-                                    className="dms-table-btn"
-                                    onClick={() => handleDownloadSelectedPod(false)}
-                                    disabled={podDownloading}
-                                    style={{ fontSize: 11, padding: '3px 8px' }}
-                                    title="Download Proof of Delivery"
-                                >
-                                    {podDownloading ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
-                                    <span>Download POD</span>
-                                </button>
-                            )}
+                        <div className="dms-detail-card-header">
+                            <FileCheck size={16} className="dms-detail-card-icon" />
+                            <h5>Proof of Delivery (POD)</h5>
                         </div>
                         <div className="dms-detail-card-body">
                             {podLoading ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 0', color: 'var(--text-secondary)' }}>
-                                    <Loader2 size={16} className="spin" />
-                                    <span>Loading Proof of Delivery...</span>
+                                <div className="dms-pod-loading" data-testid="dms-pod-loading">
+                                    <div className="dms-spinner" />
+                                    <span>Retrieving proof of delivery document...</span>
                                 </div>
                             ) : effectivePod ? (
-                                <div className="dms-pod-content">
-                                    <div className="dms-pod-media-wrapper" style={{ marginBottom: 12 }}>
-                                        {effectivePod.fileName?.toLowerCase().endsWith('.pdf') ? (
+                                <div className="dms-pod-content" data-testid="dms-pod-content">
+                                    <div className="dms-pod-preview-wrapper">
+                                        {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) && !podImageError ? (
+                                            <div
+                                                className="dms-pod-thumbnail-wrapper"
+                                                onClick={handleOpenPodPreview}
+                                                title="Click to preview POD image"
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        handleOpenPodPreview();
+                                                    }
+                                                }}
+                                            >
+                                                <img
+                                                    src={effectivePod.fileUrl}
+                                                    alt="Proof of Delivery thumbnail"
+                                                    className="dms-pod-thumbnail-img"
+                                                    onError={() => setPodImageError(true)}
+                                                />
+                                                <div className="dms-pod-thumbnail-overlay">
+                                                    <Eye size={18} />
+                                                    <span>View Preview</span>
+                                                </div>
+                                            </div>
+                                        ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
                                             <div
                                                 className="dms-pod-pdf-preview"
-                                                onClick={() => setPodPreviewOpen(true)}
-                                                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: 'var(--surface-sunken, #f8fafc)', borderRadius: 6, border: '1px solid var(--border)' }}
+                                                onClick={handleOpenPodPreview}
+                                                title="Click to preview PDF document"
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        handleOpenPodPreview();
+                                                    }
+                                                }}
                                             >
-                                                <FileText size={28} color="var(--primary, #00A99D)" />
-                                                <div>
-                                                    <div style={{ fontWeight: 600, fontSize: 13 }}>{effectivePod.fileName}</div>
-                                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Click to preview PDF document</div>
+                                                <FileText size={36} color="var(--primary, #00A99D)" />
+                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
+                                                <div className="dms-pod-thumbnail-overlay">
+                                                    <Eye size={18} />
+                                                    <span>View PDF</span>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div
-                                                className="dms-pod-thumb-container"
-                                                onClick={() => setPodPreviewOpen(true)}
-                                                style={{ cursor: 'pointer', position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', maxHeight: 180, display: 'inline-block' }}
-                                                title="Click to preview full Proof of Delivery"
-                                            >
-                                                <img
-                                                    src={effectivePod.podUrl || effectivePod.downloadUrl}
-                                                    alt="Proof of Delivery"
-                                                    style={{ maxHeight: 180, maxWidth: '100%', objectFit: 'cover', display: 'block' }}
-                                                    onError={() => setPodImageError(true)}
-                                                />
-                                                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 11, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <ExternalLink size={11} /> Click to expand
-                                                </div>
+                                            <div className="dms-pod-doc-icon-preview">
+                                                <FileCheck size={36} color="var(--primary, #00A99D)" />
+                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
                                             </div>
                                         )}
                                     </div>
-                                    <div className="dms-detail-row">
-                                        <span className="dms-detail-label">File Name</span>
-                                        <span className="dms-detail-val">{effectivePod.fileName || 'Proof_of_Delivery.jpg'}</span>
-                                    </div>
-                                    <div className="dms-detail-row">
-                                        <span className="dms-detail-label">Uploaded At</span>
-                                        <span className="dms-detail-val">{effectivePod.uploadedAt ? new Date(effectivePod.uploadedAt).toLocaleString() : '—'}</span>
-                                    </div>
-                                    <div className="dms-detail-row">
-                                        <span className="dms-detail-label">Uploaded By / Courier</span>
-                                        <span className="dms-detail-val">{effectivePod.uploadedByName || selectedDelivery.courierFullName || 'Courier Driver'}</span>
-                                    </div>
-                                    {effectivePod.fileSize && (
+
+                                    <div className="dms-pod-meta-grid">
                                         <div className="dms-detail-row">
-                                            <span className="dms-detail-label">File Size</span>
-                                            <span className="dms-detail-val">{(effectivePod.fileSize / 1024).toFixed(1)} KB</span>
+                                            <span className="dms-detail-label">File Name</span>
+                                            <span className="dms-detail-val dms-pod-filename" title={effectivePod.fileName || 'POD Document'}>
+                                                {effectivePod.fileName || 'POD Document'}
+                                            </span>
                                         </div>
-                                    )}
+                                        <div className="dms-detail-row">
+                                            <span className="dms-detail-label">File Type</span>
+                                            <span className="dms-detail-val">{effectivePod.contentType || 'image/jpeg'}</span>
+                                        </div>
+                                        {effectivePod.fileSize != null && effectivePod.fileSize > 0 && (
+                                            <div className="dms-detail-row">
+                                                <span className="dms-detail-label">File Size</span>
+                                                <span className="dms-detail-val">{formatFileSize(effectivePod.fileSize)}</span>
+                                            </div>
+                                        )}
+                                        <div className="dms-detail-row">
+                                            <span className="dms-detail-label">Uploaded At</span>
+                                            <span className="dms-detail-val">
+                                                {effectivePod.uploadedAt ? new Date(effectivePod.uploadedAt).toLocaleString() : '—'}
+                                            </span>
+                                        </div>
+                                        {effectivePod.uploadedByName && (
+                                            <div className="dms-detail-row">
+                                                <span className="dms-detail-label">Uploaded By</span>
+                                                <span className="dms-detail-val">{effectivePod.uploadedByName}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="dms-pod-actions-row">
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-view-btn"
+                                            data-testid="dms-pod-view-btn"
+                                            onClick={handleOpenPodPreview}
+                                            title="Preview Proof of Delivery"
+                                        >
+                                            <Eye size={13} />
+                                            <span>Full Preview</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-download-btn"
+                                            data-testid="dms-pod-download-btn"
+                                            onClick={handleDownloadPod}
+                                            disabled={podDownloading}
+                                            title="Download Proof of Delivery Document"
+                                        >
+                                            <Download size={13} className={podDownloading ? 'spin' : ''} />
+                                            <span>{podDownloading ? 'Downloading...' : 'Download File'}</span>
+                                        </button>
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="dms-pod-empty" style={{ padding: '16px 0', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                    <FileCheck size={28} style={{ opacity: 0.35, marginBottom: 6 }} />
-                                    <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>No Proof of Delivery (POD) Uploaded Yet</p>
-                                    <p style={{ margin: 0, fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                                        Proof of delivery photo or signed receiving copy will appear here once the courier completes the drop-off in DMS.
+                                <div className="dms-pod-empty" data-testid="dms-pod-empty">
+                                    <FileCheck size={28} className="dms-pod-empty-icon" />
+                                    <p className="dms-pod-empty-title">No Proof of Delivery Attached</p>
+                                    <p className="dms-pod-empty-sub">
+                                        The courier has not uploaded a digital POD signature or delivery photo yet.
                                     </p>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
+
+                {/* POD Full Preview Modal */}
+                {showPodModal && effectivePod && (
+                    <div
+                        className="dms-modal-overlay dms-pod-preview-overlay"
+                        data-testid="dms-pod-preview-modal"
+                        onClick={() => setShowPodModal(false)}
+                    >
+                        <div
+                            className="dms-modal-content dms-pod-modal-content"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="dms-modal-header">
+                                <div className="dms-modal-title-box">
+                                    <FileCheck size={18} color="var(--primary, #00A99D)" />
+                                    <h4>Proof of Delivery — {effectivePod.fileName || selectedDelivery.dmsWaybillNo || 'Document'}</h4>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="dms-modal-close-btn"
+                                    data-testid="dms-pod-modal-close-btn"
+                                    onClick={() => setShowPodModal(false)}
+                                    title="Close Preview"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="dms-modal-body dms-pod-modal-body">
+                                {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
+                                    <div className="dms-pod-modal-img-container">
+                                        <img
+                                            src={podPreviewUrl || effectivePod.fileUrl}
+                                            alt="Proof of Delivery Full Preview"
+                                            className="dms-pod-modal-full-img"
+                                        />
+                                    </div>
+                                ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
+                                    <div className="dms-pod-modal-pdf-container">
+                                        <iframe
+                                            src={podPreviewUrl || effectivePod.fileUrl}
+                                            title="Proof of Delivery PDF Viewer"
+                                            className="dms-pod-modal-iframe"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="dms-pod-modal-fallback">
+                                        <FileCheck size={48} color="var(--primary, #00A99D)" />
+                                        <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
+                                        <button
+                                            type="button"
+                                            className="dms-btn-action dms-pod-download-btn"
+                                            onClick={handleDownloadPod}
+                                            disabled={podDownloading}
+                                        >
+                                            <Download size={13} />
+                                            <span>Download to view</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="dms-modal-footer dms-pod-modal-footer">
+                                <div className="dms-pod-modal-meta">
+                                    <span>{effectivePod.fileName || 'POD Document'}</span>
+                                    {effectivePod.fileSize != null && effectivePod.fileSize > 0 && (
+                                        <span>({formatFileSize(effectivePod.fileSize)})</span>
+                                    )}
+                                </div>
+                                <div className="dms-pod-modal-actions">
+                                    <button
+                                        type="button"
+                                        className="dms-detail-footer-btn-secondary"
+                                        onClick={() => setShowPodModal(false)}
+                                    >
+                                        Close
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="dms-detail-footer-btn-primary"
+                                        onClick={handleDownloadPod}
+                                        disabled={podDownloading}
+                                    >
+                                        <Download size={14} className={podDownloading ? 'spin' : ''} />
+                                        <span>{podDownloading ? 'Downloading...' : 'Download File'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Action Footer Bar ── */}
                 <div className="dms-detail-footer">
@@ -1240,80 +1438,6 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         </button>
                     )}
                 </div>
-
-                {/* ── Proof of Delivery (POD) Preview Modal ── */}
-                {podPreviewOpen && effectivePod && (
-                    <div
-                        className="tv-modal-overlay tv-pod-preview-overlay"
-                        onClick={() => setPodPreviewOpen(false)}
-                        data-testid="dms-pod-preview-modal"
-                        style={{ zIndex: 9999 }}
-                    >
-                        <div className="tv-modal-content tv-pod-preview-modal" onClick={e => e.stopPropagation()}>
-                            <div className="tv-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-                                <div className="tv-pod-modal-title-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <FileCheck size={16} />
-                                    <h4 className="tv-modal-title" style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Proof of Delivery Preview</h4>
-                                    {effectivePod.fileName && <span className="tv-pod-modal-file-badge" style={{ fontSize: 11, background: 'var(--bg-input, #f1f5f9)', padding: '2px 8px', borderRadius: 4 }}>{effectivePod.fileName}</span>}
-                                </div>
-                                <button
-                                    type="button"
-                                    className="tv-modal-close"
-                                    onClick={() => setPodPreviewOpen(false)}
-                                    aria-label="Close Preview"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                                >
-                                    <X size={16} />
-                                </button>
-                            </div>
-                            <div className="tv-pod-preview-body" style={{ padding: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: '75vh', overflow: 'auto' }}>
-                                {effectivePod.fileName?.toLowerCase().endsWith('.pdf') ? (
-                                    <div className="tv-pod-pdf-embed-wrapper" style={{ width: '100%', height: 500 }}>
-                                        <iframe
-                                            src={effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                            title="POD PDF Viewer"
-                                            className="tv-pod-modal-pdf-frame"
-                                            style={{ width: '100%', height: '100%', border: 'none' }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <img
-                                        src={effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                        alt="Proof of Delivery Full Preview"
-                                        className="tv-pod-modal-img"
-                                        style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 6 }}
-                                        onError={() => setPodImageError(true)}
-                                    />
-                                )}
-                            </div>
-                            <div className="tv-modal-footer tv-pod-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: '1px solid var(--border)' }}>
-                                <span className="tv-pod-modal-meta" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    Uploaded: {effectivePod.uploadedAt ? new Date(effectivePod.uploadedAt).toLocaleString() : '—'} by {effectivePod.uploadedByName || selectedDelivery?.courierFullName || 'Field Courier'}
-                                </span>
-                                <div className="tv-pod-modal-btn-row" style={{ display: 'flex', gap: 8 }}>
-                                    <button
-                                        type="button"
-                                        className="dms-detail-footer-btn-secondary"
-                                        onClick={() => setPodPreviewOpen(false)}
-                                        style={{ padding: '6px 12px', fontSize: 12 }}
-                                    >
-                                        Close
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="dms-table-btn"
-                                        onClick={() => handleDownloadSelectedPod(false)}
-                                        disabled={podDownloading}
-                                        style={{ padding: '6px 12px', fontSize: 12, background: 'var(--primary, #00A99D)', color: '#fff', border: 'none' }}
-                                    >
-                                        {podDownloading ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
-                                        <span>Download Original</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         );
     }
@@ -1640,12 +1764,14 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                         {(() => {
                                             const driverInfo = formatDriverDisplay(item.courierFullName, item.courierEmployeeId, item.courierIsActive);
                                             const pairedInfo = formatDriverDisplayShared(item.courierFullName, item.courierEmployeeId, item.courierIsActive, { layout: 'id-first' });
+                                            const nameOnlyInfo = formatDriverDisplayShared(item.courierFullName, item.courierEmployeeId, item.courierIsActive, { layout: 'name-only' });
                                             if (driverInfo.displayText === 'Unassigned' && !item.courierEmployeeId) {
                                                 return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Auto / Pool</span>;
                                             }
                                             return (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                                     <span className="dms-driver-badge" data-testid="dms-courier-name">
+                                                        <span className="dms-name-only-driver-text">{nameOnlyInfo.displayText}</span>
                                                         <span className="dms-paired-driver-text">{pairedInfo.displayText}</span>
                                                         <span className="dms-legacy-driver-text" style={{ display: 'none' }}>{driverInfo.displayText}</span>
                                                     </span>
@@ -1757,80 +1883,6 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     </>
                 )}
             </div>
-
-            {/* ── Proof of Delivery (POD) Preview Modal ── */}
-            {podPreviewOpen && effectivePod && (
-                <div
-                    className="tv-modal-overlay tv-pod-preview-overlay"
-                    onClick={() => setPodPreviewOpen(false)}
-                    data-testid="dms-pod-preview-modal"
-                    style={{ zIndex: 9999 }}
-                >
-                    <div className="tv-modal-content tv-pod-preview-modal" onClick={e => e.stopPropagation()}>
-                        <div className="tv-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-                            <div className="tv-pod-modal-title-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <FileCheck size={16} />
-                                <h4 className="tv-modal-title" style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Proof of Delivery Preview</h4>
-                                {effectivePod.fileName && <span className="tv-pod-modal-file-badge" style={{ fontSize: 11, background: 'var(--bg-input, #f1f5f9)', padding: '2px 8px', borderRadius: 4 }}>{effectivePod.fileName}</span>}
-                            </div>
-                            <button
-                                type="button"
-                                className="tv-modal-close"
-                                onClick={() => setPodPreviewOpen(false)}
-                                aria-label="Close Preview"
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-                        <div className="tv-pod-preview-body" style={{ padding: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: '75vh', overflow: 'auto' }}>
-                            {effectivePod.fileName?.toLowerCase().endsWith('.pdf') ? (
-                                <div className="tv-pod-pdf-embed-wrapper" style={{ width: '100%', height: 500 }}>
-                                    <iframe
-                                        src={effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                        title="POD PDF Viewer"
-                                        className="tv-pod-modal-pdf-frame"
-                                        style={{ width: '100%', height: '100%', border: 'none' }}
-                                    />
-                                </div>
-                            ) : (
-                                <img
-                                    src={effectivePod.podUrl || effectivePod.downloadUrl || ''}
-                                    alt="Proof of Delivery Full Preview"
-                                    className="tv-pod-modal-img"
-                                    style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 6 }}
-                                    onError={() => setPodImageError(true)}
-                                />
-                            )}
-                        </div>
-                        <div className="tv-modal-footer tv-pod-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: '1px solid var(--border)' }}>
-                            <span className="tv-pod-modal-meta" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                Uploaded: {effectivePod.uploadedAt ? new Date(effectivePod.uploadedAt).toLocaleString() : '—'} by {effectivePod.uploadedByName || selectedDelivery?.courierFullName || 'Field Courier'}
-                            </span>
-                            <div className="tv-pod-modal-btn-row" style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                    type="button"
-                                    className="dms-detail-footer-btn-secondary"
-                                    onClick={() => setPodPreviewOpen(false)}
-                                    style={{ padding: '6px 12px', fontSize: 12 }}
-                                >
-                                    Close
-                                </button>
-                                <button
-                                    type="button"
-                                    className="dms-table-btn"
-                                    onClick={() => handleDownloadSelectedPod(false)}
-                                    disabled={podDownloading}
-                                    style={{ padding: '6px 12px', fontSize: 12, background: 'var(--primary, #00A99D)', color: '#fff', border: 'none' }}
-                                >
-                                    {podDownloading ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
-                                    <span>Download Original</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

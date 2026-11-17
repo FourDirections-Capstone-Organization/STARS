@@ -95,6 +95,7 @@ async function main() {
   await test("DMS creates Delivery Order and auto-generates Waybill", async () => {
     const payload = {
       starsTaskId: testTaskId,
+      taskStatus: "Approved",
       taskTitle: "[INTEGRATION-TEST] Delivery of Urgent Audit Documentation",
       recipientName: "Engr. Roberto Cruz",
       recipientContact: "09171234567",
@@ -123,6 +124,7 @@ async function main() {
   await test("DMS enforces idempotency on retried order creation", async () => {
     const payload = {
       starsTaskId: testTaskId,
+      taskStatus: "Approved",
       taskTitle: "[INTEGRATION-TEST] Retry Submission",
       recipientName: "Engr. Roberto Cruz",
       recipientContact: "09171234567",
