@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Megaphone, AlertTriangle, AlertCircle, ChevronRight, CheckCircle2, Paperclip, ThumbsUp, Loader2, Eye, X } from 'lucide-react';
 import api from '../../api';
 import AnnouncementDetailModal, { AnnouncementItem } from './AnnouncementDetailModal';
+import { getArchivedAnnouncementIds, archiveAnnouncementId } from './AnnouncementsTab';
 
 interface AnnouncementBannerProps {
     onNavigateToAnnouncements?: () => void;
@@ -56,8 +57,9 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
             const res = await api.get('/api/Announcement/active');
             if (res.data?.isSuccess && Array.isArray(res.data?.data)) {
                 const viewedIds = getViewedAnnouncementIds();
+                const archivedIds = getArchivedAnnouncementIds(getUserId());
                 const unviewed = (res.data.data as AnnouncementItem[]).filter(
-                    a => !viewedIds.includes(a.id)
+                    a => !viewedIds.includes(a.id) && !archivedIds.includes(a.id)
                 );
                 setAnnouncements(unviewed);
             }
@@ -70,6 +72,17 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
 
     useEffect(() => {
         fetchActive();
+
+        const handleArchived = (e: any) => {
+            if (e.detail?.id) {
+                setAnnouncements(prev => prev.filter(item => item.id !== e.detail.id));
+            }
+        };
+
+        window.addEventListener('stars:announcement-archived', handleArchived);
+        return () => {
+            window.removeEventListener('stars:announcement-archived', handleArchived);
+        };
     }, []);
 
     const handleViewAnnouncement = (a: AnnouncementItem) => {
@@ -242,6 +255,11 @@ export const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({ onNaviga
                     onClose={() => setSelectedAnnouncement(null)}
                     onUpdated={() => {
                         fetchActive();
+                    }}
+                    onToggleArchive={(id) => {
+                        archiveAnnouncementId(id, getUserId());
+                        setAnnouncements(prev => prev.filter(item => item.id !== id));
+                        setSelectedAnnouncement(null);
                     }}
                 />
             )}

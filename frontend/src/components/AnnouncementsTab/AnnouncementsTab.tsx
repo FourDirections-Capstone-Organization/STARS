@@ -4,7 +4,7 @@ import {
     Calendar, MessageSquare, ThumbsUp, Send, Paperclip, Download, FileText,
     Image as ImageIcon, Eye, Edit3, Bold, Italic, List, ListOrdered, Heading, Quote,
     AlertTriangle, Globe, Lock, UserCheck, Copy, Check, Sparkles, Flame,
-    ChevronDown, ChevronUp, Bell, ArrowUpRight, Search
+    ChevronDown, ChevronUp, Bell, ArrowUpRight, Search, Archive, RotateCcw
 } from 'lucide-react';
 import StatusCard from '../StatusCard/StatusCard';
 import FormModal from '../FormModal/FormModal';
@@ -69,6 +69,48 @@ const getExpiryStatus = (expiryDate?: string) => {
     const diffDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
     if (diffDays <= 3) return { label: `Expires in ${diffDays}d`, isUrgent: true };
     return { label: `Expires ${fmtDate(expiryDate)}`, isUrgent: false };
+};
+
+export const getArchivedStorageKey = (userId?: string) => `archived_announcements_${userId || 'default'}`;
+
+export const getArchivedAnnouncementIds = (userId?: string): string[] => {
+    try {
+        const raw = localStorage.getItem(getArchivedStorageKey(userId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+export const archiveAnnouncementId = (id: string, userId?: string): string[] => {
+    try {
+        const key = getArchivedStorageKey(userId);
+        const existing = getArchivedAnnouncementIds(userId);
+        if (!existing.includes(id)) {
+            const updated = [...existing, id];
+            localStorage.setItem(key, JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('stars:announcement-archived', { detail: { id, userId } }));
+            return updated;
+        }
+        return existing;
+    } catch {
+        return [];
+    }
+};
+
+export const unarchiveAnnouncementId = (id: string, userId?: string): string[] => {
+    try {
+        const key = getArchivedStorageKey(userId);
+        const existing = getArchivedAnnouncementIds(userId);
+        const updated = existing.filter(x => x !== id);
+        localStorage.setItem(key, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('stars:announcement-unarchived', { detail: { id, userId } }));
+        return updated;
+    } catch {
+        return [];
+    }
 };
 
 const getMinDateTimeLocal = () => {
@@ -241,31 +283,72 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
         }
     })();
 
-    // Summary statistics for KPIs
+    const [archivedIds, setArchivedIds] = useState<string[]>(() => getArchivedAnnouncementIds(currentUserId));
+
+    useEffect(() => {
+        setArchivedIds(getArchivedAnnouncementIds(currentUserId));
+    }, [currentUserId]);
+
+    useEffect(() => {
+        const handleArchivedChange = () => {
+            setArchivedIds(getArchivedAnnouncementIds(currentUserId));
+        };
+        window.addEventListener('stars:announcement-archived', handleArchivedChange);
+        window.addEventListener('stars:announcement-unarchived', handleArchivedChange);
+        return () => {
+            window.removeEventListener('stars:announcement-archived', handleArchivedChange);
+            window.removeEventListener('stars:announcement-unarchived', handleArchivedChange);
+        };
+    }, [currentUserId]);
+
+    const handleArchiveAnnouncement = (id: string) => {
+        const updated = archiveAnnouncementId(id, currentUserId);
+        setArchivedIds(updated);
+    };
+
+    const handleUnarchiveAnnouncement = (id: string) => {
+        const updated = unarchiveAnnouncementId(id, currentUserId);
+        setArchivedIds(updated);
+    };
+
+    // Separate active announcements from archived announcements
+    const activeAnnouncements = useMemo(() => {
+        return announcements.filter(a => !archivedIds.includes(a.id));
+    }, [announcements, archivedIds]);
+
+    const archivedAnnouncements = useMemo(() => {
+        return announcements.filter(a => archivedIds.includes(a.id));
+    }, [announcements, archivedIds]);
+
+    // Summary statistics for KPIs (based on active bulletins)
     const stats = useMemo(() => {
-        const total = announcements.length;
-        const urgentCount = announcements.filter(a => a.priority === 'Urgent').length;
-        const importantCount = announcements.filter(a => a.priority === 'Important').length;
-        const acknowledgedCount = announcements.filter(a => a.isAcknowledged).length;
-        const expiringSoonCount = announcements.filter(a => isExpiringSoon(a.expiryDate)).length;
+        const total = activeAnnouncements.length;
+        const urgentCount = activeAnnouncements.filter(a => a.priority === 'Urgent').length;
+        const importantCount = activeAnnouncements.filter(a => a.priority === 'Important').length;
+        const acknowledgedCount = activeAnnouncements.filter(a => a.isAcknowledged).length;
+        const expiringSoonCount = activeAnnouncements.filter(a => isExpiringSoon(a.expiryDate)).length;
 
         return {
             total,
             urgentAndImportant: urgentCount + importantCount,
             acknowledged: acknowledgedCount,
             expiringSoon: expiringSoonCount,
+            archivedCount: archivedAnnouncements.length,
         };
-    }, [announcements]);
+    }, [activeAnnouncements, archivedAnnouncements]);
 
     // Filter Logic
     const filteredAnnouncements = useMemo(() => {
-        return announcements.filter(a => {
+        const sourceList = filterPriority === 'Archived' ? archivedAnnouncements : activeAnnouncements;
+
+        return sourceList.filter(a => {
             let matchesFilter = true;
             if (filterPriority === 'Urgent') matchesFilter = a.priority === 'Urgent';
             else if (filterPriority === 'Important') matchesFilter = a.priority === 'Important';
             else if (filterPriority === 'Normal') matchesFilter = a.priority === 'Normal';
             else if (filterPriority === 'Public') matchesFilter = a.isPublic;
             else if (filterPriority === 'Acknowledged') matchesFilter = a.isAcknowledged;
+            else if (filterPriority === 'Archived') matchesFilter = true;
 
             const q = searchTerm.trim().toLowerCase();
             const matchesSearch = !q ||
@@ -275,7 +358,7 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
 
             return matchesFilter && matchesSearch;
         });
-    }, [announcements, filterPriority, searchTerm]);
+    }, [activeAnnouncements, archivedAnnouncements, filterPriority, searchTerm]);
 
     return (
         <div className="ann-container">
@@ -343,6 +426,7 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                             { key: 'Normal', label: 'Standard' },
                             { key: 'Public', label: 'Public' },
                             { key: 'Acknowledged', label: 'Acknowledged' },
+                            { key: 'Archived', label: `Archived${archivedAnnouncements.length > 0 ? ` (${archivedAnnouncements.length})` : ''}`, className: 'archived' },
                         ].map(tab => (
                             <button
                                 key={tab.key}
@@ -354,6 +438,7 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                                 {tab.key === 'Important' && <Sparkles size={12} />}
                                 {tab.key === 'Public' && <Globe size={12} />}
                                 {tab.key === 'Acknowledged' && <CheckCircle2 size={12} />}
+                                {tab.key === 'Archived' && <Archive size={12} />}
                                 {tab.label}
                             </button>
                         ))}
@@ -439,6 +524,8 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                         const commentCount = a.comments?.length || 0;
                         const isCommentsOpen = !!expandedComments[a.id];
                         const expiryStatus = getExpiryStatus(a.expiryDate);
+                        const isArchived = archivedIds.includes(a.id);
+                        const hasNoExpiry = !a.expiryDate;
 
                         return (
                             <div key={a.id} className={`ann-card ${priorityClass}`}>
@@ -483,6 +570,13 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                                                         <Copy size={11} />
                                                     )}
                                                 </span>
+
+                                                {/* Archived Badge */}
+                                                {isArchived && (
+                                                    <span className="ann-badge-archived">
+                                                        <Archive size={11} /> Archived
+                                                    </span>
+                                                )}
                                             </div>
 
                                             <h3 className="ann-card-title">
@@ -508,10 +602,15 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                                                     <span>Effective: <strong>{fmtDate(a.effectiveDate)}</strong></span>
                                                 </div>
 
-                                                {expiryStatus && (
+                                                {expiryStatus ? (
                                                     <span className={`ann-expiry-pill ${expiryStatus.isUrgent ? 'urgent' : ''}`}>
                                                         <Clock size={11} />
                                                         {expiryStatus.label}
+                                                    </span>
+                                                ) : (
+                                                    <span className="ann-expiry-pill no-expiry" style={{ background: 'rgba(100, 116, 139, 0.08)', color: '#64748b', border: '1px solid rgba(100, 116, 139, 0.2)' }}>
+                                                        <Clock size={11} />
+                                                        No Expiry Date
                                                     </span>
                                                 )}
                                             </div>
@@ -602,6 +701,32 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
                                                 {isCommentsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                                             </button>
                                         </div>
+
+                                        {(hasNoExpiry || isArchived) && (
+                                            <div className="ann-right-actions">
+                                                {isArchived ? (
+                                                    <button
+                                                        type="button"
+                                                        className="ann-btn-restore"
+                                                        onClick={() => handleUnarchiveAnnouncement(a.id)}
+                                                        title="Restore announcement to active view"
+                                                    >
+                                                        <RotateCcw size={13} />
+                                                        <span>Restore Notice</span>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="ann-btn-archive"
+                                                        onClick={() => handleArchiveAnnouncement(a.id)}
+                                                        title="Archive announcement (has no expiration date)"
+                                                    >
+                                                        <Archive size={13} />
+                                                        <span>Archive</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* ── Publisher Analytics / Roster ── */}
@@ -718,9 +843,18 @@ export const AnnouncementsTab: React.FC<AnnouncementsTabProps> = ({ canCreate })
             {selectedDetail && (
                 <AnnouncementDetailModal
                     announcement={selectedDetail}
+                    isArchived={archivedIds.includes(selectedDetail.id)}
                     onClose={() => setSelectedDetail(null)}
                     onUpdated={() => {
                         fetchAnnouncements();
+                    }}
+                    onToggleArchive={(id, isCurArchived) => {
+                        if (isCurArchived) {
+                            handleUnarchiveAnnouncement(id);
+                        } else {
+                            handleArchiveAnnouncement(id);
+                        }
+                        setSelectedDetail(null);
                     }}
                 />
             )}
@@ -806,6 +940,17 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
         return selected < current;
     }, [effectiveDate]);
 
+    const handleSetQuickExpiry = (days: number) => {
+        const base = effectiveDate ? new Date(effectiveDate) : new Date();
+        base.setDate(base.getDate() + days);
+        const tzOffset = base.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(base.getTime() - tzOffset)).toISOString().slice(0, 16);
+        setExpiryDate(localISOTime);
+        if (formError && formError.toLowerCase().includes('expir')) {
+            setFormError('');
+        }
+    };
+
     const handleSubmit = async () => {
         if (!title.trim()) {
             setFormError('Announcement title is required.');
@@ -835,8 +980,18 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
             return;
         }
 
-        if (expiryDate && new Date(expiryDate) < new Date(effectiveDate)) {
+        if (!expiryDate) {
+            setFormError('Announcement expiry date is required.');
+            return;
+        }
+
+        if (new Date(expiryDate) <= new Date(effectiveDate)) {
             setFormError('Expiry date must not precede the effective date.');
+            return;
+        }
+
+        if (new Date(expiryDate).getTime() < nowMs) {
+            setFormError('Expiry date cannot be in the past. Please select a future date and time.');
             return;
         }
 
@@ -1205,17 +1360,47 @@ const CreateAnnouncementModal: React.FC<CreateAnnouncementModalProps> = ({ onClo
                     </span>
                 </div>
                 <div className="field">
-                    <label style={{ fontWeight: 600 }}>
-                        Expiry Date <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(Optional)</span>
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <label style={{ margin: 0, fontWeight: 600 }}>
+                            Expiry Date <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                            {[
+                                { label: '+3d', days: 3 },
+                                { label: '+7d', days: 7 },
+                                { label: '+14d', days: 14 },
+                                { label: '+30d', days: 30 },
+                            ].map(opt => (
+                                <button
+                                    key={opt.days}
+                                    type="button"
+                                    className="btn btn-sm"
+                                    onClick={() => handleSetQuickExpiry(opt.days)}
+                                    style={{ fontSize: 10, padding: '1px 6px', height: 20 }}
+                                    title={`Set expiration to ${opt.days} days after effective date`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <input
                         type="datetime-local"
                         value={expiryDate}
                         min={effectiveDate || minDateTime}
-                        onChange={e => setExpiryDate(e.target.value)}
+                        onChange={e => {
+                            setExpiryDate(e.target.value);
+                            if (formError && formError.toLowerCase().includes('expir')) {
+                                setFormError('');
+                            }
+                        }}
+                        required
+                        style={{
+                            borderColor: !expiryDate && formError ? '#ef4444' : undefined,
+                        }}
                     />
                     <span className="ann-date-hint">
-                        Automatically archives after this date/time.
+                        Required. Announcement automatically archives after this date/time.
                     </span>
                 </div>
             </div>
