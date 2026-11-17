@@ -132,6 +132,12 @@
     box-shadow: 0 3px 10px rgba(245, 158, 11, 0.3);
 }
 
+.ann-chip.archived.active {
+    background: #64748b;
+    border-color: #64748b;
+    box-shadow: 0 3px 10px rgba(100, 116, 139, 0.3);
+}
+
 /* ── Primary Action Button ── */
 .ann-btn-create {
     display: inline-flex;
@@ -544,6 +550,66 @@
 .ann-btn-view-notice:hover {
     border-color: var(--primary, #4318ff);
     color: var(--primary, #4318ff);
+}
+
+.ann-right-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.ann-btn-archive {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.06);
+    color: #dc2626;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.ann-btn-archive:hover {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: #ef4444;
+}
+
+.ann-btn-restore {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.08);
+    color: #059669;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.ann-btn-restore:hover {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: #10b981;
+}
+
+.ann-badge-archived {
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(100, 116, 139, 0.15);
+    color: #475569;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* ── Publisher Acknowledgment Accordion ── */
