@@ -391,6 +391,112 @@ async function main() {
     return `DMS relayed failure event to STARS successfully (${res.ms}ms)`;
   });
 
+  console.log("\n[6] Integration 5: Delivery Order Cancelled -> STARS Notification");
+
+  await test("STARS rejects unauthorized order cancellation (no X-Api-Key)", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/cancellation`, {
+      body: {
+        waybillNo: generatedWaybill || "WB-2026-TEST01",
+        starsTaskId: testTaskId,
+        cancellationReason: "Client requested cancellation"
+      }
+    });
+    expect(res.status === 401 || res.status === 503 || res.status === 502, `expected 401/502/503 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await test("DMS rejects unauthorized order cancellation trigger (no X-Api-Key)", async () => {
+    const res = await call("POST", `${DMS_URL}/api/integration/stars/order-cancelled/trigger`, {
+      body: {
+        waybillNo: generatedWaybill || "WB-2026-TEST01",
+        starsTaskId: testTaskId,
+        cancellationReason: "Client requested cancellation"
+      }
+    });
+    expect(res.status === 401 || res.status === 503 || res.status === 502, `expected 401/502/503 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await test("STARS processes order cancellation remark and preserves task FSM status", async () => {
+    // 1. Ensure original task status is "Completed"
+    await call("POST", `${STARS_URL}/api/integration/dms/status`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        starsTaskId: testTaskId,
+        status: "Delivered",
+        dmsStatus: "Delivered",
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    const cancellationReason = "Client requested cancellation: project scope modified";
+    const cancelledBy = "Operations Dispatcher (DMS)";
+
+    const payload = {
+      waybillNo: generatedWaybill,
+      starsTaskId: testTaskId,
+      cancellationReason,
+      cancelledBy,
+      timestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/cancellation`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `order cancellation failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "AddedCancellationRemark", `expected action 'AddedCancellationRemark' but got '${data?.actionTaken}'`);
+    expect(data?.waybillNo === generatedWaybill, `waybill mismatch: ${data?.waybillNo} vs ${generatedWaybill}`);
+
+    // Verify task delivery details in STARS
+    const detailRes = await call("GET", `${STARS_URL}/api/integration/dms/tasks/${testTaskId}/delivery-details`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+    expect(detailRes.status === 200, `failed to fetch task details: ${detailRes.status}`);
+    const detail = detailRes.json?.data || detailRes.json;
+    expect(detail?.dmsStatus === "Cancelled", `expected dmsStatus 'Cancelled', got '${detail?.dmsStatus}'`);
+    expect(detail?.dmsFailureReason === cancellationReason, `expected dmsFailureReason '${cancellationReason}', got '${detail?.dmsFailureReason}'`);
+
+    // Verify original task FSM status remains strictly "Completed"
+    expect(detail?.taskStatus === "Completed" || detail?.status === "Completed", `expected task status 'Completed', got '${detail?.taskStatus || detail?.status}'`);
+
+    return `Action: ${data.actionTaken}, Detail Status: ${detail.dmsStatus}, Task Status: ${detail.taskStatus || "Completed"} (${res.ms}ms)`;
+  });
+
+  await test("DMS triggers order cancellation to STARS via M2M trigger endpoint", async () => {
+    const triggerWaybill = `WB-CANC-${Date.now().toString().slice(-6)}`;
+    const triggerTaskId = randomUuid();
+    const triggerPayload = {
+      waybillNo: triggerWaybill,
+      starsTaskId: triggerTaskId,
+      cancellationReason: "Incorrect delivery coordinates and customer cancellation",
+      cancelledBy: "DMS Admin Portal",
+      timestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${DMS_URL}/api/integration/stars/order-cancelled/trigger`, {
+      headers: { "X-Api-Key": STARS_TO_DMS_KEY },
+      body: triggerPayload
+    });
+
+    expect(res.status === 200, `DMS cancellation trigger failed with status ${res.status}: ${res.text}`);
+    expect(res.json?.success === true, `expected success: true, got ${res.text}`);
+
+    // Verify relayed cancellation reached STARS
+    const checkRes = await call("GET", `${STARS_URL}/api/integration/dms/tasks/${triggerTaskId}/delivery-details`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+    expect(checkRes.status === 200, `failed to fetch relayed task details: ${checkRes.status}`);
+    const checkDetail = checkRes.json?.data || checkRes.json;
+    expect(checkDetail?.dmsStatus === "Cancelled", `expected dmsStatus 'Cancelled', got '${checkDetail?.dmsStatus}'`);
+    expect(checkDetail?.dmsFailureReason === triggerPayload.cancellationReason, `expected reason '${triggerPayload.cancellationReason}', got '${checkDetail?.dmsFailureReason}'`);
+
+    return `DMS relayed cancellation event to STARS successfully (${res.ms}ms)`;
+  });
+
   console.log("\n==================================================================");
   const passed = results.filter((r) => r.ok === true).length;
   const failed = results.filter((r) => r.ok === false).length;

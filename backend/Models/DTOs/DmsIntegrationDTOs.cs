@@ -248,6 +248,7 @@ public class TaskDeliveryDetailResponseDTO
     public DateTime? ExpectedDelivery { get; set; }
     public string? ExpectedDeliveryDate { get; set; }
     public string? TaskType { get; set; }
+    public string? TaskStatus { get; set; }
     public string? PackageType { get; set; }
     public string? Weight { get; set; }
     public int? ItemCount { get; set; }
@@ -332,6 +333,7 @@ public class DmsStatusWebhookDTO
     public string? PotImage { get; set; }
 
     public string? TaskType { get; set; }
+    public string? TaskStatus { get; set; }
     public string? PackageType { get; set; }
     public string? Weight { get; set; }
     public int? ItemCount { get; set; }
@@ -405,6 +407,7 @@ public class DmsDeliveryItemDTO
     public DateTime? ExpectedDelivery { get; set; }
     public string? ExpectedDeliveryDate { get; set; }
     public string? TaskType { get; set; }
+    public string? TaskStatus { get; set; }
     public string? PackageType { get; set; }
     public string? Weight { get; set; }
     public int? ItemCount { get; set; }

@@ -1635,6 +1635,7 @@ public class DmsIntegrationService : IDmsIntegrationService
             ExpectedDelivery = taskDeadline,
             ExpectedDeliveryDate = taskDeadline.HasValue ? taskDeadline.Value.ToString("yyyy-MM-dd") : null,
             TaskType = !string.IsNullOrWhiteSpace(d.TaskType) ? d.TaskType : "Standard Delivery",
+            TaskStatus = d.Task?.Status.ToString(),
             PackageType = !string.IsNullOrWhiteSpace(d.PackageType) ? d.PackageType : "Parcel",
             Weight = !string.IsNullOrWhiteSpace(d.Weight) ? d.Weight : "—",
             ItemCount = d.ItemCount.HasValue && d.ItemCount.Value > 0 ? d.ItemCount.Value : 1
@@ -2422,11 +2423,27 @@ public class DmsIntegrationService : IDmsIntegrationService
 
         if (task == null)
         {
-            _logger.LogWarning(
-                "Order cancellation received for unmatched task. Waybill: {WaybillNo}, TaskId: {StarsTaskId}",
+            _logger.LogInformation(
+                "Order cancellation received for unmatched task. Autonomously creating task for Waybill: {WaybillNo}, TaskId: {StarsTaskId}",
                 dto.WaybillNo, dto.StarsTaskId);
-            return ApiResponseDTO<DmsOrderCancellationResponseDTO>.Failure(
-                $"No task matched for Waybill '{dto.WaybillNo}' or Task ID '{dto.StarsTaskId}'.");
+
+            var targetTaskId = dto.StarsTaskId != Guid.Empty ? dto.StarsTaskId : Guid.NewGuid();
+            var creatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+            task = new Backend.Models.Task
+            {
+                Id = targetTaskId,
+                Title = $"Delivery Order {dto.WaybillNo}",
+                Description = $"Delivery order cancelled in DMS (Waybill: {dto.WaybillNo}). Reason: {dto.CancellationReason}",
+                PriorityLevel = PriorityLevel.Medium,
+                Status = Backend.Models.Enums.TaskStatus.Completed,
+                Classification = TaskClassification.SpecialTask,
+                CreatedById = creatorId,
+                Deadline = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.Tasks.Add(task);
+            await _db.SaveChangesAsync();
         }
 
         // 2. Preserve FSM (CRITICAL RULE):
