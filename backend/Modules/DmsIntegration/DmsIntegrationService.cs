@@ -2411,8 +2411,18 @@ public class DmsIntegrationService : IDmsIntegrationService
                 .FirstOrDefaultAsync(t => t.Id == dto.StarsTaskId);
         }
 
-        var detail = await _db.TaskDeliveryDetails
-            .FirstOrDefaultAsync(d => (dto.StarsTaskId != Guid.Empty && d.TaskId == dto.StarsTaskId) || d.DmsWaybillNo == dto.WaybillNo);
+        TaskDeliveryDetail? detail = null;
+        if (dto.StarsTaskId != Guid.Empty)
+        {
+            detail = await _db.TaskDeliveryDetails
+                .FirstOrDefaultAsync(d => d.TaskId == dto.StarsTaskId);
+        }
+
+        if (detail == null && !string.IsNullOrWhiteSpace(dto.WaybillNo))
+        {
+            detail = await _db.TaskDeliveryDetails
+                .FirstOrDefaultAsync(d => d.DmsWaybillNo == dto.WaybillNo);
+        }
 
         if (task == null && detail != null)
         {
@@ -2453,7 +2463,30 @@ public class DmsIntegrationService : IDmsIntegrationService
 
         // 3. Update or create TaskDeliveryDetail
         var syncTimestamp = dto.Timestamp.Kind == DateTimeKind.Utc ? dto.Timestamp : dto.Timestamp.ToUniversalTime();
-        if (detail == null)
+
+        var allLinkedDetails = await _db.TaskDeliveryDetails
+            .Where(d => (dto.StarsTaskId != Guid.Empty && d.TaskId == dto.StarsTaskId) || (!string.IsNullOrWhiteSpace(dto.WaybillNo) && d.DmsWaybillNo == dto.WaybillNo))
+            .ToListAsync();
+
+        if (allLinkedDetails.Any())
+        {
+            foreach (var d in allLinkedDetails)
+            {
+                d.DmsStatus = "Cancelled";
+                d.DmsRawStatus = "Cancelled";
+                d.DmsFailureReason = dto.CancellationReason;
+                d.DmsLastSyncedAt = syncTimestamp;
+                d.SyncStatus = "Synced";
+                d.UpdatedAt = DateTime.UtcNow;
+                if (string.IsNullOrWhiteSpace(d.DmsWaybillNo))
+                {
+                    d.DmsWaybillNo = dto.WaybillNo;
+                }
+            }
+            detail = allLinkedDetails.FirstOrDefault(d => dto.StarsTaskId != Guid.Empty && d.TaskId == dto.StarsTaskId)
+                     ?? allLinkedDetails.First();
+        }
+        else
         {
             detail = new TaskDeliveryDetail
             {
@@ -2474,19 +2507,6 @@ public class DmsIntegrationService : IDmsIntegrationService
                 UpdatedAt = DateTime.UtcNow
             };
             _db.TaskDeliveryDetails.Add(detail);
-        }
-        else
-        {
-            detail.DmsStatus = "Cancelled";
-            detail.DmsRawStatus = "Cancelled";
-            detail.DmsFailureReason = dto.CancellationReason;
-            detail.DmsLastSyncedAt = syncTimestamp;
-            detail.SyncStatus = "Synced";
-            detail.UpdatedAt = DateTime.UtcNow;
-            if (string.IsNullOrWhiteSpace(detail.DmsWaybillNo))
-            {
-                detail.DmsWaybillNo = dto.WaybillNo;
-            }
         }
 
         // 4. Add Cancellation Remark (TaskComment)
