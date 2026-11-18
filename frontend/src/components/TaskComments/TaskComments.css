@@ -522,3 +522,169 @@
     text-align: right;
     opacity: 0.75;
 }
+
+/* ── Automated DMS Failure Remarks (Integration 4) ── */
+.tc-msg-automated {
+    max-width: 95%;
+}
+
+.tc-avatar-dms {
+    background: #ea580c !important;
+    color: #fff !important;
+}
+
+.tc-avatar-dms.critical {
+    background: #dc2626 !important;
+}
+
+.tc-automated-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.tc-author-dms {
+    font-weight: 700;
+    color: #ea580c;
+    font-size: 0.78rem;
+}
+
+.tc-dms-tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+}
+
+.tc-dms-tag.warning {
+    background: #fff7ed;
+    color: #ea580c;
+    border: 1px solid rgba(234, 88, 12, 0.25);
+}
+
+.tc-dms-tag.critical {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.tc-attempt-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+
+.tc-attempt-badge.warning {
+    background: #fed7aa;
+    color: #9a3412;
+}
+
+.tc-attempt-badge.critical {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+.tc-dms-card {
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.tc-dms-card.warning {
+    background: #fffaf5;
+    border: 1px solid #fed7aa;
+}
+
+.tc-dms-card.critical {
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+}
+
+.tc-dms-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tc-dms-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #9a3412;
+}
+
+.tc-dms-card.critical .tc-dms-type-badge {
+    color: #991b1b;
+}
+
+.tc-dms-recorded-time {
+    font-size: 0.68rem;
+    color: #64748b;
+    font-family: monospace;
+}
+
+.tc-dms-reason-box {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.tc-dms-reason-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.03em;
+}
+
+.tc-dms-reason-text {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.35;
+}
+
+.tc-dms-footer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: #475569;
+}
+
+.tc-dms-raw-toggle {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.tc-dms-raw-text {
+    font-size: 0.68rem;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.tc-dms-system-note {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    font-style: italic;
+    margin-left: 6px;
+}

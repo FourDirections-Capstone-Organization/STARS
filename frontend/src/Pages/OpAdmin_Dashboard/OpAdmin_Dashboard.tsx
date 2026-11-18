@@ -9684,7 +9684,15 @@ export default function OpsAdminDashboard() {
         },
     ], [activeTab, handleNavChange]);
     const [tasks, setTasks] = useState<Task[]>([]);
-    const CLASSIFICATION_MAP: Record<number, string> = { 0: 'routine', 1: 'special' };
+    const CLASSIFICATION_MAP: Record<any, string> = {
+        0: 'routine',
+        1: 'special',
+        '0': 'routine',
+        '1': 'special',
+        'Routine': 'routine',
+        'SpecialTask': 'special',
+        'Special': 'special'
+    };
     const tmTasks = useMemo(() => {
         let createdEndorsements: Set<string>;
         try {
@@ -9709,7 +9717,7 @@ export default function OpsAdminDashboard() {
         name: t.taskTitle,
         taskNumber: t.taskNumber || t.taskReferenceNumber,
         referenceNumber: t.taskNumber || t.taskReferenceNumber,
-        classification: CLASSIFICATION_MAP[t.classification] ?? '',
+        classification: CLASSIFICATION_MAP[t.classification] ?? CLASSIFICATION_MAP[(t as any).Classification] ?? (String(t.classification).toLowerCase().includes('special') ? 'special' : (t.taskTitle?.startsWith('Delivery Follow-up - ') ? 'special' : '')),
         project: t.taskCategory,
         assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
         priority: t.priority as TMTask['priority'],
@@ -9747,18 +9755,24 @@ export default function OpsAdminDashboard() {
         const now = new Date();
         const isToday = createdDate.toDateString() === now.toDateString();
         const timeStr = createdDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const rawTitle = n.title || n.Title || '';
+        const rawMsg = n.message || n.Message || n.description || n.Description || '';
+        const titleText = rawTitle || rawMsg || 'Notification';
+        const descText = rawTitle && rawMsg ? rawMsg : (n.description || n.Description || '');
+        const isFollowUp = titleText.includes('Delivery Follow-up') || titleText.includes('Follow-up');
         return {
             id: String(n.id ?? n.notificationId ?? ''),
-            title: n.message ?? n.title ?? '',
-            description: n.description ?? '',
+            title: titleText,
+            description: descText,
             timestamp: timeStr,
             date: isToday ? 'Today' : createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             createdAt: createdAt,
             read: n.isRead ?? false,
-            type: typeLabels[type] || 'info',
-            category: 'system',
+            type: isFollowUp ? 'alert' : (typeLabels[type] || 'info'),
+            category: isFollowUp ? 'logistics' : 'system',
             isToday,
             source: 'System',
+            actionLabel: (n.relatedTaskId ?? n.taskId) ? (isFollowUp ? 'View Follow-up' : 'View Task') : undefined,
             relatedEntityId: n.relatedTaskId ?? n.taskId ?? null,
             relatedEntityType: n.relatedTaskId || n.taskId ? 'task' as const : undefined,
         };
@@ -9951,7 +9965,7 @@ export default function OpsAdminDashboard() {
                     taskCategory: t.taskCategory ?? '',
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
-                    classification: t.classification ?? t.Classification ?? 0,
+                    classification: (t.classification === 1 || t.classification === '1' || t.classification === 'SpecialTask' || rawTitle.startsWith('Delivery Follow-up - ')) ? 1 : (t.classification ?? t.Classification ?? 0),
                     priority: normalizeCoordinatorPriority(t.priorityLevel ?? t.priority),
                     dueAt: deadlineStr,
                     taskStatus: STATUS_LABELS[statusNum] ?? t.taskStatus ?? '',
@@ -10310,7 +10324,7 @@ export default function OpsAdminDashboard() {
                     taskCategory: t.taskCategory ?? '',
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
                     taskReferenceNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
-                    classification: t.classification ?? t.Classification ?? 0,
+                    classification: (t.classification === 1 || t.classification === '1' || t.classification === 'SpecialTask' || rawTitle.startsWith('Delivery Follow-up - ')) ? 1 : (t.classification ?? t.Classification ?? 0),
                     priority: priorityStr as Priority,
                     dueAt: t.deadline ?? t.dueAt ?? null,
                     taskStatus: statusStr,

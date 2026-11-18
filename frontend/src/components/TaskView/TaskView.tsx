@@ -307,6 +307,108 @@ const parseFomsCollection = (title?: string, desc?: string): ParsedFomsCollectio
     };
 };
 
+// ─── DMS Delivery Follow-up Parser (Integration 4) ───────────────────────────
+
+export interface ParsedDmsFollowUpInfo {
+    isFollowUp: boolean;
+    waybillNo: string;
+    failureType: string;
+    failureReason: string;
+    attemptCount: number;
+    driverDisplay: string;
+    originalTaskTitle?: string;
+    originalTaskId?: string;
+    actionRequired?: string;
+}
+
+export const parseDmsFollowUp = (
+    title?: string,
+    desc?: string,
+    deliveryDetail?: TaskDeliveryDetailData | null
+): ParsedDmsFollowUpInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isFollowUp = rawTitle.startsWith('Delivery Follow-up - ')
+        || rawTitle.includes('[Delivery Follow-up]')
+        || rawDesc.includes('Follow-up required for Failed Delivery')
+        || rawDesc.includes('Follow-up required for Failed Pickup')
+        || (deliveryDetail?.dmsStatus === 'Failed' && rawTitle.toLowerCase().includes('follow-up'));
+
+    if (!isFollowUp) return null;
+
+    let waybillNo = '';
+    const waybillTitleMatch = rawTitle.match(/Delivery Follow-up\s*-\s*([A-Za-z0-9-_]+)/i);
+    const waybillDescMatch = rawDesc.match(/Waybill\s+([A-Za-z0-9-_]+)/i);
+    if (waybillTitleMatch) {
+        waybillNo = waybillTitleMatch[1].trim();
+    } else if (deliveryDetail?.dmsWaybillNo) {
+        waybillNo = deliveryDetail.dmsWaybillNo;
+    } else if (waybillDescMatch) {
+        waybillNo = waybillDescMatch[1].trim();
+    } else {
+        waybillNo = 'N/A';
+    }
+
+    let failureType = 'Failed Delivery';
+    const typeMatch = rawDesc.match(/Follow-up required for (Failed Delivery|Failed Pickup)/i)
+        || rawDesc.match(/Type:\s*([^|\n]+)/i);
+    if (typeMatch) {
+        failureType = typeMatch[1].trim();
+    } else if (deliveryDetail?.dmsRawStatus) {
+        failureType = deliveryDetail.dmsRawStatus;
+    } else if (rawDesc.toLowerCase().includes('pickup')) {
+        failureType = 'Failed Pickup';
+    }
+
+    let failureReason = '';
+    const reasonMatch = rawDesc.match(/Failure Reason:\s*([^\n]+)/i);
+    if (reasonMatch) {
+        failureReason = reasonMatch[1].trim();
+    } else if (deliveryDetail?.dmsFailureReason) {
+        failureReason = deliveryDetail.dmsFailureReason;
+    } else {
+        failureReason = 'Operational Exception';
+    }
+
+    let attemptCount = 1;
+    const attemptMatch = rawDesc.match(/Attempt Count:\s*(\d+)/i)
+        || rawDesc.match(/Attempt\s*#?(\d+)/i);
+    if (attemptMatch) {
+        attemptCount = parseInt(attemptMatch[1], 10) || 1;
+    }
+
+    let driverDisplay = '';
+    const driverMatch = rawDesc.match(/Driver:\s*([^\n]+)/i);
+    if (driverMatch) {
+        driverDisplay = driverMatch[1].trim();
+    } else if (deliveryDetail?.courierFullName || deliveryDetail?.courierEmployeeId) {
+        driverDisplay = deliveryDetail.courierFullName
+            ? `${deliveryDetail.courierFullName} (${deliveryDetail.courierEmployeeId || ''})`.trim()
+            : (deliveryDetail.courierEmployeeId || 'N/A');
+    } else {
+        driverDisplay = 'Unassigned';
+    }
+
+    const origMatch = rawDesc.match(/Original Task:\s*(.+?)\s*\(([^)]+)\)/i);
+    const originalTaskTitle = origMatch ? origMatch[1].trim() : undefined;
+    const originalTaskId = origMatch ? origMatch[2].trim() : undefined;
+
+    const actionMatch = rawDesc.match(/Action Required:\s*([^\n]+)/i);
+    const actionRequired = actionMatch ? actionMatch[1].trim() : 'Contact client to arrange next attempt or return to sender in DMS.';
+
+    return {
+        isFollowUp: true,
+        waybillNo,
+        failureType,
+        failureReason,
+        attemptCount,
+        driverDisplay,
+        originalTaskTitle,
+        originalTaskId,
+        actionRequired,
+    };
+};
+
 // ─── FOMS Endorsement Parser (Integration 1) ──────────────────────────────────
 
 interface ParsedFomsEndorsementInfo {
@@ -455,7 +557,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     const token = localStorage.getItem('authToken');
 
     // ─── DMS Delivery Order & Tracking ──────────────────────────────────────────
-    const [deliveryDetail, setDeliveryDetail] = useState<TaskDeliveryDetailData | null>(null);
+    const [deliveryDetail, setDeliveryDetail] = useState<TaskDeliveryDetailData | null>((task as any)?.deliveryDetails || null);
     const [deliveryLoading, setDeliveryLoading] = useState(false);
     const [showEditDeliveryModal, setShowEditDeliveryModal] = useState(false);
     const [editingDelivery, setEditingDelivery] = useState<UpsertDeliveryDetailPayload>({
@@ -473,20 +575,27 @@ const TaskView: React.FC<TaskViewProps> = ({
     const [resendingDms, setResendingDms] = useState(false);
     const [copiedWaybill, setCopiedWaybill] = useState(false);
 
+    // ─── DMS Delivery Follow-up (Integration 4) ──────────────────────────────────
+    const dmsFollowUp = useMemo(
+        () => parseDmsFollowUp(task.taskTitle, task.taskDescription, deliveryDetail),
+        [task.taskTitle, task.taskDescription, deliveryDetail]
+    );
+
     const handleNavigateToDmsTracker = useCallback(() => {
+        const waybill = deliveryDetail?.dmsWaybillNo || dmsFollowUp?.waybillNo;
         if (onNavigateToDmsTracker) {
-            onNavigateToDmsTracker(deliveryDetail?.dmsWaybillNo, task.taskId);
+            onNavigateToDmsTracker(waybill, task.taskId);
         } else if (onNavigateToDeliveryTracker) {
-            onNavigateToDeliveryTracker(task.taskId, deliveryDetail?.dmsWaybillNo);
+            onNavigateToDeliveryTracker(task.taskId, waybill);
         } else {
             window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
                 detail: {
-                    waybillNo: deliveryDetail?.dmsWaybillNo,
+                    waybillNo: waybill,
                     taskId: task.taskId,
                 }
             }));
         }
-    }, [onNavigateToDmsTracker, onNavigateToDeliveryTracker, deliveryDetail?.dmsWaybillNo, task.taskId]);
+    }, [onNavigateToDmsTracker, onNavigateToDeliveryTracker, deliveryDetail?.dmsWaybillNo, dmsFollowUp?.waybillNo, task.taskId]);
 
     // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
     const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
@@ -1262,6 +1371,151 @@ const TaskView: React.FC<TaskViewProps> = ({
                             <div className="tv-section">
                                 <span className="tv-section-label">Remarks</span>
                                 <div className="tv-text-box tv-text-box-remarks">{task.taskRemarks}</div>
+                            </div>
+                        )}
+
+                        {/* ── DMS Delivery Follow-up & Workload Graph Routing Section (Integration 4) ── */}
+                        {dmsFollowUp && (
+                            <div className="tv-section tv-dms-followup-section" data-testid="tv-dms-followup-section">
+                                <div className="tv-dms-followup-header">
+                                    <div className="tv-dms-followup-header-title">
+                                        <Truck size={16} className="tv-dms-followup-icon" />
+                                        <span>DMS Delivery Follow-up &amp; Workload Graph Routing</span>
+                                    </div>
+                                    <div className="tv-dms-followup-header-status">
+                                        <span className="tv-dms-followup-pill tv-dms-followup-pill-routed">
+                                            <Sparkles size={11} /> Graph Routed to Optimal Coordinator
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="tv-dms-followup-card">
+                                    {/* Top Key Failure Stats Banner */}
+                                    <div className="tv-dms-followup-stats-banner">
+                                        <div className="tv-dms-followup-stat-group">
+                                            <span className="tv-dms-followup-stat-label">FAILURE TYPE</span>
+                                            <span className="tv-dms-followup-stat-type">
+                                                <AlertTriangle size={13} /> {dmsFollowUp.failureType}
+                                            </span>
+                                        </div>
+                                        <div className="tv-dms-followup-stat-group">
+                                            <span className="tv-dms-followup-stat-label">WAYBILL NUMBER</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span className="tv-dms-followup-waybill-num">{dmsFollowUp.waybillNo}</span>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm tv-dms-copy-btn"
+                                                    onClick={() => handleCopyWaybill(dmsFollowUp.waybillNo)}
+                                                    title="Copy waybill number"
+                                                >
+                                                    {copiedWaybill ? <Check size={11} color="#059669" /> : <Copy size={11} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="tv-dms-followup-stat-group">
+                                            <span className="tv-dms-followup-stat-label">ATTEMPT COUNT</span>
+                                            <span className={`tv-dms-followup-attempt-tag ${dmsFollowUp.attemptCount > 1 ? 'critical' : 'warning'}`}>
+                                                Attempt #{dmsFollowUp.attemptCount}
+                                            </span>
+                                        </div>
+                                        <div className="tv-dms-followup-stat-group">
+                                            <span className="tv-dms-followup-stat-label">SLA DEADLINE</span>
+                                            <span className="tv-dms-followup-stat-val">2 Business Days</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Root Cause Failure Reason Banner */}
+                                    <div className="tv-dms-followup-reason-banner">
+                                        <div className="tv-dms-followup-reason-icon">
+                                            <AlertCircle size={15} />
+                                        </div>
+                                        <div className="tv-dms-followup-reason-info">
+                                            <span className="tv-dms-followup-reason-label">EXCEPTION ROOT CAUSE</span>
+                                            <p className="tv-dms-followup-reason-text">
+                                                {dmsFollowUp.failureReason}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Graph Routing Engine Assignment Card */}
+                                    <div className="tv-dms-followup-routing-banner">
+                                        <div className="tv-dms-followup-routing-icon">
+                                            <Zap size={15} />
+                                        </div>
+                                        <div className="tv-dms-followup-routing-info">
+                                            <span className="tv-dms-followup-routing-label">GRAPH ROUTING ENGINE ASSIGNMENT</span>
+                                            <p className="tv-dms-followup-routing-desc">
+                                                Intercepted from DMS operational exception stream and automatically assigned to <strong>{task.assignees?.[0]?.fullName || task.assignedEmployee || task.assignedTo || 'Optimal Coordinator'}</strong> based on minimum active workload across Coordinators. Original delivery task status is preserved as Completed.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Driver & Delivery Information Grid */}
+                                    <div className="tv-dms-followup-grid">
+                                        <div className="tv-dms-followup-grid-item">
+                                            <span className="tv-dms-followup-grid-label">Assigned Driver</span>
+                                            <span className="tv-dms-followup-grid-value" style={{ fontWeight: 600 }}>
+                                                {dmsFollowUp.driverDisplay}
+                                            </span>
+                                        </div>
+                                        <div className="tv-dms-followup-grid-item">
+                                            <span className="tv-dms-followup-grid-label">Recipient Client</span>
+                                            <span className="tv-dms-followup-grid-value">
+                                                {deliveryDetail?.recipientName || 'Client / Recipient'}
+                                            </span>
+                                            {deliveryDetail?.recipientContact && (
+                                                <span className="tv-dms-followup-sub-val" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Phone size={11} color="var(--primary, #0284c7)" /> {deliveryDetail.recipientContact}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="tv-dms-followup-grid-item tv-dms-followup-grid-full">
+                                            <span className="tv-dms-followup-grid-label">Destination Address</span>
+                                            <span className="tv-dms-followup-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <MapPin size={12} color="var(--primary, #0284c7)" />
+                                                {deliveryDetail?.deliveryAddress || `Delivery address for Waybill ${dmsFollowUp.waybillNo}`}
+                                            </span>
+                                        </div>
+                                        {dmsFollowUp.originalTaskTitle && (
+                                            <div className="tv-dms-followup-grid-item tv-dms-followup-grid-full">
+                                                <span className="tv-dms-followup-grid-label">Original Completed STARS Task</span>
+                                                <span className="tv-dms-followup-grid-value" style={{ color: '#059669', fontWeight: 600 }}>
+                                                    <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 4 }} />
+                                                    {dmsFollowUp.originalTaskTitle} (Preserved Terminal Status: Completed)
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Action Required Callout */}
+                                    <div className="tv-dms-followup-action-box">
+                                        <div className="tv-dms-followup-action-label">COORDINATOR ACTION REQUIRED:</div>
+                                        <div className="tv-dms-followup-action-text">{dmsFollowUp.actionRequired}</div>
+                                    </div>
+
+                                    {/* Quick Action Navigation Buttons */}
+                                    <div className="tv-dms-followup-quick-actions">
+                                        <button
+                                            type="button"
+                                            className="tv-btn tv-btn-primary tv-btn-sm"
+                                            onClick={() => {
+                                                setActiveTab('comments');
+                                                setIsChatPanelOpen(true);
+                                            }}
+                                        >
+                                            <MessageSquare size={12} />
+                                            <span>View Failure Remarks &amp; Comments</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="tv-btn tv-btn-outline-sm"
+                                            onClick={handleNavigateToDmsTracker}
+                                        >
+                                            <Truck size={12} />
+                                            <span>Live Delivery Tracker</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
 

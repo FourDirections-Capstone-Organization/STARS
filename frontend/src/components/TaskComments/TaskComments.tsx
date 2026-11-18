@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Send, X, Paperclip, Loader2, AlertCircle, CheckCircle2,
-    Pencil, Trash2, FileText, Download,
+    Pencil, Trash2, FileText, Download, Truck, AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
 import EmptyState from '../ui/EmptyState';
@@ -53,6 +53,41 @@ const getCurrentAccountId = (): string => {
         ] ?? payload.sub ?? payload.nameid ?? '';
     } catch { return ''; }
 };
+
+export interface ParsedFailureComment {
+    isFollowUpRemark: boolean;
+    isUpdate: boolean;
+    failureType: string;
+    attemptCount: number;
+    reason: string;
+    driver: string;
+    recorded: string;
+    rawText: string;
+}
+
+export function parseFailureFollowUpComment(content: string): ParsedFailureComment | null {
+    if (!content) return null;
+    const isLogged = content.startsWith('[Failure Follow-up Logged]');
+    const isUpdate = content.startsWith('[Failure Follow-up Update]');
+    if (!isLogged && !isUpdate) return null;
+
+    const typeMatch = content.match(/Type:\s*([^|]+)/i);
+    const attemptMatch = content.match(/Attempt\s*#?(\d+)/i);
+    const reasonMatch = content.match(/Reason:\s*([^|]+)/i);
+    const driverMatch = content.match(/Driver:\s*([^|]+)/i);
+    const recordedMatch = content.match(/Recorded:\s*(.+)$/i);
+
+    return {
+        isFollowUpRemark: true,
+        isUpdate,
+        failureType: typeMatch ? typeMatch[1].trim() : 'Operational Exception',
+        attemptCount: attemptMatch ? parseInt(attemptMatch[1], 10) : 1,
+        reason: reasonMatch ? reasonMatch[1].trim() : 'Unspecified Exception',
+        driver: driverMatch ? driverMatch[1].trim() : 'N/A',
+        recorded: recordedMatch ? recordedMatch[1].trim() : '',
+        rawText: content,
+    };
+}
 
 const TaskComments: React.FC<TaskCommentsProps> = ({
     taskId,
@@ -243,6 +278,64 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                 ) : comments.length === 0 ? (
                     <EmptyState icon={<FileText size={22} strokeWidth={1.5} />} title="No comments yet." description="Start the conversation below." />
                 ) : comments.map(c => {
+                    const failureRemark = parseFailureFollowUpComment(c.message);
+                    if (failureRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className={`tc-msg tc-msg-theirs tc-msg-automated ${failureRemark.attemptCount > 1 ? 'tc-msg-critical' : 'tc-msg-warning'}`}
+                                data-testid="tc-failure-remark"
+                            >
+                                <div className={`tc-avatar tc-avatar-dms ${failureRemark.attemptCount > 1 ? 'critical' : 'warning'}`} title="DMS Automated Integration">
+                                    <Truck size={14} />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-dms">DMS System Integration</span>
+                                        <span className={`tc-dms-tag ${failureRemark.attemptCount > 1 ? 'critical' : 'warning'}`}>
+                                            {failureRemark.isUpdate ? 'Follow-up Update' : 'Follow-up Logged'}
+                                        </span>
+                                        <span className={`tc-attempt-badge ${failureRemark.attemptCount > 1 ? 'critical' : 'warning'}`}>
+                                            Attempt #{failureRemark.attemptCount}
+                                        </span>
+                                    </div>
+
+                                    <div className={`tc-dms-card ${failureRemark.attemptCount > 1 ? 'critical' : 'warning'}`}>
+                                        <div className="tc-dms-card-top">
+                                            <div className="tc-dms-type-badge">
+                                                <AlertTriangle size={12} />
+                                                <span>{failureRemark.failureType}</span>
+                                            </div>
+                                            {failureRemark.recorded && (
+                                                <span className="tc-dms-recorded-time">{failureRemark.recorded}</span>
+                                            )}
+                                        </div>
+
+                                        <div className="tc-dms-reason-box">
+                                            <span className="tc-dms-reason-label">Failure Reason:</span>
+                                            <span className="tc-dms-reason-text">{failureRemark.reason}</span>
+                                        </div>
+
+                                        <div className="tc-dms-footer-meta">
+                                            <span className="tc-dms-driver">
+                                                <strong>Driver:</strong> {failureRemark.driver}
+                                            </span>
+                                        </div>
+
+                                        <div className="tc-dms-raw-toggle">
+                                            <span className="tc-dms-raw-text">{c.message}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automated Closed-Loop Audit Entry</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
                     const isMe = isOwnComment(c);
                     const isEditing = editingId === c.taskCommentId;
                     return (

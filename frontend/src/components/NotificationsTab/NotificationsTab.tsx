@@ -99,10 +99,12 @@ const NOTIF_TYPE_NAMES: Record<number, string> = {
     9: 'TemplateTaskUnassigned',
 };
 
+const EMPTY_EXTRA_NOTIFICATIONS: any[] = [];
+
 export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     onViewTask,
     canViewTasks = true,
-    extraNotifications = [],
+    extraNotifications = EMPTY_EXTRA_NOTIFICATIONS,
 }) => {
     const { success, error } = useToast();
 
@@ -494,7 +496,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                                         onViewTask(item.taskId!);
                                     }}
                                 >
-                                    View Linked Task <ArrowRight size={13} />
+                                    {item.title?.includes('Follow-up') ? 'View Follow-up Task' : 'View Linked Task'} <ArrowRight size={13} />
                                 </button>
                             ) : <div />}
 
