@@ -230,6 +230,167 @@ async function main() {
     return `Total: ${data.totalDeliveries}, On-Time: ${data.onTimeCount} (${data.onTimePercentage}%)`;
   });
 
+  console.log("\n[5] Integration 4: Failed Delivery / Pickup -> Follow-up Task Creation");
+  let followUpTaskId = null;
+  let assignedCoordId = null;
+
+  await test("STARS rejects unauthorized failure follow-up (no X-Api-Key)", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/failure-followup`, {
+      body: {
+        waybillNo: generatedWaybill || "WB-2026-TEST01",
+        starsTaskId: testTaskId,
+        failureType: "Failed Delivery",
+        failureReason: "Recipient Unreachable"
+      }
+    });
+    expect(res.status === 401 || res.status === 503, `expected 401/503 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await test("DMS rejects unauthorized failure follow-up trigger (no X-Api-Key)", async () => {
+    const res = await call("POST", `${DMS_URL}/api/integration/stars/failure-followup/trigger`, {
+      body: {
+        waybillNo: generatedWaybill || "WB-2026-TEST01",
+        starsTaskId: testTaskId,
+        failureType: "Failed Delivery",
+        failureReason: "Recipient Unreachable"
+      }
+    });
+    expect(res.status === 401 || res.status === 503, `expected 401/503 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await test("STARS creates follow-up task on Failed Delivery (assigned to Coordinator, original Completed)", async () => {
+    // 1. Mark original task as Completed in STARS so we can verify original FSM state remains Completed
+    await call("POST", `${STARS_URL}/api/integration/dms/status`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        starsTaskId: testTaskId,
+        status: "Delivered",
+        dmsStatus: "Delivered",
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    const payload = {
+      waybillNo: generatedWaybill,
+      starsTaskId: testTaskId,
+      failureType: "Failed Delivery",
+      failureReason: "Customer Unreachable / Delivery Address Closed",
+      attemptCount: 1,
+      timestamp: new Date().toISOString(),
+      driverId: "DRV-001",
+      driverName: "Juan Dela Cruz"
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/failure-followup`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `failure follow-up failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "CreatedTask", `expected action 'CreatedTask' but got '${data?.actionTaken}'`);
+    expect(data?.followUpTaskId, "missing followUpTaskId in response");
+    expect(data?.assignedCoordinatorId, "missing assignedCoordinatorId in response");
+    expect(data?.waybillNo === generatedWaybill, `waybill mismatch: ${data?.waybillNo} vs ${generatedWaybill}`);
+
+    followUpTaskId = data.followUpTaskId;
+    assignedCoordId = data.assignedCoordinatorId;
+
+    // Verify follow-up task details in STARS
+    const followUpCheck = await call("GET", `${STARS_URL}/api/integration/dms/tasks/${followUpTaskId}/delivery-details`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+    expect(followUpCheck.status === 200, `failed to fetch follow-up task details: ${followUpCheck.status}`);
+    const followUpDetail = followUpCheck.json?.data || followUpCheck.json;
+    expect(followUpDetail?.dmsStatus === "Failed", `expected dmsStatus 'Failed', got '${followUpDetail?.dmsStatus}'`);
+    expect(followUpDetail?.dmsFailureReason === payload.failureReason, `expected failureReason '${payload.failureReason}', got '${followUpDetail?.dmsFailureReason}'`);
+
+    // Verify original task delivery details remain intact
+    const originalCheck = await call("GET", `${STARS_URL}/api/integration/dms/tasks/${testTaskId}/delivery-details`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+    expect(originalCheck.status === 200, `failed to fetch original task details: ${originalCheck.status}`);
+
+    return `Created Task: ${followUpTaskId}, Assignee: ${assignedCoordId}, Action: ${data.actionTaken} (${res.ms}ms)`;
+  });
+
+  await test("STARS enforces deduplication and appends remark on secondary failure attempt", async () => {
+    const payloadAttempt2 = {
+      waybillNo: generatedWaybill,
+      starsTaskId: testTaskId,
+      failureType: "Failed Delivery",
+      failureReason: "Customer Phone Unattended on 2nd Attempt",
+      attemptCount: 2,
+      timestamp: new Date().toISOString(),
+      driverId: "DRV-001",
+      driverName: "Juan Dela Cruz"
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/failure-followup`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: payloadAttempt2
+    });
+
+    expect(res.status === 200, `dedup attempt failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "AddedRemark", `expected action 'AddedRemark' but got '${data?.actionTaken}'`);
+    expect(data?.followUpTaskId === followUpTaskId, `expected existing task ${followUpTaskId}, got ${data?.followUpTaskId}`);
+    return `Appended Remark to existing task: ${data.followUpTaskId}, Action: ${data.actionTaken} (${res.ms}ms)`;
+  });
+
+  await test("STARS creates follow-up task on Failed Pickup (overdue > 2 business days)", async () => {
+    const pickupWaybill = `WB-PKUP-${Date.now().toString().slice(-6)}`;
+    const pickupTaskId = randomUuid();
+    const pickupPayload = {
+      waybillNo: pickupWaybill,
+      starsTaskId: pickupTaskId,
+      failureType: "Failed Pickup",
+      failureReason: "Pickup Overdue > 2 Business Days (Sender Warehouse Unavailable)",
+      attemptCount: 1,
+      timestamp: new Date().toISOString(),
+      driverId: "DRV-002",
+      driverName: "Maria Santos"
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/failure-followup`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: pickupPayload
+    });
+
+    expect(res.status === 200, `failed pickup follow-up failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "CreatedTask", `expected action 'CreatedTask' but got '${data?.actionTaken}'`);
+    expect(data?.followUpTaskId, "missing followUpTaskId for pickup follow-up");
+    return `Created Pickup Follow-up: ${data.followUpTaskId}, Assignee: ${data.assignedCoordinatorId} (${res.ms}ms)`;
+  });
+
+  await test("DMS triggers failure follow-up to STARS via M2M trigger endpoint", async () => {
+    const triggerWaybill = `WB-TRIG-${Date.now().toString().slice(-6)}`;
+    const triggerTaskId = randomUuid();
+    const triggerPayload = {
+      waybillNo: triggerWaybill,
+      starsTaskId: triggerTaskId,
+      failureType: "Failed Delivery",
+      failureReason: "Incorrect Shipping Address / Incomplete Coordinates",
+      attemptCount: 1,
+      timestamp: new Date().toISOString(),
+      driverId: "DRV-003",
+      driverName: "Pedro Penduko"
+    };
+
+    const res = await call("POST", `${DMS_URL}/api/integration/stars/failure-followup/trigger`, {
+      headers: { "X-Api-Key": STARS_TO_DMS_KEY },
+      body: triggerPayload
+    });
+
+    expect(res.status === 200, `DMS failure trigger failed with status ${res.status}: ${res.text}`);
+    expect(res.json?.success === true, `expected success: true, got ${res.text}`);
+    return `DMS relayed failure event to STARS successfully (${res.ms}ms)`;
+  });
+
   console.log("\n==================================================================");
   const passed = results.filter((r) => r.ok === true).length;
   const failed = results.filter((r) => r.ok === false).length;
