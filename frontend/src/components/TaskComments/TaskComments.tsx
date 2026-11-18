@@ -65,6 +65,34 @@ export interface ParsedFailureComment {
     rawText: string;
 }
 
+export interface ParsedCancellationComment {
+    isCancellationRemark: boolean;
+    waybillNo: string;
+    reason: string;
+    cancelledBy: string;
+    recorded: string;
+    rawText: string;
+}
+
+export function parseCancellationComment(content: string): ParsedCancellationComment | null {
+    if (!content) return null;
+    if (!content.startsWith('[Order Cancelled in DMS]')) return null;
+
+    const waybillMatch = content.match(/Waybill:\s*([^|]+)/i);
+    const reasonMatch = content.match(/Reason:\s*([^|]+)/i);
+    const cancelledByMatch = content.match(/Cancelled By:\s*([^|]+)/i);
+    const recordedMatch = content.match(/Recorded:\s*(.+)$/i);
+
+    return {
+        isCancellationRemark: true,
+        waybillNo: waybillMatch ? waybillMatch[1].trim() : '',
+        reason: reasonMatch ? reasonMatch[1].trim() : 'Operational Cancellation',
+        cancelledBy: cancelledByMatch ? cancelledByMatch[1].trim() : 'DMS System',
+        recorded: recordedMatch ? recordedMatch[1].trim() : '',
+        rawText: content,
+    };
+}
+
 export function parseFailureFollowUpComment(content: string): ParsedFailureComment | null {
     if (!content) return null;
     const isLogged = content.startsWith('[Failure Follow-up Logged]');
@@ -330,6 +358,66 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                     <div className="tc-meta">
                                         <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
                                         <span className="tc-dms-system-note">Automated Closed-Loop Audit Entry</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const cancellationRemark = parseCancellationComment(c.message);
+                    if (cancellationRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-cancelled"
+                                data-testid="tc-cancellation-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-dms cancelled" title="DMS Order Cancellation">
+                                    <Truck size={14} />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-dms cancelled">DMS System Integration</span>
+                                        <span className="tc-dms-tag cancelled">
+                                            Order Cancelled
+                                        </span>
+                                        {cancellationRemark.waybillNo && (
+                                            <span className="tc-waybill-badge cancelled">
+                                                WB: {cancellationRemark.waybillNo}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="tc-dms-card cancelled">
+                                        <div className="tc-dms-card-top">
+                                            <div className="tc-dms-type-badge cancelled">
+                                                <AlertCircle size={12} />
+                                                <span>Delivery Order Cancelled in DMS</span>
+                                            </div>
+                                            {cancellationRemark.recorded && (
+                                                <span className="tc-dms-recorded-time">{cancellationRemark.recorded}</span>
+                                            )}
+                                        </div>
+
+                                        <div className="tc-dms-reason-box cancelled">
+                                            <span className="tc-dms-reason-label">Cancellation Reason:</span>
+                                            <span className="tc-dms-reason-text">{cancellationRemark.reason}</span>
+                                        </div>
+
+                                        <div className="tc-dms-footer-meta">
+                                            <span className="tc-dms-cancelled-by">
+                                                <strong>Cancelled By:</strong> {cancellationRemark.cancelledBy}
+                                            </span>
+                                        </div>
+
+                                        <div className="tc-dms-raw-toggle">
+                                            <span className="tc-dms-raw-text">{c.message}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automated Closed-Loop Cancellation Entry</span>
                                     </div>
                                 </div>
                             </div>

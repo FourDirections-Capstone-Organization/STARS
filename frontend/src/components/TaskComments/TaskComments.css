@@ -688,3 +688,57 @@
     font-style: italic;
     margin-left: 6px;
 }
+
+/* ── Automated DMS Order Cancellation Remarks (Integration 5) ── */
+.tc-msg-cancelled {
+    max-width: 95%;
+}
+
+.tc-avatar-dms.cancelled {
+    background: #64748b !important;
+    color: #fff !important;
+}
+
+.tc-author-dms.cancelled {
+    color: #475569 !important;
+}
+
+.tc-dms-tag.cancelled {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+.tc-waybill-badge.cancelled {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.tc-dms-card.cancelled {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+}
+
+.tc-dms-card.cancelled .tc-dms-type-badge.cancelled {
+    color: #dc2626;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tc-dms-reason-box.cancelled {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #dc2626;
+}
+
+.tc-dms-cancelled-by {
+    font-size: 0.72rem;
+    color: #475569;
+}

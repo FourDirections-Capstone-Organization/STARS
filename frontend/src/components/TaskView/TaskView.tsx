@@ -1935,8 +1935,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 {copiedWaybill ? 'Copied!' : 'Copy Waybill'}
                                             </button>
                                             {deliveryDetail.dmsStatus && (
-                                                <span className="tv-dms-status-tag">
-                                                    Status: <strong>{formatStatus(deliveryDetail.dmsStatus)}</strong>
+                                                <span
+                                                    className={`tv-dms-status-tag ${deliveryDetail.dmsStatus.toLowerCase() === 'cancelled' ? 'tv-dms-status-cancelled' : ''}`}
+                                                    data-testid="tv-dms-status-badge"
+                                                >
+                                                    Status: <strong className={deliveryDetail.dmsStatus.toLowerCase() === 'cancelled' ? 'tv-badge-cancelled' : ''}>{formatStatus(deliveryDetail.dmsStatus)}</strong>
                                                 </span>
                                             )}
                                         </div>
@@ -1964,6 +1967,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             else if (s.includes('processing') || s.includes('preparing')) activeIdx = 1;
                                             else activeIdx = 0;
 
+                                            const isCancelled = s.includes('cancelled') || s.includes('canceled');
                                             const isAllDelivered = activeIdx === 6;
                                             const progressPct = (Math.max(0, activeIdx) / (stages.length - 1)) * 100;
                                             const formattedTime = deliveryDetail.dmsLastSyncedAt
@@ -1972,6 +1976,16 @@ const TaskView: React.FC<TaskViewProps> = ({
 
                                             return (
                                                 <div className="tv-dms-stepper-inner">
+                                                    {isCancelled && (
+                                                        <div className="tv-dms-cancelled-stepper-notice" data-testid="tv-dms-cancelled-notice">
+                                                            <span className="tv-dms-cancelled-pill">
+                                                                <X size={12} strokeWidth={2.5} /> Cancelled in DMS
+                                                            </span>
+                                                            <span className="tv-dms-cancelled-subtext">
+                                                                Logistical order cancelled in DMS. Primary task operational status is preserved in STARS.
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                     <div className="tv-dms-stepper-track">
                                                         <div
                                                             className="tv-dms-stepper-progress"
@@ -2013,12 +2027,30 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     </div>
 
                                     {deliveryDetail.dmsFailureReason && (
-                                        <div className="tv-dms-error-box" style={{ margin: '4px 0' }}>
+                                        <div
+                                            className={`tv-dms-error-box ${deliveryDetail.dmsStatus?.toLowerCase() === 'cancelled' ? 'tv-dms-cancelled-box' : ''}`}
+                                            style={{ margin: '4px 0' }}
+                                            data-testid="tv-dms-failure-box"
+                                        >
                                             <AlertCircle size={14} className="tv-dms-error-icon" />
-                                            <div>
-                                                <div className="tv-dms-error-title">Delivery Issue Reported</div>
-                                                <div className="tv-dms-error-msg">{deliveryDetail.dmsFailureReason}</div>
+                                            <div style={{ flex: 1 }}>
+                                                <div className="tv-dms-error-title">
+                                                    {deliveryDetail.dmsStatus?.toLowerCase() === 'cancelled'
+                                                        ? 'Delivery Order Cancelled in DMS'
+                                                        : 'Delivery Issue Reported'}
+                                                </div>
+                                                <div className="tv-dms-error-msg" data-testid="tv-dms-failure-reason">{deliveryDetail.dmsFailureReason}</div>
                                             </div>
+                                            {deliveryDetail.dmsStatus?.toLowerCase() === 'cancelled' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-sm tv-btn-outline-sm tv-dms-view-remarks-btn"
+                                                    onClick={() => setActiveTab('comments')}
+                                                    style={{ marginLeft: 'auto', alignSelf: 'center', whiteSpace: 'nowrap' }}
+                                                >
+                                                    View Remarks
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 

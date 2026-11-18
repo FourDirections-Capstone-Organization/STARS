@@ -3065,3 +3065,82 @@
 .tv-pod-modal-btn-row .tv-btn {
     border-radius: var(--btn-radius, 8px);
 }
+
+/* ── DMS Order Cancellation Styles (Integration 5) ── */
+.tv-dms-status-tag.tv-dms-status-cancelled {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+.tv-dms-status-tag.tv-dms-status-cancelled strong,
+.tv-badge-cancelled {
+    color: #dc2626 !important;
+    font-weight: 700;
+}
+
+.tv-dms-cancelled-box {
+    background: #fef2f2 !important;
+    border: 1px solid #fecaca !important;
+}
+
+.tv-dms-cancelled-box .tv-dms-error-icon {
+    color: #dc2626 !important;
+}
+
+.tv-dms-cancelled-box .tv-dms-error-title {
+    color: #991b1b !important;
+    font-weight: 700;
+}
+
+.tv-dms-cancelled-box .tv-dms-error-msg {
+    color: #7f1d1d !important;
+}
+
+.tv-dms-view-remarks-btn {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    transition: all 0.15s ease-in-out;
+}
+
+.tv-dms-view-remarks-btn:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #1e293b;
+}
+
+.tv-dms-cancelled-stepper-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.tv-dms-cancelled-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.tv-dms-cancelled-subtext {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-style: italic;
+}
