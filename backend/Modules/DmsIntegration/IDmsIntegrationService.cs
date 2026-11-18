@@ -94,4 +94,11 @@ public interface IDmsIntegrationService
     /// Idempotently creates a follow-up task or appends a remark to an existing open follow-up task.
     /// </summary>
     Task<ApiResponseDTO<DmsFailureFollowUpResponseDTO>> ProcessFailureFollowUpAsync(DmsFailureFollowUpDTO dto);
+
+    /// <summary>
+    /// Integration 5: Handles incoming delivery order cancellation notification from DMS.
+    /// Preserves original task FSM status (Completed), logs cancellation remark,
+    /// alerts Coordinator and Manager, and records audit trail.
+    /// </summary>
+    Task<ApiResponseDTO<DmsOrderCancellationResponseDTO>> ProcessOrderCancellationAsync(DmsOrderCancellationDTO dto);
 }

@@ -222,6 +222,21 @@ public class DmsIntegrationController : ControllerBase
     }
 
     /// <summary>
+    /// Integration 5: DMS pushes delivery order cancellation to STARS.
+    /// Preserves task FSM status (Completed), logs cancellation remark, and notifies Coordinator & Manager.
+    /// </summary>
+    [HttpPost("api/integration/dms/cancellation")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveOrderCancellation([FromBody] DmsOrderCancellationDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _dmsService.ProcessOrderCancellationAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
     /// Merged performance summary reporting on-time vs late delivery rates.
     /// Accessible via API Key (machine-to-machine) or Manager/Coordinator/Admin/SystemAdmin JWT.
     /// </summary>

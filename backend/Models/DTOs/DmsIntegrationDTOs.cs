@@ -455,3 +455,27 @@ public class DmsFailureFollowUpResponseDTO
     public string? WaybillNo { get; set; }
     public string? Message { get; set; }
 }
+
+public class DmsOrderCancellationDTO
+{
+    [Required]
+    public string WaybillNo { get; set; } = string.Empty;
+
+    [Required]
+    public Guid StarsTaskId { get; set; }
+
+    [Required]
+    public string CancellationReason { get; set; } = string.Empty;
+
+    public string? CancelledBy { get; set; }
+
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
+public class DmsOrderCancellationResponseDTO
+{
+    public Guid TaskId { get; set; }
+    public string WaybillNo { get; set; } = string.Empty;
+    public string ActionTaken { get; set; } = "AddedCancellationRemark";
+    public string Message { get; set; } = string.Empty;
+}

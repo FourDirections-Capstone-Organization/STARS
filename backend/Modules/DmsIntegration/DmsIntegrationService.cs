@@ -2375,4 +2375,186 @@ public class DmsIntegrationService : IDmsIntegrationService
             Message = $"Created follow-up task '{newTask.Title}' assigned to {selectedAssignee?.FirstName ?? "Coordinator"} {selectedAssignee?.LastName ?? ""}".Trim()
         }, "Delivery follow-up task created successfully.");
     }
+
+    /// <summary>
+    /// Integration 5: Handles incoming delivery order cancellation notification from DMS.
+    /// Preserves original task FSM status (Completed), logs cancellation remark,
+    /// alerts Coordinator and Manager, and records audit trail.
+    /// </summary>
+    public async Task<ApiResponseDTO<DmsOrderCancellationResponseDTO>> ProcessOrderCancellationAsync(DmsOrderCancellationDTO dto)
+    {
+        if (dto == null)
+            return ApiResponseDTO<DmsOrderCancellationResponseDTO>.Failure("Payload cannot be null");
+
+        if (string.IsNullOrWhiteSpace(dto.WaybillNo))
+            return ApiResponseDTO<DmsOrderCancellationResponseDTO>.Failure("Waybill number is required");
+
+        dto.WaybillNo = dto.WaybillNo.Trim();
+        dto.CancellationReason = string.IsNullOrWhiteSpace(dto.CancellationReason)
+            ? "Order cancelled in DMS"
+            : dto.CancellationReason.Trim();
+
+        var actor = !string.IsNullOrWhiteSpace(dto.CancelledBy) ? dto.CancelledBy.Trim() : "DMS System";
+        if (dto.Timestamp == default) dto.Timestamp = DateTime.UtcNow;
+
+        _logger.LogInformation(
+            "Processing Integration 5 order cancellation: Waybill {WaybillNo}, StarsTaskId {StarsTaskId}, Reason: {Reason}, By: {Actor}",
+            dto.WaybillNo, dto.StarsTaskId, dto.CancellationReason, actor);
+
+        // 1. Task Matching: match by StarsTaskId or WaybillNo
+        Backend.Models.Task? task = null;
+        if (dto.StarsTaskId != Guid.Empty)
+        {
+            task = await _db.Tasks
+                .Include(t => t.Assignments)
+                .FirstOrDefaultAsync(t => t.Id == dto.StarsTaskId);
+        }
+
+        var detail = await _db.TaskDeliveryDetails
+            .FirstOrDefaultAsync(d => (dto.StarsTaskId != Guid.Empty && d.TaskId == dto.StarsTaskId) || d.DmsWaybillNo == dto.WaybillNo);
+
+        if (task == null && detail != null)
+        {
+            task = await _db.Tasks
+                .Include(t => t.Assignments)
+                .FirstOrDefaultAsync(t => t.Id == detail.TaskId);
+        }
+
+        if (task == null)
+        {
+            _logger.LogWarning(
+                "Order cancellation received for unmatched task. Waybill: {WaybillNo}, TaskId: {StarsTaskId}",
+                dto.WaybillNo, dto.StarsTaskId);
+            return ApiResponseDTO<DmsOrderCancellationResponseDTO>.Failure(
+                $"No task matched for Waybill '{dto.WaybillNo}' or Task ID '{dto.StarsTaskId}'.");
+        }
+
+        // 2. Preserve FSM (CRITICAL RULE):
+        // The original STARS task status remains strictly "Completed" (or its current state). Never rewind or overwrite to Cancelled.
+        // Task status is intentionally untouched.
+        task.UpdatedAt = DateTime.UtcNow;
+
+        // 3. Update or create TaskDeliveryDetail
+        var syncTimestamp = dto.Timestamp.Kind == DateTimeKind.Utc ? dto.Timestamp : dto.Timestamp.ToUniversalTime();
+        if (detail == null)
+        {
+            detail = new TaskDeliveryDetail
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                RecipientName = "Client - " + dto.WaybillNo,
+                RecipientContact = "N/A",
+                DeliveryAddress = "Delivery Address for Waybill " + dto.WaybillNo,
+                Area = string.Empty,
+                PackageDescription = task.Title,
+                DmsWaybillNo = dto.WaybillNo,
+                DmsStatus = "Cancelled",
+                DmsRawStatus = "Cancelled",
+                DmsFailureReason = dto.CancellationReason,
+                DmsLastSyncedAt = syncTimestamp,
+                SyncStatus = "Synced",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.TaskDeliveryDetails.Add(detail);
+        }
+        else
+        {
+            detail.DmsStatus = "Cancelled";
+            detail.DmsRawStatus = "Cancelled";
+            detail.DmsFailureReason = dto.CancellationReason;
+            detail.DmsLastSyncedAt = syncTimestamp;
+            detail.SyncStatus = "Synced";
+            detail.UpdatedAt = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(detail.DmsWaybillNo))
+            {
+                detail.DmsWaybillNo = dto.WaybillNo;
+            }
+        }
+
+        // 4. Add Cancellation Remark (TaskComment)
+        var commentAuthorId = task.CreatedById != Guid.Empty
+            ? task.CreatedById
+            : (await _db.Users.Where(u => u.IsActive && !u.IsDeactivated).Select(u => u.Id).FirstOrDefaultAsync());
+
+        var comment = new TaskComment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            AuthorId = commentAuthorId,
+            Content = $"[Order Cancelled in DMS] Waybill: {dto.WaybillNo} | Reason: {dto.CancellationReason} | Cancelled By: {actor} | Recorded: {dto.Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TaskComments.Add(comment);
+
+        await _db.SaveChangesAsync();
+
+        // 5. Notify Coordinator & Manager
+        var recipientIds = new HashSet<Guid>();
+        if (task.CreatedById != Guid.Empty)
+        {
+            recipientIds.Add(task.CreatedById);
+        }
+
+        if (task.Assignments != null)
+        {
+            foreach (var a in task.Assignments)
+            {
+                if (a.AssignedUserId != Guid.Empty)
+                    recipientIds.Add(a.AssignedUserId);
+            }
+        }
+
+        var activeRoles = await _db.Users
+            .Where(u => u.IsActive && !u.IsDeactivated && (u.Role == UserRole.Coordinator || u.Role == UserRole.Manager))
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        foreach (var uid in activeRoles)
+        {
+            recipientIds.Add(uid);
+        }
+
+        if (recipientIds.Any())
+        {
+            try
+            {
+                await _notificationService.SendBulkNotificationAsync(
+                    recipientIds.ToList(),
+                    NotificationType.TaskUpdated,
+                    $"Delivery Order Cancelled - {dto.WaybillNo}",
+                    $"Delivery order {dto.WaybillNo} for task '{task.Title}' was cancelled in DMS. Reason: {dto.CancellationReason} (Cancelled by: {actor}).",
+                    task.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to dispatch order cancellation notifications for Waybill {WaybillNo}", dto.WaybillNo);
+            }
+        }
+
+        // 6. Audit Log
+        try
+        {
+            await _auditLogService.LogAsync(
+                commentAuthorId,
+                AuditActionType.StatusChange,
+                "TaskDeliveryDetail",
+                detail.Id,
+                null,
+                $"DMS delivery order {dto.WaybillNo} cancelled. Reason: {dto.CancellationReason}. Action By: {actor}.",
+                "DmsIntegration");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write audit log for order cancellation on Waybill {WaybillNo}", dto.WaybillNo);
+        }
+
+        return ApiResponseDTO<DmsOrderCancellationResponseDTO>.Success(new DmsOrderCancellationResponseDTO
+        {
+            TaskId = task.Id,
+            WaybillNo = dto.WaybillNo,
+            ActionTaken = "AddedCancellationRemark",
+            Message = $"Processed cancellation for waybill {dto.WaybillNo}. Preserved task status as {task.Status}."
+        }, "Delivery order cancellation processed successfully.");
+    }
 }
