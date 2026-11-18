@@ -11,6 +11,7 @@ using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Backend.Modules.Notifications;
 using Backend.Modules.TaskManagement;
+using Backend.Modules.Utilities;
 
 namespace Backend.Modules.DmsIntegration;
 
@@ -2079,5 +2080,299 @@ public class DmsIntegrationService : IDmsIntegrationService
             ".svg" => "image/svg+xml",
             _ => "application/octet-stream"
         };
+    }
+
+    /// <summary>
+    /// Integration 4: Handles incoming failed delivery / failed pickup event from DMS.
+    /// Idempotently creates a follow-up task or appends a comment remark to an existing open follow-up task.
+    /// </summary>
+    public async Task<ApiResponseDTO<DmsFailureFollowUpResponseDTO>> ProcessFailureFollowUpAsync(DmsFailureFollowUpDTO dto)
+    {
+        if (dto == null)
+            return ApiResponseDTO<DmsFailureFollowUpResponseDTO>.Failure("Payload cannot be null");
+
+        if (string.IsNullOrWhiteSpace(dto.WaybillNo))
+            return ApiResponseDTO<DmsFailureFollowUpResponseDTO>.Failure("Waybill number is required");
+
+        dto.WaybillNo = dto.WaybillNo.Trim();
+        dto.FailureType = string.IsNullOrWhiteSpace(dto.FailureType) ? "Failed Delivery" : dto.FailureType.Trim();
+        dto.FailureReason = string.IsNullOrWhiteSpace(dto.FailureReason) ? "Delivery Attempt Failed" : dto.FailureReason.Trim();
+        if (dto.Timestamp == default) dto.Timestamp = DateTime.UtcNow;
+
+        _logger.LogInformation(
+            "Processing Integration 4 failure follow-up: Waybill {WaybillNo}, StarsTaskId {StarsTaskId}, Type {FailureType}, Reason {Reason}, Attempt #{Attempt}",
+            dto.WaybillNo, dto.StarsTaskId, dto.FailureType, dto.FailureReason, dto.AttemptCount);
+
+        // 1. Task Matching: Match StarsTaskId and WaybillNo against TaskDeliveryDetails and Tasks
+        Models.Task? originalTask = null;
+        if (dto.StarsTaskId != Guid.Empty)
+        {
+            originalTask = await _db.Tasks
+                .Include(t => t.Assignments)
+                .FirstOrDefaultAsync(t => t.Id == dto.StarsTaskId);
+        }
+
+        var originalDetail = await _db.TaskDeliveryDetails
+            .FirstOrDefaultAsync(d => (dto.StarsTaskId != Guid.Empty && d.TaskId == dto.StarsTaskId) || d.DmsWaybillNo == dto.WaybillNo);
+
+        if (originalTask == null && originalDetail != null)
+        {
+            originalTask = await _db.Tasks
+                .Include(t => t.Assignments)
+                .FirstOrDefaultAsync(t => t.Id == originalDetail.TaskId);
+        }
+
+        if (originalTask == null)
+        {
+            _logger.LogWarning(
+                "Failure follow-up received for unmatched StarsTaskId {StarsTaskId} or Waybill {WaybillNo}. Proceeding with autonomous task creation.",
+                dto.StarsTaskId, dto.WaybillNo);
+        }
+
+        // 2. Check if an open follow-up task already exists for this waybill
+        var openFollowUpTask = await _db.Tasks
+            .Include(t => t.Assignments)
+            .Where(t => t.Status != Backend.Models.Enums.TaskStatus.Completed && t.Status != Backend.Models.Enums.TaskStatus.Cancelled)
+            .Where(t => t.Title.StartsWith("Delivery Follow-up - " + dto.WaybillNo)
+                     || _db.TaskDeliveryDetails.Any(d => d.TaskId == t.Id && d.DmsWaybillNo == dto.WaybillNo && (dto.StarsTaskId == Guid.Empty || t.Id != dto.StarsTaskId)))
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        // 3. Existing Open Follow-up Branch: Deduplicate & append remark
+        if (openFollowUpTask != null)
+        {
+            var commentAuthorId = openFollowUpTask.CreatedById != Guid.Empty
+                ? openFollowUpTask.CreatedById
+                : (await _db.Users.Where(u => u.IsActive && !u.IsDeactivated).Select(u => u.Id).FirstOrDefaultAsync());
+
+            var driverDisplay = !string.IsNullOrWhiteSpace(dto.DriverId)
+                ? (!string.IsNullOrWhiteSpace(dto.DriverName) ? $"{dto.DriverName} ({dto.DriverId})" : dto.DriverId)
+                : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName : "N/A");
+
+            var commentContent = $"[Failure Follow-up Update] Type: {dto.FailureType} | Attempt #{dto.AttemptCount} | Reason: {dto.FailureReason} | Driver: {driverDisplay} | Recorded: {dto.Timestamp:yyyy-MM-dd HH:mm:ss} UTC";
+
+            var comment = new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = openFollowUpTask.Id,
+                AuthorId = commentAuthorId,
+                Content = commentContent,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.TaskComments.Add(comment);
+
+            // Update delivery detail failure info if linked
+            var followUpDetail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == openFollowUpTask.Id);
+            if (followUpDetail != null)
+            {
+                followUpDetail.DmsStatus = "Failed";
+                followUpDetail.DmsRawStatus = dto.FailureType;
+                followUpDetail.DmsFailureReason = dto.FailureReason;
+                followUpDetail.DmsLastSyncedAt = dto.Timestamp;
+                followUpDetail.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Escalate priority on multiple failed attempts
+            if (dto.AttemptCount > 1 && openFollowUpTask.PriorityLevel != PriorityLevel.Urgent)
+            {
+                openFollowUpTask.PriorityLevel = PriorityLevel.Urgent;
+            }
+            openFollowUpTask.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            await _auditLogService.LogAsync(
+                null,
+                AuditActionType.Update,
+                "Task",
+                openFollowUpTask.Id,
+                null,
+                $"Added failure follow-up remark for Waybill {dto.WaybillNo} (Attempt #{dto.AttemptCount}): {dto.FailureReason}",
+                "DmsIntegration");
+
+            var assignedCoordId = openFollowUpTask.Assignments.FirstOrDefault()?.AssignedUserId;
+
+            return ApiResponseDTO<DmsFailureFollowUpResponseDTO>.Success(new DmsFailureFollowUpResponseDTO
+            {
+                FollowUpTaskId = openFollowUpTask.Id,
+                ActionTaken = "AddedRemark",
+                AssignedCoordinatorId = assignedCoordId,
+                WaybillNo = dto.WaybillNo,
+                Message = $"Logged failure update remark on existing follow-up task '{openFollowUpTask.Title}'."
+            }, "Existing follow-up task updated with failure remark.");
+        }
+
+        // 4. New Follow-up Task Creation Branch
+        // Graph Workload Coordinator Routing: Query active coordinators and evaluate lowest active workload
+        var candidateCoordinators = await _db.Users
+            .Where(u => u.IsActive && !u.IsDeactivated && u.Role == UserRole.Coordinator && u.AvailabilityStatus == AvailabilityStatus.Active)
+            .ToListAsync();
+
+        if (!candidateCoordinators.Any())
+        {
+            candidateCoordinators = await _db.Users
+                .Where(u => u.IsActive && !u.IsDeactivated && u.Role == UserRole.Coordinator)
+                .ToListAsync();
+        }
+
+        User? selectedAssignee = null;
+
+        if (candidateCoordinators.Any())
+        {
+            var candidateIds = candidateCoordinators.Select(u => u.Id).ToList();
+            var workloadCounts = await _db.TaskAssignments
+                .Where(a => candidateIds.Contains(a.AssignedUserId))
+                .Where(a => a.Task != null && a.Task.Status != Backend.Models.Enums.TaskStatus.Completed && a.Task.Status != Backend.Models.Enums.TaskStatus.Cancelled)
+                .GroupBy(a => a.AssignedUserId)
+                .Select(g => new { UserId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
+            selectedAssignee = candidateCoordinators
+                .OrderBy(u => workloadCounts.GetValueOrDefault(u.Id, 0))
+                .ThenBy(u => u.CreatedAt)
+                .First();
+        }
+        else
+        {
+            // Fallback to Manager or any active user
+            selectedAssignee = await _db.Users
+                .Where(u => u.IsActive && !u.IsDeactivated && u.Role == UserRole.Manager)
+                .OrderBy(u => u.CreatedAt)
+                .FirstOrDefaultAsync()
+                ?? await _db.Users.Where(u => u.IsActive && !u.IsDeactivated).FirstOrDefaultAsync();
+        }
+
+        var creatorId = originalTask?.CreatedById != null && originalTask.CreatedById != Guid.Empty
+            ? originalTask.CreatedById
+            : (selectedAssignee?.Id ?? (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync()));
+
+        var now = DateTime.UtcNow;
+        var taskNumber = TaskNumberGenerator.Generate(8);
+        var driverDisplayString = !string.IsNullOrWhiteSpace(dto.DriverId)
+            ? (!string.IsNullOrWhiteSpace(dto.DriverName) ? $"{dto.DriverName} ({dto.DriverId})" : dto.DriverId)
+            : (!string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName : "N/A");
+
+        var description = $"Follow-up required for {dto.FailureType} on Waybill {dto.WaybillNo}.\n"
+            + (originalTask != null ? $"Original Task: {originalTask.Title} ({originalTask.Id})\n" : "")
+            + $"Failure Reason: {dto.FailureReason}\n"
+            + $"Attempt Count: {dto.AttemptCount}\n"
+            + $"Driver: {driverDisplayString}\n\n"
+            + "Action Required: Contact client to arrange next attempt or return to sender in DMS.";
+
+        var newTask = new Backend.Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = taskNumber,
+            Title = $"Delivery Follow-up - {dto.WaybillNo}",
+            Description = description,
+            PriorityLevel = dto.AttemptCount > 1 ? PriorityLevel.Urgent : PriorityLevel.High,
+            Classification = TaskClassification.SpecialTask,
+            Status = Backend.Models.Enums.TaskStatus.NotStarted,
+            AssignmentScope = AssignmentScope.SingleEmployee,
+            Deadline = now.AddDays(2),
+            AssignedDepartmentId = originalTask?.AssignedDepartmentId,
+            CreatedById = creatorId,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _db.Tasks.Add(newTask);
+
+        if (selectedAssignee != null)
+        {
+            var assignment = new TaskAssignment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = newTask.Id,
+                AssignedUserId = selectedAssignee.Id,
+                CompletionPercentage = 0,
+                AssignedAt = now
+            };
+            _db.TaskAssignments.Add(assignment);
+        }
+
+        var newDetail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = newTask.Id,
+            RecipientName = originalDetail?.RecipientName ?? (!string.IsNullOrWhiteSpace(dto.WaybillNo) ? $"Client - {dto.WaybillNo}" : "Recipient"),
+            RecipientContact = originalDetail?.RecipientContact ?? "N/A",
+            DeliveryAddress = originalDetail?.DeliveryAddress ?? $"Delivery Address for Waybill {dto.WaybillNo}",
+            Area = originalDetail?.Area ?? string.Empty,
+            PackageDescription = originalDetail?.PackageDescription ?? $"Package for Waybill {dto.WaybillNo}",
+            SenderAddress = originalDetail?.SenderAddress,
+            SpecialInstructions = originalDetail?.SpecialInstructions,
+            TaskType = originalDetail?.TaskType ?? dto.FailureType,
+            PackageType = originalDetail?.PackageType,
+            Weight = originalDetail?.Weight,
+            ItemCount = originalDetail?.ItemCount,
+            CourierEmployeeId = dto.DriverId ?? originalDetail?.CourierEmployeeId,
+            CourierFullName = dto.DriverName ?? originalDetail?.CourierFullName,
+            DmsOrderId = originalDetail?.DmsOrderId,
+            DmsWaybillNo = dto.WaybillNo,
+            DmsStatus = "Failed",
+            DmsRawStatus = dto.FailureType,
+            DmsFailureReason = dto.FailureReason,
+            DmsLastSyncedAt = dto.Timestamp != default ? dto.Timestamp : now,
+            SyncStatus = "Synced",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _db.TaskDeliveryDetails.Add(newDetail);
+
+        var initialComment = new TaskComment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = newTask.Id,
+            AuthorId = creatorId,
+            Content = $"[Failure Follow-up Logged] Type: {dto.FailureType} | Attempt #{dto.AttemptCount} | Reason: {dto.FailureReason} | Driver: {driverDisplayString} | Recorded: {dto.Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+            CreatedAt = now
+        };
+        _db.TaskComments.Add(initialComment);
+
+        // Preserve Original Task: original task status must remain untouched/Completed
+        if (originalTask != null && originalTask.Status == Backend.Models.Enums.TaskStatus.Completed)
+        {
+            originalTask.Status = Backend.Models.Enums.TaskStatus.Completed;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // Notify Coordinator
+        if (selectedAssignee != null)
+        {
+            try
+            {
+                await _notificationService.SendNotificationAsync(
+                    selectedAssignee.Id,
+                    NotificationType.TaskAssigned,
+                    "Delivery Follow-up Task Assigned",
+                    $"New delivery follow-up task created for Waybill {dto.WaybillNo} ({dto.FailureReason}).",
+                    newTask.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to dispatch follow-up assignment notification to user {UserId}", selectedAssignee.Id);
+            }
+        }
+
+        // Audit Log
+        await _auditLogService.LogAsync(
+            creatorId,
+            AuditActionType.Create,
+            "Task",
+            newTask.Id,
+            null,
+            $"Created delivery follow-up task '{newTask.Title}' for failed waybill {dto.WaybillNo} ({dto.FailureType}: {dto.FailureReason})",
+            "DmsIntegration");
+
+        return ApiResponseDTO<DmsFailureFollowUpResponseDTO>.Success(new DmsFailureFollowUpResponseDTO
+        {
+            FollowUpTaskId = newTask.Id,
+            ActionTaken = "CreatedTask",
+            AssignedCoordinatorId = selectedAssignee?.Id,
+            WaybillNo = dto.WaybillNo,
+            Message = $"Created follow-up task '{newTask.Title}' assigned to {selectedAssignee?.FirstName ?? "Coordinator"} {selectedAssignee?.LastName ?? ""}".Trim()
+        }, "Delivery follow-up task created successfully.");
     }
 }

@@ -423,3 +423,35 @@ public class TaskPodResponseDTO
     public string? DownloadUrl { get; set; }
     public bool HasPod => !string.IsNullOrWhiteSpace(PodUrl) || !string.IsNullOrWhiteSpace(DownloadUrl);
 }
+
+public class DmsFailureFollowUpDTO
+{
+    [Required]
+    public string WaybillNo { get; set; } = string.Empty;
+
+    [Required]
+    public Guid StarsTaskId { get; set; }
+
+    [Required]
+    public string FailureType { get; set; } = "Failed Delivery"; // "Failed Delivery" or "Failed Pickup"
+
+    [Required]
+    public string FailureReason { get; set; } = string.Empty;
+
+    public int AttemptCount { get; set; } = 1;
+
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    public string? DriverId { get; set; }
+
+    public string? DriverName { get; set; }
+}
+
+public class DmsFailureFollowUpResponseDTO
+{
+    public Guid FollowUpTaskId { get; set; }
+    public string ActionTaken { get; set; } = string.Empty; // "CreatedTask" or "AddedRemark"
+    public Guid? AssignedCoordinatorId { get; set; }
+    public string? WaybillNo { get; set; }
+    public string? Message { get; set; }
+}

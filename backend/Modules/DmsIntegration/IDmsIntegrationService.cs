@@ -88,4 +88,10 @@ public interface IDmsIntegrationService
     /// Download or proxy the Proof of Delivery (POD) file with RBAC enforcement.
     /// </summary>
     Task<(byte[]? FileBytes, string ContentType, string FileName)?> DownloadTaskPodAsync(Guid taskId, Guid requestUserId, UserRole requestUserRole);
+
+    /// <summary>
+    /// Integration 4: Handles incoming failed delivery / failed pickup event from DMS.
+    /// Idempotently creates a follow-up task or appends a remark to an existing open follow-up task.
+    /// </summary>
+    Task<ApiResponseDTO<DmsFailureFollowUpResponseDTO>> ProcessFailureFollowUpAsync(DmsFailureFollowUpDTO dto);
 }

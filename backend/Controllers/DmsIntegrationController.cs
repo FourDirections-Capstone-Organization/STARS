@@ -207,6 +207,21 @@ public class DmsIntegrationController : ControllerBase
     }
 
     /// <summary>
+    /// Integration 4: DMS pushes failed delivery / pickup events to STARS.
+    /// Automatically creates a follow-up task or logs an attempt update remark on existing follow-up task.
+    /// </summary>
+    [HttpPost("api/integration/dms/failure-followup")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveFailureFollowUp([FromBody] DmsFailureFollowUpDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _dmsService.ProcessFailureFollowUpAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
     /// Merged performance summary reporting on-time vs late delivery rates.
     /// Accessible via API Key (machine-to-machine) or Manager/Coordinator/Admin/SystemAdmin JWT.
     /// </summary>

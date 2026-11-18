@@ -2194,4 +2194,237 @@ public class DmsIntegrationTests : IDisposable
         Assert.Equal("EMP-009", saved2.DriverId);
         Assert.False(saved2.IsOnTime);
     }
+
+    [Fact]
+    public async Task ProcessFailureFollowUpAsync_CreatesNewFollowUpTask_WhenNoExistingFollowUpExists()
+    {
+        // Arrange
+        var coord = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-001",
+            Email = "coord@test.com",
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = UserRole.Coordinator,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        _db.Users.Add(coord);
+
+        var originalTask = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Delivery Task Original",
+            Description = "Original delivery task",
+            Status = Backend.Models.Enums.TaskStatus.Completed,
+            CreatedById = coord.Id
+        };
+        _db.Tasks.Add(originalTask);
+
+        var deliveryDetail = new TaskDeliveryDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = originalTask.Id,
+            RecipientName = "Juan Dela Cruz",
+            RecipientContact = "09171234567",
+            DeliveryAddress = "123 Main St, Makati",
+            Area = "Makati",
+            PackageDescription = "Important docs",
+            DmsWaybillNo = "WB-FAIL-001",
+            DmsStatus = "Delivered"
+        };
+        _db.TaskDeliveryDetails.Add(deliveryDetail);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+
+        var dto = new DmsFailureFollowUpDTO
+        {
+            WaybillNo = "WB-FAIL-001",
+            StarsTaskId = originalTask.Id,
+            FailureType = "Failed Delivery",
+            FailureReason = "Customer Unreachable",
+            AttemptCount = 1,
+            DriverId = "DRV-100",
+            DriverName = "Pedro Driver"
+        };
+
+        // Act
+        var result = await service.ProcessFailureFollowUpAsync(dto);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal("CreatedTask", result.Data.ActionTaken);
+        Assert.Equal(coord.Id, result.Data.AssignedCoordinatorId);
+        Assert.Equal("WB-FAIL-001", result.Data.WaybillNo);
+
+        // Verify new task created
+        var followUpTask = await _db.Tasks.FindAsync(result.Data.FollowUpTaskId);
+        Assert.NotNull(followUpTask);
+        Assert.StartsWith("Delivery Follow-up - WB-FAIL-001", followUpTask.Title);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.NotStarted, followUpTask.Status);
+        Assert.Equal(TaskClassification.SpecialTask, followUpTask.Classification);
+        Assert.Equal(PriorityLevel.High, followUpTask.PriorityLevel);
+
+        // Verify original task preserved as Completed
+        var reloadedOriginal = await _db.Tasks.FindAsync(originalTask.Id);
+        Assert.NotNull(reloadedOriginal);
+        Assert.Equal(Backend.Models.Enums.TaskStatus.Completed, reloadedOriginal.Status);
+
+        // Verify assignment
+        var assignment = await _db.TaskAssignments.FirstOrDefaultAsync(a => a.TaskId == followUpTask.Id);
+        Assert.NotNull(assignment);
+        Assert.Equal(coord.Id, assignment.AssignedUserId);
+
+        // Verify comment
+        var comment = await _db.TaskComments.FirstOrDefaultAsync(c => c.TaskId == followUpTask.Id);
+        Assert.NotNull(comment);
+        Assert.Contains("Customer Unreachable", comment.Content);
+
+        // Verify notification sent to coordinator
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coord.Id,
+            NotificationType.TaskAssigned,
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            followUpTask.Id), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessFailureFollowUpAsync_AppendsRemark_WhenOpenFollowUpAlreadyExists()
+    {
+        // Arrange
+        var coord = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-002",
+            Email = "coord2@test.com",
+            FirstName = "Elena",
+            LastName = "Reyes",
+            Role = UserRole.Coordinator,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        _db.Users.Add(coord);
+        await _db.SaveChangesAsync();
+
+        var service = CreateService();
+
+        var dto1 = new DmsFailureFollowUpDTO
+        {
+            WaybillNo = "WB-DEDUP-001",
+            StarsTaskId = Guid.NewGuid(),
+            FailureType = "Failed Delivery",
+            FailureReason = "House closed",
+            AttemptCount = 1,
+            DriverId = "DRV-101",
+            DriverName = "Driver One"
+        };
+
+        // First attempt creates task
+        var res1 = await service.ProcessFailureFollowUpAsync(dto1);
+        Assert.True(res1.IsSuccess);
+        Assert.Equal("CreatedTask", res1.Data!.ActionTaken);
+        var followUpTaskId = res1.Data.FollowUpTaskId;
+
+        var dto2 = new DmsFailureFollowUpDTO
+        {
+            WaybillNo = "WB-DEDUP-001",
+            StarsTaskId = dto1.StarsTaskId,
+            FailureType = "Failed Delivery",
+            FailureReason = "Incorrect address provided",
+            AttemptCount = 2,
+            DriverId = "DRV-102",
+            DriverName = "Driver Two"
+        };
+
+        // Act - Second attempt should deduplicate and append remark
+        var res2 = await service.ProcessFailureFollowUpAsync(dto2);
+
+        // Assert
+        Assert.True(res2.IsSuccess);
+        Assert.NotNull(res2.Data);
+        Assert.Equal("AddedRemark", res2.Data.ActionTaken);
+        Assert.Equal(followUpTaskId, res2.Data.FollowUpTaskId);
+
+        // Verify comments count is 2 (initial + second attempt)
+        var comments = await _db.TaskComments.Where(c => c.TaskId == followUpTaskId).ToListAsync();
+        Assert.Equal(2, comments.Count);
+        Assert.Contains(comments, c => c.Content.Contains("Incorrect address provided") && c.Content.Contains("Attempt #2"));
+
+        // Verify priority escalated to Urgent on Attempt #2
+        var followUpTask = await _db.Tasks.FindAsync(followUpTaskId);
+        Assert.NotNull(followUpTask);
+        Assert.Equal(PriorityLevel.Urgent, followUpTask.PriorityLevel);
+    }
+
+    [Fact]
+    public async Task Controller_ReceiveFailureFollowUp_RejectsUnauthorized()
+    {
+        // Arrange
+        var controller = CreateController();
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+
+        var dto = new DmsFailureFollowUpDTO
+        {
+            WaybillNo = "WB-UNAUTH-01",
+            StarsTaskId = Guid.NewGuid(),
+            FailureType = "Failed Delivery",
+            FailureReason = "Refused"
+        };
+
+        // Act (no API key)
+        var response = await controller.ReceiveFailureFollowUp(dto);
+
+        // Assert
+        Assert.IsType<UnauthorizedObjectResult>(response);
+    }
+
+    [Fact]
+    public async Task Controller_ReceiveFailureFollowUp_SucceedsWithValidApiKey()
+    {
+        // Arrange
+        var coord = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-003",
+            Email = "coord3@test.com",
+            FirstName = "Carlo",
+            LastName = "Aquino",
+            Role = UserRole.Coordinator,
+            AvailabilityStatus = AvailabilityStatus.Active,
+            IsActive = true
+        };
+        _db.Users.Add(coord);
+        await _db.SaveChangesAsync();
+
+        var controller = CreateController();
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers[DmsIntegrationService.ApiKeyHeaderName] = "test-inbound-key";
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var dto = new DmsFailureFollowUpDTO
+        {
+            WaybillNo = "WB-AUTH-001",
+            StarsTaskId = Guid.NewGuid(),
+            FailureType = "Failed Delivery",
+            FailureReason = "Refused acceptance",
+            AttemptCount = 1
+        };
+
+        // Act
+        var response = await controller.ReceiveFailureFollowUp(dto);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(response);
+        var apiRes = Assert.IsType<ApiResponseDTO<DmsFailureFollowUpResponseDTO>>(okResult.Value);
+        Assert.True(apiRes.IsSuccess);
+        Assert.Equal("CreatedTask", apiRes.Data!.ActionTaken);
+        Assert.Equal("WB-AUTH-001", apiRes.Data.WaybillNo);
+    }
 }
