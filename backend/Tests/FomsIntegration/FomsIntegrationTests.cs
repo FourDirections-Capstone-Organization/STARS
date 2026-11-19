@@ -120,6 +120,45 @@ public class FomsIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateEndorsementTaskAsync_DuplicateEndorsementRequest_AppendsTaskCommentRemark_AndPreventsDuplicateTask_FR044()
+    {
+        var service = CreateService();
+
+        var request = new FomsEndorsementRequestDTO
+        {
+            InvoiceNumber = "INV-FR044-DUPLICATE-001",
+            ClientName = "FR044 Test Corp",
+            ClientAddress = "456 Test Blvd, Taguig",
+            InvoiceAmount = 120500.00m,
+            SentDate = DateTime.UtcNow
+        };
+
+        // First call creates the task
+        var firstResult = await service.CreateEndorsementTaskAsync(request);
+        Assert.True(firstResult.IsSuccess);
+        Assert.NotNull(firstResult.Data);
+        var initialTaskId = firstResult.Data.StarsTaskId;
+
+        var commentCountBefore = await _db.TaskComments.CountAsync(c => c.TaskId == initialTaskId);
+        Assert.Equal(0, commentCountBefore);
+
+        // Duplicate call with exact same invoice number
+        var secondResult = await service.CreateEndorsementTaskAsync(request);
+        Assert.True(secondResult.IsSuccess);
+        Assert.NotNull(secondResult.Data);
+        Assert.Equal(initialTaskId, secondResult.Data.StarsTaskId);
+
+        // Ensure no duplicate task detail or task was created in DB
+        var totalDetails = await _db.TaskFomsInvoiceDetails.CountAsync(d => d.InvoiceNumber == "INV-FR044-DUPLICATE-001");
+        Assert.Equal(1, totalDetails);
+
+        // Ensure TaskComment audit remark was appended per FR-044
+        var comments = await _db.TaskComments.Where(c => c.TaskId == initialTaskId).ToListAsync();
+        Assert.Single(comments);
+        Assert.Contains("[FOMS Endorsement Sync] Duplicate endorsement request received from FOMS for invoice INV-FR044-DUPLICATE-001", comments[0].Content);
+    }
+
+    [Fact]
     public async Task CreateEndorsementTaskAsync_WithActiveCoordinators_AssignsOptimalCoordinator_AndNotifiesAndAudits()
     {
         var service = CreateService();
