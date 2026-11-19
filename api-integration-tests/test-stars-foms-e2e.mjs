@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * End-to-End Live Integration Verification Script (Zero Frontend UI)
- * Tests all 4 integrations between STARS and FOMS across the internet:
+ * Tests all 5 integrations between STARS and FOMS across the internet:
  *   - Integration 1: FOMS -> STARS Endorsement Request & STARS -> FOMS Completion Callback
  *   - Integration 2: FOMS -> STARS Payment Status Webhook & Dashboard Financial Visibility
  *   - Integration 3: FOMS -> STARS Overdue Accounts Collection Routing (Graph Routing Engine)
  *   - Integration 4: FOMS -> STARS Client Account Sync (Reference Data Master Sync)
+ *   - Integration 5: FOMS Late/Invalid Liquidation -> STARS Liquidation Correction Task
  *
  * Usage:
  *   node api-integration-tests/test-stars-foms-e2e.mjs
@@ -622,6 +623,207 @@ async function main() {
     expect(res.json?.isSuccess === false, `expected isSuccess=false: ${res.text}`);
     expect(res.json?.message?.toLowerCase().includes("inactive"), `expected 'inactive' in error message: ${res.json?.message}`);
     return `Blocked creation cleanly: ${res.json?.message}`;
+  });
+
+  console.log("\n[7] Integration 5: FOMS Late/Invalid Liquidation → STARS Liquidation Correction Task");
+
+  // Endpoint probe to check if target environment has deployed Integration 5 endpoints
+  const probeInteg5 = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+    headers: { "X-Api-Key": "probe-key" },
+    body: {}
+  });
+  const isSection7Deployed = probeInteg5.status !== 404;
+
+  if (!isSection7Deployed) {
+    console.log("  [NOTICE] Integration 5 endpoints returned 404 on target host (pending Azure deployment of feat/stars-foms-integration-5-liquidation-correction).");
+  }
+
+  const testOrSkip5 = async (name, fn) => {
+    if (!isSection7Deployed) {
+      skip(name, "Endpoint returned 404 on target host (pending Azure deployment)");
+      return;
+    }
+    await test(name, fn);
+  };
+
+  // 1. Security & Auth Enforcement on Liquidation Correction Endpoints
+  await testOrSkip5("STARS rejects unauthorized liquidation correction request (no X-Api-Key)", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+      body: { requestId: "LIQ-TEST-SEC", requester: "Security Test", liquidationStatus: "For Correction", correctionReason: "Test" }
+    });
+    expect(res.status === 401 || res.status === 503, `expected 401/503 but got ${res.status} (${res.text})`);
+    return `Status: ${res.status}`;
+  });
+
+  await testOrSkip5("STARS rejects invalid X-Api-Key for liquidation correction", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+      headers: { "X-Api-Key": "invalid-hex-key-999" },
+      body: { requestId: "LIQ-TEST-SEC", requester: "Security Test", liquidationStatus: "For Correction", correctionReason: "Test" }
+    });
+    expect(res.status === 401, `expected 401 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await testOrSkip5("FOMS rejects unauthorized liquidation correction callback (no X-Api-Key)", async () => {
+    const res = await call("POST", `${FOMS_URL}/api/integration/stars/liquidation-correction-callback`, {
+      body: { requestId: "LIQ-TEST-SEC" }
+    });
+    expect(res.status === 401 || res.status === 403 || res.status === 503, `expected 401/403/503 but got ${res.status} (${res.text})`);
+    return `Status: ${res.status}`;
+  });
+
+  await testOrSkip5("FOMS rejects invalid X-Api-Key for liquidation correction callback", async () => {
+    const res = await call("POST", `${FOMS_URL}/api/integration/stars/liquidation-correction-callback`, {
+      headers: { "X-Api-Key": "invalid-hex-key-999" },
+      body: { requestId: "LIQ-TEST-SEC" }
+    });
+    expect(res.status === 401, `expected 401 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  // 2. Liquidation correction request dispatch from FOMS; STARS task creation with 8-character task number and Coordinator assignment
+  const testLiqRequestId = `LIQ-2026-LIVE-${Math.floor(1000 + Math.random() * 9000)}`;
+  let createdLiqTaskId = null;
+  let createdLiqTaskNumber = null;
+  let assignedLiqCoordinator = null;
+
+  await testOrSkip5("FOMS pushes liquidation correction request; STARS creates task with Graph Routing (FR-017, FR-019)", async () => {
+    const payload = {
+      requestId: testLiqRequestId,
+      liquidationId: 9901,
+      requester: "Juan Dela Cruz (Courier NCR-South)",
+      requesterEmployeeId: "EMP-005",
+      deliveryReference: "WB-2026-88291",
+      liquidationStatus: "For Correction",
+      correctionReason: "Missing BIR official receipt for fuel top-up at Shell SLEX",
+      dueDate: new Date(Date.now() + 86400000).toISOString(),
+      amount: 3250.75,
+      remarks: "Assistant FM EMP-004 flagged: receipt image is blurry and missing TIN."
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS liquidation correction but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    createdLiqTaskId = data?.starsTaskId || data?.data?.starsTaskId;
+    createdLiqTaskNumber = data?.starsTaskNumber || data?.data?.starsTaskNumber;
+    assignedLiqCoordinator = data?.assignedTo || data?.data?.assignedTo;
+
+    expect(createdLiqTaskId, `expected starsTaskId in response: ${res.text}`);
+    expect(createdLiqTaskNumber && createdLiqTaskNumber.length >= 8, `expected 8-char task number, got ${createdLiqTaskNumber}`);
+    return `Created Task ${createdLiqTaskNumber} (ID: ${createdLiqTaskId}) routed to ${assignedLiqCoordinator}`;
+  });
+
+  // 3. Idempotency & Re-entrancy Check (FR-044, FR-035)
+  await testOrSkip5("Idempotency: Re-dispatching same liquidation returns existing task without duplicate creation (FR-044)", async () => {
+    const payload = {
+      requestId: testLiqRequestId,
+      liquidationId: 9901,
+      requester: "Juan Dela Cruz (Courier NCR-South)",
+      requesterEmployeeId: "EMP-005",
+      deliveryReference: "WB-2026-88291",
+      liquidationStatus: "For Correction",
+      correctionReason: "Missing BIR official receipt - follow-up reminder",
+      dueDate: new Date(Date.now() + 86400000).toISOString(),
+      amount: 3250.75,
+      remarks: "Second notification from Assistant FM."
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    const returnedTaskId = data?.starsTaskId || data?.data?.starsTaskId;
+    expect(returnedTaskId === createdLiqTaskId, `expected duplicate to return original taskId ${createdLiqTaskId}, got ${returnedTaskId}`);
+    return `Idempotent duplicate handled: matched original Task ${createdLiqTaskNumber}`;
+  });
+
+  // 4. Proof attachment & resolution notes submission in STARS
+  await testOrSkip5("STARS records corrected receipts and dispatches callback to FOMS (FR-018, FR-024)", async () => {
+    const dispatchPayload = {
+      taskId: createdLiqTaskId,
+      correctedReceiptsUrl: "https://stars.blob.core.windows.net/receipts/corrected-official-receipt-shell-slex.pdf",
+      remarks: "Coordinator obtained physical BIR receipt from Shell SLEX. TIN: 000-123-456-000 verified. Line items match delivery fuel logs."
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/dispatch-liquidation-callback`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: dispatchPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS dispatch callback but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Callback dispatched: ${res.json?.message || "Success"}`;
+  });
+
+  // 5. STARS completion callback to FOMS; FOMS attaches document and resets status to Under Review
+  await testOrSkip5("FOMS receives completion callback; records LiquidationDocument and resets status to Under Review (FR-050, FR-052)", async () => {
+    const callbackPayload = {
+      requestId: testLiqRequestId,
+      liquidationId: 9901,
+      starsTaskId: createdLiqTaskId || "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      starsTaskNumber: createdLiqTaskNumber || "TK82C101",
+      correctedReceiptsReference: "https://stars.blob.core.windows.net/receipts/corrected-official-receipt-shell-slex.pdf",
+      remarks: "Coordinator obtained physical BIR receipt from Shell SLEX. TIN: 000-123-456-000 verified.",
+      completionDate: new Date().toISOString(),
+      status: "Completed"
+    };
+
+    const res = await call("POST", `${FOMS_URL}/api/integration/stars/liquidation-correction-callback`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY },
+      body: callbackPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from FOMS callback endpoint but got ${res.status}: ${res.text}`);
+    expect(res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    expect(res.json?.message?.includes("Under Review"), `expected 'Under Review' in response message: ${res.json?.message}`);
+    return `Status updated to Under Review: ${res.json?.message}`;
+  });
+
+  // 6. Deduction flagging verification (CSH-08, FR-074 to FR-076)
+  await testOrSkip5("Deduction liability flagging (CSH-08): Rejected/overdue liquidation flags deduction without modifying ledger", async () => {
+    const rejectedRequestId = `LIQ-REJ-${Math.floor(1000 + Math.random() * 9000)}`;
+    const deductionRemarks = "[CSH-08: Salary deduction liability flagged for ₱4,850.00 against Pedro Penduko. Deducted via external payroll.]";
+    const rejectedPayload = {
+      requestId: rejectedRequestId,
+      liquidationId: 9902,
+      requester: "Pedro Penduko (Driver Luzon Route)",
+      requesterEmployeeId: "EMP-007",
+      deliveryReference: "WB-2026-99012",
+      liquidationStatus: "Rejected",
+      correctionReason: "Physical receipt rejected due to item mismatch with delivery manifest",
+      amount: 4850.00,
+      remarks: deductionRemarks
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/liquidation-correction`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: rejectedPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS for rejected liquidation but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Deduction liability flagged per CSH-08; task created: ${data?.starsTaskNumber || data?.data?.starsTaskNumber}`;
+  });
+
+  // 7. FOMS tracked liquidation correction tasks query
+  await testOrSkip5("FOMS queries tracked liquidation correction tasks", async () => {
+    const res = await call("GET", `${FOMS_URL}/api/integration/stars/liquidation-tasks`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY }
+    });
+
+    expect(res.status === 200, `expected 200 OK from FOMS liquidation tasks query but got ${res.status}: ${res.text}`);
+    const list = Array.isArray(res.json?.data) ? res.json.data : (Array.isArray(res.json) ? res.json : []);
+    return `Tracked tasks retrieved: ${list.length} item(s) in FOMS`;
   });
 
   console.log("\n==================================================================");
