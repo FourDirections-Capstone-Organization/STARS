@@ -11,6 +11,9 @@ public class FomsEndorsementRequestDTO
     [MaxLength(100)]
     public string InvoiceNumber { get; set; } = string.Empty;
 
+    [MaxLength(100)]
+    public string? ClientAccountId { get; set; }
+
     [Required]
     [MaxLength(200)]
     public string ClientName { get; set; } = string.Empty;
@@ -32,6 +35,8 @@ public class FomsEndorsementRequestDTO
     public decimal InvoiceAmount { get; set; }
 
     public DateTime? BillingDate { get; set; }
+
+    public DateTime? SentDate { get; set; }
 
     public DateTime? DueDate { get; set; }
 
@@ -69,6 +74,10 @@ public class StarsEndorsementCompletionDTO
     public string StarsTaskNumber { get; set; } = string.Empty;
 
     public string CompletionResult { get; set; } = "Completed";
+
+    public string DeliveryResult { get; set; } = "Delivered"; // "Delivered" or "Refused"
+
+    public Guid? CoordinatorId { get; set; }
 
     [Required]
     public DateTime ActualReceivedDate { get; set; }

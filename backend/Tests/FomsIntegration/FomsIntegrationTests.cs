@@ -112,6 +112,166 @@ public class FomsIntegrationTests : IDisposable
         Assert.True(secondResult.IsSuccess);
         Assert.Equal(firstResult.Data.StarsTaskId, secondResult.Data!.StarsTaskId);
         Assert.Equal(1, await _db.TaskFomsInvoiceDetails.CountAsync(d => d.InvoiceNumber == "INV-2026-TEST-001"));
+
+        // FR-044: Verify duplicate check appended an audit remark (TaskComment)
+        var comment = await _db.TaskComments.FirstOrDefaultAsync(c => c.TaskId == firstResult.Data.StarsTaskId);
+        Assert.NotNull(comment);
+        Assert.Contains("Duplicate endorsement request received", comment.Content);
+    }
+
+    [Fact]
+    public async Task CreateEndorsementTaskAsync_WithActiveCoordinators_AssignsOptimalCoordinator_AndNotifiesAndAudits()
+    {
+        var service = CreateService();
+
+        // Seed 2 coordinators with different workloads
+        var coord1 = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "coord1@test.local",
+            PasswordHash = "hash",
+            FirstName = "Alice",
+            LastName = "Coordinator",
+            Username = "alice.coord",
+            Role = UserRole.Coordinator,
+            EmploymentStatus = "Active",
+            IsActive = true,
+            IsDeactivated = false
+        };
+        var coord2 = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "coord2@test.local",
+            PasswordHash = "hash",
+            FirstName = "Bob",
+            LastName = "Coordinator",
+            Username = "bob.coord",
+            Role = UserRole.Coordinator,
+            EmploymentStatus = "Active",
+            IsActive = true,
+            IsDeactivated = false
+        };
+
+        // Give coord1 an active task assignment so coord2 has lower workload
+        var existingTask = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TASK0001",
+            Title = "Existing Task",
+            Status = Models.Enums.TaskStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Users.AddRange(coord1, coord2);
+        _db.Tasks.Add(existingTask);
+        _db.TaskAssignments.Add(new TaskAssignment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = existingTask.Id,
+            AssignedUserId = coord1.Id,
+            AssignedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var request = new FomsEndorsementRequestDTO
+        {
+            InvoiceNumber = "INV-SCOPING-001",
+            ClientAccountId = "CLI-SCOPING-1",
+            ClientName = "Optimal Logistics Inc",
+            InvoiceAmount = 95000m,
+            SentDate = DateTime.UtcNow
+        };
+
+        var result = await service.CreateEndorsementTaskAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal("Bob Coordinator", result.Data.AssignedTo);
+
+        // Verify TaskAssignment was created for Bob
+        var assignment = await _db.TaskAssignments.FirstOrDefaultAsync(a => a.TaskId == result.Data.StarsTaskId);
+        Assert.NotNull(assignment);
+        Assert.Equal(coord2.Id, assignment.AssignedUserId);
+
+        // Verify Notification (FR-033) was dispatched
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coord2.Id,
+            NotificationType.TaskAssigned,
+            It.Is<string>(s => s.Contains("Invoice Endorsement Task Assigned")),
+            It.Is<string>(s => s.Contains("INV-SCOPING-001")),
+            result.Data.StarsTaskId), Times.Once);
+
+        // Verify Audit Log (FR-046) was recorded
+        _mockAudit.Verify(a => a.LogAsync(
+            It.IsAny<Guid?>(),
+            AuditActionType.Create,
+            "TaskManagement",
+            result.Data.StarsTaskId,
+            null,
+            It.Is<string>(s => s.Contains("INV-SCOPING-001") && s.Contains("Bob Coordinator")),
+            "TaskManagement",
+            null,
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendInvoiceEndorsementCompletionAsync_WhenHttpFails_SetsStatusFailed_SendsNotification_KeepsTaskCompleted()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("HTTP Error 500.30 - ASP.NET Core app failed to start")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var reviewerId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TASKFAIL",
+            Title = "Endorsement Task",
+            Status = Models.Enums.TaskStatus.Completed,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsInvoiceDetail
+        {
+            TaskId = task.Id,
+            InvoiceNumber = "INV-FAIL-001",
+            ClientName = "Fail Test Client",
+            InvoiceAmount = 15000m,
+            EndorsementStatus = "PendingEndorsement",
+            FomsSyncStatus = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TaskFomsInvoiceDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var result = await service.SendInvoiceEndorsementCompletionAsync(task.Id, reviewerId);
+
+        Assert.False(result.IsSuccess);
+        var updatedDetail = await _db.TaskFomsInvoiceDetails.FindAsync(detail.Id);
+        Assert.Equal("Failed", updatedDetail!.FomsSyncStatus);
+        Assert.Contains("500", updatedDetail.LastSyncError);
+
+        // Task status remains strictly Completed (FSM preservation)
+        var updatedTask = await _db.Tasks.FindAsync(task.Id);
+        Assert.Equal(Models.Enums.TaskStatus.Completed, updatedTask!.Status);
+
+        // Notification dispatched to reviewer
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            reviewerId,
+            NotificationType.TaskUpdated,
+            It.Is<string>(s => s.Contains("FOMS Endorsement Sync Failed")),
+            It.Is<string>(s => s.Contains("INV-FAIL-001")),
+            task.Id), Times.Once);
     }
 
     [Fact]

@@ -73,6 +73,25 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         if (existingDetail != null && existingDetail.Task != null)
         {
+            // FR-044: If an open task exists, append an official audit remark (TaskComment) and halt duplicate creation
+            if (existingDetail.Task.Status != Models.Enums.TaskStatus.Completed &&
+                existingDetail.Task.Status != Models.Enums.TaskStatus.Cancelled)
+            {
+                var commentAuthorId = existingDetail.Task.CreatedById != Guid.Empty
+                    ? existingDetail.Task.CreatedById
+                    : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync());
+
+                _db.TaskComments.Add(new TaskComment
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = existingDetail.TaskId,
+                    AuthorId = commentAuthorId,
+                    Content = $"[FOMS Endorsement Sync] Duplicate endorsement request received from FOMS for invoice {dto.InvoiceNumber.Trim()}. Details verified and acknowledged.",
+                    CreatedAt = DateTime.UtcNow
+                });
+                await _db.SaveChangesAsync();
+            }
+
             return ApiResponseDTO<FomsEndorsementResponseDTO>.Success(new FomsEndorsementResponseDTO
             {
                 IsSuccess = true,
@@ -80,6 +99,7 @@ public class FomsIntegrationService : IFomsIntegrationService
                 StarsTaskNumber = existingDetail.Task.TaskNumber,
                 InvoiceNumber = existingDetail.InvoiceNumber,
                 Status = existingDetail.EndorsementStatus,
+                AssignedTo = "Optimal Coordinator",
                 Message = "Invoice endorsement task already exists in STARS (idempotent response)."
             });
         }
@@ -131,7 +151,7 @@ public class FomsIntegrationService : IFomsIntegrationService
             ClientContactNumber = dto.ClientContactNumber?.Trim(),
             ClientEmail = dto.ClientEmail?.Trim(),
             InvoiceAmount = dto.InvoiceAmount,
-            BillingDate = ToUtc(dto.BillingDate),
+            BillingDate = ToUtc(dto.BillingDate ?? dto.SentDate),
             DueDate = ToUtc(dto.DueDate),
             InvoiceDocumentUrl = dto.InvoiceDocumentUrl?.Trim(),
             EndorsementStatus = "PendingEndorsement",
@@ -143,9 +163,76 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         _db.TaskFomsInvoiceDetails.Add(endorsementDetail);
 
-        // Keep in NotStarted status without auto-assignment so it appears first in the Invoice Endorsement tab
-        // under "Awaiting STARS Task" where coordinators/managers click "Create STARS Task" (Defect 2)
+        // Destination Scoping (FR-019): Evaluate coordinator workload and assign optimal coordinator
+        var optimalCoordinator = await _db.Users
+            .Where(u => u.Role == UserRole.Coordinator && (u.EmploymentStatus == "Active" || u.EmploymentStatus == null) && u.IsActive && !u.IsDeactivated)
+            .OrderBy(u => _db.TaskAssignments.Count(a => a.AssignedUserId == u.Id && a.Task!.Status != Models.Enums.TaskStatus.Completed && a.Task!.Status != Models.Enums.TaskStatus.Cancelled))
+            .FirstOrDefaultAsync();
+
+        if (optimalCoordinator == null)
+        {
+            optimalCoordinator = await _db.Users
+                .Where(u => (u.Role == UserRole.Coordinator || u.Role == UserRole.Manager) && u.IsActive && !u.IsDeactivated)
+                .OrderBy(u => _db.TaskAssignments.Count(a => a.AssignedUserId == u.Id && a.Task!.Status != Models.Enums.TaskStatus.Completed && a.Task!.Status != Models.Enums.TaskStatus.Cancelled))
+                .FirstOrDefaultAsync();
+        }
+
+        if (optimalCoordinator != null)
+        {
+            _db.TaskAssignments.Add(new TaskAssignment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                AssignedUserId = optimalCoordinator.Id,
+                AssignedAt = now,
+                CompletionPercentage = 0
+            });
+        }
+
         await _db.SaveChangesAsync();
+
+        // Dispatch in-app notification (FR-033) alerting the assigned Coordinator
+        if (optimalCoordinator != null)
+        {
+            try
+            {
+                await _notificationService.SendNotificationAsync(
+                    optimalCoordinator.Id,
+                    NotificationType.TaskAssigned,
+                    "Invoice Endorsement Task Assigned",
+                    $"New invoice delivery and endorsement task assigned for Invoice {dto.InvoiceNumber.Trim()} ({dto.ClientName.Trim()}).",
+                    task.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send assignment notification for task {TaskId}", task.Id);
+            }
+        }
+
+        // Record inbound event in audit logging (FR-046)
+        try
+        {
+            var coordinatorName = optimalCoordinator != null
+                ? (!string.IsNullOrWhiteSpace(optimalCoordinator.FirstName) ? $"{optimalCoordinator.FirstName} {optimalCoordinator.LastName}".Trim() : optimalCoordinator.Username)
+                : "Unassigned";
+
+            await _auditLogService.LogAsync(
+                defaultCreatorId != Guid.Empty ? defaultCreatorId : (optimalCoordinator?.Id),
+                AuditActionType.Create,
+                "TaskManagement",
+                task.Id,
+                null,
+                $"Created invoice endorsement delivery task for invoice {dto.InvoiceNumber.Trim()} assigned to {coordinatorName}.",
+                "TaskManagement");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for task {TaskId}", task.Id);
+        }
+
+        var assignedDisplay = optimalCoordinator != null
+            ? (!string.IsNullOrWhiteSpace(optimalCoordinator.FirstName) ? $"{optimalCoordinator.FirstName} {optimalCoordinator.LastName}".Trim() : optimalCoordinator.Username)
+            : "Optimal Coordinator";
 
         return ApiResponseDTO<FomsEndorsementResponseDTO>.Success(new FomsEndorsementResponseDTO
         {
@@ -154,8 +241,8 @@ public class FomsIntegrationService : IFomsIntegrationService
             StarsTaskNumber = task.TaskNumber,
             InvoiceNumber = endorsementDetail.InvoiceNumber,
             Status = endorsementDetail.EndorsementStatus,
-            AssignedTo = "Awaiting STARS Task",
-            Message = "Invoice endorsement received and awaiting STARS task creation."
+            AssignedTo = assignedDisplay,
+            Message = "Invoice endorsement task created and assigned."
         });
     }
 
@@ -232,6 +319,8 @@ public class FomsIntegrationService : IFomsIntegrationService
             StarsTaskId = task.Id,
             StarsTaskNumber = task.TaskNumber,
             CompletionResult = "Completed",
+            DeliveryResult = "Delivered",
+            CoordinatorId = reviewerId,
             ActualReceivedDate = detail.ActualReceivedDate.Value,
             SignedCopyUrl = detail.SignedReceivingCopyUrl,
             DeliveryRemarks = detail.DeliveryRemarks ?? $"Approved in STARS by {completedByName}",
@@ -245,6 +334,24 @@ public class FomsIntegrationService : IFomsIntegrationService
             detail.LastSyncError = "FOMS integration is not configured (missing BaseUrl or OutboundApiKey)";
             detail.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Endorsement Sync Failed",
+                        $"Invoice endorsement completion for {detail.InvoiceNumber} could not be synced to FOMS. Task remains Completed. Please retry when FOMS is available.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
             _logger.LogWarning("Cannot send endorsement completion for task {TaskId}: FOMS integration not configured", taskId);
             return ApiResponseDTO<bool>.Failure("FOMS integration is not configured on this server");
         }
@@ -282,6 +389,23 @@ public class FomsIntegrationService : IFomsIntegrationService
             detail.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Endorsement Sync Failed",
+                        $"Invoice endorsement completion for {detail.InvoiceNumber} could not be synced to FOMS. Task remains Completed. Please retry when FOMS is available.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
             _logger.LogWarning("FOMS returned HTTP {Status} for invoice {InvoiceNumber}: {Body}", (int)res.StatusCode, detail.InvoiceNumber, responseBody);
             return ApiResponseDTO<bool>.Failure($"FOMS returned HTTP {(int)res.StatusCode}: {responseBody}");
         }
@@ -291,6 +415,23 @@ public class FomsIntegrationService : IFomsIntegrationService
             detail.LastSyncError = ex.Message;
             detail.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Endorsement Sync Failed",
+                        $"Invoice endorsement completion for {detail.InvoiceNumber} could not be synced to FOMS. Task remains Completed. Please retry when FOMS is available.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
 
             _logger.LogError(ex, "Exception sending endorsement completion for invoice {InvoiceNumber}", detail.InvoiceNumber);
             return ApiResponseDTO<bool>.Failure($"Failed to contact FOMS: {ex.Message}");
