@@ -485,4 +485,270 @@ public class FomsIntegrationTests : IDisposable
         Assert.Equal(1, res.Data.PaidInvoicesCount);
         Assert.Equal(1, res.Data.PendingInvoicesCount);
     }
+
+    [Fact]
+    public async Task ProcessPaymentStatusWebhookAsync_PaidInvoice_ResolvesOpenCollectionTask_AndNotifiesCoordinator()
+    {
+        var service = CreateService();
+
+        var coordinator = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "coord_resolver",
+            Email = "coord_resolver@speedex.com",
+            Role = UserRole.Coordinator,
+            IsActive = true
+        };
+        _db.Users.Add(coordinator);
+
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-COL-001",
+            Title = "[Collection Follow-up] Invoice INV-COL-001 - Acme Corp",
+            Status = Models.Enums.TaskStatus.InProgress,
+            PriorityLevel = PriorityLevel.Urgent,
+            Deadline = DateTime.UtcNow.AddDays(7),
+            CreatedById = coordinator.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        _db.TaskAssignments.Add(new TaskAssignment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            AssignedUserId = coordinator.Id,
+            AssignedAt = DateTime.UtcNow
+        });
+
+        var collectionDetail = new TaskFomsCollectionDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            InvoiceNumber = "INV-COL-001",
+            ClientAccountId = "CLI-ACME",
+            ClientName = "Acme Corp",
+            AmountDue = 85000m,
+            DaysOverdue = 15,
+            AgingStatus = "1-30",
+            DueDate = DateTime.UtcNow.AddDays(-15)
+        };
+        _db.TaskFomsCollectionDetails.Add(collectionDetail);
+        await _db.SaveChangesAsync();
+
+        var payload = new FomsPaymentStatusDTO
+        {
+            InvoiceNumber = "INV-COL-001",
+            ClientAccountId = "CLI-ACME",
+            ClientName = "Acme Corp",
+            InvoiceStatus = "Approved",
+            PaymentStatus = "Paid",
+            DueStatus = "Normal",
+            AgingBucket = "Current",
+            OutstandingBalance = 0m,
+            TotalAmount = 85000m,
+            AmountPaid = 85000m
+        };
+
+        var res = await service.ProcessPaymentStatusWebhookAsync(payload);
+
+        Assert.True(res.IsSuccess);
+
+        // Verify open collection task was resolved to Completed
+        var updatedTask = await _db.Tasks.FindAsync(task.Id);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Models.Enums.TaskStatus.Completed, updatedTask.Status);
+
+        // Verify TaskComment remark was added per Step 6
+        var comment = await _db.TaskComments.FirstOrDefaultAsync(c => c.TaskId == task.Id);
+        Assert.NotNull(comment);
+        Assert.Contains("Full payment settled for invoice INV-COL-001", comment.Content);
+        Assert.Contains("Follow-up concluded", comment.Content);
+
+        // Verify Coordinator notification was dispatched
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordinator.Id,
+            NotificationType.TaskCompleted,
+            It.Is<string>(s => s.Contains("Payment") || s.Contains("Concluded")),
+            It.Is<string>(s => s.Contains("INV-COL-001")),
+            task.Id), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ProcessPaymentStatusWebhookAsync_OverdueInvoice_DispatchesAlertNotification()
+    {
+        var service = CreateService();
+
+        var coordinator = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "coord_overdue",
+            Email = "coord_overdue@speedex.com",
+            Role = UserRole.Coordinator,
+            IsActive = true
+        };
+        _db.Users.Add(coordinator);
+
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-INV-002",
+            Title = "[FOMS Endorsement] Invoice INV-OVERDUE-99 - Global Corp",
+            Status = Models.Enums.TaskStatus.InProgress,
+            PriorityLevel = PriorityLevel.Medium,
+            Deadline = DateTime.UtcNow.AddDays(7),
+            CreatedById = coordinator.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        _db.TaskAssignments.Add(new TaskAssignment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            AssignedUserId = coordinator.Id,
+            AssignedAt = DateTime.UtcNow
+        });
+
+        var invDetail = new TaskFomsInvoiceDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            InvoiceNumber = "INV-OVERDUE-99",
+            ClientName = "Global Corp",
+            InvoiceAmount = 64000m
+        };
+        _db.TaskFomsInvoiceDetails.Add(invDetail);
+        await _db.SaveChangesAsync();
+
+        var payload = new FomsPaymentStatusDTO
+        {
+            InvoiceNumber = "INV-OVERDUE-99",
+            ClientAccountId = "CLI-GLOBAL",
+            ClientName = "Global Corp",
+            InvoiceStatus = "Sent",
+            PaymentStatus = "Unpaid",
+            DueStatus = "Overdue",
+            AgingBucket = "1-30",
+            OutstandingBalance = 64000m,
+            TotalAmount = 64000m,
+            AmountPaid = 0m
+        };
+
+        var res = await service.ProcessPaymentStatusWebhookAsync(payload);
+
+        Assert.True(res.IsSuccess);
+
+        // Verify Overdue notification was sent to assigned coordinator
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordinator.Id,
+            NotificationType.TaskOverdue,
+            "Invoice Overdue Alert",
+            It.Is<string>(s => s.Contains("INV-OVERDUE-99") && s.Contains("64,000.00")),
+            task.Id), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetDashboardFinancialSummaryAsync_CoordinatorRole_ScopesToManagedClientsOnly()
+    {
+        var service = CreateService();
+
+        var coordA = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "coord_alpha",
+            Email = "coord_alpha@speedex.com",
+            Role = UserRole.Coordinator,
+            IsActive = true
+        };
+        var coordB = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "coord_bravo",
+            Email = "coord_bravo@speedex.com",
+            Role = UserRole.Coordinator,
+            IsActive = true
+        };
+        _db.Users.AddRange(coordA, coordB);
+
+        // Task A managed by coordA
+        var taskA = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-A",
+            Title = "[FOMS Endorsement] Invoice INV-ALPHA - Client Alpha",
+            Status = Models.Enums.TaskStatus.InProgress,
+            Deadline = DateTime.UtcNow.AddDays(10),
+            CreatedById = coordA.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        // Task B managed by coordB
+        var taskB = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-B",
+            Title = "[FOMS Endorsement] Invoice INV-BRAVO - Client Bravo",
+            Status = Models.Enums.TaskStatus.InProgress,
+            Deadline = DateTime.UtcNow.AddDays(10),
+            CreatedById = coordB.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.AddRange(taskA, taskB);
+
+        _db.TaskAssignments.AddRange(
+            new TaskAssignment { Id = Guid.NewGuid(), TaskId = taskA.Id, AssignedUserId = coordA.Id, AssignedAt = DateTime.UtcNow },
+            new TaskAssignment { Id = Guid.NewGuid(), TaskId = taskB.Id, AssignedUserId = coordB.Id, AssignedAt = DateTime.UtcNow }
+        );
+
+        _db.TaskFomsInvoiceDetails.AddRange(
+            new TaskFomsInvoiceDetail { Id = Guid.NewGuid(), TaskId = taskA.Id, InvoiceNumber = "INV-ALPHA", ClientName = "Client Alpha", InvoiceAmount = 50000m },
+            new TaskFomsInvoiceDetail { Id = Guid.NewGuid(), TaskId = taskB.Id, InvoiceNumber = "INV-BRAVO", ClientName = "Client Bravo", InvoiceAmount = 30000m }
+        );
+
+        _db.FomsClientFinancialStatuses.AddRange(
+            new FomsClientFinancialStatus
+            {
+                ClientAccountId = "CLI-ALPHA",
+                ClientName = "Client Alpha",
+                InvoiceNumber = "INV-ALPHA",
+                CurrentStatus = "Overdue",
+                OutstandingBalance = 50000m,
+                TotalAmount = 50000m
+            },
+            new FomsClientFinancialStatus
+            {
+                ClientAccountId = "CLI-BRAVO",
+                ClientName = "Client Bravo",
+                InvoiceNumber = "INV-BRAVO",
+                CurrentStatus = "Overdue",
+                OutstandingBalance = 30000m,
+                TotalAmount = 30000m
+            }
+        );
+        await _db.SaveChangesAsync();
+
+        // 1. Scoped query for Coordinator Alpha
+        var scopedRes = await service.GetDashboardFinancialSummaryAsync(coordA.Id, UserRole.Coordinator);
+        Assert.True(scopedRes.IsSuccess);
+        Assert.NotNull(scopedRes.Data);
+        Assert.Equal(50000m, scopedRes.Data.TotalOutstandingBalance);
+        Assert.Equal(50000m, scopedRes.Data.TotalOverdueBalance);
+        Assert.Equal(1, scopedRes.Data.OverdueInvoicesCount);
+        Assert.Single(scopedRes.Data.TopOutstandingClients);
+        Assert.Equal("Client Alpha", scopedRes.Data.TopOutstandingClients[0].ClientName);
+
+        // 2. Unscoped / Company-wide query for Manager
+        var managerRes = await service.GetDashboardFinancialSummaryAsync(Guid.NewGuid(), UserRole.Manager);
+        Assert.True(managerRes.IsSuccess);
+        Assert.NotNull(managerRes.Data);
+        Assert.Equal(80000m, managerRes.Data.TotalOutstandingBalance);
+        Assert.Equal(80000m, managerRes.Data.TotalOverdueBalance);
+        Assert.Equal(2, managerRes.Data.OverdueInvoicesCount);
+        Assert.Equal(2, managerRes.Data.TopOutstandingClients.Count);
+    }
 }

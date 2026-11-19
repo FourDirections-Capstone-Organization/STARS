@@ -365,6 +365,7 @@ public class FomsIntegrationController : ControllerBase
     /// <summary>
     /// Dashboard summary reporting aggregated client balances and overdue invoices.
     /// Accessible via API Key (M2M) or Manager/Coordinator JWT session.
+    /// Supports role-based scoping (Coordinators see managed accounts, Managers/API see company-wide).
     /// </summary>
     [HttpGet("api/integration/foms/dashboard-summary")]
     [AllowAnonymous]
@@ -373,15 +374,25 @@ public class FomsIntegrationController : ControllerBase
         var apiKey = Request.Headers[FomsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
         bool hasApiKey = FomsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
 
+        Guid? userId = null;
+        Backend.Models.Enums.UserRole? userRole = null;
+
         if (!hasApiKey)
         {
             var isUserAuth = User.Identity?.IsAuthenticated == true;
 
             if (!isUserAuth)
                 return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required (valid API key or authenticated user session)."));
+
+            userId = GetUserId();
+            var userRoleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (Enum.TryParse<Backend.Models.Enums.UserRole>(userRoleStr, true, out var parsedRole))
+            {
+                userRole = parsedRole;
+            }
         }
 
-        var result = await _fomsService.GetDashboardFinancialSummaryAsync();
+        var result = await _fomsService.GetDashboardFinancialSummaryAsync(userId, userRole);
         return Ok(result);
     }
 

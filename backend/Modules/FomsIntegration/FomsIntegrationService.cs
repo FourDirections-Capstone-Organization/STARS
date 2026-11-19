@@ -446,13 +446,31 @@ public class FomsIntegrationService : IFomsIntegrationService
         if (string.IsNullOrWhiteSpace(dto.InvoiceNumber))
             return ApiResponseDTO<bool>.Failure("InvoiceNumber is required");
 
-        var record = await _db.FomsClientFinancialStatuses
-            .FirstOrDefaultAsync(s => s.InvoiceNumber == dto.InvoiceNumber.Trim());
-
-        var now = DateTime.UtcNow;
+        var cleanInvoiceNumber = dto.InvoiceNumber.Trim();
         var clientAccountId = string.IsNullOrWhiteSpace(dto.ClientAccountId) ? "CLI-001" : dto.ClientAccountId.Trim();
         var clientName = string.IsNullOrWhiteSpace(dto.ClientName) ? "Client" : dto.ClientName.Trim();
-        var currentStatus = string.IsNullOrWhiteSpace(dto.CurrentStatus) ? "Unpaid" : dto.CurrentStatus.Trim();
+
+        // Determine effective statuses and dates
+        var invoiceStatus = !string.IsNullOrWhiteSpace(dto.InvoiceStatus) ? dto.InvoiceStatus.Trim() : null;
+        var paymentStatus = !string.IsNullOrWhiteSpace(dto.PaymentStatus)
+            ? dto.PaymentStatus.Trim()
+            : (string.Equals(dto.CurrentStatus, "Paid", StringComparison.OrdinalIgnoreCase) || dto.OutstandingBalance <= 0 ? "Paid" : "Unpaid");
+
+        var dueStatus = !string.IsNullOrWhiteSpace(dto.DueStatus)
+            ? dto.DueStatus.Trim()
+            : (string.Equals(dto.CurrentStatus, "Overdue", StringComparison.OrdinalIgnoreCase) ? "Overdue" : "Normal");
+
+        var agingBucket = !string.IsNullOrWhiteSpace(dto.AgingBucket) ? dto.AgingBucket.Trim() : "Current";
+
+        var currentStatus = !string.IsNullOrWhiteSpace(dto.CurrentStatus)
+            ? dto.CurrentStatus.Trim()
+            : (paymentStatus == "Paid" ? "Paid" : (dueStatus == "Overdue" ? "Overdue" : (invoiceStatus ?? "Unpaid")));
+
+        var effectiveDueDate = dto.DueDate ?? dto.NextDueDate;
+        var now = DateTime.UtcNow;
+
+        var record = await _db.FomsClientFinancialStatuses
+            .FirstOrDefaultAsync(s => s.InvoiceNumber == cleanInvoiceNumber);
 
         if (record == null)
         {
@@ -460,12 +478,16 @@ public class FomsIntegrationService : IFomsIntegrationService
             {
                 ClientAccountId = clientAccountId,
                 ClientName = clientName,
-                InvoiceNumber = dto.InvoiceNumber.Trim(),
+                InvoiceNumber = cleanInvoiceNumber,
                 CurrentStatus = currentStatus,
+                InvoiceStatus = invoiceStatus,
+                PaymentStatus = paymentStatus,
+                DueStatus = dueStatus,
+                AgingBucket = agingBucket,
                 TotalAmount = dto.TotalAmount,
                 AmountPaid = dto.AmountPaid,
                 OutstandingBalance = dto.OutstandingBalance,
-                NextDueDate = ToUtc(dto.NextDueDate),
+                NextDueDate = ToUtc(effectiveDueDate),
                 LastPaymentDate = ToUtc(dto.LastPaymentDate),
                 LastUpdatedFromFoms = now
             };
@@ -474,20 +496,187 @@ public class FomsIntegrationService : IFomsIntegrationService
         else
         {
             record.ClientAccountId = clientAccountId;
-            if (!string.IsNullOrWhiteSpace(clientName))
+            if (!string.IsNullOrWhiteSpace(clientName) && clientName != "Client")
                 record.ClientName = clientName;
             record.CurrentStatus = currentStatus;
-            record.TotalAmount = dto.TotalAmount;
+            record.InvoiceStatus = invoiceStatus ?? record.InvoiceStatus;
+            record.PaymentStatus = paymentStatus;
+            record.DueStatus = dueStatus;
+            record.AgingBucket = agingBucket;
+            if (dto.TotalAmount > 0) record.TotalAmount = dto.TotalAmount;
             record.AmountPaid = dto.AmountPaid;
             record.OutstandingBalance = dto.OutstandingBalance;
-            record.NextDueDate = ToUtc(dto.NextDueDate);
-            record.LastPaymentDate = ToUtc(dto.LastPaymentDate);
+            if (effectiveDueDate.HasValue) record.NextDueDate = ToUtc(effectiveDueDate);
+            if (dto.LastPaymentDate.HasValue) record.LastPaymentDate = ToUtc(dto.LastPaymentDate);
             record.LastUpdatedFromFoms = now;
         }
 
         await _db.SaveChangesAsync();
-        _logger.LogInformation("Recorded FOMS financial status update for invoice {InvoiceNumber}: Status={Status}, Balance={Balance}",
-            record.InvoiceNumber, record.CurrentStatus, record.OutstandingBalance);
+        _logger.LogInformation("Recorded FOMS financial status update for invoice {InvoiceNumber}: Status={Status}, PaymentStatus={PaymentStatus}, Balance={Balance}",
+            record.InvoiceNumber, record.CurrentStatus, record.PaymentStatus, record.OutstandingBalance);
+
+        // 1. Notification Alerts (FR-033)
+        var invoiceDetail = await _db.TaskFomsInvoiceDetails
+            .Include(d => d.Task)
+                .ThenInclude(t => t!.Assignments)
+            .FirstOrDefaultAsync(d => d.InvoiceNumber == cleanInvoiceNumber);
+
+        var collectionDetail = await _db.TaskFomsCollectionDetails
+            .Include(c => c.Task)
+                .ThenInclude(t => t!.Assignments)
+            .FirstOrDefaultAsync(c => c.InvoiceNumber == cleanInvoiceNumber);
+
+        var coordinatorUserIds = new HashSet<Guid>();
+        if (invoiceDetail?.Task?.Assignments != null)
+        {
+            foreach (var a in invoiceDetail.Task.Assignments)
+            {
+                if (a.AssignedUserId != Guid.Empty) coordinatorUserIds.Add(a.AssignedUserId);
+            }
+        }
+        if (collectionDetail?.Task?.Assignments != null)
+        {
+            foreach (var a in collectionDetail.Task.Assignments)
+            {
+                if (a.AssignedUserId != Guid.Empty) coordinatorUserIds.Add(a.AssignedUserId);
+            }
+        }
+
+        if (coordinatorUserIds.Count == 0)
+        {
+            var fallbackCoordinators = await _db.Users
+                .Where(u => u.Role == UserRole.Coordinator && u.IsActive && !u.IsDeactivated)
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            if (fallbackCoordinators.Count == 0)
+            {
+                fallbackCoordinators = await _db.Users
+                    .Where(u => u.Role == UserRole.Coordinator)
+                    .Select(u => u.Id)
+                    .ToListAsync();
+            }
+
+            foreach (var cId in fallbackCoordinators)
+            {
+                coordinatorUserIds.Add(cId);
+            }
+        }
+
+        var isOverdue = string.Equals(dueStatus, "Overdue", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(currentStatus, "Overdue", StringComparison.OrdinalIgnoreCase);
+
+        var isPaid = string.Equals(paymentStatus, "Paid", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(currentStatus, "Paid", StringComparison.OrdinalIgnoreCase) ||
+                     dto.OutstandingBalance <= 0;
+
+        var refTaskId = collectionDetail?.TaskId ?? invoiceDetail?.TaskId;
+
+        if (isOverdue)
+        {
+            var overdueTitle = "Invoice Overdue Alert";
+            var overdueMsg = $"Invoice {cleanInvoiceNumber} for {clientName} is now overdue (Outstanding: ₱{dto.OutstandingBalance:N2}).";
+            foreach (var cId in coordinatorUserIds)
+            {
+                await _notificationService.SendNotificationAsync(
+                    cId,
+                    NotificationType.TaskOverdue,
+                    overdueTitle,
+                    overdueMsg,
+                    refTaskId);
+            }
+        }
+        else if (isPaid)
+        {
+            var paidTitle = "Invoice Payment Settled";
+            var paidMsg = $"Invoice {cleanInvoiceNumber} for {clientName} has been settled in full.";
+            foreach (var cId in coordinatorUserIds)
+            {
+                await _notificationService.SendNotificationAsync(
+                    cId,
+                    NotificationType.TaskCompleted,
+                    paidTitle,
+                    paidMsg,
+                    refTaskId);
+            }
+        }
+
+        // 2. Collection Follow-up Interception & Conclusion (Workflow Step 6)
+        var openCollection = await _db.TaskFomsCollectionDetails
+            .Include(c => c.Task)
+            .FirstOrDefaultAsync(c => c.InvoiceNumber == cleanInvoiceNumber &&
+                                      c.Task != null &&
+                                      c.Task.Status != Models.Enums.TaskStatus.Completed &&
+                                      c.Task.Status != Models.Enums.TaskStatus.Cancelled);
+
+        if (openCollection != null && isPaid)
+        {
+            var commentAuthorId = openCollection.Task!.CreatedById != Guid.Empty
+                ? openCollection.Task.CreatedById
+                : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync());
+
+            _db.TaskComments.Add(new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = openCollection.TaskId,
+                AuthorId = commentAuthorId,
+                Content = $"[FOMS Payment Notification] Full payment settled for invoice {cleanInvoiceNumber}. Outstanding balance cleared. Follow-up concluded.",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            openCollection.Task.Status = Models.Enums.TaskStatus.Completed;
+            openCollection.Task.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            var collectionAssignees = await _db.TaskAssignments
+                .Where(a => a.TaskId == openCollection.TaskId)
+                .Select(a => a.AssignedUserId)
+                .ToListAsync();
+
+            foreach (var assigneeId in collectionAssignees)
+            {
+                await _notificationService.SendNotificationAsync(
+                    assigneeId,
+                    NotificationType.TaskCompleted,
+                    "Collection Follow-up Concluded",
+                    $"[FOMS Payment Notification] Full payment settled for invoice {cleanInvoiceNumber}. Outstanding balance cleared. Follow-up concluded.",
+                    openCollection.TaskId);
+            }
+
+            try
+            {
+                await _auditLogService.LogAsync(
+                    commentAuthorId != Guid.Empty ? commentAuthorId : null,
+                    AuditActionType.Update,
+                    "TaskManagement",
+                    openCollection.TaskId,
+                    null,
+                    $"Concluded collection follow-up task {openCollection.Task.TaskNumber} for settled invoice {cleanInvoiceNumber}.",
+                    "FomsIntegration");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write audit log for concluded collection task {TaskId}", openCollection.TaskId);
+            }
+        }
+
+        // 3. Event Logging (FR-046)
+        try
+        {
+            await _auditLogService.LogAsync(
+                null,
+                AuditActionType.Update,
+                "FomsClientFinancialStatus",
+                record.Id,
+                null,
+                $"Updated financial status for invoice {cleanInvoiceNumber}: Status={record.CurrentStatus}, PaymentStatus={record.PaymentStatus}, Balance=₱{record.OutstandingBalance:N2}.",
+                "FomsIntegration");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for financial status record {RecordId}", record.Id);
+        }
 
         return ApiResponseDTO<bool>.Success(true, "Payment status recorded successfully");
     }
@@ -631,8 +820,10 @@ public class FomsIntegrationService : IFomsIntegrationService
 
     /// <summary>
     /// Aggregated client balances and invoice metrics for the STARS dashboard (FR-038).
+    /// Supports role-based scoping (Coordinators see managed accounts, Managers/API see company-wide).
     /// </summary>
-    public async Task<ApiResponseDTO<FomsDashboardFinancialSummaryDTO>> GetDashboardFinancialSummaryAsync()
+    public async Task<ApiResponseDTO<FomsDashboardFinancialSummaryDTO>> GetDashboardFinancialSummaryAsync(
+        Guid? requestingUserId = null, UserRole? role = null)
     {
         var records = await _db.FomsClientFinancialStatuses.ToListAsync();
 
@@ -714,6 +905,69 @@ public class FomsIntegrationService : IFomsIntegrationService
         }
         var taskInvoices = await _db.TaskFomsInvoiceDetails.ToListAsync();
         var overdueCollections = await _db.TaskFomsCollectionDetails.ToListAsync();
+        var generalFomsTasks = await _db.Tasks
+            .Where(t => t.Title.Contains("Endorsement") || t.Title.Contains("Collection") || t.Title.Contains("[FOMS"))
+            .ToListAsync();
+
+        // FR-011 / FR-010: Role-Based Scoping for Coordinators
+        if (role == UserRole.Coordinator && requestingUserId.HasValue)
+        {
+            var coordinatorId = requestingUserId.Value;
+
+            var managedTaskIds = await _db.Tasks
+                .Where(t => t.CreatedById == coordinatorId || t.Assignments.Any(a => a.AssignedUserId == coordinatorId))
+                .Select(t => t.Id)
+                .ToListAsync();
+
+            var managedTaskSet = new HashSet<Guid>(managedTaskIds);
+
+            var managedClientAccountIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var managedClientNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var managedInvoiceNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var managedInvoices = taskInvoices.Where(ti => managedTaskSet.Contains(ti.TaskId)).ToList();
+            foreach (var inv in managedInvoices)
+            {
+                if (!string.IsNullOrWhiteSpace(inv.ClientName)) managedClientNames.Add(inv.ClientName.Trim());
+                if (!string.IsNullOrWhiteSpace(inv.InvoiceNumber)) managedInvoiceNumbers.Add(inv.InvoiceNumber.Trim());
+            }
+
+            var managedCollections = overdueCollections.Where(oc => managedTaskSet.Contains(oc.TaskId)).ToList();
+            foreach (var col in managedCollections)
+            {
+                if (!string.IsNullOrWhiteSpace(col.ClientAccountId)) managedClientAccountIds.Add(col.ClientAccountId.Trim());
+                if (!string.IsNullOrWhiteSpace(col.ClientName)) managedClientNames.Add(col.ClientName.Trim());
+                if (!string.IsNullOrWhiteSpace(col.InvoiceNumber)) managedInvoiceNumbers.Add(col.InvoiceNumber.Trim());
+            }
+
+            var managedGeneral = generalFomsTasks.Where(gt => managedTaskSet.Contains(gt.Id)).ToList();
+            foreach (var gt in managedGeneral)
+            {
+                var titleParts = gt.Title.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+                if (titleParts.Length > 1) managedClientNames.Add(titleParts[^1].Trim());
+
+                var desc = gt.Description ?? "";
+                var invoiceMatch = System.Text.RegularExpressions.Regex.Match(desc, @"(?:Invoice|invoice):\s*([A-Za-z0-9-]+)");
+                var invNo = invoiceMatch.Success ? invoiceMatch.Groups[1].Value.Trim() : (System.Text.RegularExpressions.Regex.Match(gt.Title, @"(?:Invoice|INV-)\s*([A-Za-z0-9-]+)").Groups[1].Value.Trim());
+                if (!string.IsNullOrEmpty(invNo)) managedInvoiceNumbers.Add(invNo);
+            }
+
+            bool IsManaged(string? accountId, string? clientName, string? invoiceNo)
+            {
+                if (!string.IsNullOrWhiteSpace(accountId) && managedClientAccountIds.Contains(accountId.Trim()))
+                    return true;
+                if (!string.IsNullOrWhiteSpace(clientName) && managedClientNames.Contains(clientName.Trim()))
+                    return true;
+                if (!string.IsNullOrWhiteSpace(invoiceNo) && managedInvoiceNumbers.Contains(invoiceNo.Trim()))
+                    return true;
+                return false;
+            }
+
+            records = records.Where(r => IsManaged(r.ClientAccountId, r.ClientName, r.InvoiceNumber)).ToList();
+            taskInvoices = taskInvoices.Where(ti => managedTaskSet.Contains(ti.TaskId) || IsManaged(null, ti.ClientName, ti.InvoiceNumber)).ToList();
+            overdueCollections = overdueCollections.Where(oc => managedTaskSet.Contains(oc.TaskId) || IsManaged(oc.ClientAccountId, oc.ClientName, oc.InvoiceNumber)).ToList();
+            generalFomsTasks = managedGeneral;
+        }
 
         var clientMap = new Dictionary<string, FomsClientFinancialSummaryItemDTO>(StringComparer.OrdinalIgnoreCase);
 
@@ -758,7 +1012,10 @@ public class FomsIntegrationService : IFomsIntegrationService
             var isOverdue = inv.DueDate.HasValue && inv.DueDate.Value < DateTime.UtcNow && inv.EndorsementStatus != "Completed";
             var balance = inv.EndorsementStatus == "Completed" ? 0m : inv.InvoiceAmount;
 
-            if (!clientMap.TryGetValue(key, out var item))
+            var item = clientMap.Values.FirstOrDefault(v =>
+                string.Equals(v.ClientName, inv.ClientName, StringComparison.OrdinalIgnoreCase));
+
+            if (item == null && !clientMap.TryGetValue(key, out item))
             {
                 item = new FomsClientFinancialSummaryItemDTO
                 {
@@ -789,7 +1046,11 @@ public class FomsIntegrationService : IFomsIntegrationService
             var key = !string.IsNullOrWhiteSpace(col.ClientAccountId) ? col.ClientAccountId : col.ClientName;
             if (string.IsNullOrWhiteSpace(key)) continue;
 
-            if (!clientMap.TryGetValue(key, out var item))
+            var item = clientMap.Values.FirstOrDefault(v =>
+                (!string.IsNullOrWhiteSpace(col.ClientAccountId) && string.Equals(v.ClientAccountId, col.ClientAccountId, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(col.ClientName) && string.Equals(v.ClientName, col.ClientName, StringComparison.OrdinalIgnoreCase)));
+
+            if (item == null && !clientMap.TryGetValue(key, out item))
             {
                 item = new FomsClientFinancialSummaryItemDTO
                 {
@@ -812,10 +1073,6 @@ public class FomsIntegrationService : IFomsIntegrationService
         }
 
         // Incorporate general tasks matching Endorsement or Collection Follow-up
-        var generalFomsTasks = await _db.Tasks
-            .Where(t => t.Title.Contains("Endorsement") || t.Title.Contains("Collection") || t.Title.Contains("[FOMS"))
-            .ToListAsync();
-
         foreach (var gt in generalFomsTasks)
         {
             if (taskInvoices.Any(ti => ti.TaskId == gt.Id) || overdueCollections.Any(oc => oc.TaskId == gt.Id))
@@ -832,7 +1089,10 @@ public class FomsIntegrationService : IFomsIntegrationService
             var isCompleted = gt.Status == Models.Enums.TaskStatus.Completed;
             var isOverdue = !isCompleted && gt.Deadline < DateTime.UtcNow;
 
-            if (!clientMap.TryGetValue(clientName, out var item))
+            var item = clientMap.Values.FirstOrDefault(v =>
+                string.Equals(v.ClientName, clientName, StringComparison.OrdinalIgnoreCase));
+
+            if (item == null && !clientMap.TryGetValue(clientName, out item))
             {
                 item = new FomsClientFinancialSummaryItemDTO
                 {

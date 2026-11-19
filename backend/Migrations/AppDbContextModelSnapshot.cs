@@ -633,6 +633,10 @@ namespace Backend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AgingBucket")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<decimal>("AmountPaid")
                         .HasColumnType("decimal(18,2)");
 
@@ -651,10 +655,18 @@ namespace Backend.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("DueStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("InvoiceNumber")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("InvoiceStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("LastPaymentDate")
                         .HasColumnType("timestamp with time zone");
@@ -667,6 +679,10 @@ namespace Backend.Migrations
 
                     b.Property<decimal>("OutstandingBalance")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PaymentStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("decimal(18,2)");

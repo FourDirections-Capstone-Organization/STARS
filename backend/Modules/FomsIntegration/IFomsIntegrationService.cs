@@ -33,8 +33,10 @@ public interface IFomsIntegrationService
 
     /// <summary>
     /// Aggregated client balances and invoice metrics for the STARS dashboard (FR-038).
+    /// Supports role-based scoping (Coordinators see managed accounts, Managers/API see company-wide).
     /// </summary>
-    Task<ApiResponseDTO<FomsDashboardFinancialSummaryDTO>> GetDashboardFinancialSummaryAsync();
+    Task<ApiResponseDTO<FomsDashboardFinancialSummaryDTO>> GetDashboardFinancialSummaryAsync(
+        Guid? requestingUserId = null, Backend.Models.Enums.UserRole? role = null);
 
     /// <summary>
     /// Retrieves the FOMS endorsement details linked to a STARS task.

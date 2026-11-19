@@ -29,6 +29,18 @@ public class FomsClientFinancialStatus
     [MaxLength(50)]
     public string CurrentStatus { get; set; } = string.Empty;
 
+    [MaxLength(50)]
+    public string? InvoiceStatus { get; set; }
+
+    [MaxLength(50)]
+    public string? PaymentStatus { get; set; }
+
+    [MaxLength(50)]
+    public string? AgingBucket { get; set; }
+
+    [MaxLength(50)]
+    public string? DueStatus { get; set; }
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalAmount { get; set; }
 

@@ -112,9 +112,34 @@ public class FomsPaymentStatusDTO
     /// <summary>
     /// Current invoice/payment status: Draft, Approved, Sent, Overdue, Paid.
     /// </summary>
-    [Required]
     [MaxLength(50)]
     public string CurrentStatus { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Document/Invoice status: Sent, Received, Approved, Disputed, etc.
+    /// </summary>
+    [MaxLength(50)]
+    public string? InvoiceStatus { get; set; }
+
+    /// <summary>
+    /// Strict payment state per FR-039: "Unpaid" or "Paid"
+    /// </summary>
+    [MaxLength(50)]
+    public string? PaymentStatus { get; set; }
+
+    /// <summary>
+    /// Due indicator: "Normal", "Due Soon", "Overdue", "Disputed"
+    /// </summary>
+    [MaxLength(50)]
+    public string? DueStatus { get; set; }
+
+    /// <summary>
+    /// Aging bracket: "Not Yet Due", "Due Soon", "Current", "1-30", "31-60", "61-90", "90+"
+    /// </summary>
+    [MaxLength(50)]
+    public string? AgingBucket { get; set; }
+
+    public DateTime? DueDate { get; set; }
 
     public decimal TotalAmount { get; set; }
 
