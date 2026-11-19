@@ -104,6 +104,26 @@ public class FomsIntegrationService : IFomsIntegrationService
             });
         }
 
+        // Inactive Account Gate Enforcement: Block new client-linked tasks if client is Inactive
+        if (!string.IsNullOrWhiteSpace(dto.ClientAccountId))
+        {
+            var clientAccount = await _db.FomsClientAccounts
+                .FirstOrDefaultAsync(c => c.ClientAccountId == dto.ClientAccountId.Trim());
+            if (clientAccount != null && string.Equals(clientAccount.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponseDTO<FomsEndorsementResponseDTO>.Failure($"Client account '{dto.ClientAccountId.Trim()}' is inactive. Cannot create new tasks for inactive clients.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.ClientName))
+        {
+            var clientAccount = await _db.FomsClientAccounts
+                .FirstOrDefaultAsync(c => c.ClientName == dto.ClientName.Trim());
+            if (clientAccount != null && string.Equals(clientAccount.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponseDTO<FomsEndorsementResponseDTO>.Failure($"Client account '{dto.ClientName.Trim()}' is inactive. Cannot create new tasks for inactive clients.");
+            }
+        }
+
         // Determine creator/manager user
         var defaultCreatorId = await _db.Users
             .Where(u => u.Role == UserRole.Manager || u.Role == UserRole.Coordinator)
@@ -724,6 +744,26 @@ public class FomsIntegrationService : IFomsIntegrationService
                 Status = existingActiveCollection.Task.Status.ToString(),
                 Message = "Active collection follow-up task already exists in STARS; duplicate remark appended (FR-044)."
             });
+        }
+
+        // Inactive Account Gate Enforcement: Block new collection tasks if client is Inactive
+        if (!string.IsNullOrWhiteSpace(dto.ClientAccountId))
+        {
+            var clientAccount = await _db.FomsClientAccounts
+                .FirstOrDefaultAsync(c => c.ClientAccountId == dto.ClientAccountId.Trim());
+            if (clientAccount != null && string.Equals(clientAccount.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponseDTO<FomsEndorsementResponseDTO>.Failure($"Client account '{dto.ClientAccountId.Trim()}' is inactive. Cannot create new tasks for inactive clients.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.ClientName))
+        {
+            var clientAccount = await _db.FomsClientAccounts
+                .FirstOrDefaultAsync(c => c.ClientName == dto.ClientName.Trim());
+            if (clientAccount != null && string.Equals(clientAccount.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponseDTO<FomsEndorsementResponseDTO>.Failure($"Client account '{dto.ClientName.Trim()}' is inactive. Cannot create new tasks for inactive clients.");
+            }
         }
 
         // Determine priority based on aging status and overdue duration
@@ -1627,6 +1667,364 @@ public class FomsIntegrationService : IFomsIntegrationService
             _logger.LogError(ex, "Exception while synchronizing password for {EmployeeId} to FOMS", employeeId);
             return ApiResponseDTO<bool>.Failure($"FOMS password sync error: {ex.Message}");
         }
+    }
+
+    // ─── Integration 4: Client Account Sync Implementation ──────────────────────
+
+    /// <summary>
+    /// Integration 4 (FOMS → STARS): Processes real-time client account synchronization webhook.
+    /// Idempotent upsert matching on ClientAccountId. Resolves AccountHandler and dispatches alerts for unmatched handlers or invalid payloads.
+    /// </summary>
+    public async Task<ApiResponseDTO<FomsClientAccountResponseDTO>> ProcessClientSyncWebhookAsync(FomsClientSyncDTO dto)
+    {
+        if (dto == null || string.IsNullOrWhiteSpace(dto.ClientAccountId) || string.IsNullOrWhiteSpace(dto.ClientName))
+        {
+            var errorMsg = "ClientAccountId and ClientName are required.";
+
+            // FR-046: Audit log for rejected malformed payload
+            try
+            {
+                await _auditLogService.LogAsync(
+                    null,
+                    AuditActionType.Create,
+                    "FomsClientAccount",
+                    Guid.Empty,
+                    null,
+                    $"Rejected malformed client sync payload from FOMS: {errorMsg}",
+                    "FomsIntegration");
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "Failed to write audit log for malformed client sync payload");
+            }
+
+            // FR-033: Dispatches in-app notification alert to the STARS Manager
+            await NotifyManagersAsync(
+                "Client Sync Payload Rejected",
+                $"FOMS client sync rejected due to validation failure: {errorMsg}");
+
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure(errorMsg);
+        }
+
+        var cleanAccountId = dto.ClientAccountId.Trim();
+        var client = await _db.FomsClientAccounts
+            .Include(c => c.AssignedCoordinator)
+            .Include(c => c.AccountHandlerUser)
+            .FirstOrDefaultAsync(c => c.ClientAccountId == cleanAccountId);
+
+        bool isNew = (client == null);
+
+        // Account Handler matching against STARS employee registry
+        Guid? matchedUserId = null;
+        string? empNo = string.IsNullOrWhiteSpace(dto.AccountHandler) ? null : dto.AccountHandler.Trim();
+
+        if (!string.IsNullOrWhiteSpace(empNo))
+        {
+            var handlerUser = await _db.Users.FirstOrDefaultAsync(u => u.EmployeeNumber.ToLower() == empNo.ToLower());
+            if (handlerUser != null)
+            {
+                matchedUserId = handlerUser.Id;
+            }
+            else
+            {
+                matchedUserId = null;
+                _logger.LogWarning("Account handler employee number {EmpNo} not found in STARS for client {ClientAccountId}", empNo, cleanAccountId);
+
+                // FR-033: Dispatches in-app notification alert to STARS Manager
+                await NotifyManagersAsync(
+                    "Unmatched FOMS Account Handler",
+                    $"Client account '{cleanAccountId}' ({dto.ClientName.Trim()}) was synchronized with Account Handler '{empNo}', but no matching employee was found in STARS.");
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var syncTimestamp = ToUtc(dto.LastUpdatedTimestamp) ?? now;
+        var status = !string.IsNullOrWhiteSpace(dto.Status) ? dto.Status.Trim() : "Active";
+
+        if (isNew)
+        {
+            client = new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = cleanAccountId,
+                ClientName = dto.ClientName.Trim(),
+                ContactPerson = dto.ContactPerson?.Trim(),
+                ContactNumber = dto.ContactNumber?.Trim(),
+                Email = dto.Email?.Trim(),
+                Address = dto.Address?.Trim(),
+                AccountHandlerEmployeeNumber = empNo,
+                AccountHandlerUserId = matchedUserId,
+                Status = status,
+                AssignedCoordinatorId = null, // Newly synchronized client accounts appear in STARS as unassigned
+                LastSyncedAt = syncTimestamp,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _db.FomsClientAccounts.Add(client);
+        }
+        else
+        {
+            client.ClientName = dto.ClientName.Trim();
+            client.ContactPerson = dto.ContactPerson?.Trim();
+            client.ContactNumber = dto.ContactNumber?.Trim();
+            client.Email = dto.Email?.Trim();
+            client.Address = dto.Address?.Trim();
+            client.AccountHandlerEmployeeNumber = empNo;
+            client.AccountHandlerUserId = matchedUserId;
+            client.Status = status;
+            // Preserves existing AssignedCoordinatorId
+            client.LastSyncedAt = syncTimestamp;
+            client.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // FR-046: Audit log record
+        try
+        {
+            await _auditLogService.LogAsync(
+                null,
+                isNew ? AuditActionType.Create : AuditActionType.Update,
+                "FomsClientAccount",
+                client.Id,
+                null,
+                $"{(isNew ? "Created" : "Updated")} client account {client.ClientAccountId} ({client.ClientName}) via FOMS sync.",
+                "FomsIntegration");
+        }
+        catch (Exception logEx)
+        {
+            _logger.LogWarning(logEx, "Failed to write audit log for client sync {ClientAccountId}", client.ClientAccountId);
+        }
+
+        var responseDto = await MapClientAccountResponseAsync(client);
+        return ApiResponseDTO<FomsClientAccountResponseDTO>.Success(responseDto, $"Client account {client.ClientAccountId} synchronized successfully.");
+    }
+
+    /// <summary>
+    /// Integration 4 (FOMS → STARS): Processes bulk client account synchronization webhook (full load).
+    /// </summary>
+    public async Task<ApiResponseDTO<int>> ProcessClientBatchSyncWebhookAsync(FomsClientBatchSyncDTO dto)
+    {
+        if (dto?.Clients == null || dto.Clients.Count == 0)
+            return ApiResponseDTO<int>.Failure("No client records provided in batch.");
+
+        int syncedCount = 0;
+        foreach (var clientDto in dto.Clients)
+        {
+            var res = await ProcessClientSyncWebhookAsync(clientDto);
+            if (res.IsSuccess)
+            {
+                syncedCount++;
+            }
+        }
+
+        return ApiResponseDTO<int>.Success(syncedCount, $"Batch synchronization completed. {syncedCount} of {dto.Clients.Count} client accounts synchronized.");
+    }
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Manager assigns a Coordinator to manage a synchronized client account (FR-011).
+    /// </summary>
+    public async Task<ApiResponseDTO<FomsClientAccountResponseDTO>> AssignClientCoordinatorAsync(string clientAccountId, Guid coordinatorId, Guid managerUserId)
+    {
+        if (string.IsNullOrWhiteSpace(clientAccountId))
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure("ClientAccountId is required.");
+
+        var client = await _db.FomsClientAccounts
+            .Include(c => c.AssignedCoordinator)
+            .Include(c => c.AccountHandlerUser)
+            .FirstOrDefaultAsync(c => c.ClientAccountId == clientAccountId.Trim());
+
+        if (client == null)
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure($"Client account '{clientAccountId}' not found.");
+
+        var coordinator = await _db.Users.FindAsync(coordinatorId);
+        if (coordinator == null)
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure("Coordinator not found.");
+
+        client.AssignedCoordinatorId = coordinatorId;
+        client.AssignedCoordinator = coordinator;
+        client.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        // FR-046: Audit log
+        try
+        {
+            var coordName = (!string.IsNullOrWhiteSpace(coordinator.FirstName) || !string.IsNullOrWhiteSpace(coordinator.LastName))
+                ? $"{coordinator.FirstName} {coordinator.LastName}".Trim()
+                : coordinator.Username;
+
+            await _auditLogService.LogAsync(
+                managerUserId,
+                AuditActionType.Update,
+                "FomsClientAccount",
+                client.Id,
+                null,
+                $"Assigned coordinator {coordName} ({coordinator.EmployeeNumber}) to client {client.ClientAccountId}.",
+                "FomsIntegration");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for coordinator assignment on {ClientAccountId}", client.ClientAccountId);
+        }
+
+        // FR-033: In-app notification to the assigned Coordinator
+        try
+        {
+            await _notificationService.SendNotificationAsync(
+                coordinatorId,
+                NotificationType.TaskAssigned,
+                "Client Account Assigned",
+                $"You have been assigned as managing Coordinator for client {client.ClientAccountId} ({client.ClientName}).",
+                null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send assignment notification to coordinator {CoordinatorId}", coordinatorId);
+        }
+
+        var responseDto = await MapClientAccountResponseAsync(client);
+        return ApiResponseDTO<FomsClientAccountResponseDTO>.Success(responseDto, "Coordinator assigned successfully.");
+    }
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Retrieves client accounts with role-based scoping (Manager sees all, Coordinator sees assigned).
+    /// </summary>
+    public async Task<ApiResponseDTO<List<FomsClientAccountResponseDTO>>> GetClientAccountsAsync(UserRole role, Guid? userId)
+    {
+        IQueryable<FomsClientAccount> query = _db.FomsClientAccounts
+            .Include(c => c.AccountHandlerUser)
+            .Include(c => c.AssignedCoordinator);
+
+        // FR-011, FR-010: Coordinators see only their assigned clients
+        if (role == UserRole.Coordinator && userId.HasValue && userId.Value != Guid.Empty)
+        {
+            query = query.Where(c => c.AssignedCoordinatorId == userId.Value);
+        }
+        // FR-012: Managers (and Directors/Admins/SuperAdmins) see all clients
+
+        var list = await query.OrderBy(c => c.ClientName).ToListAsync();
+        var resultList = new List<FomsClientAccountResponseDTO>();
+        foreach (var client in list)
+        {
+            resultList.Add(await MapClientAccountResponseAsync(client));
+        }
+
+        return ApiResponseDTO<List<FomsClientAccountResponseDTO>>.Success(resultList);
+    }
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Retrieves a single client account with role-based scoping.
+    /// </summary>
+    public async Task<ApiResponseDTO<FomsClientAccountResponseDTO>> GetClientAccountByIdAsync(string clientAccountId, UserRole role, Guid? userId)
+    {
+        if (string.IsNullOrWhiteSpace(clientAccountId))
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure("ClientAccountId is required.");
+
+        var client = await _db.FomsClientAccounts
+            .Include(c => c.AccountHandlerUser)
+            .Include(c => c.AssignedCoordinator)
+            .FirstOrDefaultAsync(c => c.ClientAccountId == clientAccountId.Trim());
+
+        if (client == null)
+            return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure($"Client account '{clientAccountId}' not found.");
+
+        // Scoping check for Coordinator (FR-011)
+        if (role == UserRole.Coordinator && userId.HasValue && userId.Value != Guid.Empty)
+        {
+            if (client.AssignedCoordinatorId != userId.Value)
+            {
+                return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure("Access denied. This client is not assigned to you.");
+            }
+        }
+
+        var result = await MapClientAccountResponseAsync(client);
+        return ApiResponseDTO<FomsClientAccountResponseDTO>.Success(result);
+    }
+
+    private async System.Threading.Tasks.Task NotifyManagersAsync(string title, string message)
+    {
+        try
+        {
+            var managers = await _db.Users
+                .Where(u => u.Role == UserRole.Manager && u.IsActive && !u.IsDeactivated)
+                .ToListAsync();
+
+            if (managers.Count == 0)
+            {
+                managers = await _db.Users
+                    .Where(u => u.Role == UserRole.Manager)
+                    .ToListAsync();
+            }
+
+            foreach (var manager in managers)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        manager.Id,
+                        NotificationType.TaskUpdated,
+                        title,
+                        message,
+                        null);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send notification to manager {ManagerId}", manager.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to query managers for notification: {Title}", title);
+        }
+    }
+
+    private async Task<FomsClientAccountResponseDTO> MapClientAccountResponseAsync(FomsClientAccount client)
+    {
+        string? handlerName = null;
+        if (client.AccountHandlerUserId.HasValue)
+        {
+            var handler = client.AccountHandlerUser ?? await _db.Users.FindAsync(client.AccountHandlerUserId.Value);
+            if (handler != null)
+            {
+                handlerName = (!string.IsNullOrWhiteSpace(handler.FirstName) || !string.IsNullOrWhiteSpace(handler.LastName))
+                    ? $"{handler.FirstName} {handler.LastName}".Trim()
+                    : handler.Username;
+            }
+        }
+
+        string? coordinatorName = null;
+        if (client.AssignedCoordinatorId.HasValue)
+        {
+            var coord = client.AssignedCoordinator ?? await _db.Users.FindAsync(client.AssignedCoordinatorId.Value);
+            if (coord != null)
+            {
+                coordinatorName = (!string.IsNullOrWhiteSpace(coord.FirstName) || !string.IsNullOrWhiteSpace(coord.LastName))
+                    ? $"{coord.FirstName} {coord.LastName}".Trim()
+                    : coord.Username;
+            }
+        }
+
+        return new FomsClientAccountResponseDTO
+        {
+            Id = client.Id,
+            ClientAccountId = client.ClientAccountId,
+            ClientName = client.ClientName,
+            ContactPerson = client.ContactPerson,
+            ContactNumber = client.ContactNumber,
+            Email = client.Email,
+            Address = client.Address,
+            AccountHandlerEmployeeNumber = client.AccountHandlerEmployeeNumber,
+            AccountHandlerUserId = client.AccountHandlerUserId,
+            AccountHandlerName = handlerName,
+            Status = client.Status,
+            AssignedCoordinatorId = client.AssignedCoordinatorId,
+            AssignedCoordinatorName = coordinatorName,
+            LastSyncedAt = client.LastSyncedAt,
+            CreatedAt = client.CreatedAt,
+            UpdatedAt = client.UpdatedAt
+        };
     }
 
     private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];

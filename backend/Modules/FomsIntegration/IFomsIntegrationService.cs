@@ -79,5 +79,31 @@ public interface IFomsIntegrationService
     /// Synchronizes a user's updated password to FOMS.
     /// </summary>
     Task<ApiResponseDTO<bool>> SyncPasswordAsync(string employeeId, string newPassword);
+
+    /// <summary>
+    /// Integration 4 (FOMS → STARS): Processes real-time client account synchronization webhook.
+    /// Idempotent upsert matching on ClientAccountId. Resolves AccountHandler and dispatches alerts for unmatched handlers or invalid payloads.
+    /// </summary>
+    Task<ApiResponseDTO<FomsClientAccountResponseDTO>> ProcessClientSyncWebhookAsync(FomsClientSyncDTO dto);
+
+    /// <summary>
+    /// Integration 4 (FOMS → STARS): Processes bulk client account synchronization webhook (full load).
+    /// </summary>
+    Task<ApiResponseDTO<int>> ProcessClientBatchSyncWebhookAsync(FomsClientBatchSyncDTO dto);
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Manager assigns a Coordinator to manage a synchronized client account (FR-011).
+    /// </summary>
+    Task<ApiResponseDTO<FomsClientAccountResponseDTO>> AssignClientCoordinatorAsync(string clientAccountId, Guid coordinatorId, Guid managerUserId);
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Retrieves client accounts with role-based scoping (Manager sees all, Coordinator sees assigned).
+    /// </summary>
+    Task<ApiResponseDTO<List<FomsClientAccountResponseDTO>>> GetClientAccountsAsync(Backend.Models.Enums.UserRole role, Guid? userId);
+
+    /// <summary>
+    /// Integration 4 (STARS Internal): Retrieves a single client account with role-based scoping.
+    /// </summary>
+    Task<ApiResponseDTO<FomsClientAccountResponseDTO>> GetClientAccountByIdAsync(string clientAccountId, Backend.Models.Enums.UserRole role, Guid? userId);
 }
 

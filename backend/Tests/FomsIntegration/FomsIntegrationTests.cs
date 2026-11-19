@@ -938,4 +938,412 @@ public class FomsIntegrationTests : IDisposable
             It.Is<string>(msg => msg.Contains("could not be synced to FOMS")),
             task.Id), Times.Once);
     }
+
+    // ─── Integration 4: Client Account Sync Tests ─────────────────────────────
+
+    [Fact]
+    public async Task ProcessClientSyncWebhookAsync_NewClient_CreatesRecordAsUnassigned()
+    {
+        var service = CreateService();
+
+        var syncDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "CLI-TEST-001",
+            ClientName = "Acme Logistics Inc.",
+            ContactPerson = "John Doe",
+            ContactNumber = "09171234567",
+            Email = "john.doe@acme.com",
+            Address = "100 Logistics Way, Pasig City",
+            Status = "Active"
+        };
+
+        var result = await service.ProcessClientSyncWebhookAsync(syncDto);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal("CLI-TEST-001", result.Data.ClientAccountId);
+        Assert.Null(result.Data.AssignedCoordinatorId); // Newly created are Unassigned
+        Assert.Equal("Active", result.Data.Status);
+
+        var saved = await _db.FomsClientAccounts.FirstOrDefaultAsync(c => c.ClientAccountId == "CLI-TEST-001");
+        Assert.NotNull(saved);
+        Assert.Null(saved.AssignedCoordinatorId);
+        Assert.Equal("Acme Logistics Inc.", saved.ClientName);
+    }
+
+    [Fact]
+    public async Task ProcessClientSyncWebhookAsync_DuplicatePayload_UpdatesIdempotentlyWithoutDuplication()
+    {
+        var service = CreateService();
+
+        var initialDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "CLI-IDEMP-001",
+            ClientName = "Beta Enterprise",
+            ContactPerson = "Original Contact",
+            Status = "Active"
+        };
+        await service.ProcessClientSyncWebhookAsync(initialDto);
+
+        // Assign a coordinator
+        var manager = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "MGR-001",
+            Email = "mgr@speedex.com",
+            Username = "mgr",
+            FirstName = "Manager",
+            LastName = "Boss",
+            Role = UserRole.Manager,
+            PasswordHash = "hash"
+        };
+        var coord = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COR-001",
+            Email = "cor@speedex.com",
+            Username = "cor",
+            FirstName = "Coord",
+            LastName = "One",
+            Role = UserRole.Coordinator,
+            PasswordHash = "hash"
+        };
+        _db.Users.AddRange(manager, coord);
+        await _db.SaveChangesAsync();
+
+        await service.AssignClientCoordinatorAsync("CLI-IDEMP-001", coord.Id, manager.Id);
+
+        // Send updated sync
+        var updateDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "CLI-IDEMP-001",
+            ClientName = "Beta Enterprise Updated",
+            ContactPerson = "New Contact Person",
+            Status = "Active"
+        };
+        var updateResult = await service.ProcessClientSyncWebhookAsync(updateDto);
+
+        Assert.True(updateResult.IsSuccess);
+        var count = await _db.FomsClientAccounts.CountAsync(c => c.ClientAccountId == "CLI-IDEMP-001");
+        Assert.Equal(1, count); // No duplicate records created!
+
+        var updated = await _db.FomsClientAccounts.FirstOrDefaultAsync(c => c.ClientAccountId == "CLI-IDEMP-001");
+        Assert.NotNull(updated);
+        Assert.Equal("Beta Enterprise Updated", updated.ClientName);
+        Assert.Equal("New Contact Person", updated.ContactPerson);
+        Assert.Equal(coord.Id, updated.AssignedCoordinatorId); // Preserved coordinator assignment!
+    }
+
+    [Fact]
+    public async Task ProcessClientSyncWebhookAsync_ValidAccountHandler_MatchesStarsUser()
+    {
+        var service = CreateService();
+
+        var handlerUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-MATCH-001",
+            Email = "handler@speedex.com",
+            Username = "handler",
+            FirstName = "Handler",
+            LastName = "User",
+            Role = UserRole.Coordinator,
+            PasswordHash = "hash"
+        };
+        _db.Users.Add(handlerUser);
+        await _db.SaveChangesAsync();
+
+        var syncDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "CLI-HANDLER-001",
+            ClientName = "Gamma Corp",
+            AccountHandler = "EMP-MATCH-001",
+            Status = "Active"
+        };
+
+        var result = await service.ProcessClientSyncWebhookAsync(syncDto);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(handlerUser.Id, result.Data!.AccountHandlerUserId);
+        Assert.Equal("EMP-MATCH-001", result.Data.AccountHandlerEmployeeNumber);
+    }
+
+    [Fact]
+    public async Task ProcessClientSyncWebhookAsync_InvalidAccountHandler_LeavesBlankAndNotifiesManager()
+    {
+        var service = CreateService();
+
+        var manager = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "MGR-NOTIF-001",
+            Email = "manager.alert@speedex.com",
+            Username = "mgralert",
+            FirstName = "Manager",
+            LastName = "Alert",
+            Role = UserRole.Manager,
+            PasswordHash = "hash"
+        };
+        _db.Users.Add(manager);
+        await _db.SaveChangesAsync();
+
+        var syncDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "CLI-UNMATCHED-001",
+            ClientName = "Delta Services",
+            AccountHandler = "NON-EXISTENT-EMP-999",
+            Status = "Active"
+        };
+
+        var result = await service.ProcessClientSyncWebhookAsync(syncDto);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Data!.AccountHandlerUserId);
+        Assert.Equal("NON-EXISTENT-EMP-999", result.Data.AccountHandlerEmployeeNumber);
+
+        // Dispatched in-app notification alert to the Manager (FR-033)
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            manager.Id,
+            NotificationType.TaskUpdated,
+            "Unmatched FOMS Account Handler",
+            It.Is<string>(msg => msg.Contains("NON-EXISTENT-EMP-999")),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task AssignClientCoordinatorAsync_ManagerAssignsCoordinator_SuccessfullyUpdates()
+    {
+        var service = CreateService();
+
+        var manager = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "MGR-ASSIGN-01",
+            Email = "mgr.assign@speedex.com",
+            Username = "mrgassign",
+            FirstName = "Manager",
+            LastName = "Lead",
+            Role = UserRole.Manager,
+            PasswordHash = "hash"
+        };
+        var coordinator = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COR-ASSIGN-01",
+            Email = "coord.assign@speedex.com",
+            Username = "coordassign",
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = UserRole.Coordinator,
+            PasswordHash = "hash"
+        };
+        _db.Users.AddRange(manager, coordinator);
+
+        var client = new FomsClientAccount
+        {
+            Id = Guid.NewGuid(),
+            ClientAccountId = "CLI-ASSIGN-001",
+            ClientName = "Epsilon Retail Inc.",
+            Status = "Active",
+            AssignedCoordinatorId = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _db.FomsClientAccounts.Add(client);
+        await _db.SaveChangesAsync();
+
+        var result = await service.AssignClientCoordinatorAsync("CLI-ASSIGN-001", coordinator.Id, manager.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(coordinator.Id, result.Data!.AssignedCoordinatorId);
+        Assert.Equal("Maria Santos", result.Data.AssignedCoordinatorName);
+
+        // Verification of database update
+        var updated = await _db.FomsClientAccounts.FirstOrDefaultAsync(c => c.ClientAccountId == "CLI-ASSIGN-001");
+        Assert.NotNull(updated);
+        Assert.Equal(coordinator.Id, updated.AssignedCoordinatorId);
+
+        // Verification of in-app notification to assigned coordinator (FR-033)
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordinator.Id,
+            NotificationType.TaskAssigned,
+            "Client Account Assigned",
+            It.Is<string>(msg => msg.Contains("CLI-ASSIGN-001")),
+            null), Times.Once);
+
+        // Verification of AuditLog record (FR-046)
+        _mockAudit.Verify(a => a.LogAsync(
+            manager.Id,
+            AuditActionType.Update,
+            "FomsClientAccount",
+            client.Id,
+            null,
+            It.Is<string>(desc => desc.Contains("Maria Santos")),
+            "FomsIntegration",
+            null,
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetClientAccountsAsync_CoordinatorRole_ScopesToAssignedClientsOnly_FR011()
+    {
+        var service = CreateService();
+
+        var coord1 = Guid.NewGuid();
+        var coord2 = Guid.NewGuid();
+
+        _db.FomsClientAccounts.AddRange(
+            new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = "CLI-SCOPE-1",
+                ClientName = "Client 1 for Coord 1",
+                AssignedCoordinatorId = coord1,
+                Status = "Active"
+            },
+            new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = "CLI-SCOPE-2",
+                ClientName = "Client 2 for Coord 2",
+                AssignedCoordinatorId = coord2,
+                Status = "Active"
+            },
+            new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = "CLI-SCOPE-3",
+                ClientName = "Client 3 Unassigned",
+                AssignedCoordinatorId = null,
+                Status = "Active"
+            }
+        );
+        await _db.SaveChangesAsync();
+
+        var result = await service.GetClientAccountsAsync(UserRole.Coordinator, coord1);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Data!);
+        Assert.Equal("CLI-SCOPE-1", result.Data![0].ClientAccountId);
+    }
+
+    [Fact]
+    public async Task GetClientAccountsAsync_ManagerRole_SeesAllClients_FR012()
+    {
+        var service = CreateService();
+
+        var coord1 = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+
+        _db.FomsClientAccounts.AddRange(
+            new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = "CLI-MGR-1",
+                ClientName = "Client Alpha",
+                AssignedCoordinatorId = coord1,
+                Status = "Active"
+            },
+            new FomsClientAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientAccountId = "CLI-MGR-2",
+                ClientName = "Client Beta",
+                AssignedCoordinatorId = null,
+                Status = "Inactive"
+            }
+        );
+        await _db.SaveChangesAsync();
+
+        var result = await service.GetClientAccountsAsync(UserRole.Manager, managerId);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Data!.Count >= 2);
+        Assert.Contains(result.Data, c => c.ClientAccountId == "CLI-MGR-1");
+        Assert.Contains(result.Data, c => c.ClientAccountId == "CLI-MGR-2");
+    }
+
+    [Fact]
+    public async Task CreateEndorsementTaskAsync_InactiveClient_BlocksNewTaskCreation()
+    {
+        var service = CreateService();
+
+        var inactiveClient = new FomsClientAccount
+        {
+            Id = Guid.NewGuid(),
+            ClientAccountId = "CLI-INACTIVE-01",
+            ClientName = "Defunct Enterprises",
+            Status = "Inactive"
+        };
+        _db.FomsClientAccounts.Add(inactiveClient);
+        await _db.SaveChangesAsync();
+
+        var request = new FomsEndorsementRequestDTO
+        {
+            InvoiceNumber = "INV-BLOCKED-001",
+            ClientAccountId = "CLI-INACTIVE-01",
+            ClientName = "Defunct Enterprises",
+            InvoiceAmount = 50000m
+        };
+
+        var result = await service.CreateEndorsementTaskAsync(request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("inactive", result.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Verification that no task was created
+        var taskExists = await _db.Tasks.AnyAsync(t => t.Title.Contains("INV-BLOCKED-001"));
+        Assert.False(taskExists);
+    }
+
+    [Fact]
+    public async Task ProcessClientSyncWebhookAsync_MalformedPayload_RejectsAndNotifiesManager_FR046()
+    {
+        var service = CreateService();
+
+        var manager = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "MGR-MALFORMED",
+            Email = "manager.err@speedex.com",
+            Username = "mgrerr",
+            FirstName = "Manager",
+            LastName = "ErrorReceiver",
+            Role = UserRole.Manager,
+            PasswordHash = "hash"
+        };
+        _db.Users.Add(manager);
+        await _db.SaveChangesAsync();
+
+        var invalidDto = new FomsClientSyncDTO
+        {
+            ClientAccountId = "", // Malformed: missing required ClientAccountId
+            ClientName = "Missing Account Id Corp"
+        };
+
+        var result = await service.ProcessClientSyncWebhookAsync(invalidDto);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("required", result.Message);
+
+        // Verification of Manager notification alert (FR-033)
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            manager.Id,
+            NotificationType.TaskUpdated,
+            "Client Sync Payload Rejected",
+            It.Is<string>(msg => msg.Contains("validation failure")),
+            null), Times.Once);
+
+        // Verification of AuditLog record (FR-046)
+        _mockAudit.Verify(a => a.LogAsync(
+            null,
+            AuditActionType.Create,
+            "FomsClientAccount",
+            Guid.Empty,
+            null,
+            It.Is<string>(desc => desc.Contains("Rejected malformed")),
+            "FomsIntegration",
+            null,
+            null), Times.Once);
+    }
 }

@@ -98,6 +98,26 @@ public static class DatabaseStartupDdl
         CREATE INDEX IF NOT EXISTS ""IX_TaskFomsCollectionDetails_InvoiceNumber"" ON ""TaskFomsCollectionDetails"" (""InvoiceNumber"");
         CREATE INDEX IF NOT EXISTS ""IX_TaskFomsCollectionDetails_ClientAccountId"" ON ""TaskFomsCollectionDetails"" (""ClientAccountId"");
 
+        CREATE TABLE IF NOT EXISTS ""FomsClientAccounts"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""ClientAccountId"" character varying(100) NOT NULL,
+            ""ClientName"" character varying(200) NOT NULL,
+            ""ContactPerson"" character varying(150) NULL,
+            ""ContactNumber"" character varying(50) NULL,
+            ""Email"" character varying(150) NULL,
+            ""Address"" character varying(500) NULL,
+            ""AccountHandlerEmployeeNumber"" character varying(50) NULL,
+            ""AccountHandlerUserId"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""Status"" character varying(50) NOT NULL DEFAULT 'Active',
+            ""AssignedCoordinatorId"" uuid NULL REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+            ""LastSyncedAt"" timestamp with time zone NOT NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_FomsClientAccounts_ClientAccountId"" ON ""FomsClientAccounts"" (""ClientAccountId"");
+        CREATE INDEX IF NOT EXISTS ""IX_FomsClientAccounts_AssignedCoordinatorId"" ON ""FomsClientAccounts"" (""AssignedCoordinatorId"");
+        CREATE INDEX IF NOT EXISTS ""IX_FomsClientAccounts_Status"" ON ""FomsClientAccounts"" (""Status"");
+
         CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
             ""MigrationId"" character varying(150) NOT NULL PRIMARY KEY,
             ""ProductVersion"" character varying(32) NOT NULL

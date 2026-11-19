@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.FomsIntegration;
 using Backend.Modules.RoleBasedAccessControl;
 
@@ -336,6 +337,58 @@ public class FomsIntegrationController : ControllerBase
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
+    /// <summary>
+    /// Integration 4: Retrieves synchronized client accounts with role-based scoping (Manager sees all, Coordinator sees assigned).
+    /// </summary>
+    [HttpGet("api/foms-integration/clients")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> GetClientAccounts()
+    {
+        var userId = GetUserId();
+        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        Enum.TryParse<UserRole>(roleStr, true, out var role);
+
+        var result = await _fomsService.GetClientAccountsAsync(role, userId);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Retrieves a specific client account profile with role-based scoping.
+    /// </summary>
+    [HttpGet("api/foms-integration/clients/{clientAccountId}")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> GetClientAccount(string clientAccountId)
+    {
+        var userId = GetUserId();
+        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        Enum.TryParse<UserRole>(roleStr, true, out var role);
+
+        var result = await _fomsService.GetClientAccountByIdAsync(clientAccountId, role, userId);
+        if (!result.IsSuccess)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                return NotFound(result);
+            if (result.Message.Contains("denied", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(403, result);
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Manager assigns a Coordinator to manage a synchronized FOMS client account (FR-011).
+    /// </summary>
+    [HttpPut("api/foms-integration/clients/{clientAccountId}/assign-coordinator")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    public async Task<IActionResult> AssignClientCoordinator(string clientAccountId, [FromBody] AssignClientCoordinatorDTO dto)
+    {
+        var managerUserId = GetUserId();
+        if (!managerUserId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token."));
+
+        var result = await _fomsService.AssignClientCoordinatorAsync(clientAccountId, dto.CoordinatorId, managerUserId.Value);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────
 
     /// <summary>
@@ -378,6 +431,36 @@ public class FomsIntegrationController : ControllerBase
         if (authError != null) return authError;
 
         var result = await _fomsService.ProcessOverdueAlertWebhookAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 4: FOMS pushes client account lifecycle updates (create/update/deactivate) to STARS.
+    /// Machine-to-machine endpoint guarded by pre-shared X-Api-Key.
+    /// </summary>
+    [HttpPost("api/integration/foms/client-sync")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveClientSync([FromBody] FomsClientSyncDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _fomsService.ProcessClientSyncWebhookAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Bulk/full load client account synchronization from FOMS to STARS.
+    /// Machine-to-machine endpoint guarded by pre-shared X-Api-Key.
+    /// </summary>
+    [HttpPost("api/integration/foms/client-sync/batch")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveClientBatchSync([FromBody] FomsClientBatchSyncDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _fomsService.ProcessClientBatchSyncWebhookAsync(dto);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 

@@ -31,6 +31,7 @@ public class AppDbContext : DbContext
     public DbSet<TaskFomsInvoiceDetail> TaskFomsInvoiceDetails => Set<TaskFomsInvoiceDetail>();
     public DbSet<FomsClientFinancialStatus> FomsClientFinancialStatuses => Set<FomsClientFinancialStatus>();
     public DbSet<TaskFomsCollectionDetail> TaskFomsCollectionDetails => Set<TaskFomsCollectionDetail>();
+    public DbSet<FomsClientAccount> FomsClientAccounts => Set<FomsClientAccount>();
     public DbSet<KpiConfiguration> KpiConfigurations => Set<KpiConfiguration>();
     public DbSet<KpiItem> KpiItems => Set<KpiItem>();
     public DbSet<EvaluationTemplate> EvaluationTemplates => Set<EvaluationTemplate>();
@@ -375,6 +376,34 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.InvoiceNumber).IsUnique();
             entity.HasIndex(e => e.ClientAccountId);
+        });
+
+        // FomsClientAccount Configuration
+        modelBuilder.Entity<FomsClientAccount>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ClientAccountId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ClientName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ContactPerson).HasMaxLength(150);
+            entity.Property(e => e.ContactNumber).HasMaxLength(50);
+            entity.Property(e => e.Email).HasMaxLength(150);
+            entity.Property(e => e.Address).HasMaxLength(500);
+            entity.Property(e => e.AccountHandlerEmployeeNumber).HasMaxLength(50);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+
+            entity.HasOne(c => c.AccountHandlerUser)
+                .WithMany()
+                .HasForeignKey(c => c.AccountHandlerUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.AssignedCoordinator)
+                .WithMany()
+                .HasForeignKey(c => c.AssignedCoordinatorId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ClientAccountId).IsUnique();
+            entity.HasIndex(e => e.AssignedCoordinatorId);
+            entity.HasIndex(e => e.Status);
         });
 
         // KpiConfiguration Configuration

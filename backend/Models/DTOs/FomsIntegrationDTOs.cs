@@ -331,3 +331,83 @@ public class TriggerCollectionOutcomeDTO
     public string? CoordinatorName { get; set; }
 }
 
+/// <summary>
+/// Webhook payload received from FOMS when a client account is created or updated (Integration 4).
+/// Financial details (rates, payment terms, billing schedules, balances) are strictly excluded.
+/// </summary>
+public class FomsClientSyncDTO
+{
+    [Required]
+    [MaxLength(100)]
+    public string ClientAccountId { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(200)]
+    public string ClientName { get; set; } = string.Empty;
+
+    [MaxLength(150)]
+    public string? ContactPerson { get; set; }
+
+    [MaxLength(50)]
+    public string? ContactNumber { get; set; }
+
+    [MaxLength(150)]
+    public string? Email { get; set; }
+
+    [MaxLength(500)]
+    public string? Address { get; set; }
+
+    [MaxLength(50)]
+    public string? AccountHandler { get; set; }
+
+    [Required]
+    [MaxLength(50)]
+    public string Status { get; set; } = "Active";
+
+    public DateTime? LastUpdatedTimestamp { get; set; }
+}
+
+/// <summary>
+/// Webhook payload received from FOMS for bulk/full load client synchronization (Integration 4).
+/// </summary>
+public class FomsClientBatchSyncDTO
+{
+    [Required]
+    public List<FomsClientSyncDTO> Clients { get; set; } = new();
+
+    public DateTime? BatchTimestamp { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Request payload for a STARS Manager assigning a Coordinator to a synchronized FOMS client account (FR-011).
+/// </summary>
+public class AssignClientCoordinatorDTO
+{
+    [Required]
+    public Guid CoordinatorId { get; set; }
+}
+
+/// <summary>
+/// Response representation of a synchronized FOMS client account in STARS.
+/// </summary>
+public class FomsClientAccountResponseDTO
+{
+    public Guid Id { get; set; }
+    public string ClientAccountId { get; set; } = string.Empty;
+    public string ClientName { get; set; } = string.Empty;
+    public string? ContactPerson { get; set; }
+    public string? ContactNumber { get; set; }
+    public string? Email { get; set; }
+    public string? Address { get; set; }
+    public string? AccountHandlerEmployeeNumber { get; set; }
+    public Guid? AccountHandlerUserId { get; set; }
+    public string? AccountHandlerName { get; set; }
+    public string Status { get; set; } = "Active";
+    public Guid? AssignedCoordinatorId { get; set; }
+    public string? AssignedCoordinatorName { get; set; }
+    public DateTime LastSyncedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+
