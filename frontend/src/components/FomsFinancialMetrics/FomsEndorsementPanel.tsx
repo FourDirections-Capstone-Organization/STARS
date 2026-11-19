@@ -284,7 +284,14 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
     // Handler: Create STARS Task for an Endorsement item (like in DMS)
     const handleCreateStarsTask = (item: FomsEndorsementItem) => {
+        // Inactive Account Gate Enforcement: Block new client-linked tasks if client is Inactive
+        if (String((item as any).clientStatus).toLowerCase() === 'inactive' || (item as any).isInactive) {
+            toastError('Client account is inactive in FOMS. Tasks cannot be created for inactive accounts.');
+            return;
+        }
+
         try {
+
             const raw = localStorage.getItem('stars_created_endorsements');
             const arr = raw ? JSON.parse(raw) : [];
             const set = new Set(Array.isArray(arr) ? arr : []);
@@ -837,15 +844,23 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                             </span>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
-                                            <button
-                                                type="button"
-                                                className="create-task-action-btn"
-                                                title="Create operational endorsement delivery task in STARS"
-                                                onClick={() => handleCreateStarsTask(item)}
-                                            >
-                                                <PlusCircle size={14} /> Create STARS Task
-                                            </button>
+                                            {(() => {
+                                                const isInactive = String((item as any).clientStatus).toLowerCase() === 'inactive' || Boolean((item as any).isInactive);
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        className={`create-task-action-btn ${isInactive ? 'disabled' : ''}`}
+                                                        title={isInactive ? 'Client account is inactive in FOMS. Tasks cannot be created for inactive accounts.' : 'Create operational endorsement delivery task in STARS'}
+                                                        disabled={isInactive}
+                                                        onClick={() => handleCreateStarsTask(item)}
+                                                        style={isInactive ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                                    >
+                                                        <PlusCircle size={14} /> Create STARS Task
+                                                    </button>
+                                                );
+                                            })()}
                                         </td>
+
                                     </tr>
                                 ))}
                             </tbody>

@@ -458,14 +458,23 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
                                     {/* Inline action button — routes via onNotificationAction prop */}
                                     {(() => {
+                                      const isAccountHandler = (
+                                        n.title?.toLowerCase().includes('account handler') ||
+                                        n.title?.toLowerCase().includes('unmatched') ||
+                                        n.description?.toLowerCase().includes('account handler') ||
+                                        n.description?.toLowerCase().includes('unrecognized account handler')
+                                      );
                                       const effectiveActionLabel = n.actionLabel || (
-                                        (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
-                                          ? 'View Collection Task'
-                                          : (n.taskId || (n as any).relatedEntityId)
-                                            ? 'View Linked Task'
-                                            : undefined
+                                        isAccountHandler
+                                          ? 'View Client Details'
+                                          : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Collection Task'
+                                            : (n.taskId || (n as any).relatedEntityId)
+                                              ? 'View Linked Task'
+                                              : undefined
                                       );
                                       if (!effectiveActionLabel) return null;
+
                                       return (
                                         <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
                                           <button
@@ -545,14 +554,23 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
                                     {/* Inline action button — routes via onNotificationAction prop */}
                                     {(() => {
+                                      const isAccountHandler = (
+                                        n.title?.toLowerCase().includes('account handler') ||
+                                        n.title?.toLowerCase().includes('unmatched') ||
+                                        n.description?.toLowerCase().includes('account handler') ||
+                                        n.description?.toLowerCase().includes('unrecognized account handler')
+                                      );
                                       const effectiveActionLabel = n.actionLabel || (
-                                        (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
-                                          ? 'View Collection Task'
-                                          : (n.taskId || (n as any).relatedEntityId)
-                                            ? 'View Linked Task'
-                                            : undefined
+                                        isAccountHandler
+                                          ? 'View Client Details'
+                                          : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Collection Task'
+                                            : (n.taskId || (n as any).relatedEntityId)
+                                              ? 'View Linked Task'
+                                              : undefined
                                       );
                                       if (!effectiveActionLabel) return null;
+
                                       return (
                                         <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
                                           <button

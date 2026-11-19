@@ -5,4 +5,6 @@ export { default as StatusCard } from './StatusCard/StatusCard';
 export { default as ConfirmModal } from './ConfirmModal/ConfirmModal';
 export { default as SearchableSelect } from './ui/SearchableSelect';
 export type { NotificationItem } from "./notificationTypes";
+export * from './ClientManagement';
+
 

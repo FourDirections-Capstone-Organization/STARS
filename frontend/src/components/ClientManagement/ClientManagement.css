@@ -1,0 +1,605 @@
+/* ================================================================
+   Client Management & FOMS Client Sync View
+   Part of Speedex STARS OneUI Design System
+   ================================================================ */
+
+.client-mgmt-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 100%;
+    animation: clientMgmtFadeIn 0.3s ease-out;
+}
+
+@keyframes clientMgmtFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Role Scoping Banner ── */
+.role-scoping-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1.2rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.role-scoping-banner.manager {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+}
+
+.role-scoping-banner.coordinator {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+}
+
+.role-scoping-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.role-scoping-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+}
+
+.role-scoping-banner.manager .role-scoping-badge {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.role-scoping-banner.coordinator .role-scoping-badge {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+/* ── Master Data Tooltip / Notice ── */
+.foms-master-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.95rem;
+    background: #fafafa;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: #64748b;
+}
+
+.foms-master-notice-icon {
+    color: #0284c7;
+    flex-shrink: 0;
+}
+
+/* ── KPI Grid ── */
+.client-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+}
+
+.client-kpi-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.2rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.client-kpi-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+}
+
+.client-kpi-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.client-kpi-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+
+.client-kpi-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.client-kpi-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.client-kpi-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.client-kpi-icon.teal { background: #ccfbf1; color: #0d9488; }
+.client-kpi-icon.green { background: #dcfce7; color: #16a34a; }
+.client-kpi-icon.gray { background: #f1f5f9; color: #64748b; }
+.client-kpi-icon.amber { background: #fef3c7; color: #d97706; }
+
+/* ── Filter / Control Bar ── */
+.client-controls-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1.1rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.client-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 240px;
+    max-width: 380px;
+}
+
+.client-search-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem 0.5rem 2.2rem;
+    font-size: 0.85rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.client-search-input:focus {
+    border-color: #00A99D;
+    box-shadow: 0 0 0 3px rgba(0, 169, 157, 0.12);
+}
+
+.client-search-icon {
+    position: absolute;
+    left: 0.75rem;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+.client-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.client-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.client-filter-chip:hover {
+    background: #f1f5f9;
+}
+
+.client-filter-chip.active {
+    background: #00A99D;
+    border-color: #00A99D;
+    color: #ffffff;
+}
+
+/* ── Table & Cards ── */
+.client-table-container {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.client-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+    text-align: left;
+}
+
+.client-table th {
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.client-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    vertical-align: middle;
+}
+
+.client-table tr:hover td {
+    background: #fafbfd;
+}
+
+.client-id-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #0f172a;
+    background: #f1f5f9;
+    padding: 0.2rem 0.5rem;
+    border-radius: 5px;
+    border: 1px solid #e2e8f0;
+}
+
+/* ── Status Pills (Active = Green, Inactive = Gray) ── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.status-pill.active {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+}
+
+.status-pill.inactive {
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #d1d5db;
+}
+
+.status-pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.status-pill.active .status-pill-dot {
+    background: #10b981;
+}
+
+.status-pill.inactive .status-pill-dot {
+    background: #9ca3af;
+}
+
+/* ── Coordinator Assignment Badges & 1-click button ── */
+.assignment-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.assignment-badge.assigned {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.assignment-badge.unassigned {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+    font-weight: 700;
+}
+
+.btn-assign-coordinator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 6px;
+    border: none;
+    background: #d97706;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-assign-coordinator:hover {
+    background: #b45309;
+}
+
+.btn-reassign {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    color: #0284c7;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    margin-left: 0.5rem;
+}
+
+.btn-reassign:hover {
+    color: #0369a1;
+}
+
+/* ── Account Handler Badges ── */
+.account-handler-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.handler-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.handler-emp {
+    font-size: 0.72rem;
+    color: #64748b;
+    font-family: monospace;
+}
+
+.handler-unrecognized {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.45rem;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* ── Table Action Buttons ── */
+.client-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-client-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.74rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-client-action:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+
+.btn-client-action.primary {
+    background: #00A99D;
+    border-color: #00A99D;
+    color: #ffffff;
+}
+
+.btn-client-action.primary:hover {
+    background: #008f85;
+}
+
+.btn-client-action.disabled,
+.btn-client-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+
+/* ── Inactive Error Banner ── */
+.client-inactive-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.75rem 1rem;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    color: #991b1b;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 1rem;
+    animation: clientShake 0.3s ease;
+}
+
+@keyframes clientShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+}
+
+/* ── Coordinator Assignment Drawer / Modal ── */
+.drawer-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 1050;
+    display: flex;
+    justify-content: flex-end;
+    animation: fadeInBackdrop 0.2s ease-out;
+}
+
+@keyframes fadeInBackdrop {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.drawer-panel {
+    width: 480px;
+    max-width: 90vw;
+    height: 100%;
+    background: #ffffff;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    animation: slideInDrawer 0.25s ease-out;
+}
+
+@keyframes slideInDrawer {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.drawer-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #0f172a;
+}
+
+.drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.drawer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.coordinator-card-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+}
+
+.coordinator-radio-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.coordinator-radio-item:hover {
+    border-color: #00A99D;
+    background: #f0fdfa;
+}
+
+.coordinator-radio-item.selected {
+    border-color: #00A99D;
+    background: #f0fdfa;
+    box-shadow: 0 0 0 2px rgba(0, 169, 157, 0.2);
+}
+
+.coordinator-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.coordinator-item-name {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.85rem;
+}
+
+.coordinator-item-emp {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.coordinator-workload-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    background: #f1f5f9;
+    color: #475569;
+}

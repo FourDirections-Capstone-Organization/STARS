@@ -18,13 +18,16 @@ import {
     Layers,
     RotateCcw,
     FolderTree,
+    Building2,
 } from 'lucide-react';
 import { StatusCard } from '../StatusCard/StatusCard';
 import EmptyState from '../ui/EmptyState';
 import Pagination from '../ui/Pagination';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
+import ClientDetailModal from '../ClientManagement/ClientDetailModal';
 import './NotificationsTab.css';
+
 
 export interface NotificationRecord {
     id: string;
@@ -89,7 +92,34 @@ interface NotificationsTabProps {
     onViewTask?: (taskId: string) => void;
     canViewTasks?: boolean;
     extraNotifications?: any[];
+    onViewClientDetails?: (clientAccountId: string) => void;
 }
+
+const isAccountHandlerNotif = (title?: string, msg?: string): boolean => {
+    const t = (title || '').toLowerCase();
+    const m = (msg || '').toLowerCase();
+    return (
+        t.includes('account handler') ||
+        t.includes('unmatched foms') ||
+        m.includes('account handler') ||
+        m.includes('unrecognized account handler') ||
+        m.includes('no matching employee was found in stars')
+    );
+};
+
+const extractClientAccountId = (msg?: string, title?: string): string | null => {
+    const text = `${title || ''} ${msg || ''}`;
+    const m1 = text.match(/Client account '([^']+)'/i);
+    if (m1) return m1[1];
+    const m2 = text.match(/Client ([A-Za-z0-9_-]+) was synchronized/i);
+    if (m2) return m2[1];
+    const m3 = text.match(/Client '([^']+)'/i);
+    if (m3) return m3[1];
+    const m4 = text.match(/Client ([A-Za-z0-9_-]+)/i);
+    if (m4) return m4[1];
+    return null;
+};
+
 
 const NOTIF_TYPE_NAMES: Record<number, string> = {
     0: 'TaskAssigned',
@@ -110,6 +140,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     onViewTask,
     canViewTasks = true,
     extraNotifications = EMPTY_EXTRA_NOTIFICATIONS,
+    onViewClientDetails,
 }) => {
     const { success, error } = useToast();
 
@@ -120,6 +151,8 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [activeDetailClientId, setActiveDetailClientId] = useState<string | null>(null);
+
 
     const [activeFilter, setActiveFilter] = useState<
         'all' | 'unread' | 'overdue' | 'deadline' | 'review' | 'assigned' | 'completed' | 'update'
@@ -489,42 +522,70 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                         {item.message}
                     </div>
 
-                    {(item.taskId || !item.isRead) && (
-                        <div className="notif-card-footer">
-                            {canViewTasks && item.taskId && onViewTask ? (
-                                <button
-                                    type="button"
-                                    className="notif-card-task-link"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!item.isRead) handleMarkAsRead(item.id);
-                                        onViewTask(item.taskId!);
-                                    }}
-                                >
-                                    {(item.title?.includes('Collection') || item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert') || item.message?.includes('Collection follow-up') || item.title?.includes('Overdue Collection'))
-                                        ? 'View Collection Task'
-                                        : item.title?.includes('Follow-up')
-                                            ? 'View Follow-up Task'
-                                            : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
-                                                ? 'View Cancelled Order Task'
-                                                : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
-                                                    ? 'View Settled Task'
-                                                    : 'View Linked Task'} <ArrowRight size={13} />
-                                </button>
-                            ) : <div />}
+                    {(() => {
+                        const isAccountHandler = isAccountHandlerNotif(item.title, item.message);
+                        const clientCode = isAccountHandler ? extractClientAccountId(item.message, item.title) : null;
 
-                            {!item.isRead && (
-                                <button
-                                    type="button"
-                                    className="notif-card-mark-read"
-                                    onClick={(e) => handleMarkAsRead(item.id, e)}
-                                >
-                                    <CheckCircle2 size={13} />
-                                    Mark as read
-                                </button>
-                            )}
-                        </div>
-                    )}
+                        if (!item.taskId && !isAccountHandler && item.isRead) return null;
+
+                        return (
+                            <div className="notif-card-footer">
+                                {isAccountHandler ? (
+                                    <button
+                                        type="button"
+                                        className="notif-card-task-link client-details-shortcut"
+                                        data-testid="view-client-details-shortcut"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!item.isRead) handleMarkAsRead(item.id);
+                                            const targetId = clientCode || (item as any).clientAccountId || '';
+                                            if (onViewClientDetails) {
+                                                onViewClientDetails(targetId);
+                                            } else {
+                                                setActiveDetailClientId(targetId);
+                                            }
+                                        }}
+                                    >
+                                        <Building2 size={13} />
+                                        <span>View Client Details</span>
+                                        <ArrowRight size={13} />
+                                    </button>
+                                ) : canViewTasks && item.taskId && onViewTask ? (
+                                    <button
+                                        type="button"
+                                        className="notif-card-task-link"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!item.isRead) handleMarkAsRead(item.id);
+                                            onViewTask(item.taskId!);
+                                        }}
+                                    >
+                                        {(item.title?.includes('Collection') || item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert') || item.message?.includes('Collection follow-up') || item.title?.includes('Overdue Collection'))
+                                            ? 'View Collection Task'
+                                            : item.title?.includes('Follow-up')
+                                                ? 'View Follow-up Task'
+                                                : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
+                                                    ? 'View Cancelled Order Task'
+                                                    : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
+                                                        ? 'View Settled Task'
+                                                        : 'View Linked Task'} <ArrowRight size={13} />
+                                    </button>
+                                ) : <div />}
+
+                                {!item.isRead && (
+                                    <button
+                                        type="button"
+                                        className="notif-card-mark-read"
+                                        onClick={(e) => handleMarkAsRead(item.id, e)}
+                                    >
+                                        <CheckCircle2 size={13} />
+                                        Mark as read
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                 </div>
             </div>
         );
@@ -752,8 +813,24 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                     />
                 </div>
             )}
+
+            {/* ── In-App Client Detail Modal (Triggered via Missing Handler Shortcut) ── */}
+            {activeDetailClientId && (
+                <ClientDetailModal
+                    isOpen={Boolean(activeDetailClientId)}
+                    client={{
+                        id: '',
+                        clientAccountId: activeDetailClientId,
+                        clientName: activeDetailClientId,
+                        status: 'Active',
+                        lastSyncedAt: new Date().toISOString(),
+                    }}
+                    onClose={() => setActiveDetailClientId(null)}
+                />
+            )}
         </div>
     );
 };
+
 
 export default NotificationsTab;

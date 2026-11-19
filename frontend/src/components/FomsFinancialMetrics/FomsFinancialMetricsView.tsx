@@ -25,10 +25,13 @@ import {
     ChevronRight,
     UserCheck,
     AlertTriangle,
+    Users,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
+import ClientManagementView from '../ClientManagement/ClientManagementView';
 import {
+
     FomsDashboardFinancialSummary,
     FomsClientFinancialSummaryItem,
     FomsRecentInvoiceItem,
@@ -60,8 +63,10 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     onViewClientTasks,
     onOpenTask,
     onCreateTaskForEndorsement,
+    initialClientAccountId,
 }) => {
-    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement'>(initialTab || 'balances');
+    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement' | 'clients'>(initialTab || 'balances');
+
     const [tableTab, setTableTab] = useState<'clients' | 'recent_invoices'>('clients');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -427,9 +432,27 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     <span>Invoice Endorsement</span>
                     <span className="foms-tab-badge badge-endorsement">30-Day Term</span>
                 </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'clients' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('clients')}
+                    data-testid="hub-tab-clients"
+                >
+                    <Users size={14} />
+                    <span>Client Accounts</span>
+                    <span className="foms-tab-badge">FOMS Sync</span>
+                </button>
             </div>
 
-            {activeHubTab === 'endorsement' ? (
+            {activeHubTab === 'clients' ? (
+                <ClientManagementView
+                    showHeader={false}
+                    initialClientAccountId={initialClientAccountId}
+                    userRole={currentUserRole}
+                    onOpenTask={onOpenTask}
+                />
+            ) : activeHubTab === 'endorsement' ? (
+
                 <FomsEndorsementPanel
                     onOpenTask={onOpenTask}
                     onViewClientTasks={onViewClientTasks}
