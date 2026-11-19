@@ -1,0 +1,71 @@
+.task-detail-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.task-detail-modal-dialog {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    width: 100%;
+    max-width: 1100px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+.task-detail-modal-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: rgba(241, 245, 249, 0.9);
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #475569;
+    z-index: 20;
+    transition: all 0.15s ease;
+}
+
+.task-detail-modal-close-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.task-detail-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.task-detail-modal-loading,
+.task-detail-modal-error,
+.task-detail-modal-empty {
+    padding: 4rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: #64748b;
+    font-size: 0.9rem;
+}

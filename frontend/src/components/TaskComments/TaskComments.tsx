@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Send, X, Paperclip, Loader2, AlertCircle, CheckCircle2,
-    Pencil, Trash2, FileText, Download, Truck, AlertTriangle, FileCheck,
+    Pencil, Trash2, FileText, Download, Truck, AlertTriangle, FileCheck, ShieldAlert,
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
 import EmptyState from '../ui/EmptyState';
@@ -152,6 +152,57 @@ export function parseFomsPaymentNotificationComment(content: string): ParsedFoms
     return {
         isFomsPaymentRemark: true,
         invoiceNumber: invoiceMatch ? invoiceMatch[1].trim() : '',
+        messageText: content,
+        rawText: content,
+    };
+}
+
+export interface ParsedFomsOverdueAlertComment {
+    isFomsOverdueRemark: boolean;
+    invoiceNumber: string;
+    daysOverdue: number;
+    amountDue: string;
+    messageText: string;
+    rawText: string;
+}
+
+export function parseFomsOverdueAlertComment(content: string): ParsedFomsOverdueAlertComment | null {
+    if (!content) return null;
+    if (!content.includes('[FOMS Overdue Alert]')) return null;
+
+    const invoiceMatch = content.match(/invoice\s+([A-Za-z0-9-]+)/i);
+    const daysMatch = content.match(/(\d+)\s+days overdue/i);
+    const amountMatch = content.match(/₱\s*([\d,]+(?:\.\d+)?)/);
+
+    return {
+        isFomsOverdueRemark: true,
+        invoiceNumber: invoiceMatch ? invoiceMatch[1].trim() : '',
+        daysOverdue: daysMatch ? parseInt(daysMatch[1], 10) : 0,
+        amountDue: amountMatch ? amountMatch[1].trim() : '',
+        messageText: content,
+        rawText: content,
+    };
+}
+
+export interface ParsedFomsCollectionOutcomeComment {
+    isFomsCollectionOutcomeRemark: boolean;
+    outcome: string;
+    actionTaken: string;
+    messageText: string;
+    rawText: string;
+}
+
+export function parseFomsCollectionOutcomeComment(content: string): ParsedFomsCollectionOutcomeComment | null {
+    if (!content) return null;
+    if (!content.includes('[Collection Outcome]')) return null;
+
+    const outcomeMatch = content.match(/outcome:\s*([^.]+)/i);
+    const actionMatch = content.match(/Action:\s*([^.]+)/i);
+
+    return {
+        isFomsCollectionOutcomeRemark: true,
+        outcome: outcomeMatch ? outcomeMatch[1].trim() : '',
+        actionTaken: actionMatch ? actionMatch[1].trim() : '',
         messageText: content,
         rawText: content,
     };
@@ -562,6 +613,105 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                     <div className="tc-meta">
                                         <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
                                         <span className="tc-dms-system-note">Automated M2M Idempotency Audit Remark</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const fomsOverdueRemark = parseFomsOverdueAlertComment(c.message);
+                    if (fomsOverdueRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-foms-overdue"
+                                data-testid="tc-foms-overdue-duplicate-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-foms-overdue" title="FOMS Overdue Alert">
+                                    <ShieldAlert size={14} color="#dc2626" />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-foms-overdue">FOMS System Integration</span>
+                                        <span className="tc-foms-tag tc-foms-tag-overdue">
+                                            Duplicate Overdue Alert
+                                        </span>
+                                        {fomsOverdueRemark.invoiceNumber && (
+                                            <span className="tc-invoice-badge tc-invoice-badge-overdue">
+                                                INV: {fomsOverdueRemark.invoiceNumber}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="tc-foms-card duplicate foms-overdue-card">
+                                        <div className="tc-foms-card-top">
+                                            <div className="tc-foms-type-badge type-overdue">
+                                                <AlertCircle size={12} color="#dc2626" />
+                                                <span>Duplicate Overdue Alert Intercepted</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="tc-foms-reason-box overdue-box">
+                                            <span className="tc-foms-reason-text">{c.message}</span>
+                                        </div>
+
+                                        <div className="tc-foms-footer-meta">
+                                            <span className="tc-foms-note">
+                                                Existing open task retained per single-active task idempotency (FR-044)
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automated M2M Overdue Alert Audit Remark</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const fomsCollectionOutcomeRemark = parseFomsCollectionOutcomeComment(c.message);
+                    if (fomsCollectionOutcomeRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-foms-outcome"
+                                data-testid="tc-foms-collection-outcome-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-foms-outcome" title="FOMS Collection Outcome">
+                                    <CheckCircle2 size={14} color="#059669" />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-foms-outcome">STARS Coordinator</span>
+                                        <span className="tc-foms-tag tc-foms-tag-outcome">
+                                            Collection Follow-up Outcome
+                                        </span>
+                                    </div>
+
+                                    <div className="tc-foms-card outcome-card">
+                                        <div className="tc-foms-card-top">
+                                            <div className="tc-foms-type-badge type-outcome">
+                                                <CheckCircle2 size={12} color="#059669" />
+                                                <span>Follow-up Outcome: {fomsCollectionOutcomeRemark.outcome}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="tc-foms-reason-box outcome-box">
+                                            <span className="tc-foms-reason-text">{c.message}</span>
+                                        </div>
+
+                                        <div className="tc-foms-footer-meta">
+                                            <span className="tc-foms-note">
+                                                Collection outcome returned to FOMS callback (FOMS FR-033)
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Coordinator Collection Action Remark</span>
                                     </div>
                                 </div>
                             </div>

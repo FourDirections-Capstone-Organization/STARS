@@ -606,6 +606,22 @@ const TaskView: React.FC<TaskViewProps> = ({
         setTimeout(() => setCopiedFomsKey(null), 2000);
     };
 
+    const isCollectionUrgent = !!fomsCollection && (
+        fomsCollection.daysOverdue >= 30 ||
+        fomsCollection.aging.includes('61-90') ||
+        fomsCollection.aging.includes('90+') ||
+        fomsCollection.aging.includes('60') ||
+        task.priority === 'Urgent'
+    );
+
+    const [showCollectionOutcomeModal, setShowCollectionOutcomeModal] = useState<boolean>(false);
+    const [collectionOutcomeType, setCollectionOutcomeType] = useState<string>('Promised to Pay');
+    const [collectionPromisedDate, setCollectionPromisedDate] = useState<string>('');
+    const [collectionActionTaken, setCollectionActionTaken] = useState<string>('Phone Call');
+    const [collectionOutcomeNotes, setCollectionOutcomeNotes] = useState<string>('');
+    const [submittingCollectionOutcome, setSubmittingCollectionOutcome] = useState<boolean>(false);
+    const [collectionOutcomeError, setCollectionOutcomeError] = useState<string>('');
+
     // ─── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ───────────
     const fomsEndorsement = useMemo(() => parseFomsEndorsement(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
     const [endorsementDetail, setEndorsementDetail] = useState<any | null>(null);
@@ -1149,7 +1165,9 @@ const TaskView: React.FC<TaskViewProps> = ({
                         <span className={priorityDotClass(task.priority)} />
                         <div className="tv-header-text">
                             <h2 className="tv-title">
-                                {task.taskTitle}
+                                {fomsCollection && !task.taskTitle.startsWith('[Collection Follow-up]')
+                                    ? `[Collection Follow-up] Invoice ${fomsCollection.invoiceNumber} - ${fomsCollection.clientName}`
+                                    : task.taskTitle}
                                 {task.classification && (
                                     <span
                                         style={{
@@ -1245,7 +1263,28 @@ const TaskView: React.FC<TaskViewProps> = ({
                             </div>
                             <div className="tv-meta-chip">
                                 <span className="tv-meta-label">Priority</span>
-                                <PrioBadge p={task.priority} />
+                                {isCollectionUrgent ? (
+                                    <span
+                                        className="tv-urgent-priority-pill"
+                                        data-testid="tv-urgent-priority-pill"
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            background: '#fee2e2',
+                                            color: '#b91c1c',
+                                            border: '1px solid #f87171',
+                                            borderRadius: 9999,
+                                            padding: '2px 8px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                        }}
+                                    >
+                                        <ShieldAlert size={12} color="#dc2626" /> Urgent
+                                    </span>
+                                ) : (
+                                    <PrioBadge p={task.priority} />
+                                )}
                             </div>
                             <div className="tv-meta-chip">
                                 <span className="tv-meta-label">Classification</span>
@@ -1577,6 +1616,33 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             </span>
                                         </div>
                                         <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">PRIORITY LEVEL</span>
+                                            {isCollectionUrgent ? (
+                                                <span
+                                                    className="tv-urgent-priority-pill"
+                                                    data-testid="foms-urgent-priority-badge"
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 4,
+                                                        background: '#fee2e2',
+                                                        color: '#b91c1c',
+                                                        border: '1px solid #f87171',
+                                                        borderRadius: 9999,
+                                                        padding: '2px 8px',
+                                                        fontSize: '0.74rem',
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    <ShieldAlert size={11} color="#dc2626" /> Urgent
+                                                </span>
+                                            ) : (
+                                                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#c2410c' }}>
+                                                    High
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">ORIGINAL DUE DATE</span>
                                             <span className="tv-foms-stat-val">{fomsCollection.dueDate}</span>
                                         </div>
@@ -1686,6 +1752,23 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     }}
                                                 >
                                                     <CheckCircle2 size={11} /> Mark Settled
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-primary-sm tv-foms-outcome-modal-btn"
+                                                    onClick={() => {
+                                                        setCollectionOutcomeType('Promised to Pay');
+                                                        const defDate = new Date();
+                                                        defDate.setDate(defDate.getDate() + 3);
+                                                        setCollectionPromisedDate(defDate.toISOString().split('T')[0]);
+                                                        setCollectionActionTaken('Phone Call');
+                                                        setCollectionOutcomeNotes('');
+                                                        setCollectionOutcomeError('');
+                                                        setShowCollectionOutcomeModal(true);
+                                                    }}
+                                                    data-testid="tv-record-collection-outcome-btn"
+                                                >
+                                                    <FileCheck size={11} /> Record Collection Outcome
                                                 </button>
                                             </div>
                                         )}
@@ -3061,6 +3144,167 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 >
                                     {submittingSign ? <Loader2 size={13} className="spin" /> : <FileCheck size={13} />}
                                     {submittingSign ? 'Transmitting to FOMS…' : 'Record & Transmit to FOMS'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Coordinator Collection Outcome Modal (FOMS Integration 3 / FOMS FR-033) ── */}
+            {showCollectionOutcomeModal && fomsCollection && (
+                <div className="tv-modal-overlay" onClick={() => !submittingCollectionOutcome && setShowCollectionOutcomeModal(false)}>
+                    <div className="tv-modal tv-modal-delivery" onClick={e => e.stopPropagation()} data-testid="tv-collection-outcome-modal">
+                        <div className="tv-modal-header">
+                            <div>
+                                <h3 className="tv-modal-title">Submit Collection Follow-up Outcome</h3>
+                                <p className="tv-modal-sub">
+                                    Record final resolution and dispatch outcome callback to FOMS (FOMS FR-033).
+                                </p>
+                            </div>
+                        </div>
+
+                        <form
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (collectionOutcomeType === 'Promised to Pay' && !collectionPromisedDate) {
+                                    setCollectionOutcomeError('Promised payment date is required when outcome is Promised to Pay.');
+                                    return;
+                                }
+                                setSubmittingCollectionOutcome(true);
+                                setCollectionOutcomeError('');
+
+                                try {
+                                    const payload = {
+                                        outcome: collectionOutcomeType,
+                                        promisedPaymentDate: collectionOutcomeType === 'Promised to Pay' && collectionPromisedDate ? new Date(collectionPromisedDate).toISOString() : null,
+                                        actionTaken: collectionActionTaken.trim() || 'Client Contact',
+                                        notes: collectionOutcomeNotes.trim() || null,
+                                    };
+                                    const res = await api.post(`/api/foms-integration/tasks/${task.taskId}/collection-outcome`, payload);
+                                    if (res.data?.isSuccess) {
+                                        toastSuccess('Collection follow-up outcome recorded and dispatched to FOMS.');
+                                        setShowCollectionOutcomeModal(false);
+                                        setLocalStatus('Completed');
+                                        if (onUpdate) {
+                                            onUpdate({ ...task, taskStatus: 'Completed' });
+                                        }
+                                    } else {
+                                        setCollectionOutcomeError(res.data?.message || 'Failed to submit outcome to FOMS.');
+                                    }
+                                } catch (err: any) {
+                                    setCollectionOutcomeError(err?.response?.data?.message || err?.message || 'Error transmitting collection outcome.');
+                                } finally {
+                                    setSubmittingCollectionOutcome(false);
+                                }
+                            }}
+                        >
+                            <div className="tv-modal-body">
+                                {collectionOutcomeError && (
+                                    <div className="tv-delivery-error-box" style={{ marginBottom: 12 }}>
+                                        <AlertCircle size={14} />
+                                        <span>{collectionOutcomeError}</span>
+                                    </div>
+                                )}
+
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Invoice &amp; Client</span>
+                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{fomsCollection.invoiceNumber} - {fomsCollection.clientName}</div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Amount Due</span>
+                                            <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#dc2626' }}>{fomsCollection.amountDue}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Outcome <span className="tv-form-req">*</span>
+                                    </label>
+                                    <select
+                                        className="tv-form-input"
+                                        value={collectionOutcomeType}
+                                        onChange={e => {
+                                            setCollectionOutcomeType(e.target.value);
+                                            setCollectionOutcomeError('');
+                                        }}
+                                        data-testid="tv-outcome-type-select"
+                                    >
+                                        <option value="Promised to Pay">Promised to Pay</option>
+                                        <option value="Disputed">Disputed</option>
+                                        <option value="Unreachable">Unreachable</option>
+                                    </select>
+                                </div>
+
+                                {collectionOutcomeType === 'Promised to Pay' && (
+                                    <div className="tv-form-group">
+                                        <label className="tv-form-label">
+                                            Promised Payment Date <span className="tv-form-req">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            className="tv-form-input"
+                                            value={collectionPromisedDate}
+                                            onChange={e => {
+                                                setCollectionPromisedDate(e.target.value);
+                                                setCollectionOutcomeError('');
+                                            }}
+                                            data-testid="tv-promised-date-input"
+                                            required
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Action Taken <span className="tv-form-req">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        value={collectionActionTaken}
+                                        onChange={e => setCollectionActionTaken(e.target.value)}
+                                        placeholder="e.g. Phone Call, Demand Letter Delivered, On-site Visit"
+                                        data-testid="tv-action-taken-input"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Notes / Discussion Details
+                                    </label>
+                                    <textarea
+                                        className="tv-form-textarea"
+                                        rows={3}
+                                        value={collectionOutcomeNotes}
+                                        onChange={e => setCollectionOutcomeNotes(e.target.value)}
+                                        placeholder="Enter notes from client contact or promise details..."
+                                        data-testid="tv-outcome-notes-textarea"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="tv-modal-footer">
+                                <button
+                                    type="button"
+                                    className="tv-btn tv-btn-secondary"
+                                    disabled={submittingCollectionOutcome}
+                                    onClick={() => setShowCollectionOutcomeModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="tv-btn tv-btn-primary"
+                                    disabled={submittingCollectionOutcome}
+                                    data-testid="tv-submit-outcome-btn"
+                                >
+                                    {submittingCollectionOutcome ? <Loader2 size={13} className="spin" /> : <FileCheck size={13} />}
+                                    {submittingCollectionOutcome ? 'Transmitting Callback…' : 'Submit Outcome to FOMS'}
                                 </button>
                             </div>
                         </form>

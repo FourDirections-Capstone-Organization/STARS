@@ -106,6 +106,27 @@ export interface SubmitSignedEndorsementPayload {
     deliveryRemarks?: string;
 }
 
+export interface SubmitCollectionOutcomePayload {
+    outcome: 'Promised to Pay' | 'Disputed' | 'Unreachable' | string;
+    promisedPaymentDate?: string | null;
+    actionTaken: string;
+    notes?: string | null;
+}
+
+export interface CollectionFollowUpListProps {
+    alerts?: FomsOverdueAlertItem[];
+    loading?: boolean;
+    onRefresh?: () => void;
+    onOpenTask?: (taskId: string) => void;
+    onOutcomeSubmitted?: (taskId: string, payload: SubmitCollectionOutcomePayload) => void;
+    showFilters?: boolean;
+}
+
+export interface CollectionAlertsViewProps {
+    onOpenTask?: (taskId: string) => void;
+    onViewClientTasks?: (clientName: string, accountId: string) => void;
+}
+
 export interface FomsEndorsementPanelProps {
     onOpenTask?: (taskId: string) => void;
     onViewClientTasks?: (clientName: string, accountId: string) => void;

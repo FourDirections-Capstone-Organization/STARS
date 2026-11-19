@@ -877,3 +877,104 @@
     border-radius: 6px;
     padding: 8px 10px;
 }
+
+/* ── Automated FOMS Overdue Duplicate Remarks (Integration 3, FR-044) ── */
+.tc-msg-foms-overdue {
+    max-width: 95%;
+}
+
+.tc-avatar-foms-overdue {
+    background: #fef2f2 !important;
+    color: #dc2626 !important;
+    border: 1px solid #fecaca !important;
+}
+
+.tc-author-foms-overdue {
+    color: #b91c1c !important;
+    font-weight: 700;
+}
+
+.tc-foms-tag-overdue {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.tc-invoice-badge-overdue {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.tc-foms-card.foms-overdue-card {
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tc-foms-type-badge.type-overdue {
+    color: #dc2626;
+}
+
+.tc-foms-reason-box.overdue-box {
+    background: #ffffff;
+    border: 1px solid #fee2e2;
+    border-left: 3px solid #dc2626;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+/* ── Automated FOMS Collection Outcome Remarks (Integration 3 / FOMS FR-033) ── */
+.tc-msg-foms-outcome {
+    max-width: 95%;
+}
+
+.tc-avatar-foms-outcome {
+    background: #f0fdf4 !important;
+    color: #059669 !important;
+    border: 1px solid #a7f3d0 !important;
+}
+
+.tc-author-foms-outcome {
+    color: #047857 !important;
+    font-weight: 700;
+}
+
+.tc-foms-tag-outcome {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(5, 150, 105, 0.1);
+    color: #059669;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.tc-foms-card.outcome-card {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tc-foms-type-badge.type-outcome {
+    color: #059669;
+}
+
+.tc-foms-reason-box.outcome-box {
+    background: #ffffff;
+    border: 1px solid #dcfce7;
+    border-left: 3px solid #059669;
+    border-radius: 6px;
+    padding: 8px 10px;
+}

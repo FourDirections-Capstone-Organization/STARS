@@ -27,10 +27,13 @@ import {
     TrendingDown,
     Network,
     GitBranch,
+    FileCheck,
+    Loader2,
 } from 'lucide-react';
 import api from '../../api';
 import { FomsOverdueAlertItem, CoordinatorWorkloadItem } from './types';
 import FormModal from '../FormModal/FormModal';
+import { useToast } from '../Toast/Toast';
 import { ActionsDropdown } from '../ui/DataTable';
 import '../ui/DataTable.css';
 import './FomsFinancialMetricsView.css';
@@ -59,6 +62,78 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
 
     // Inspector Modal State
     const [inspectAlert, setInspectAlert] = useState<FomsOverdueAlertItem | null>(null);
+
+    // Outcome Modal State
+    const { success: toastSuccess, error: toastError } = useToast();
+    const [outcomeAlert, setOutcomeAlert] = useState<FomsOverdueAlertItem | null>(null);
+    const [outcomeType, setOutcomeType] = useState<string>('Promised to Pay');
+    const [promisedPaymentDate, setPromisedPaymentDate] = useState<string>('');
+    const [actionTaken, setActionTaken] = useState<string>('Phone Call');
+    const [outcomeNotes, setOutcomeNotes] = useState<string>('');
+    const [submittingOutcome, setSubmittingOutcome] = useState<boolean>(false);
+    const [outcomeError, setOutcomeError] = useState<string>('');
+
+    const handleOpenOutcomeModal = (alert: FomsOverdueAlertItem) => {
+        setOutcomeAlert(alert);
+        setOutcomeType('Promised to Pay');
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 3);
+        setPromisedPaymentDate(defaultDate.toISOString().split('T')[0]);
+        setActionTaken('Phone Call');
+        setOutcomeNotes('');
+        setOutcomeError('');
+    };
+
+    const handleCloseOutcomeModal = () => {
+        setOutcomeAlert(null);
+        setOutcomeError('');
+        setSubmittingOutcome(false);
+    };
+
+    const handleSubmitOutcome = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!outcomeAlert) return;
+
+        if (outcomeType === 'Promised to Pay' && !promisedPaymentDate) {
+            setOutcomeError('Promised payment date is required when outcome is Promised to Pay.');
+            return;
+        }
+
+        const taskId = outcomeAlert.starsTaskId;
+        if (!taskId) {
+            setOutcomeError('Target STARS Task ID is not associated with this collection alert.');
+            return;
+        }
+
+        setSubmittingOutcome(true);
+        setOutcomeError('');
+
+        const payload = {
+            outcome: outcomeType,
+            promisedPaymentDate: outcomeType === 'Promised to Pay' && promisedPaymentDate ? new Date(promisedPaymentDate).toISOString() : null,
+            actionTaken: actionTaken.trim() || 'Client Contact',
+            notes: outcomeNotes.trim() || null,
+        };
+
+        try {
+            const res = await api.post(`/api/foms-integration/tasks/${taskId}/collection-outcome`, payload);
+            if (res.data?.isSuccess) {
+                toastSuccess(`Collection outcome "${outcomeType}" recorded and dispatched to FOMS callback.`);
+                handleCloseOutcomeModal();
+                fetchExistingCollectionTasks();
+            } else {
+                const errMsg = res.data?.message || 'Failed to submit collection outcome to FOMS.';
+                setOutcomeError(errMsg);
+                toastError(errMsg);
+            }
+        } catch (err: any) {
+            const errMsg = err?.response?.data?.message || err?.message || 'Network error while transmitting collection outcome.';
+            setOutcomeError(errMsg);
+            toastError(errMsg);
+        } finally {
+            setSubmittingOutcome(false);
+        }
+    };
 
     // ── Fetch Coordinators & Live Workloads ──
     const fetchCoordinators = useCallback(async () => {
@@ -685,6 +760,11 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                                                             label: 'Trace Routing Decision',
                                                             icon: <Sparkles size={13} />,
                                                             onClick: () => setInspectAlert(alert)
+                                                        },
+                                                        {
+                                                            label: 'Record Collection Outcome',
+                                                            icon: <FileCheck size={13} />,
+                                                            onClick: () => handleOpenOutcomeModal(alert)
                                                         }
                                                     ]}
                                                 />
@@ -1045,6 +1125,145 @@ export const FomsGraphRoutingPanel: React.FC<FomsGraphRoutingPanelProps> = ({
                             </div>
                         )}
                     </div>
+                </FormModal>
+            )}
+
+            {/* ── Coordinator Outcome Submission Modal (FOMS FR-033 / Integration 3) ── */}
+            {outcomeAlert && (
+                <FormModal
+                    isOpen={!!outcomeAlert}
+                    onClose={handleCloseOutcomeModal}
+                    title="Submit Collection Follow-up Outcome"
+                    subtitle={`Dispatches outcome callback to FOMS (FR-033) • Invoice ${outcomeAlert.invoiceNumber}`}
+                    size="md"
+                    footer={
+                        <>
+                            <button
+                                type="button"
+                                className="fm-btn fm-btn-cancel"
+                                onClick={handleCloseOutcomeModal}
+                                disabled={submittingOutcome}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="fm-btn fm-btn-primary"
+                                onClick={handleSubmitOutcome}
+                                disabled={submittingOutcome}
+                                data-testid="submit-outcome-confirm-btn"
+                            >
+                                {submittingOutcome ? (
+                                    <>
+                                        <Loader2 size={13} className="foms-spin" /> Transmitting Callback...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileCheck size={13} /> Submit Outcome to FOMS
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    }
+                >
+                    <form onSubmit={handleSubmitOutcome} className="foms-outcome-modal-form" data-testid="graph-collection-outcome-form">
+                        {outcomeError && (
+                            <div className="foms-modal-error-box" style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 12px', borderRadius: 6, marginBottom: 14, color: '#dc2626', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <AlertCircle size={15} />
+                                <span>{outcomeError}</span>
+                            </div>
+                        )}
+
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748b', fontWeight: 700 }}>Client Account</div>
+                                    <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{outcomeAlert.clientName}</div>
+                                    <div style={{ fontSize: '0.76rem', color: '#64748b' }}>Account: {outcomeAlert.clientAccountId}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748b', fontWeight: 700 }}>Amount Due</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#dc2626' }}>{formatCurrency(outcomeAlert.amountDue)}</div>
+                                    <div style={{ fontSize: '0.74rem', color: '#dc2626', fontWeight: 600 }}>{outcomeAlert.daysOverdue} days overdue</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="fm-field-group" style={{ marginBottom: 14 }}>
+                            <label className="fm-label" htmlFor="graph-outcome-select" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>
+                                Collection Follow-up Outcome <span style={{ color: '#dc2626' }}>*</span>
+                            </label>
+                            <select
+                                id="graph-outcome-select"
+                                className="fm-select"
+                                value={outcomeType}
+                                onChange={e => {
+                                    setOutcomeType(e.target.value);
+                                    setOutcomeError('');
+                                }}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                                data-testid="graph-outcome-type-select"
+                            >
+                                <option value="Promised to Pay">Promised to Pay</option>
+                                <option value="Disputed">Disputed</option>
+                                <option value="Unreachable">Unreachable</option>
+                            </select>
+                        </div>
+
+                        {outcomeType === 'Promised to Pay' && (
+                            <div className="fm-field-group" style={{ marginBottom: 14 }}>
+                                <label className="fm-label" htmlFor="graph-promised-date" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>
+                                    Promised Settlement Date <span style={{ color: '#dc2626' }}>*</span>
+                                </label>
+                                <input
+                                    id="graph-promised-date"
+                                    type="date"
+                                    className="fm-input"
+                                    value={promisedPaymentDate}
+                                    onChange={e => {
+                                        setPromisedPaymentDate(e.target.value);
+                                        setOutcomeError('');
+                                    }}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                                    data-testid="graph-promised-date-input"
+                                    required
+                                />
+                            </div>
+                        )}
+
+                        <div className="fm-field-group" style={{ marginBottom: 14 }}>
+                            <label className="fm-label" htmlFor="graph-action-taken" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>
+                                Action Taken <span style={{ color: '#dc2626' }}>*</span>
+                            </label>
+                            <input
+                                id="graph-action-taken"
+                                type="text"
+                                className="fm-input"
+                                placeholder="e.g. Phone Call, Demand Letter Delivered, On-site Visit"
+                                value={actionTaken}
+                                onChange={e => setActionTaken(e.target.value)}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                                data-testid="graph-action-taken-input"
+                                required
+                            />
+                        </div>
+
+                        <div className="fm-field-group" style={{ marginBottom: 8 }}>
+                            <label className="fm-label" htmlFor="graph-outcome-notes" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>
+                                Follow-up Notes &amp; Discussion Details
+                            </label>
+                            <textarea
+                                id="graph-outcome-notes"
+                                className="fm-textarea"
+                                rows={3}
+                                placeholder="Provide context regarding conversation with client representative, payment schedule, or dispute reasons..."
+                                value={outcomeNotes}
+                                onChange={e => setOutcomeNotes(e.target.value)}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', resize: 'vertical' }}
+                                data-testid="graph-outcome-notes-textarea"
+                            />
+                        </div>
+                    </form>
                 </FormModal>
             )}
         </div>

@@ -1,19 +1,19 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Bell, 
-  CheckCheck, 
-  Trash2, 
-  Info, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Settings, 
-  LogOut, 
-  User, 
-  ChevronRight, 
-  Clock, 
-  Calendar, 
-  Truck, 
-  DollarSign, 
+import {
+  Bell,
+  CheckCheck,
+  Trash2,
+  Info,
+  AlertTriangle,
+  CheckCircle2,
+  Settings,
+  LogOut,
+  User,
+  ChevronRight,
+  Clock,
+  Calendar,
+  Truck,
+  DollarSign,
   Menu,
   LayoutGrid
 } from 'lucide-react';
@@ -86,7 +86,7 @@ const defaultProfile: {
   avatarInitials: 'FL',
 };
 
-const GlobalHeader: React.FC<GlobalHeaderProps> = ({ 
+const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   title = 'Dashboard',
   breadcrumbs,
   profile = defaultProfile,
@@ -205,12 +205,12 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   // Apply read/unread tabs
   const filtered = useMemo(() => {
     let result = roleRelevantNotifications;
-    
+
     // Read/Unread tab filter
     if (filter === 'unread') {
       result = result.filter(n => !n.read);
     }
-    
+
     return result;
   }, [roleRelevantNotifications, filter]);
 
@@ -337,7 +337,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
           </div>
           {/* Notification Button & Dropdown */}
           <div className="header-notification-container" ref={notificationRef}>
-            <button 
+            <button
               ref={bellBtnRef}
               className={`header-icon-btn ${bellAnimating ? 'bell-pulse' : ''}`}
               onClick={() => {
@@ -355,9 +355,9 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 </span>
               )}
             </button>
-            
+
             {showNotifications && (
-              <div 
+              <div
                 className="notification-dropdown"
                 role="dialog"
                 aria-live="polite"
@@ -375,24 +375,24 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <CheckCheck size={14} /> Mark all as read
                   </button>
                 </div>
-                
+
                 {/* Filter tab bar */}
                 <div className="notification-filter-bar">
-                  <span 
-                    onClick={() => setFilter('all')} 
+                  <span
+                    onClick={() => setFilter('all')}
                     className={`notification-filter-tab ${filter === 'all' ? 'active' : ''}`}
                   >
                     All
                   </span>
-                  <span 
-                    onClick={() => setFilter('unread')} 
+                  <span
+                    onClick={() => setFilter('unread')}
                     className={`notification-filter-tab ${filter === 'unread' ? 'active' : ''}`}
                   >
                     Unread ({unreadCount})
                   </span>
                 </div>
 
- 
+
                 {/* Notification Items List */}
                 <div className="notification-dropdown-list">
                   {sortedFiltered.length === 0 ? (
@@ -412,8 +412,8 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                           {todayNotifications.map((n) => {
                             const isCritical = n.type === 'alert';
                             return (
-                              <div 
-                                key={n.id} 
+                              <div
+                                key={n.id}
                                 className={`notification-dropdown-item ${!n.read ? 'unread' : ''} ${isCritical ? 'critical' : ''}`}
                                 onClick={() => {
                                   if (!n.read) {
@@ -455,23 +455,33 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                       </div>
                                     </div>
                                     <p className="notification-dropdown-item-desc">{n.description}</p>
-                                    
+
                                     {/* Inline action button — routes via onNotificationAction prop */}
-                                    {n.actionLabel && (
-                                      <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
-                                        <button 
-                                          className="notification-action-btn"
-                                          onClick={() => {
-                                            setShowNotifications(false);
-                                            onNotificationAction
-                                              ? onNotificationAction(n)
-                                              : console.info('[GlobalHeader] onNotificationAction not set for:', n.actionLabel);
-                                          }}
-                                        >
-                                          {n.actionLabel} →
-                                        </button>
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const effectiveActionLabel = n.actionLabel || (
+                                        (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                          ? 'View Collection Task'
+                                          : (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Linked Task'
+                                            : undefined
+                                      );
+                                      if (!effectiveActionLabel) return null;
+                                      return (
+                                        <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
+                                          <button
+                                            className="notification-action-btn"
+                                            onClick={() => {
+                                              setShowNotifications(false);
+                                              onNotificationAction
+                                                ? onNotificationAction({ ...n, actionLabel: effectiveActionLabel })
+                                                : console.info('[GlobalHeader] onNotificationAction not set for:', effectiveActionLabel);
+                                            }}
+                                          >
+                                            {effectiveActionLabel} →
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
 
                                     <span className="notification-dropdown-item-time">{n.timestamp}</span>
                                   </div>
@@ -481,7 +491,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                           })}
                         </div>
                       )}
- 
+
                       {/* EARLIER SECTION */}
                       {earlierNotifications.length > 0 && (
                         <div className="notification-group-section">
@@ -489,8 +499,8 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                           {earlierNotifications.map((n) => {
                             const isCritical = n.type === 'alert';
                             return (
-                              <div 
-                                key={n.id} 
+                              <div
+                                key={n.id}
                                 className={`notification-dropdown-item ${!n.read ? 'unread' : ''} ${isCritical ? 'critical' : ''}`}
                                 onClick={() => {
                                   if (!n.read) {
@@ -534,21 +544,31 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                     <p className="notification-dropdown-item-desc">{n.description}</p>
 
                                     {/* Inline action button — routes via onNotificationAction prop */}
-                                    {n.actionLabel && (
-                                      <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
-                                        <button 
-                                          className="notification-action-btn"
-                                          onClick={() => {
-                                            setShowNotifications(false);
-                                            onNotificationAction
-                                              ? onNotificationAction(n)
-                                              : console.info('[GlobalHeader] onNotificationAction not set for:', n.actionLabel);
-                                          }}
-                                        >
-                                          {n.actionLabel} →
-                                        </button>
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const effectiveActionLabel = n.actionLabel || (
+                                        (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                          ? 'View Collection Task'
+                                          : (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Linked Task'
+                                            : undefined
+                                      );
+                                      if (!effectiveActionLabel) return null;
+                                      return (
+                                        <div style={{ marginTop: '6px' }} onClick={e => e.stopPropagation()}>
+                                          <button
+                                            className="notification-action-btn"
+                                            onClick={() => {
+                                              setShowNotifications(false);
+                                              onNotificationAction
+                                                ? onNotificationAction({ ...n, actionLabel: effectiveActionLabel })
+                                                : console.info('[GlobalHeader] onNotificationAction not set for:', effectiveActionLabel);
+                                            }}
+                                          >
+                                            {effectiveActionLabel} →
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
 
                                     <span className="notification-dropdown-item-time">{n.timestamp}</span>
                                   </div>
@@ -561,7 +581,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     </>
                   )}
                 </div>
- 
+
                 {/* Footer Link */}
                 <div className="notification-dropdown-footer">
                   <button
@@ -577,9 +597,9 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <ChevronRight size={14} />
                   </button>
                   {/* Destructive Clear All icon is now linked to confirmation workflow */}
-                  <button 
-                    className="clear-all-notifications-btn" 
-                    onClick={() => setShowClearConfirm(true)} 
+                  <button
+                    className="clear-all-notifications-btn"
+                    onClick={() => setShowClearConfirm(true)}
                     title="Clear all notifications"
                   >
                     <Trash2 size={14} />
@@ -588,12 +608,12 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               </div>
             )}
           </div>
- 
+
           {/* Profile Avatar & Dropdown */}
           <div className="header-profile-container" ref={profileRef}>
-            <button 
+            <button
               ref={avatarBtnRef}
-              className="header-avatar-btn" 
+              className="header-avatar-btn"
               onClick={() => {
                 setShowProfileMenu(!showProfileMenu);
                 setShowNotifications(false);
@@ -613,7 +633,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 <span className="avatar-online-indicator" title="Online" />
               </div>
             </button>
-            
+
             {showProfileMenu && (
               <div className="profile-dropdown" role="menu" aria-label="Profile menu">
                 {/* Identity Header */}
@@ -633,12 +653,12 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <span className="profile-dropdown-role">{profile.role}</span>
                   </div>
                 </div>
- 
+
                 <div className="profile-dropdown-divider" />
-                
+
                 {/* Options List */}
                 <div className="profile-dropdown-options">
-                  <button 
+                  <button
                     className="profile-dropdown-option"
                     role="menuitem"
                     onClick={() => {
@@ -652,7 +672,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <span>My Profile</span>
                   </button>
 
-                  <button 
+                  <button
                     className="profile-dropdown-option"
                     role="menuitem"
                     onClick={() => {
@@ -663,8 +683,8 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <LayoutGrid size={15} strokeWidth={2} className="option-icon" />
                     <span>System Portal</span>
                   </button>
-                  
-                  <button 
+
+                  <button
                     className="profile-dropdown-option"
                     role="menuitem"
                     onClick={() => {
@@ -678,12 +698,12 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     <span>System Settings</span>
                   </button>
                 </div>
- 
 
-                
+
+
                 {/* Logout Option */}
                 <div className="profile-dropdown-logout-section">
-                  <button 
+                  <button
                     className="profile-dropdown-option logout-option"
                     role="menuitem"
                     onClick={() => {
@@ -724,5 +744,5 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
     </header>
   );
 };
- 
+
 export default GlobalHeader;

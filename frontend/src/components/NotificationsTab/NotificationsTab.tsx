@@ -501,15 +501,15 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                                         onViewTask(item.taskId!);
                                     }}
                                 >
-                                    {item.title?.includes('Follow-up')
-                                        ? 'View Follow-up Task'
-                                        : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
-                                        ? 'View Cancelled Order Task'
-                                        : (item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert'))
+                                    {(item.title?.includes('Collection') || item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert') || item.message?.includes('Collection follow-up') || item.title?.includes('Overdue Collection'))
                                         ? 'View Collection Task'
-                                        : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
-                                        ? 'View Settled Task'
-                                        : 'View Linked Task'} <ArrowRight size={13} />
+                                        : item.title?.includes('Follow-up')
+                                            ? 'View Follow-up Task'
+                                            : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
+                                                ? 'View Cancelled Order Task'
+                                                : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
+                                                    ? 'View Settled Task'
+                                                    : 'View Linked Task'} <ArrowRight size={13} />
                                 </button>
                             ) : <div />}
 
