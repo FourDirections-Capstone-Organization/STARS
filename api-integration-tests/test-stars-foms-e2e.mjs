@@ -823,6 +823,7 @@ async function main() {
 
     expect(res.status === 200, `expected 200 OK from FOMS liquidation tasks query but got ${res.status}: ${res.text}`);
     const list = Array.isArray(res.json?.data) ? res.json.data : (Array.isArray(res.json) ? res.json : []);
+    expect(list.length >= 1, `expected at least 1 tracked liquidation task in FOMS, got ${list.length}`);
     return `Tracked tasks retrieved: ${list.length} item(s) in FOMS`;
   });
 
