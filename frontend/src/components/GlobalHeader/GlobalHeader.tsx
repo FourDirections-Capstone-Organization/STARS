@@ -189,7 +189,7 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   const roleRelevantNotifications = useMemo(() => {
     const role = profile.role.toLowerCase();
     return notifications.filter(item => {
-      if (role.includes('director') || role.includes('admin') || role.includes('manager')) {
+      if (role.includes('director') || role.includes('admin') || role.includes('manager') || role.includes('coordinator')) {
         return item.category === 'logistics' || item.category === 'finance' || item.category === 'system';
       }
       if (role.includes('finance') || role.includes('auditor')) {

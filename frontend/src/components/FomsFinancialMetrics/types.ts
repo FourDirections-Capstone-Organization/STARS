@@ -14,8 +14,25 @@ export interface FomsDashboardFinancialSummary {
     overdueInvoicesCount: number;
     paidInvoicesCount: number;
     pendingInvoicesCount: number;
+    disputedInvoicesCount?: number;
+    dueSoonInvoicesCount?: number;
     topOutstandingClients: FomsClientFinancialSummaryItem[];
+    recentInvoices?: FomsRecentInvoiceItem[];
     lastUpdatedAt: string;
+}
+
+export interface FomsRecentInvoiceItem {
+    invoiceNumber: string;
+    clientAccountId?: string;
+    clientName: string;
+    invoiceStatus?: string;
+    paymentStatus?: 'Unpaid' | 'Paid' | string;
+    dueStatus?: 'Normal' | 'Due Soon' | 'Overdue' | string;
+    agingBucket?: string;
+    outstandingBalance: number;
+    totalAmount?: number;
+    dueDate?: string | null;
+    timestamp?: string;
 }
 
 export interface FomsOverdueAlertItem {

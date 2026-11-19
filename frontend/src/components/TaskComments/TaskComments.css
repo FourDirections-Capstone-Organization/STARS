@@ -824,3 +824,56 @@
     color: #64748b;
     font-style: italic;
 }
+
+/* ── Automated FOMS Payment Settlement Remarks (Integration 2, Workflow Step 6) ── */
+.tc-msg-foms-payment {
+    max-width: 95%;
+}
+
+.tc-avatar-foms-payment {
+    background: #ecfdf5 !important;
+    color: #059669 !important;
+    border: 1px solid #a7f3d0 !important;
+}
+
+.tc-author-foms-payment {
+    color: #047857 !important;
+    font-weight: 700;
+}
+
+.tc-foms-tag-payment {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(5, 150, 105, 0.1);
+    color: #059669;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.tc-invoice-badge-payment {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.tc-foms-card.foms-payment-card {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tc-foms-type-badge.type-settled {
+    color: #059669;
+}
+
+.tc-foms-reason-box.settlement-box {
+    background: #ffffff;
+    border: 1px solid #dcfce7;
+    border-left: 3px solid #059669;
+    border-radius: 6px;
+    padding: 8px 10px;
+}

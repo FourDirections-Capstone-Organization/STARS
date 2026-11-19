@@ -137,6 +137,26 @@ export function parseFomsEndorsementSyncComment(content: string): ParsedFomsEndo
     };
 }
 
+export interface ParsedFomsPaymentNotificationComment {
+    isFomsPaymentRemark: boolean;
+    invoiceNumber: string;
+    messageText: string;
+    rawText: string;
+}
+
+export function parseFomsPaymentNotificationComment(content: string): ParsedFomsPaymentNotificationComment | null {
+    if (!content) return null;
+    if (!content.includes('[FOMS Payment Notification]')) return null;
+
+    const invoiceMatch = content.match(/invoice\s+([A-Za-z0-9-]+)/i);
+    return {
+        isFomsPaymentRemark: true,
+        invoiceNumber: invoiceMatch ? invoiceMatch[1].trim() : '',
+        messageText: content,
+        rawText: content,
+    };
+}
+
 const TaskComments: React.FC<TaskCommentsProps> = ({
     taskId,
     currentEmployeeId: _propId,
@@ -438,6 +458,58 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                     <div className="tc-meta">
                                         <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
                                         <span className="tc-dms-system-note">Automated Closed-Loop Cancellation Entry</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const fomsPaymentRemark = parseFomsPaymentNotificationComment(c.message);
+                    if (fomsPaymentRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-foms-payment"
+                                data-testid="tc-foms-payment-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-foms-payment" title="FOMS Payment Notification">
+                                    <CheckCircle2 size={14} color="#059669" />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-foms-payment">FOMS System Integration</span>
+                                        <span className="tc-foms-tag tc-foms-tag-payment">
+                                            Payment Settlement Concluded
+                                        </span>
+                                        {fomsPaymentRemark.invoiceNumber && (
+                                            <span className="tc-invoice-badge tc-invoice-badge-payment">
+                                                INV: {fomsPaymentRemark.invoiceNumber}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="tc-foms-card foms-payment-card settlement-card">
+                                        <div className="tc-foms-card-top">
+                                            <div className="tc-foms-type-badge type-settled">
+                                                <CheckCircle2 size={12} color="#059669" />
+                                                <span>Full Payment Settled</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="tc-foms-reason-box settlement-box">
+                                            <span className="tc-foms-reason-text">{c.message}</span>
+                                        </div>
+
+                                        <div className="tc-foms-footer-meta">
+                                            <span className="tc-foms-note">
+                                                Outstanding balance cleared in full • Collection follow-up concluded (Workflow Step 6)
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automated M2M Settlement &amp; Conclusion Remark</span>
                                     </div>
                                 </div>
                             </div>

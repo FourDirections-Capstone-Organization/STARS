@@ -68,7 +68,11 @@ export function classifyNotification(item: NotificationRecord): NotificationClas
     if (title.includes('assigned') || title.includes('assignment') || typeStr.includes('taskassigned') || typeStr.includes('template')) {
         return 'Task Assignments';
     }
-    if (title.includes('completed') || title.includes('marked done') || typeStr.includes('taskcompleted')) {
+    if (
+        title.includes('completed') || title.includes('marked done') ||
+        title.includes('settled') || title.includes('payment settled') ||
+        msg.includes('settled in full') || typeStr.includes('taskcompleted')
+    ) {
         return 'Task Completions';
     }
     if (
@@ -501,6 +505,10 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                                         ? 'View Follow-up Task'
                                         : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
                                         ? 'View Cancelled Order Task'
+                                        : (item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert'))
+                                        ? 'View Collection Task'
+                                        : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
+                                        ? 'View Settled Task'
                                         : 'View Linked Task'} <ArrowRight size={13} />
                                 </button>
                             ) : <div />}

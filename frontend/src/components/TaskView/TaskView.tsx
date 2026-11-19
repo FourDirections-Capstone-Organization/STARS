@@ -1528,18 +1528,33 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <span>FOMS Automated Collection &amp; Workload Graph Routing</span>
                                     </div>
                                     <div className="tv-foms-header-status">
-                                        <span className="tv-foms-pill tv-foms-pill-routed">
-                                            <Sparkles size={11} /> Graph Routed to Optimal Coordinator
-                                        </span>
+                                        {effectiveStatus === 'Completed' ? (
+                                            <span className="tv-foms-pill tv-foms-pill-settled" data-testid="foms-collection-settled-pill">
+                                                <CheckCircle2 size={11} color="#059669" /> Settled &amp; Concluded (FOMS)
+                                            </span>
+                                        ) : (
+                                            <span className="tv-foms-pill tv-foms-pill-routed">
+                                                <Sparkles size={11} /> Graph Routed to Optimal Coordinator
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="tv-foms-card">
+                                    {effectiveStatus === 'Completed' && (
+                                        <div className="tv-foms-settled-banner" data-testid="foms-collection-auto-concluded-banner">
+                                            <CheckCircle2 size={16} color="#059669" style={{ flexShrink: 0 }} />
+                                            <span>[FOMS Payment Notification] Full payment settled for invoice {fomsCollection.invoiceNumber}. Outstanding balance cleared. Follow-up concluded.</span>
+                                        </div>
+                                    )}
+
                                     {/* Top Key Overdue Stats Banner */}
                                     <div className="tv-foms-stats-banner">
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">OUTSTANDING AMOUNT</span>
-                                            <span className="tv-foms-stat-amount">{fomsCollection.amountDue}</span>
+                                            <span className="tv-foms-stat-amount" style={effectiveStatus === 'Completed' ? { color: '#059669' } : {}}>
+                                                {effectiveStatus === 'Completed' ? '₱0.00 (Settled)' : fomsCollection.amountDue}
+                                            </span>
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">INVOICE NUMBER</span>
@@ -1557,8 +1572,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">AGING DURATION</span>
-                                            <span className={`tv-foms-aging-tag ${fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
-                                                {fomsCollection.aging}
+                                            <span className={`tv-foms-aging-tag ${effectiveStatus === 'Completed' ? 'moderate' : fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
+                                                {effectiveStatus === 'Completed' ? 'Cleared / Settled' : fomsCollection.aging}
                                             </span>
                                         </div>
                                         <div className="tv-foms-stat-group">
@@ -1639,35 +1654,41 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     {/* Quick Coordinator Collection Action Bar */}
                                     <div className="tv-foms-action-bar">
                                         <span className="tv-foms-action-label">Coordinator Follow-up Actions:</span>
-                                        <div className="tv-foms-action-buttons">
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
-                                                }}
-                                            >
-                                                <Phone size={11} /> Log Call Attempt
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Recorded: Payment promised within 3 business days.');
-                                                }}
-                                            >
-                                                <Clock size={11} /> Promised Payment
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
-                                                }}
-                                            >
-                                                <CheckCircle2 size={11} /> Mark Settled
-                                            </button>
-                                        </div>
+                                        {effectiveStatus === 'Completed' ? (
+                                            <span className="tv-foms-completed-note" data-testid="foms-followup-concluded-note">
+                                                <CheckCircle2 size={12} color="#059669" /> Collection follow-up concluded — payment settled in full.
+                                            </span>
+                                        ) : (
+                                            <div className="tv-foms-action-buttons">
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
+                                                    }}
+                                                >
+                                                    <Phone size={11} /> Log Call Attempt
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Recorded: Payment promised within 3 business days.');
+                                                    }}
+                                                >
+                                                    <Clock size={11} /> Promised Payment
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
+                                                    }}
+                                                >
+                                                    <CheckCircle2 size={11} /> Mark Settled
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
