@@ -177,16 +177,20 @@ async function main() {
   });
 
   console.log("\n[4] Integration 2: FOMS -> STARS Payment Status Webhook & Dashboard");
-  await test("FOMS pushes payment status update to STARS", async () => {
+  await test("FOMS pushes payment status update to STARS with aligned contracts (FR-038)", async () => {
     const payload = {
       clientAccountId: "CLI-LIVE-001",
       clientName: "Horizon Retail Holdings Inc.",
       invoiceNumber: testInvoiceNumber,
-      currentStatus: "Overdue",
+      invoiceStatus: "Sent",
+      paymentStatus: "Unpaid",
+      dueStatus: "Overdue",
+      agingBucket: "1-30",
       totalAmount: 89500.00,
       amountPaid: 20000.00,
       outstandingBalance: 69500.00,
-      nextDueDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+      dueDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+      currentStatus: "Overdue",
       timestamp: new Date().toISOString()
     };
 
@@ -196,7 +200,33 @@ async function main() {
     });
 
     expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
-    return "Status recorded in STARS financial tracking cache";
+    return "Status and aging bucket recorded in STARS financial tracking cache";
+  });
+
+  await test("FOMS pushes full payment settlement (FR-039) to STARS; balance clears", async () => {
+    const payload = {
+      clientAccountId: "CLI-LIVE-001",
+      clientName: "Horizon Retail Holdings Inc.",
+      invoiceNumber: testInvoiceNumber,
+      invoiceStatus: "Sent",
+      paymentStatus: "Paid",
+      dueStatus: "Normal",
+      agingBucket: "Current",
+      totalAmount: 89500.00,
+      amountPaid: 89500.00,
+      outstandingBalance: 0.00,
+      dueDate: new Date(Date.now() + 25 * 86400000).toISOString(),
+      currentStatus: "Paid",
+      timestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/payment-status`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    return "Full payment recorded; invoice marked Paid";
   });
 
   await test("STARS exposes updated Dashboard Financial Summary (FR-038)", async () => {
