@@ -2177,6 +2177,134 @@
     color: var(--navy, #1A2238);
 }
 
+/* ── FOMS Endorsement Sync Failure Banner & Badge ── */
+.foms-sync-failure-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.15rem;
+    border-radius: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+}
+
+.foms-sync-failure-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.foms-sync-failure-icon {
+    color: #dc2626;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.foms-sync-failure-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #991b1b;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.foms-sync-failure-desc {
+    font-size: 0.78rem;
+    color: #7f1d1d;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.foms-sync-retry-all-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #ffffff;
+    background: #dc2626;
+    border: 1px solid #b91c1c;
+    border-radius: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.foms-sync-retry-all-btn:hover:not(:disabled) {
+    background: #b91c1c;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+}
+
+.foms-sync-retry-all-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.foms-sync-badge-failed {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.foms-sync-error-hint {
+    font-size: 0.68rem;
+    color: #dc2626;
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.foms-btn-retry-sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    padding: 0.25rem 0.55rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.foms-btn-retry-sync:hover:not(:disabled) {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #f87171;
+}
+
+.foms-btn-retry-sync:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.foms-filter-chip.chip-danger {
+    color: #b91c1c;
+}
+
+.foms-filter-chip.chip-danger.active {
+    background: #dc2626;
+    color: #ffffff;
+    border-color: #dc2626;
+}
+
 /* ================================================================
    FOMS General Buttons, Cards & OneUI Polish
    ================================================================ */

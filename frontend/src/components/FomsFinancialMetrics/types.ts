@@ -77,6 +77,7 @@ export interface FomsEndorsementItem {
     fomsSyncStatus: 'Pending' | 'Synced' | 'Failed' | string;
     fomsSyncAttempts?: number;
     lastSyncedAt?: string | null;
+    lastSyncError?: string | null;
     calculatedPaymentDueDate?: string | null;
     assignedCoordinatorName?: string;
     taskStatus?: string;

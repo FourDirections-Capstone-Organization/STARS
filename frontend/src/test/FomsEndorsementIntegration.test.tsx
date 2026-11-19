@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import FomsFinancialMetricsView from '../components/FomsFinancialMetrics/FomsFinancialMetricsView';
 import FomsEndorsementPanel from '../components/FomsFinancialMetrics/FomsEndorsementPanel';
 import TaskView, { TaskViewTask } from '../components/TaskView/TaskView';
+import TaskComments from '../components/TaskComments/TaskComments';
 import api from '../api';
 
 // Mock Recharts
@@ -232,6 +233,99 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
                 );
             });
         });
+
+        it('fetches from GET /api/foms-integration/endorsements and renders calculatedPaymentDueDate and assigned coordinator in the endorsement table', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/foms-integration/endorsements')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: [
+                                {
+                                    id: 'live-endorse-c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                    taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                    taskNumber: 'TK82C101',
+                                    invoiceNumber: 'INV-2026-8810',
+                                    clientName: 'Horizon Retail Holdings Inc.',
+                                    invoiceAmount: 89500,
+                                    billingDate: '2026-11-01T00:00:00Z',
+                                    actualReceivedDate: '2026-11-10T00:00:00Z',
+                                    calculatedPaymentDueDate: '2026-12-10T00:00:00Z',
+                                    endorsementStatus: 'Completed',
+                                    fomsSyncStatus: 'Synced',
+                                    assignedCoordinatorName: 'Jane Coordinator',
+                                    taskStatus: 'Completed',
+                                },
+                            ],
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<FomsEndorsementPanel initialSubTab="active" />);
+
+            await waitFor(() => {
+                expect(screen.getByText('INV-2026-8810')).toBeInTheDocument();
+            });
+            expect(screen.getByText('Jane Coordinator')).toBeInTheDocument();
+            expect(screen.getByTestId('calculated-payment-due-date')).toHaveTextContent(/12\/10\/2026|Dec 10, 2026/);
+        });
+
+        it('displays sync failure banner, warning badge, and handles Retry Sync to FOMS for failed endorsements', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/foms-integration/endorsements')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: [
+                                {
+                                    id: 'live-endorse-c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                    taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                    taskNumber: 'TK82C101',
+                                    invoiceNumber: 'INV-2026-8810',
+                                    clientName: 'Horizon Retail Holdings Inc.',
+                                    invoiceAmount: 89500,
+                                    actualReceivedDate: '2026-11-10T00:00:00Z',
+                                    calculatedPaymentDueDate: '2026-12-10T00:00:00Z',
+                                    endorsementStatus: 'Completed',
+                                    fomsSyncStatus: 'Failed',
+                                    lastSyncError: 'FOMS gateway timeout on callback',
+                                    assignedCoordinatorName: 'Jane Coordinator',
+                                    taskStatus: 'Completed',
+                                },
+                            ],
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<FomsEndorsementPanel initialSubTab="active" />);
+
+            // Banner is visible
+            await waitFor(() => {
+                expect(screen.getByTestId('foms-sync-failure-banner')).toBeInTheDocument();
+            });
+            expect(screen.getByTestId('foms-sync-failed-badge')).toBeInTheDocument();
+
+            // Retry button is available
+            const retryBtn = screen.getByTestId('retry-sync-to-foms-btn-INV-2026-8810');
+            expect(retryBtn).toBeInTheDocument();
+
+            // Click retry button
+            fireEvent.click(retryBtn);
+
+            await waitFor(() => {
+                expect(api.post).toHaveBeenCalledWith(
+                    '/api/foms-integration/tasks/c201a9e3-4f2b-42e1-884b-703c90e22001/resend',
+                    {}
+                );
+            });
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                expect.stringContaining('Sent endorsement completion callback to FOMS')
+            );
+        });
     });
 
     describe('TaskView - [FOMS Endorsement] Task Detection & Operations', () => {
@@ -316,6 +410,94 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
                     expect.stringContaining('Signed receiving copy recorded! 30-day payment term activated in FOMS')
                 );
             });
+        });
+
+        it('displays sync failure banner, warning badge, and handles Retry Sync to FOMS when callback fails', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/api/foms-integration/tasks/')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                invoiceNumber: 'INV-2026-8810',
+                                clientName: 'Horizon Retail Holdings Inc.',
+                                invoiceAmount: 89500,
+                                actualReceivedDate: '2026-11-10T00:00:00Z',
+                                calculatedPaymentDueDate: '2026-12-10T00:00:00Z',
+                                endorsementStatus: 'Completed',
+                                fomsSyncStatus: 'Failed',
+                                lastSyncError: 'Connection refused to FOMS callback endpoint',
+                            },
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(<TaskView task={endorsementTask} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('foms-sync-failure-banner')).toBeInTheDocument();
+            });
+            expect(screen.getByTestId('foms-sync-failed-badge')).toBeInTheDocument();
+            expect(screen.getByTestId('tv-calculated-due-date')).toBeInTheDocument();
+
+            const retryBtn = screen.getByTestId('retry-sync-to-foms-btn');
+            expect(retryBtn).toBeInTheDocument();
+
+            fireEvent.click(retryBtn);
+
+            await waitFor(() => {
+                expect(api.post).toHaveBeenCalledWith(
+                    '/api/foms-integration/tasks/c201a9e3-4f2b-42e1-884b-703c90e22001/resend',
+                    {}
+                );
+            });
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                expect.stringContaining('Endorsement completion callback transmitted to FOMS')
+            );
+        });
+    });
+
+    describe('TaskComments - [FOMS Endorsement Sync] Audit Remarks', () => {
+        it('renders duplicate remark comment [FOMS Endorsement Sync] in the task discussion thread', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/comments')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: [
+                                {
+                                    id: 'tc-foms-dup-01',
+                                    taskCommentId: 'tc-foms-dup-01',
+                                    taskId: 'c201a9e3-4f2b-42e1-884b-703c90e22001',
+                                    authorId: 'foms-system',
+                                    authorName: 'FOMS Integration',
+                                    content: '[FOMS Endorsement Sync] Duplicate endorsement request received from FOMS for invoice INV-2026-8810. Details verified and acknowledged.',
+                                    message: '[FOMS Endorsement Sync] Duplicate endorsement request received from FOMS for invoice INV-2026-8810. Details verified and acknowledged.',
+                                    createdAt: new Date().toISOString(),
+                                },
+                            ],
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(
+                <TaskComments
+                    taskId="c201a9e3-4f2b-42e1-884b-703c90e22001"
+                    currentEmployeeId="user-01"
+                    taskReferenceNumber="TK82C101"
+                />
+            );
+
+            expect(await screen.findByTestId('tc-foms-duplicate-remark')).toBeInTheDocument();
+            expect(screen.getByText('Duplicate Endorsement Sync')).toBeInTheDocument();
+            expect(
+                screen.getByText(/\[FOMS Endorsement Sync\] Duplicate endorsement request received from FOMS for invoice INV-2026-8810/i)
+            ).toBeInTheDocument();
         });
     });
 });

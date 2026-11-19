@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Send, X, Paperclip, Loader2, AlertCircle, CheckCircle2,
-    Pencil, Trash2, FileText, Download, Truck, AlertTriangle,
+    Pencil, Trash2, FileText, Download, Truck, AlertTriangle, FileCheck,
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
 import EmptyState from '../ui/EmptyState';
@@ -113,6 +113,26 @@ export function parseFailureFollowUpComment(content: string): ParsedFailureComme
         reason: reasonMatch ? reasonMatch[1].trim() : 'Unspecified Exception',
         driver: driverMatch ? driverMatch[1].trim() : 'N/A',
         recorded: recordedMatch ? recordedMatch[1].trim() : '',
+        rawText: content,
+    };
+}
+
+export interface ParsedFomsEndorsementSyncComment {
+    isFomsSyncRemark: boolean;
+    invoiceNumber: string;
+    messageText: string;
+    rawText: string;
+}
+
+export function parseFomsEndorsementSyncComment(content: string): ParsedFomsEndorsementSyncComment | null {
+    if (!content) return null;
+    if (!content.includes('[FOMS Endorsement Sync]')) return null;
+
+    const invoiceMatch = content.match(/invoice\s+([A-Za-z0-9-]+)/i);
+    return {
+        isFomsSyncRemark: true,
+        invoiceNumber: invoiceMatch ? invoiceMatch[1].trim() : '',
+        messageText: content,
         rawText: content,
     };
 }
@@ -418,6 +438,58 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                     <div className="tc-meta">
                                         <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
                                         <span className="tc-dms-system-note">Automated Closed-Loop Cancellation Entry</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const fomsSyncRemark = parseFomsEndorsementSyncComment(c.message);
+                    if (fomsSyncRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-foms-sync"
+                                data-testid="tc-foms-duplicate-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-foms" title="FOMS Endorsement Sync">
+                                    <FileCheck size={14} />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-foms">FOMS System Integration</span>
+                                        <span className="tc-foms-tag">
+                                            Duplicate Endorsement Sync
+                                        </span>
+                                        {fomsSyncRemark.invoiceNumber && (
+                                            <span className="tc-invoice-badge">
+                                                INV: {fomsSyncRemark.invoiceNumber}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="tc-foms-card duplicate">
+                                        <div className="tc-foms-card-top">
+                                            <div className="tc-foms-type-badge">
+                                                <CheckCircle2 size={12} color="#059669" />
+                                                <span>Duplicate Endorsement Request Verified</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="tc-foms-reason-box">
+                                            <span className="tc-foms-reason-text">{c.message}</span>
+                                        </div>
+
+                                        <div className="tc-foms-footer-meta">
+                                            <span className="tc-foms-note">
+                                                Open task record preserved without duplicate creation (FR-044)
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automated M2M Idempotency Audit Remark</span>
                                     </div>
                                 </div>
                             </div>

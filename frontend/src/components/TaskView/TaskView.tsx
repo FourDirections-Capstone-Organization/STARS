@@ -607,7 +607,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     };
 
     // ─── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ───────────
-    const fomsEndorsement = parseFomsEndorsement(task.taskTitle, task.taskDescription);
+    const fomsEndorsement = useMemo(() => parseFomsEndorsement(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
     const [endorsementDetail, setEndorsementDetail] = useState<any | null>(null);
     const [endorsementLoading, setEndorsementLoading] = useState(false);
     const [showSignModal, setShowSignModal] = useState(false);
@@ -641,7 +641,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         } finally {
             setEndorsementLoading(false);
         }
-    }, [task.taskId, fomsEndorsement]);
+    }, [task.taskId, fomsEndorsement?.invoiceNumber]);
 
     useEffect(() => {
         fetchEndorsementDetail();
@@ -1682,7 +1682,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <span>FOMS Physical Invoice Delivery &amp; Endorsement</span>
                                     </div>
                                     <div className="tv-foms-header-status">
-                                        {endorsementDetail?.endorsementStatus === 'Endorsed' ? (
+                                        {endorsementDetail?.fomsSyncStatus === 'Failed' ? (
+                                            <span className="tv-foms-pill tv-foms-pill-failed" data-testid="foms-sync-failed-badge">
+                                                <AlertCircle size={11} /> Sync Failed
+                                            </span>
+                                        ) : endorsementDetail?.endorsementStatus === 'Endorsed' ? (
                                             <span className="tv-foms-pill tv-foms-pill-endorsed">
                                                 <CheckCircle2 size={11} /> 30-Day Payment Clock Active
                                             </span>
@@ -1695,6 +1699,33 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 </div>
 
                                 <div className="tv-foms-card">
+                                    {/* ── Sync Failure Banner & Retry Button (fomsSyncStatus === "Failed") ── */}
+                                    {endorsementDetail?.fomsSyncStatus === 'Failed' && (
+                                        <div className="tv-foms-sync-fail-banner" role="alert" data-testid="foms-sync-failure-banner">
+                                            <div className="tv-foms-sync-fail-info">
+                                                <AlertTriangle size={18} className="tv-foms-sync-fail-icon" />
+                                                <div>
+                                                    <strong className="tv-foms-sync-fail-title">
+                                                        FOMS Sync Callback Failed
+                                                    </strong>
+                                                    <p className="tv-foms-sync-fail-desc">
+                                                        {endorsementDetail?.lastSyncError || 'The completion callback to FOMS failed to dispatch. Task remains Completed, but re-synchronization is required to activate the 30-day payment term in FOMS.'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                onClick={handleResendEndorsementCallback}
+                                                disabled={resendingEndorsement}
+                                                data-testid="retry-sync-to-foms-btn"
+                                            >
+                                                <RefreshCw size={12} className={resendingEndorsement ? 'spin' : ''} />
+                                                <span>{resendingEndorsement ? 'Retrying Sync...' : 'Retry Sync to FOMS'}</span>
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Stats Banner */}
                                     <div className="tv-foms-stats-banner">
                                         <div className="tv-foms-stat-group">
@@ -1731,9 +1762,14 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">30-DAY PAYMENT DUE</span>
                                             {endorsementDetail?.calculatedPaymentDueDate ? (
-                                                <span className="tv-foms-calc-term">
+                                                <span className="tv-foms-calc-term" data-testid="tv-calculated-due-date">
                                                     <Sparkles size={10} />
                                                     {new Date(endorsementDetail.calculatedPaymentDueDate).toLocaleDateString()}
+                                                </span>
+                                            ) : endorsementDetail?.actualReceivedDate ? (
+                                                <span className="tv-foms-calc-term" data-testid="tv-calculated-due-date">
+                                                    <Sparkles size={10} />
+                                                    {new Date(new Date(endorsementDetail.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString()}
                                                 </span>
                                             ) : (
                                                 <span className="tv-foms-stat-val" style={{ color: '#b45309', fontSize: 11 }}>
@@ -1842,6 +1878,19 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     <div className="tv-foms-action-bar">
                                         <span className="tv-foms-action-label">Endorsement Operations:</span>
                                         <div className="tv-foms-action-buttons">
+                                            {endorsementDetail?.fomsSyncStatus === 'Failed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                    onClick={handleResendEndorsementCallback}
+                                                    disabled={resendingEndorsement}
+                                                    data-testid="foms-retry-sync-action-btn"
+                                                    title="Retry Sync to FOMS"
+                                                >
+                                                    <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} />
+                                                    <span>{resendingEndorsement ? 'Retrying Sync...' : 'Retry Sync to FOMS'}</span>
+                                                </button>
+                                            )}
                                             {endorsementDetail?.endorsementStatus !== 'Endorsed' ? (
                                                 <button
                                                     type="button"
@@ -1859,14 +1908,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     >
                                                         <Pencil size={11} /> Update Signed Evidence
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        className="tv-btn tv-btn-outline-sm"
-                                                        onClick={handleResendEndorsementCallback}
-                                                        disabled={resendingEndorsement}
-                                                    >
-                                                        <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} /> Resend Callback to FOMS
-                                                    </button>
+                                                    {endorsementDetail?.fomsSyncStatus !== 'Failed' && (
+                                                        <button
+                                                            type="button"
+                                                            className="tv-btn tv-btn-outline-sm"
+                                                            onClick={handleResendEndorsementCallback}
+                                                            disabled={resendingEndorsement}
+                                                        >
+                                                            <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} /> Resend Callback to FOMS
+                                                        </button>
+                                                    )}
                                                 </>
                                             )}
                                         </div>

@@ -2416,6 +2416,82 @@
     border: 1px solid #fde68a;
 }
 
+.tv-foms-pill-failed {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-weight: 700;
+}
+
+.tv-foms-sync-fail-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    margin-bottom: 12px;
+}
+
+.tv-foms-sync-fail-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.tv-foms-sync-fail-icon {
+    color: #dc2626;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.tv-foms-sync-fail-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #991b1b;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.tv-foms-sync-fail-desc {
+    font-size: 11px;
+    color: #7f1d1d;
+    margin: 0;
+    line-height: 1.35;
+}
+
+.tv-btn-danger-sm {
+    padding: 4px 10px;
+    font-size: 11.5px;
+    border-radius: var(--btn-radius, 8px);
+    font-weight: 600;
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.tv-btn-danger-sm:hover:not(:disabled) {
+    background: #b91c1c;
+}
+
+.tv-btn-danger-sm:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.tv-btn-retry-foms {
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.2);
+}
+
 .tv-foms-calc-term {
     display: inline-flex;
     align-items: center;
