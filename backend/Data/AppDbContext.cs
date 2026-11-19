@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<FomsClientFinancialStatus> FomsClientFinancialStatuses => Set<FomsClientFinancialStatus>();
     public DbSet<TaskFomsCollectionDetail> TaskFomsCollectionDetails => Set<TaskFomsCollectionDetail>();
     public DbSet<FomsClientAccount> FomsClientAccounts => Set<FomsClientAccount>();
+    public DbSet<TaskFomsLiquidationDetail> TaskFomsLiquidationDetails => Set<TaskFomsLiquidationDetail>();
     public DbSet<KpiConfiguration> KpiConfigurations => Set<KpiConfiguration>();
     public DbSet<KpiItem> KpiItems => Set<KpiItem>();
     public DbSet<EvaluationTemplate> EvaluationTemplates => Set<EvaluationTemplate>();
@@ -458,6 +459,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.TaskId).IsUnique();
             entity.HasIndex(e => e.InvoiceNumber);
             entity.HasIndex(e => e.ClientAccountId);
+
+            entity.HasOne(d => d.Task)
+                .WithMany()
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // TaskFomsLiquidationDetail Configuration
+        modelBuilder.Entity<TaskFomsLiquidationDetail>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TaskId).IsUnique();
+            entity.HasIndex(e => e.RequestId);
+            entity.HasIndex(e => e.LiquidationStatus);
 
             entity.HasOne(d => d.Task)
                 .WithMany()

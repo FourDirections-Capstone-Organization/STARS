@@ -118,6 +118,31 @@ public static class DatabaseStartupDdl
         CREATE INDEX IF NOT EXISTS ""IX_FomsClientAccounts_AssignedCoordinatorId"" ON ""FomsClientAccounts"" (""AssignedCoordinatorId"");
         CREATE INDEX IF NOT EXISTS ""IX_FomsClientAccounts_Status"" ON ""FomsClientAccounts"" (""Status"");
 
+        CREATE TABLE IF NOT EXISTS ""TaskFomsLiquidationDetails"" (
+            ""Id"" uuid NOT NULL PRIMARY KEY,
+            ""TaskId"" uuid NOT NULL REFERENCES ""Tasks"" (""Id"") ON DELETE CASCADE,
+            ""RequestId"" character varying(100) NOT NULL,
+            ""LiquidationId"" integer NULL,
+            ""Requester"" character varying(200) NOT NULL,
+            ""RequesterEmployeeId"" character varying(50) NULL,
+            ""DeliveryReference"" character varying(100) NULL,
+            ""LiquidationStatus"" character varying(50) NOT NULL,
+            ""CorrectionReason"" character varying(1000) NOT NULL,
+            ""DueDate"" timestamp with time zone NULL,
+            ""Amount"" numeric(18,2) NULL,
+            ""CorrectionStatus"" character varying(50) NOT NULL DEFAULT 'PendingCorrection',
+            ""CorrectedReceiptsUrl"" character varying(1000) NULL,
+            ""ResolutionRemarks"" character varying(1000) NULL,
+            ""FomsSyncStatus"" character varying(50) NOT NULL DEFAULT 'Pending',
+            ""LastSyncedAt"" timestamp with time zone NULL,
+            ""LastSyncError"" character varying(500) NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""UpdatedAt"" timestamp with time zone NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskFomsLiquidationDetails_TaskId"" ON ""TaskFomsLiquidationDetails"" (""TaskId"");
+        CREATE INDEX IF NOT EXISTS ""IX_TaskFomsLiquidationDetails_RequestId"" ON ""TaskFomsLiquidationDetails"" (""RequestId"");
+        CREATE INDEX IF NOT EXISTS ""IX_TaskFomsLiquidationDetails_LiquidationStatus"" ON ""TaskFomsLiquidationDetails"" (""LiquidationStatus"");
+
         CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
             ""MigrationId"" character varying(150) NOT NULL PRIMARY KEY,
             ""ProductVersion"" character varying(32) NOT NULL

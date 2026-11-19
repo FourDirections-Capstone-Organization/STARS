@@ -426,4 +426,110 @@ public class FomsClientAccountResponseDTO
     public DateTime UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// Webhook payload sent from FOMS to STARS when an expense liquidation requires correction or is rejected (Integration 5).
+/// </summary>
+public class FomsLiquidationCorrectionRequestDTO
+{
+    [Required]
+    [MaxLength(100)]
+    public string RequestId { get; set; } = string.Empty;
+
+    public int? LiquidationId { get; set; }
+
+    [Required]
+    [MaxLength(200)]
+    public string Requester { get; set; } = string.Empty;
+
+    [MaxLength(50)]
+    public string? RequesterEmployeeId { get; set; }
+
+    [MaxLength(100)]
+    public string? DeliveryReference { get; set; }
+
+    [Required]
+    [MaxLength(50)]
+    public string LiquidationStatus { get; set; } = "For Correction"; // "For Correction" or "Rejected"
+
+    [Required]
+    [MaxLength(1000)]
+    public string CorrectionReason { get; set; } = string.Empty;
+
+    public DateTime? DueDate { get; set; }
+
+    public decimal? Amount { get; set; }
+
+    [MaxLength(1000)]
+    public string? Remarks { get; set; }
+}
+
+/// <summary>
+/// Response returned by STARS to FOMS upon receiving a liquidation correction request.
+/// </summary>
+public class FomsLiquidationCorrectionResponseDTO
+{
+    public bool IsSuccess { get; set; }
+    public Guid StarsTaskId { get; set; }
+    public string StarsTaskNumber { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string? AssignedTo { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Callback payload sent from STARS to FOMS when a liquidation correction task is completed with verified receipts (Integration 5).
+/// </summary>
+public class StarsLiquidationCorrectionCallbackDTO
+{
+    [Required]
+    public string RequestId { get; set; } = string.Empty;
+
+    public int? LiquidationId { get; set; }
+
+    public Guid StarsTaskId { get; set; }
+
+    public string StarsTaskNumber { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? CorrectedReceiptsReference { get; set; }
+
+    [MaxLength(1000)]
+    public string? Remarks { get; set; }
+
+    public DateTime CompletionDate { get; set; } = DateTime.UtcNow;
+
+    public Guid? CoordinatorId { get; set; }
+
+    public string Status { get; set; } = "Completed";
+}
+
+/// <summary>
+/// Payload for a Coordinator submitting corrected receipts and resolution remarks for a liquidation correction task.
+/// </summary>
+public class SubmitLiquidationCorrectionDTO
+{
+    [Required]
+    [MaxLength(1000)]
+    public string CorrectedReceiptsUrl { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Remarks { get; set; }
+}
+
+/// <summary>
+/// Trigger payload for dispatching liquidation correction callback manually or in headless tests.
+/// </summary>
+public class TriggerLiquidationCorrectionDTO
+{
+    public Guid TaskId { get; set; }
+
+    public string? CorrectedReceiptsUrl { get; set; }
+
+    public string? Remarks { get; set; }
+
+    public Guid? CoordinatorId { get; set; }
+}
+
+
 

@@ -470,6 +470,59 @@ public class FomsIntegrationController : ControllerBase
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
+    /// <summary>
+    /// Integration 5 (STARS Internal): Retrieve liquidation correction details for a specific STARS task.
+    /// </summary>
+    [HttpGet("api/foms-integration/liquidation-tasks/{taskId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> GetLiquidationDetail(Guid taskId)
+    {
+        var result = await _fomsService.GetLiquidationDetailAsync(taskId);
+        return result.IsSuccess ? Ok(result) : NotFound(result);
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Coordinator or Assignee submits corrected receipts and resolution notes.
+    /// </summary>
+    [HttpPost("api/foms-integration/liquidation-tasks/{taskId:guid}/submit-correction")]
+    [Authorize]
+    public async Task<IActionResult> SubmitLiquidationCorrection(Guid taskId, [FromBody] SubmitLiquidationCorrectionDTO dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _fomsService.SubmitLiquidationCorrectionAsync(taskId, dto, userId.Value);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Coordinator/Manager authorizes completion and dispatches callback to FOMS.
+    /// </summary>
+    [HttpPost("api/foms-integration/liquidation-tasks/{taskId:guid}/callback")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> SendLiquidationCallback(Guid taskId, [FromBody] SubmitLiquidationCorrectionDTO? dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _fomsService.SendLiquidationCorrectionCallbackAsync(taskId, userId.Value, dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Manually retry sending the liquidation correction callback to FOMS.
+    /// </summary>
+    [HttpPost("api/foms-integration/liquidation-tasks/{taskId:guid}/retry")]
+    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
+    public async Task<IActionResult> RetryLiquidationCallback(Guid taskId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var result = await _fomsService.RetryLiquidationCorrectionCallbackAsync(taskId, userId.Value);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────
 
     /// <summary>
@@ -542,6 +595,21 @@ public class FomsIntegrationController : ControllerBase
         if (authError != null) return authError;
 
         var result = await _fomsService.ProcessClientBatchSyncWebhookAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 5: FOMS flags an overdue, rejected, or invalid expense liquidation for correction.
+    /// STARS creates a Liquidation Correction task and routes it via Graph Routing to the optimal Coordinator.
+    /// </summary>
+    [HttpPost("api/integration/foms/liquidation-correction")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveLiquidationCorrection([FromBody] FomsLiquidationCorrectionRequestDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _fomsService.CreateLiquidationCorrectionTaskAsync(dto);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
@@ -641,6 +709,28 @@ public class FomsIntegrationController : ControllerBase
         var managerUserId = dto.ManagerUserId ?? mgr?.Id ?? Guid.NewGuid();
 
         var result = await _fomsService.AssignClientCoordinatorAsync(dto.ClientAccountId, dto.CoordinatorId, managerUserId);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Machine-to-machine trigger: Simulates or triggers Integration 5 liquidation correction callback to FOMS for testing.
+    /// </summary>
+    [HttpPost("api/integration/foms/dispatch-liquidation-callback")]
+    [AllowAnonymous]
+    public async Task<IActionResult> TriggerDispatchLiquidationCallback([FromBody] TriggerLiquidationCorrectionDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var explicitSubmission = !string.IsNullOrWhiteSpace(dto.CorrectedReceiptsUrl) || !string.IsNullOrWhiteSpace(dto.Remarks)
+            ? new SubmitLiquidationCorrectionDTO
+            {
+                CorrectedReceiptsUrl = dto.CorrectedReceiptsUrl ?? "https://stars.speedex.com/receipts/placeholder.jpg",
+                Remarks = dto.Remarks
+            }
+            : null;
+
+        var result = await _fomsService.SendLiquidationCorrectionCallbackAsync(dto.TaskId, dto.CoordinatorId, explicitSubmission);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 

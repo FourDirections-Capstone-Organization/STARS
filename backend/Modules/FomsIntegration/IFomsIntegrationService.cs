@@ -105,5 +105,33 @@ public interface IFomsIntegrationService
     /// Integration 4 (STARS Internal): Retrieves a single client account with role-based scoping.
     /// </summary>
     Task<ApiResponseDTO<FomsClientAccountResponseDTO>> GetClientAccountByIdAsync(string clientAccountId, Backend.Models.Enums.UserRole role, Guid? userId);
+
+    /// <summary>
+    /// Integration 5 (FOMS → STARS): Late/Invalid liquidation flagged in FOMS triggers a Liquidation Correction task in STARS.
+    /// Idempotent based on RequestId per FR-044 / FR-035.
+    /// </summary>
+    Task<ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>> CreateLiquidationCorrectionTaskAsync(FomsLiquidationCorrectionRequestDTO dto);
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Coordinator or Assignee attaches corrected receipt and resolution remarks.
+    /// </summary>
+    Task<ApiResponseDTO<TaskFomsLiquidationDetail>> SubmitLiquidationCorrectionAsync(Guid taskId, SubmitLiquidationCorrectionDTO dto, Guid coordinatorUserId);
+
+    /// <summary>
+    /// Integration 5 (STARS → FOMS): Sends completion callback with corrected receipt reference to FOMS.
+    /// Automatically triggered when task is marked Completed (or manually).
+    /// </summary>
+    Task<ApiResponseDTO<bool>> SendLiquidationCorrectionCallbackAsync(Guid taskId, Guid? reviewerId = null, SubmitLiquidationCorrectionDTO? explicitSubmission = null);
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Manually retries sending the liquidation correction callback to FOMS.
+    /// </summary>
+    Task<ApiResponseDTO<bool>> RetryLiquidationCorrectionCallbackAsync(Guid taskId, Guid? reviewerId = null);
+
+    /// <summary>
+    /// Integration 5: Retrieves liquidation correction details for a specific STARS task.
+    /// </summary>
+    Task<ApiResponseDTO<TaskFomsLiquidationDetail>> GetLiquidationDetailAsync(Guid taskId);
 }
+
 

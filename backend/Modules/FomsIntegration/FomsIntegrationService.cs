@@ -2034,6 +2034,450 @@ public class FomsIntegrationService : IFomsIntegrationService
         };
     }
 
+    // ═════════════════════════════════════════════════════════════════════════════
+    // INTEGRATION 5: FOMS Late/Invalid Liquidation -> STARS Liquidation Correction Task
+    // ═════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Integration 5 (FOMS → STARS): Late/Invalid liquidation flagged in FOMS triggers a Liquidation Correction task in STARS.
+    /// Idempotent based on RequestId per FR-044 / FR-035.
+    /// </summary>
+    public async Task<ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>> CreateLiquidationCorrectionTaskAsync(FomsLiquidationCorrectionRequestDTO dto)
+    {
+        if (dto == null)
+            return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Failure("Liquidation correction request payload is required");
+
+        if (string.IsNullOrWhiteSpace(dto.RequestId))
+            return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Failure("RequestId is required");
+
+        if (string.IsNullOrWhiteSpace(dto.Requester))
+            return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Failure("Requester name is required");
+
+        if (string.IsNullOrWhiteSpace(dto.CorrectionReason))
+            return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Failure("CorrectionReason is required");
+
+        // Idempotency (FR-044, FR-035): Check if an active liquidation correction task exists for this RequestId
+        var existingActive = await _db.TaskFomsLiquidationDetails
+            .Include(d => d.Task)
+            .FirstOrDefaultAsync(d => d.RequestId == dto.RequestId.Trim() &&
+                                      d.Task != null &&
+                                      d.Task.Status != Models.Enums.TaskStatus.Completed &&
+                                      d.Task.Status != Models.Enums.TaskStatus.Cancelled);
+
+        if (existingActive != null && existingActive.Task != null)
+        {
+            var authorId = existingActive.Task.CreatedById != Guid.Empty
+                ? existingActive.Task.CreatedById
+                : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync());
+
+            _db.TaskComments.Add(new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = existingActive.TaskId,
+                AuthorId = authorId,
+                Content = $"[FOMS Liquidation Correction Alert] Updated correction notification received for {dto.RequestId.Trim()} ({dto.LiquidationStatus}: {dto.CorrectionReason}). Existing open task retained per FR-044.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+
+            return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Success(new FomsLiquidationCorrectionResponseDTO
+            {
+                IsSuccess = true,
+                StarsTaskId = existingActive.TaskId,
+                StarsTaskNumber = existingActive.Task.TaskNumber,
+                RequestId = existingActive.RequestId,
+                Status = existingActive.Task.Status.ToString(),
+                AssignedTo = "Assigned Coordinator",
+                Message = "Active liquidation correction task already exists in STARS; duplicate remark appended (FR-044)."
+            });
+        }
+
+        // Determine Priority: Urgent if Rejected or past DueDate; otherwise High
+        var isUrgent = string.Equals(dto.LiquidationStatus?.Trim(), "Rejected", StringComparison.OrdinalIgnoreCase) ||
+                       (dto.DueDate.HasValue && dto.DueDate.Value < DateTime.UtcNow);
+        var priority = isUrgent ? PriorityLevel.Urgent : PriorityLevel.High;
+
+        var defaultCreatorId = await _db.Users
+            .Where(u => u.Role == UserRole.Manager || u.Role == UserRole.Coordinator)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync();
+
+        if (defaultCreatorId == Guid.Empty)
+            defaultCreatorId = await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+
+        var taskNumber = TaskNumberGenerator.Generate(8);
+        var now = DateTime.UtcNow;
+        var effectiveDueDate = ToUtc(dto.DueDate) ?? now.AddDays(2);
+
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = taskNumber,
+            Title = $"[Liquidation Correction] {dto.RequestId.Trim()} - {dto.Requester.Trim()}",
+            Description = $"Automated liquidation correction routed from FOMS.\n" +
+                          $"Request ID: {dto.RequestId.Trim()}\n" +
+                          (dto.LiquidationId.HasValue ? $"Liquidation ID: {dto.LiquidationId.Value}\n" : "") +
+                          $"Requester: {dto.Requester.Trim()}" + (!string.IsNullOrWhiteSpace(dto.RequesterEmployeeId) ? $" ({dto.RequesterEmployeeId.Trim()})\n" : "\n") +
+                          (!string.IsNullOrWhiteSpace(dto.DeliveryReference) ? $"Delivery/Trip Reference: {dto.DeliveryReference.Trim()}\n" : "") +
+                          $"Status: {dto.LiquidationStatus.Trim()}\n" +
+                          $"Correction Reason: {dto.CorrectionReason.Trim()}\n" +
+                          (dto.Amount.HasValue ? $"Amount: ₱{dto.Amount.Value:N2}\n" : "") +
+                          $"Due Date: {(dto.DueDate.HasValue ? dto.DueDate.Value.ToString("yyyy-MM-dd") : "N/A")}\n" +
+                          $"Remarks: {dto.Remarks ?? "Please collect corrected receipts and resolve discrepancy with requester."}",
+            PriorityLevel = priority,
+            Status = Models.Enums.TaskStatus.NotStarted,
+            Classification = TaskClassification.SpecialTask,
+            Deadline = effectiveDueDate,
+            CreatedById = defaultCreatorId,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsLiquidationDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            RequestId = dto.RequestId.Trim(),
+            LiquidationId = dto.LiquidationId,
+            Requester = dto.Requester.Trim(),
+            RequesterEmployeeId = dto.RequesterEmployeeId?.Trim(),
+            DeliveryReference = dto.DeliveryReference?.Trim(),
+            LiquidationStatus = dto.LiquidationStatus.Trim(),
+            CorrectionReason = dto.CorrectionReason.Trim(),
+            DueDate = ToUtc(dto.DueDate),
+            Amount = dto.Amount,
+            CorrectionStatus = "PendingCorrection",
+            FomsSyncStatus = "Pending",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _db.TaskFomsLiquidationDetails.Add(detail);
+
+        // Optimal Coordinator Assignment via Graph Routing / Workload Evaluator (FR-019, FR-021)
+        var optimalCoordinator = await _db.Users
+            .Where(u => u.Role == UserRole.Coordinator && u.EmploymentStatus == "Active")
+            .OrderBy(u => _db.TaskAssignments.Count(a => a.AssignedUserId == u.Id && a.Task!.Status != Models.Enums.TaskStatus.Completed && a.Task!.Status != Models.Enums.TaskStatus.Cancelled))
+            .FirstOrDefaultAsync();
+
+        string? assignedName = null;
+        if (optimalCoordinator != null)
+        {
+            _db.TaskAssignments.Add(new TaskAssignment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                AssignedUserId = optimalCoordinator.Id,
+                AssignedAt = now,
+                CompletionPercentage = 0
+            });
+            task.Status = Models.Enums.TaskStatus.InProgress;
+            assignedName = (!string.IsNullOrWhiteSpace(optimalCoordinator.FirstName) || !string.IsNullOrWhiteSpace(optimalCoordinator.LastName))
+                ? $"{optimalCoordinator.FirstName} {optimalCoordinator.LastName}".Trim()
+                : optimalCoordinator.Username;
+
+            try
+            {
+                await _notificationService.SendNotificationAsync(
+                    optimalCoordinator.Id,
+                    NotificationType.TaskAssigned,
+                    "Liquidation Correction Task Assigned",
+                    $"Liquidation correction task for {dto.RequestId.Trim()} ({dto.Requester.Trim()}) has been routed to you.",
+                    task.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send assignment notification for task {TaskId}", task.Id);
+            }
+        }
+
+        // Notify Managers (FR-033)
+        await NotifyManagersAsync(
+            "Liquidation Correction Task Created",
+            $"Liquidation correction task for {dto.RequestId.Trim()} ({dto.Requester.Trim()}) created with priority {priority}.");
+
+        await _db.SaveChangesAsync();
+
+        // Audit Log (FR-046)
+        try
+        {
+            await _auditLogService.LogAsync(
+                defaultCreatorId != Guid.Empty ? defaultCreatorId : (optimalCoordinator?.Id),
+                AuditActionType.Create,
+                "TaskManagement",
+                task.Id,
+                null,
+                $"Created liquidation correction task for {dto.RequestId.Trim()} assigned to {assignedName ?? "Unassigned"}.",
+                "TaskManagement");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for task {TaskId}", task.Id);
+        }
+
+        return ApiResponseDTO<FomsLiquidationCorrectionResponseDTO>.Success(new FomsLiquidationCorrectionResponseDTO
+        {
+            IsSuccess = true,
+            StarsTaskId = task.Id,
+            StarsTaskNumber = task.TaskNumber,
+            RequestId = detail.RequestId,
+            Status = task.Status.ToString(),
+            AssignedTo = assignedName ?? "Optimal Coordinator",
+            Message = "Liquidation correction task created and routed successfully."
+        });
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Coordinator or Assignee attaches corrected receipt and resolution remarks.
+    /// Progresses task from InProgress to PendingReview.
+    /// </summary>
+    public async Task<ApiResponseDTO<TaskFomsLiquidationDetail>> SubmitLiquidationCorrectionAsync(
+        Guid taskId, SubmitLiquidationCorrectionDTO dto, Guid coordinatorUserId)
+    {
+        if (dto == null)
+            return ApiResponseDTO<TaskFomsLiquidationDetail>.Failure("Submission details are required");
+
+        if (string.IsNullOrWhiteSpace(dto.CorrectedReceiptsUrl))
+            return ApiResponseDTO<TaskFomsLiquidationDetail>.Failure("CorrectedReceiptsUrl is required");
+
+        var detail = await _db.TaskFomsLiquidationDetails
+            .Include(d => d.Task)
+            .FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        if (detail == null)
+            return ApiResponseDTO<TaskFomsLiquidationDetail>.Failure("Liquidation correction detail not found for this task");
+
+        detail.CorrectedReceiptsUrl = dto.CorrectedReceiptsUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Remarks))
+            detail.ResolutionRemarks = dto.Remarks.Trim();
+
+        detail.CorrectionStatus = "Corrected";
+        detail.UpdatedAt = DateTime.UtcNow;
+
+        if (detail.Task != null && detail.Task.Status == Models.Enums.TaskStatus.InProgress)
+        {
+            detail.Task.Status = Models.Enums.TaskStatus.DonePendingReview;
+            detail.Task.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Add task comment documenting receipt submission (FR-018)
+        _db.TaskComments.Add(new TaskComment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            AuthorId = coordinatorUserId != Guid.Empty ? coordinatorUserId : (detail.Task?.CreatedById ?? Guid.Empty),
+            Content = $"[Liquidation Correction Submitted] Corrected receipts attached: {dto.CorrectedReceiptsUrl.Trim()}." +
+                      (!string.IsNullOrWhiteSpace(dto.Remarks) ? $" Remarks: {dto.Remarks.Trim()}" : ""),
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync();
+
+        return ApiResponseDTO<TaskFomsLiquidationDetail>.Success(detail, "Corrected receipts attached successfully.");
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS → FOMS): Sends completion callback with corrected receipt reference to FOMS.
+    /// Automatically triggered when task is marked Completed (or manually).
+    /// </summary>
+    public async Task<ApiResponseDTO<bool>> SendLiquidationCorrectionCallbackAsync(
+        Guid taskId, Guid? reviewerId = null, SubmitLiquidationCorrectionDTO? explicitSubmission = null)
+    {
+        var detail = await _db.TaskFomsLiquidationDetails
+            .Include(d => d.Task)
+            .FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        var task = detail?.Task ?? await _db.Tasks.FindAsync(taskId);
+
+        if (detail == null && task != null)
+        {
+            var title = task.Title ?? "";
+            var desc = task.Description ?? "";
+            var match = System.Text.RegularExpressions.Regex.Match($"{title} {desc}", @"(?:Request ID|LIQ|REQ-LIQ)[:\s]+([A-Za-z0-9-]+)");
+            if (match.Success)
+            {
+                var reqId = match.Groups[1].Value.Trim();
+                detail = await _db.TaskFomsLiquidationDetails.FirstOrDefaultAsync(d => d.RequestId == reqId);
+                if (detail != null)
+                {
+                    detail.TaskId = taskId;
+                }
+            }
+        }
+
+        if (detail == null)
+            return ApiResponseDTO<bool>.Failure("No FOMS liquidation correction linked to this task");
+
+        if (task == null)
+            return ApiResponseDTO<bool>.Failure("Task not found");
+
+        if (explicitSubmission != null)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitSubmission.CorrectedReceiptsUrl))
+                detail.CorrectedReceiptsUrl = explicitSubmission.CorrectedReceiptsUrl.Trim();
+            if (!string.IsNullOrWhiteSpace(explicitSubmission.Remarks))
+                detail.ResolutionRemarks = explicitSubmission.Remarks.Trim();
+            detail.CorrectionStatus = "Corrected";
+        }
+
+        // FSM Progression: Complete task (FR-022, FR-024)
+        task.Status = Models.Enums.TaskStatus.Completed;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        var reviewer = reviewerId.HasValue ? await _db.Users.FindAsync(reviewerId.Value) : null;
+        var completedByName = reviewer != null
+            ? $"{reviewer.FirstName} {reviewer.LastName}".Trim()
+            : "Operations Coordinator";
+
+        var payload = new StarsLiquidationCorrectionCallbackDTO
+        {
+            RequestId = detail.RequestId,
+            LiquidationId = detail.LiquidationId,
+            StarsTaskId = task.Id,
+            StarsTaskNumber = task.TaskNumber ?? string.Empty,
+            CorrectedReceiptsReference = detail.CorrectedReceiptsUrl,
+            Remarks = detail.ResolutionRemarks ?? $"Liquidation correction verified and completed in STARS by {completedByName}",
+            CompletionDate = DateTime.UtcNow,
+            CoordinatorId = reviewerId,
+            Status = "Completed"
+        };
+
+        if (!IsConfigured)
+        {
+            detail.FomsSyncStatus = "Failed";
+            detail.LastSyncError = "FOMS integration is not configured (missing BaseUrl or OutboundApiKey)";
+            detail.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Liquidation Sync Failed",
+                        $"Liquidation correction callback for {detail.RequestId} could not be synced to FOMS. Task remains Completed. Please retry when FOMS is available.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
+            _logger.LogWarning("Cannot send liquidation callback for task {TaskId}: FOMS integration not configured", taskId);
+            return ApiResponseDTO<bool>.Failure("FOMS integration is not configured on this server");
+        }
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            client.Timeout = TimeSpan.FromSeconds(30);
+
+            var endpoint = $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/liquidation-correction-callback";
+            using var req = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(payload)
+            };
+            req.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var res = await client.SendAsync(req);
+            var responseBody = await res.Content.ReadAsStringAsync();
+
+            if (res.IsSuccessStatusCode)
+            {
+                detail.CorrectionStatus = "Corrected";
+                detail.FomsSyncStatus = "CallbackSuccess";
+                detail.LastSyncedAt = DateTime.UtcNow;
+                detail.LastSyncError = null;
+                detail.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully synced liquidation correction callback to FOMS for request {RequestId}", detail.RequestId);
+                return ApiResponseDTO<bool>.Success(true, "Liquidation correction callback acknowledged by FOMS");
+            }
+
+            detail.FomsSyncStatus = "Failed";
+            detail.LastSyncError = $"FOMS returned HTTP {(int)res.StatusCode}: {responseBody}";
+            detail.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Liquidation Sync Failed",
+                        $"Liquidation correction callback for {detail.RequestId} could not be synced to FOMS (HTTP {(int)res.StatusCode}). Task remains Completed.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
+            _logger.LogWarning("FOMS returned HTTP {Status} for liquidation callback on request {RequestId}: {Body}", (int)res.StatusCode, detail.RequestId, responseBody);
+            return ApiResponseDTO<bool>.Failure($"FOMS returned HTTP {(int)res.StatusCode}: {responseBody}");
+        }
+        catch (Exception ex)
+        {
+            detail.FomsSyncStatus = "Failed";
+            detail.LastSyncError = ex.Message;
+            detail.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            if (reviewerId.HasValue)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        reviewerId.Value,
+                        NotificationType.TaskUpdated,
+                        "FOMS Liquidation Sync Failed",
+                        $"Liquidation correction callback for {detail.RequestId} could not be synced to FOMS: {ex.Message}. Task remains Completed.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
+            _logger.LogError(ex, "Exception sending liquidation callback for request {RequestId}", detail.RequestId);
+            return ApiResponseDTO<bool>.Failure($"Failed to contact FOMS: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Integration 5 (STARS Internal): Manually retries sending the liquidation correction callback to FOMS.
+    /// </summary>
+    public async Task<ApiResponseDTO<bool>> RetryLiquidationCorrectionCallbackAsync(Guid taskId, Guid? reviewerId = null)
+    {
+        return await SendLiquidationCorrectionCallbackAsync(taskId, reviewerId, null);
+    }
+
+    /// <summary>
+    /// Integration 5: Retrieves liquidation correction details for a specific STARS task.
+    /// </summary>
+    public async Task<ApiResponseDTO<TaskFomsLiquidationDetail>> GetLiquidationDetailAsync(Guid taskId)
+    {
+        var detail = await _db.TaskFomsLiquidationDetails
+            .Include(d => d.Task)
+            .FirstOrDefaultAsync(d => d.TaskId == taskId);
+
+        if (detail == null)
+            return ApiResponseDTO<TaskFomsLiquidationDetail>.Failure("Liquidation correction detail not found for this task");
+
+        return ApiResponseDTO<TaskFomsLiquidationDetail>.Success(detail);
+    }
+
     private static string Truncate(string s) => s.Length <= 300 ? s : s[..300];
 }
+
 

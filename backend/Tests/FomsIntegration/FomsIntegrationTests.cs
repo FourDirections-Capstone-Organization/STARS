@@ -1346,4 +1346,414 @@ public class FomsIntegrationTests : IDisposable
             null,
             null), Times.Once);
     }
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // INTEGRATION 5: FOMS Late/Invalid Liquidation -> STARS Liquidation Correction Task
+    // ═════════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CreateLiquidationCorrectionTaskAsync_ValidRequest_CreatesTaskAndRoutesToOptimalCoordinator()
+    {
+        var service = CreateService();
+
+        var coordinator = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "COORD-LIQ-01",
+            Email = "coord.liq@speedex.com",
+            Username = "coordliq01",
+            FirstName = "Carlos",
+            LastName = "Coordinator",
+            Role = UserRole.Coordinator,
+            EmploymentStatus = "Active",
+            PasswordHash = "hash"
+        };
+        _db.Users.Add(coordinator);
+
+        var manager = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "MGR-LIQ-01",
+            Email = "mgr.liq@speedex.com",
+            Username = "mgrliq01",
+            FirstName = "Manny",
+            LastName = "Manager",
+            Role = UserRole.Manager,
+            EmploymentStatus = "Active",
+            PasswordHash = "hash"
+        };
+        _db.Users.Add(manager);
+        await _db.SaveChangesAsync();
+
+        var request = new FomsLiquidationCorrectionRequestDTO
+        {
+            RequestId = "LIQ-2026-TEST-001",
+            LiquidationId = 101,
+            Requester = "Juan Dela Cruz",
+            RequesterEmployeeId = "EMP-005",
+            DeliveryReference = "WB-998877",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Missing official BIR receipt for fuel purchase",
+            DueDate = DateTime.UtcNow.AddDays(2),
+            Amount = 3500.50m,
+            Remarks = "Please submit original receipt to finance"
+        };
+
+        var result = await service.CreateLiquidationCorrectionTaskAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Equal("LIQ-2026-TEST-001", result.Data.RequestId);
+        Assert.Equal("Carlos Coordinator", result.Data.AssignedTo);
+        Assert.Equal(8, result.Data.StarsTaskNumber.Length);
+
+        // Verify task persisted in database
+        var task = await _db.Tasks.FindAsync(result.Data.StarsTaskId);
+        Assert.NotNull(task);
+        Assert.Contains("LIQ-2026-TEST-001", task.Title);
+        Assert.Contains("Juan Dela Cruz", task.Title);
+        Assert.Equal(Models.Enums.TaskStatus.InProgress, task.Status);
+        Assert.Equal(PriorityLevel.High, task.PriorityLevel);
+        Assert.Equal(TaskClassification.SpecialTask, task.Classification);
+
+        // Verify detail record persisted
+        var detail = await _db.TaskFomsLiquidationDetails.FirstOrDefaultAsync(d => d.TaskId == task.Id);
+        Assert.NotNull(detail);
+        Assert.Equal("LIQ-2026-TEST-001", detail.RequestId);
+        Assert.Equal(101, detail.LiquidationId);
+        Assert.Equal("Juan Dela Cruz", detail.Requester);
+        Assert.Equal("EMP-005", detail.RequesterEmployeeId);
+        Assert.Equal("WB-998877", detail.DeliveryReference);
+        Assert.Equal("For Correction", detail.LiquidationStatus);
+        Assert.Equal(3500.50m, detail.Amount);
+        Assert.Equal("PendingCorrection", detail.CorrectionStatus);
+        Assert.Equal("Pending", detail.FomsSyncStatus);
+
+        // Verify notifications sent to Coordinator and Manager (FR-033)
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordinator.Id,
+            NotificationType.TaskAssigned,
+            It.Is<string>(t => t.Contains("Liquidation Correction Task Assigned")),
+            It.Is<string>(m => m.Contains("LIQ-2026-TEST-001")),
+            task.Id), Times.Once);
+
+        // Verify audit logging (FR-046)
+        _mockAudit.Verify(a => a.LogAsync(
+            It.IsAny<Guid?>(),
+            AuditActionType.Create,
+            "TaskManagement",
+            task.Id,
+            null,
+            It.Is<string>(d => d.Contains("LIQ-2026-TEST-001")),
+            "TaskManagement",
+            null,
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateLiquidationCorrectionTaskAsync_DuplicateRequestId_AppendsCommentWithoutCreatingDuplicateTask_FR044()
+    {
+        var service = CreateService();
+
+        var request = new FomsLiquidationCorrectionRequestDTO
+        {
+            RequestId = "LIQ-DUP-001",
+            LiquidationId = 202,
+            Requester = "Maria Santos",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Incomplete itemized list",
+            Amount = 1500m
+        };
+
+        var firstResult = await service.CreateLiquidationCorrectionTaskAsync(request);
+        Assert.True(firstResult.IsSuccess);
+        var initialTaskId = firstResult.Data!.StarsTaskId;
+
+        var countAfterFirst = await _db.Tasks.CountAsync(t => t.Title.Contains("LIQ-DUP-001"));
+        Assert.Equal(1, countAfterFirst);
+
+        // Second duplicate request
+        var duplicateRequest = new FomsLiquidationCorrectionRequestDTO
+        {
+            RequestId = "LIQ-DUP-001",
+            LiquidationId = 202,
+            Requester = "Maria Santos",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Incomplete itemized list - REMINDER",
+            Amount = 1500m
+        };
+
+        var secondResult = await service.CreateLiquidationCorrectionTaskAsync(duplicateRequest);
+        Assert.True(secondResult.IsSuccess);
+        Assert.Equal(initialTaskId, secondResult.Data!.StarsTaskId);
+        Assert.Contains("duplicate remark appended", secondResult.Data.Message);
+
+        // Verification: Exactly 1 task exists (no duplicate created)
+        var countAfterSecond = await _db.Tasks.CountAsync(t => t.Title.Contains("LIQ-DUP-001"));
+        Assert.Equal(1, countAfterSecond);
+
+        // Verification: TaskComment appended per FR-044
+        var comments = await _db.TaskComments.Where(c => c.TaskId == initialTaskId).ToListAsync();
+        Assert.Contains(comments, c => c.Content.Contains("FR-044") && c.Content.Contains("LIQ-DUP-001"));
+    }
+
+    [Fact]
+    public async Task CreateLiquidationCorrectionTaskAsync_RejectedStatus_SetsUrgentPriority()
+    {
+        var service = CreateService();
+
+        var request = new FomsLiquidationCorrectionRequestDTO
+        {
+            RequestId = "LIQ-REJ-001",
+            Requester = "Pedro Penduko",
+            LiquidationStatus = "Rejected",
+            CorrectionReason = "Voucher was disallowed by internal audit",
+            Amount = 8200m
+        };
+
+        var result = await service.CreateLiquidationCorrectionTaskAsync(request);
+
+        Assert.True(result.IsSuccess);
+        var task = await _db.Tasks.FindAsync(result.Data!.StarsTaskId);
+        Assert.NotNull(task);
+        Assert.Equal(PriorityLevel.Urgent, task.PriorityLevel);
+    }
+
+    [Fact]
+    public async Task SubmitLiquidationCorrectionAsync_ValidReceipt_UpdatesStatusAndAttachesReceipt()
+    {
+        var service = CreateService();
+
+        var coordId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-LIQ01",
+            Title = "[Liquidation Correction] LIQ-SUB-001 - Juan",
+            Status = Models.Enums.TaskStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsLiquidationDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            RequestId = "LIQ-SUB-001",
+            Requester = "Juan",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Missing receipt",
+            CorrectionStatus = "PendingCorrection",
+            FomsSyncStatus = "Pending"
+        };
+        _db.TaskFomsLiquidationDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var submission = new SubmitLiquidationCorrectionDTO
+        {
+            CorrectedReceiptsUrl = "https://blob.speedex.com/receipts/corrected_receipt_001.pdf",
+            Remarks = "Obtained original BIR receipt from Shell gas station"
+        };
+
+        var result = await service.SubmitLiquidationCorrectionAsync(task.Id, submission, coordId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://blob.speedex.com/receipts/corrected_receipt_001.pdf", result.Data!.CorrectedReceiptsUrl);
+        Assert.Equal("Corrected", result.Data.CorrectionStatus);
+        Assert.Equal(Models.Enums.TaskStatus.DonePendingReview, task.Status);
+
+        // Verify TaskComment attached per FR-018
+        var comment = await _db.TaskComments.FirstOrDefaultAsync(c => c.TaskId == task.Id);
+        Assert.NotNull(comment);
+        Assert.Contains("Corrected receipts attached", comment.Content);
+        Assert.Contains("Shell gas station", comment.Content);
+    }
+
+    [Fact]
+    public async Task SendLiquidationCorrectionCallbackAsync_Success_DispatchesCallbackAndSetsCallbackSuccess()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                capturedRequest = req;
+                if (req.Content != null)
+                {
+                    capturedBody = req.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                }
+            })
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"isSuccess\":true,\"message\":\"Liquidation correction received\"}")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var coordId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-LIQCB1",
+            Title = "[Liquidation Correction] LIQ-CB-001 - Juan",
+            Status = Models.Enums.TaskStatus.DonePendingReview,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsLiquidationDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            RequestId = "LIQ-CB-001",
+            LiquidationId = 555,
+            Requester = "Juan",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Missing receipt",
+            CorrectedReceiptsUrl = "https://blob.speedex.com/receipts/valid_receipt.png",
+            ResolutionRemarks = "Receipt verified by Coordinator",
+            CorrectionStatus = "Corrected",
+            FomsSyncStatus = "Pending"
+        };
+        _db.TaskFomsLiquidationDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var result = await service.SendLiquidationCorrectionCallbackAsync(task.Id, coordId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("CallbackSuccess", detail.FomsSyncStatus);
+        Assert.Equal(Models.Enums.TaskStatus.Completed, task.Status);
+        Assert.NotNull(detail.LastSyncedAt);
+
+        // Verify outbound HTTP request
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Post, capturedRequest.Method);
+        Assert.EndsWith("/api/integration/stars/liquidation-correction-callback", capturedRequest.RequestUri!.AbsolutePath);
+        Assert.True(capturedRequest.Headers.Contains("X-Api-Key"));
+
+        Assert.NotNull(capturedBody);
+        Assert.Contains("LIQ-CB-001", capturedBody);
+        Assert.Contains("555", capturedBody);
+        Assert.Contains(task.Id.ToString(), capturedBody);
+        Assert.Contains("https://blob.speedex.com/receipts/valid_receipt.png", capturedBody);
+        Assert.Contains("Completed", capturedBody);
+    }
+
+    [Fact]
+    public async Task SendLiquidationCorrectionCallbackAsync_FomsUnavailable_MarksFailedAndPreservesCompletedStatus()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("{\"isSuccess\":false,\"message\":\"FOMS DB Error\"}")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var coordId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-LIQERR1",
+            Title = "[Liquidation Correction] LIQ-ERR-001 - Juan",
+            Status = Models.Enums.TaskStatus.DonePendingReview,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsLiquidationDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            RequestId = "LIQ-ERR-001",
+            Requester = "Juan",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Missing receipt",
+            CorrectedReceiptsUrl = "https://blob.speedex.com/receipts/error_test.jpg",
+            CorrectionStatus = "Corrected",
+            FomsSyncStatus = "Pending"
+        };
+        _db.TaskFomsLiquidationDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var result = await service.SendLiquidationCorrectionCallbackAsync(task.Id, coordId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Failed", detail.FomsSyncStatus);
+        Assert.NotNull(detail.LastSyncError);
+
+        // Crucial FSM preservation: Task status remains Completed even though remote callback failed
+        Assert.Equal(Models.Enums.TaskStatus.Completed, task.Status);
+
+        // Verification of Coordinator alert
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordId,
+            NotificationType.TaskUpdated,
+            It.Is<string>(t => t.Contains("FOMS Liquidation Sync Failed")),
+            It.Is<string>(m => m.Contains("LIQ-ERR-001")),
+            task.Id), Times.Once);
+    }
+
+    [Fact]
+    public async Task RetryLiquidationCorrectionCallbackAsync_SuccessfulRetry_UpdatesSyncStatus()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"isSuccess\":true,\"message\":\"Success on retry\"}")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-RETRY01",
+            Title = "[Liquidation Correction] LIQ-RETRY-001 - Juan",
+            Status = Models.Enums.TaskStatus.Completed,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsLiquidationDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            RequestId = "LIQ-RETRY-001",
+            Requester = "Juan",
+            LiquidationStatus = "For Correction",
+            CorrectionReason = "Missing receipt",
+            CorrectedReceiptsUrl = "https://blob.speedex.com/receipts/retry.jpg",
+            CorrectionStatus = "Corrected",
+            FomsSyncStatus = "Failed",
+            LastSyncError = "Previous timeout"
+        };
+        _db.TaskFomsLiquidationDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var retryResult = await service.RetryLiquidationCorrectionCallbackAsync(task.Id);
+
+        Assert.True(retryResult.IsSuccess);
+        Assert.Equal("CallbackSuccess", detail.FomsSyncStatus);
+        Assert.Null(detail.LastSyncError);
+        Assert.NotNull(detail.LastSyncedAt);
+    }
 }
