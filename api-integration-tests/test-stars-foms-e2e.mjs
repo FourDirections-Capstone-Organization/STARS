@@ -347,7 +347,7 @@ async function main() {
   });
 
   await test("Exclusion verification: Disputed invoices are barred from collection routing (FR-034)", async () => {
-    const disputedInvoiceNo = randomInvoiceNumber();
+    const disputedInvoiceNo = `INV-DISP-LIVE-${Math.floor(1000 + Math.random() * 9000)}`;
 
     // 1. Establish invoice in FOMS as Disputed via collection outcome
     const disputeSetup = await call("POST", `${FOMS_URL}/api/integration/stars/collection-outcome`, {
