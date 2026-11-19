@@ -266,3 +266,68 @@ public class LinkEndorsementTaskDTO
 
     public decimal? InvoiceAmount { get; set; }
 }
+
+/// <summary>
+/// Callback payload sent from STARS to FOMS once collection follow-up is completed (Integration 3 / FOMS FR-033).
+/// </summary>
+public class StarsCollectionOutcomeDTO
+{
+    [Required]
+    public string InvoiceNumber { get; set; } = string.Empty;
+
+    public Guid StarsTaskId { get; set; }
+
+    public string StarsTaskNumber { get; set; } = string.Empty;
+
+    [Required]
+    public string Outcome { get; set; } = "Promised to Pay"; // "Promised to Pay", "Disputed", "Unreachable"
+
+    public DateTime? PromisedPaymentDate { get; set; }
+
+    public string ActionTaken { get; set; } = "Client Contact";
+
+    public string? Notes { get; set; }
+
+    public Guid? CoordinatorId { get; set; }
+
+    public string? CoordinatorName { get; set; }
+
+    public DateTime CompletedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Input DTO for an assignee/coordinator submitting a collection outcome in STARS.
+/// </summary>
+public class SubmitCollectionOutcomeDTO
+{
+    [Required]
+    public string Outcome { get; set; } = "Promised to Pay"; // "Promised to Pay", "Disputed", "Unreachable"
+
+    public DateTime? PromisedPaymentDate { get; set; }
+
+    [Required]
+    public string ActionTaken { get; set; } = "Client Contact";
+
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Trigger DTO for dispatching collection outcome callback manually or in headless tests.
+/// </summary>
+public class TriggerCollectionOutcomeDTO
+{
+    public Guid TaskId { get; set; }
+
+    public string Outcome { get; set; } = "Promised to Pay";
+
+    public DateTime? PromisedPaymentDate { get; set; }
+
+    public string ActionTaken { get; set; } = "Client Contact";
+
+    public string? Notes { get; set; }
+
+    public Guid? CoordinatorId { get; set; }
+
+    public string? CoordinatorName { get; set; }
+}
+

@@ -700,6 +700,21 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         if (existingActiveCollection != null && existingActiveCollection.Task != null)
         {
+            // FR-044: Append an immutable remark comment (TaskComment) to the existing open task
+            var authorId = existingActiveCollection.Task.CreatedById != Guid.Empty
+                ? existingActiveCollection.Task.CreatedById
+                : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync());
+
+            _db.TaskComments.Add(new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = existingActiveCollection.TaskId,
+                AuthorId = authorId,
+                Content = $"[FOMS Overdue Alert] Duplicate overdue alert received for invoice {dto.InvoiceNumber.Trim()} ({dto.DaysOverdue} days overdue, ₱{dto.AmountDue:N2}). Existing open task retained per FR-044.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+
             return ApiResponseDTO<FomsEndorsementResponseDTO>.Success(new FomsEndorsementResponseDTO
             {
                 IsSuccess = true,
@@ -707,7 +722,7 @@ public class FomsIntegrationService : IFomsIntegrationService
                 StarsTaskNumber = existingActiveCollection.Task.TaskNumber,
                 InvoiceNumber = existingActiveCollection.InvoiceNumber,
                 Status = existingActiveCollection.Task.Status.ToString(),
-                Message = "Active collection follow-up task already exists in STARS (idempotent response)."
+                Message = "Active collection follow-up task already exists in STARS; duplicate remark appended (FR-044)."
             });
         }
 
@@ -816,6 +831,178 @@ public class FomsIntegrationService : IFomsIntegrationService
             AssignedTo = assignedName ?? "Unassigned",
             Message = "Collection follow-up task created and routed successfully."
         });
+    }
+
+    /// <summary>
+    /// Integration 3 (STARS → FOMS): Submits follow-up outcome for a collection task, marks task completed, and dispatches callback to FOMS (FOMS FR-033).
+    /// </summary>
+    public async Task<ApiResponseDTO<bool>> SendCollectionOutcomeAsync(
+        Guid taskId, SubmitCollectionOutcomeDTO dto, Guid coordinatorId, string coordinatorName)
+    {
+        if (dto == null)
+            return ApiResponseDTO<bool>.Failure("Collection outcome details are required");
+
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task == null)
+            return ApiResponseDTO<bool>.Failure("Task not found");
+
+        if (task.Status == Models.Enums.TaskStatus.Cancelled)
+            return ApiResponseDTO<bool>.Failure("Cancelled task cannot have collection outcome recorded");
+
+        var collectionDetail = await _db.TaskFomsCollectionDetails
+            .FirstOrDefaultAsync(c => c.TaskId == taskId);
+
+        // Fallback: If not linked by TaskId, check if description or title matches invoice
+        if (collectionDetail == null)
+        {
+            var title = task.Title ?? "";
+            var desc = task.Description ?? "";
+            var invoiceMatch = System.Text.RegularExpressions.Regex.Match($"{title} {desc}", @"(?:Invoice|invoice)[:\s]+([A-Za-z0-9-]+)");
+            if (invoiceMatch.Success)
+            {
+                var invNo = invoiceMatch.Groups[1].Value.Trim();
+                collectionDetail = await _db.TaskFomsCollectionDetails.FirstOrDefaultAsync(c => c.InvoiceNumber == invNo);
+                if (collectionDetail != null)
+                {
+                    collectionDetail.TaskId = taskId;
+                }
+            }
+        }
+
+        if (collectionDetail == null)
+            return ApiResponseDTO<bool>.Failure("Collection follow-up details not found for this task");
+
+        var actionTaken = string.IsNullOrWhiteSpace(dto.ActionTaken) ? "Client Contact" : dto.ActionTaken.Trim();
+        var outcome = string.IsNullOrWhiteSpace(dto.Outcome) ? "Promised to Pay" : dto.Outcome.Trim();
+
+        // 1. Transition Task FSM to Completed (FR-022)
+        task.Status = Models.Enums.TaskStatus.Completed;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        // 2. Append audit remark comment (TaskComment)
+        var commentAuthorId = coordinatorId != Guid.Empty
+            ? coordinatorId
+            : (task.CreatedById != Guid.Empty ? task.CreatedById : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync()));
+
+        var commentContent = $"[Collection Outcome] Recorded outcome: {outcome}. Action: {actionTaken}." +
+                             (dto.PromisedPaymentDate.HasValue ? $" Promised settlement date: {dto.PromisedPaymentDate.Value:yyyy-MM-dd}." : "") +
+                             (!string.IsNullOrWhiteSpace(dto.Notes) ? $" Notes: {dto.Notes.Trim()}" : "");
+
+        _db.TaskComments.Add(new TaskComment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            AuthorId = commentAuthorId,
+            Content = commentContent,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync();
+
+        // 3. Write Audit Log Event (FR-046)
+        try
+        {
+            await _auditLogService.LogAsync(
+                coordinatorId != Guid.Empty ? coordinatorId : null,
+                AuditActionType.Update,
+                "TaskManagement",
+                taskId,
+                null,
+                $"Recorded collection outcome '{outcome}' for task {task.TaskNumber} (Invoice {collectionDetail.InvoiceNumber}).",
+                "FomsIntegration");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audit log for collection outcome on task {TaskId}", taskId);
+        }
+
+        // 4. Dispatch M2M Webhook Callback to FOMS
+        var payload = new StarsCollectionOutcomeDTO
+        {
+            InvoiceNumber = collectionDetail.InvoiceNumber,
+            StarsTaskId = task.Id,
+            StarsTaskNumber = task.TaskNumber ?? string.Empty,
+            Outcome = outcome,
+            PromisedPaymentDate = ToUtc(dto.PromisedPaymentDate),
+            ActionTaken = actionTaken,
+            Notes = dto.Notes?.Trim(),
+            CoordinatorId = coordinatorId != Guid.Empty ? coordinatorId : null,
+            CoordinatorName = !string.IsNullOrWhiteSpace(coordinatorName) ? coordinatorName : "STARS Coordinator",
+            CompletedAt = DateTime.UtcNow
+        };
+
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send collection outcome callback for task {TaskId}: FOMS integration not configured", taskId);
+            return ApiResponseDTO<bool>.Failure("FOMS integration is not configured on this server");
+        }
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            client.Timeout = TimeSpan.FromSeconds(30);
+
+            var endpoint = $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/collection-outcome";
+            using var req = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(payload)
+            };
+            req.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var res = await client.SendAsync(req);
+            var responseBody = await res.Content.ReadAsStringAsync();
+
+            if (res.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Successfully synced collection outcome to FOMS for invoice {InvoiceNumber}", collectionDetail.InvoiceNumber);
+                return ApiResponseDTO<bool>.Success(true, "Collection outcome acknowledged by FOMS");
+            }
+
+            if (coordinatorId != Guid.Empty)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        coordinatorId,
+                        NotificationType.TaskUpdated,
+                        "FOMS Collection Sync Failed",
+                        $"Collection outcome for {collectionDetail.InvoiceNumber} could not be synced to FOMS (HTTP {(int)res.StatusCode}). Task remains Completed.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
+            _logger.LogWarning("FOMS returned HTTP {Status} for collection outcome on invoice {InvoiceNumber}: {Body}", (int)res.StatusCode, collectionDetail.InvoiceNumber, responseBody);
+            return ApiResponseDTO<bool>.Failure($"FOMS returned HTTP {(int)res.StatusCode}: {responseBody}");
+        }
+        catch (Exception ex)
+        {
+            if (coordinatorId != Guid.Empty)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        coordinatorId,
+                        NotificationType.TaskUpdated,
+                        "FOMS Collection Sync Failed",
+                        $"Collection outcome for {collectionDetail.InvoiceNumber} could not be synced to FOMS: {ex.Message}. Task remains Completed.",
+                        taskId);
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send sync failure notification for task {TaskId}", taskId);
+                }
+            }
+
+            _logger.LogError(ex, "Exception sending collection outcome for invoice {InvoiceNumber}", collectionDetail.InvoiceNumber);
+            return ApiResponseDTO<bool>.Failure($"Failed to contact FOMS: {ex.Message}");
+        }
     }
 
     /// <summary>

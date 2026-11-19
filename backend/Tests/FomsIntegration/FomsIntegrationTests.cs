@@ -751,4 +751,191 @@ public class FomsIntegrationTests : IDisposable
         Assert.Equal(2, managerRes.Data.OverdueInvoicesCount);
         Assert.Equal(2, managerRes.Data.TopOutstandingClients.Count);
     }
+
+    [Fact]
+    public async Task ProcessOverdueAlertWebhookAsync_DuplicateAlert_AppendsRemarkAndDoesNotDuplicate_FR044()
+    {
+        var service = CreateService();
+
+        var alertDto = new FomsOverdueAlertDTO
+        {
+            InvoiceNumber = "INV-2026-COLLECT-DUP-01",
+            ClientAccountId = "CLI-DUP-01",
+            ClientName = "Duplicate Test Logistics Corp",
+            AmountDue = 88000m,
+            DueDate = DateTime.UtcNow.AddDays(-15),
+            DaysOverdue = 15,
+            AgingStatus = "1-30"
+        };
+
+        // First alert creates the collection task
+        var firstResult = await service.ProcessOverdueAlertWebhookAsync(alertDto);
+        Assert.True(firstResult.IsSuccess);
+        Assert.NotNull(firstResult.Data);
+        var initialTaskId = firstResult.Data.StarsTaskId;
+
+        var commentCountBefore = await _db.TaskComments.CountAsync(c => c.TaskId == initialTaskId);
+        Assert.Equal(0, commentCountBefore);
+
+        // Duplicate alert arrives for same invoice
+        var secondResult = await service.ProcessOverdueAlertWebhookAsync(alertDto);
+        Assert.True(secondResult.IsSuccess);
+        Assert.NotNull(secondResult.Data);
+        Assert.Equal(initialTaskId, secondResult.Data.StarsTaskId);
+        Assert.Contains("duplicate remark appended (FR-044)", secondResult.Data.Message);
+
+        // Verify only 1 collection task and detail exists
+        Assert.Equal(1, await _db.TaskFomsCollectionDetails.CountAsync(c => c.InvoiceNumber == alertDto.InvoiceNumber));
+
+        // Verify audit remark (TaskComment) was logged
+        var comments = await _db.TaskComments.Where(c => c.TaskId == initialTaskId).ToListAsync();
+        Assert.Single(comments);
+        Assert.Contains("[FOMS Overdue Alert] Duplicate overdue alert received", comments[0].Content);
+        Assert.Contains("FR-044", comments[0].Content);
+    }
+
+    [Fact]
+    public async Task SendCollectionOutcomeAsync_DispatchesCallbackToFoms_AndCompletesTask()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"success\":true,\"message\":\"Outcome recorded\"}")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var coordId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-COL01",
+            Title = "[Collection Follow-up] Invoice INV-COL-001 - Test Corp",
+            Status = Models.Enums.TaskStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsCollectionDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            InvoiceNumber = "INV-COL-001",
+            ClientAccountId = "CLI-001",
+            ClientName = "Test Corp",
+            AmountDue = 55000m,
+            DaysOverdue = 20,
+            AgingStatus = "1-30",
+            RoutedAt = DateTime.UtcNow
+        };
+        _db.TaskFomsCollectionDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var submitDto = new SubmitCollectionOutcomeDTO
+        {
+            Outcome = "Promised to Pay",
+            PromisedPaymentDate = DateTime.UtcNow.AddDays(7),
+            ActionTaken = "Phone Conference with Finance Head",
+            Notes = "Client confirmed wire transfer on Monday."
+        };
+
+        var result = await service.SendCollectionOutcomeAsync(task.Id, submitDto, coordId, "Maria Santos");
+
+        Assert.True(result.IsSuccess);
+
+        // Verify task state transitioned to Completed
+        var updatedTask = await _db.Tasks.FindAsync(task.Id);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Models.Enums.TaskStatus.Completed, updatedTask.Status);
+
+        // Verify remark comment logged
+        var comment = await _db.TaskComments.FirstOrDefaultAsync(c => c.TaskId == task.Id);
+        Assert.NotNull(comment);
+        Assert.Contains("[Collection Outcome] Recorded outcome: Promised to Pay", comment.Content);
+        Assert.Contains("Phone Conference", comment.Content);
+
+        // Verify HTTP request sent to FOMS
+        Assert.NotNull(capturedRequest);
+        Assert.Equal(HttpMethod.Post, capturedRequest.Method);
+        Assert.Contains("/api/integration/stars/collection-outcome", capturedRequest.RequestUri?.ToString());
+        Assert.True(capturedRequest.Headers.Contains("X-Api-Key"));
+    }
+
+    [Fact]
+    public async Task SendCollectionOutcomeAsync_WhenHttpFails_PreservesCompletedFsmState()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("FOMS Database Connection Timeout")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var service = CreateService(client);
+
+        var coordId = Guid.NewGuid();
+        var task = new Models.Task
+        {
+            Id = Guid.NewGuid(),
+            TaskNumber = "TK-COL02",
+            Title = "[Collection Follow-up] Invoice INV-COL-002 - Error Corp",
+            Status = Models.Enums.TaskStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Tasks.Add(task);
+
+        var detail = new TaskFomsCollectionDetail
+        {
+            Id = Guid.NewGuid(),
+            TaskId = task.Id,
+            InvoiceNumber = "INV-COL-002",
+            ClientAccountId = "CLI-002",
+            ClientName = "Error Corp",
+            AmountDue = 45000m,
+            DaysOverdue = 45,
+            AgingStatus = "31-60",
+            RoutedAt = DateTime.UtcNow
+        };
+        _db.TaskFomsCollectionDetails.Add(detail);
+        await _db.SaveChangesAsync();
+
+        var submitDto = new SubmitCollectionOutcomeDTO
+        {
+            Outcome = "Unreachable",
+            ActionTaken = "Multiple Unanswered Phone Calls",
+            Notes = "Sent email demand notice."
+        };
+
+        var result = await service.SendCollectionOutcomeAsync(task.Id, submitDto, coordId, "Maria Santos");
+
+        // Callback returned failure
+        Assert.False(result.IsSuccess);
+        Assert.Contains("500", result.Message);
+
+        // Task still completes locally (FSM integrity)
+        var updatedTask = await _db.Tasks.FindAsync(task.Id);
+        Assert.NotNull(updatedTask);
+        Assert.Equal(Models.Enums.TaskStatus.Completed, updatedTask.Status);
+
+        // Notification sent to coordinator
+        _mockNotification.Verify(n => n.SendNotificationAsync(
+            coordId,
+            NotificationType.TaskUpdated,
+            "FOMS Collection Sync Failed",
+            It.Is<string>(msg => msg.Contains("could not be synced to FOMS")),
+            task.Id), Times.Once);
+    }
 }

@@ -32,6 +32,12 @@ public interface IFomsIntegrationService
     Task<ApiResponseDTO<FomsEndorsementResponseDTO>> ProcessOverdueAlertWebhookAsync(FomsOverdueAlertDTO dto);
 
     /// <summary>
+    /// Integration 3 (STARS → FOMS): Submits follow-up outcome for a collection task, marks task completed, and dispatches callback to FOMS (FOMS FR-033).
+    /// </summary>
+    Task<ApiResponseDTO<bool>> SendCollectionOutcomeAsync(
+        Guid taskId, SubmitCollectionOutcomeDTO dto, Guid coordinatorId, string coordinatorName);
+
+    /// <summary>
     /// Aggregated client balances and invoice metrics for the STARS dashboard (FR-038).
     /// Supports role-based scoping (Coordinators see managed accounts, Managers/API see company-wide).
     /// </summary>

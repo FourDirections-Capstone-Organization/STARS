@@ -317,6 +317,25 @@ public class FomsIntegrationController : ControllerBase
         return Ok(ApiResponseDTO<object>.Success(result));
     }
 
+    /// <summary>
+    /// Coordinator submits collection follow-up outcome (Promised to Pay, Disputed, Unreachable) and dispatches callback to FOMS (Integration 3 / FOMS FR-033).
+    /// </summary>
+    [HttpPost("api/foms-integration/tasks/{taskId:guid}/collection-outcome")]
+    [Authorize]
+    public async Task<IActionResult> SubmitCollectionOutcome(Guid taskId, [FromBody] SubmitCollectionOutcomeDTO dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var user = await _db.Users.FindAsync(userId.Value);
+        var coordinatorName = user != null
+            ? $"{user.FirstName} {user.LastName}".Trim()
+            : "STARS Coordinator";
+
+        var result = await _fomsService.SendCollectionOutcomeAsync(taskId, dto, userId.Value, coordinatorName);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     // ─── Machine-to-Machine Endpoints (API Key Guarded) ──────────────────────
 
     /// <summary>
@@ -416,6 +435,31 @@ public class FomsIntegrationController : ControllerBase
             : null;
 
         var result = await _fomsService.SendInvoiceEndorsementCompletionAsync(dto.TaskId, null, explicitSubmission);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Machine-to-machine trigger: Simulates or triggers Integration 3 collection outcome callback to FOMS for testing.
+    /// </summary>
+    [HttpPost("api/integration/foms/dispatch-collection-outcome")]
+    [AllowAnonymous]
+    public async Task<IActionResult> TriggerDispatchCollectionOutcome([FromBody] TriggerCollectionOutcomeDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var submitDto = new SubmitCollectionOutcomeDTO
+        {
+            Outcome = dto.Outcome,
+            PromisedPaymentDate = dto.PromisedPaymentDate,
+            ActionTaken = dto.ActionTaken,
+            Notes = dto.Notes
+        };
+
+        var coordinatorId = dto.CoordinatorId ?? Guid.Empty;
+        var coordinatorName = dto.CoordinatorName ?? "STARS Coordinator";
+
+        var result = await _fomsService.SendCollectionOutcomeAsync(dto.TaskId, submitDto, coordinatorId, coordinatorName);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
