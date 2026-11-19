@@ -554,21 +554,24 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                                     <button
                                         type="button"
                                         className="notif-card-task-link"
+                                        data-testid="notification-view-task-btn"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             if (!item.isRead) handleMarkAsRead(item.id);
                                             onViewTask(item.taskId!);
                                         }}
                                     >
-                                        {(item.title?.includes('Collection') || item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert') || item.message?.includes('Collection follow-up') || item.title?.includes('Overdue Collection'))
-                                            ? 'View Collection Task'
-                                            : item.title?.includes('Follow-up')
-                                                ? 'View Follow-up Task'
-                                                : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
-                                                    ? 'View Cancelled Order Task'
-                                                    : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
-                                                        ? 'View Settled Task'
-                                                        : 'View Linked Task'} <ArrowRight size={13} />
+                                        {(item.title?.includes('Liquidation') || item.message?.includes('liquidation') || item.title?.includes('FOMS Liquidation'))
+                                            ? 'View Liquidation Task'
+                                            : (item.title?.includes('Collection') || item.title?.includes('Invoice Overdue') || item.title?.includes('Overdue Alert') || item.message?.includes('Collection follow-up') || item.title?.includes('Overdue Collection'))
+                                                ? 'View Collection Task'
+                                                : item.title?.includes('Follow-up')
+                                                    ? 'View Follow-up Task'
+                                                    : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
+                                                        ? 'View Cancelled Order Task'
+                                                        : (item.title?.includes('Payment Settled') || item.title?.includes('Invoice Payment'))
+                                                            ? 'View Settled Task'
+                                                            : 'View Linked Task'} <ArrowRight size={13} />
                                     </button>
                                 ) : <div />}
 

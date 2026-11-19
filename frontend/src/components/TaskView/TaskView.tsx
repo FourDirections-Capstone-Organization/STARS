@@ -5,6 +5,7 @@ import {
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
     Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw, Save, Plus,
     DollarSign, Phone, Mail, ShieldAlert, Sparkles, Zap, FileCheck, Calendar,
+    Receipt, AlertOctagon, User,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -17,6 +18,8 @@ import axios from 'axios';
 import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
 import { formatDriverDisplay as formatDriverDisplayShared, FormatDriverOptions } from '../../utils/driverUtils';
 import { syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
+import SubmitCorrectionModal from '../LiquidationCorrections/SubmitCorrectionModal';
+import '../LiquidationCorrections/LiquidationCorrections.css';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -477,6 +480,79 @@ const parseFomsEndorsement = (title?: string, desc?: string): ParsedFomsEndorsem
     };
 };
 
+// ─── FOMS Liquidation Parser (Integration 5) ──────────────────────────────────
+
+interface ParsedFomsLiquidationInfo {
+    isLiquidationTask: boolean;
+    requestId: string;
+    liquidationId?: number | null;
+    requester: string;
+    requesterEmployeeId?: string | null;
+    deliveryReference?: string | null;
+    liquidationStatus: 'For Correction' | 'Rejected' | string;
+    correctionReason: string;
+    dueDate?: string | null;
+    amount?: number | null;
+    amountFormatted?: string;
+    remarks?: string | null;
+}
+
+const parseFomsLiquidation = (title?: string, desc?: string): ParsedFomsLiquidationInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isLiquidation = rawTitle.includes('[Liquidation Correction]') ||
+                          rawDesc.includes('Automated liquidation correction routed from FOMS') ||
+                          rawTitle.toLowerCase().includes('liquidation correction');
+    if (!isLiquidation) return null;
+
+    const reqMatch = rawDesc.match(/Request ID:\s*([^\n]+)/i) || rawTitle.match(/\[Liquidation Correction\]\s*([^\s-]+)/i);
+    const liqIdMatch = rawDesc.match(/Liquidation ID:\s*([^\n]+)/i);
+    const reqerMatch = rawDesc.match(/Requester:\s*([^\n]+)/i);
+    const delMatch = rawDesc.match(/Delivery\/Trip Reference:\s*([^\n]+)/i);
+    const statusMatch = rawDesc.match(/Status:\s*([^\n]+)/i);
+    const reasonMatch = rawDesc.match(/Correction Reason:\s*([^\n]+)/i);
+    const amountMatch = rawDesc.match(/Amount:\s*₱?([^\n]+)/i);
+    const dueMatch = rawDesc.match(/Due Date:\s*([^\n]+)/i);
+    const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
+
+    let requester = 'Courier Staff';
+    let requesterEmployeeId: string | null = null;
+    if (reqerMatch) {
+        const full = reqerMatch[1].trim();
+        const paren = full.match(/\(([^)]+)\)/);
+        if (paren) {
+            requesterEmployeeId = paren[1].trim();
+            requester = full.replace(/\([^)]+\)/, '').trim();
+        } else {
+            requester = full;
+        }
+    } else {
+        const parts = rawTitle.split(' - ');
+        if (parts.length > 1) {
+            requester = parts[parts.length - 1].trim();
+        }
+    }
+
+    const requestId = reqMatch ? reqMatch[1].trim() : 'LIQ-REQ';
+    const rawAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : null;
+    const amountFormatted = rawAmount != null ? `₱${rawAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : undefined;
+
+    return {
+        isLiquidationTask: true,
+        requestId,
+        liquidationId: liqIdMatch ? parseInt(liqIdMatch[1].trim()) : null,
+        requester,
+        requesterEmployeeId,
+        deliveryReference: delMatch ? delMatch[1].trim() : null,
+        liquidationStatus: statusMatch ? statusMatch[1].trim() : (rawTitle.toLowerCase().includes('reject') ? 'Rejected' : 'For Correction'),
+        correctionReason: reasonMatch ? reasonMatch[1].trim() : 'Missing or invalid receipt proof noted by Finance.',
+        dueDate: dueMatch && dueMatch[1].trim() !== 'N/A' ? dueMatch[1].trim() : null,
+        amount: rawAmount,
+        amountFormatted,
+        remarks: remarksMatch ? remarksMatch[1].trim() : null,
+    };
+};
+
 // ─── Reject Modal ─────────────────────────────────────────────────────────────
 
 const RejectModal: React.FC<{
@@ -713,6 +789,79 @@ const TaskView: React.FC<TaskViewProps> = ({
             toastError(err?.message || 'Failed to transmit endorsement callback.');
         } finally {
             setResendingEndorsement(false);
+        }
+    };
+
+    // ─── FOMS Liquidation Correction (Integration 5) ─────────────────────────────
+    const fomsLiquidation = useMemo(() => parseFomsLiquidation(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
+    const [liquidationDetail, setLiquidationDetail] = useState<any | null>(null);
+    const [liquidationLoading, setLiquidationLoading] = useState(false);
+    const [showLiquidationModal, setShowLiquidationModal] = useState(false);
+    const [authorizingLiquidation, setAuthorizingLiquidation] = useState(false);
+    const [retryingLiquidationSync, setRetryingLiquidationSync] = useState(false);
+
+    const fetchLiquidationDetail = useCallback(async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setLiquidationLoading(true);
+        try {
+            const res = await api.get<any>(`/api/foms-integration/liquidation-tasks/${task.taskId}`);
+            const data = res.data?.data ?? res.data;
+            if (data && (data.requestId || data.liquidationStatus)) {
+                setLiquidationDetail(data);
+            }
+        } catch {
+            // Silently fallback to parsed values
+        } finally {
+            setLiquidationLoading(false);
+        }
+    }, [task.taskId, fomsLiquidation?.requestId]);
+
+    useEffect(() => {
+        fetchLiquidationDetail();
+    }, [fetchLiquidationDetail]);
+
+    const handleAuthorizeLiquidation = async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setAuthorizingLiquidation(true);
+        try {
+            const res = await api.post(`/api/foms-integration/liquidation-tasks/${task.taskId}/callback`, {});
+            const data = res.data;
+            if (data && (data.isSuccess === false || data.success === false)) {
+                throw new Error(data.message || 'Callback failed.');
+            }
+            toastSuccess(`Liquidation task for ${fomsLiquidation.requestId} authorized and completion synced to FOMS.`);
+            setLocalStatus('Completed');
+            setLiquidationDetail((prev: any) => ({
+                ...(prev || {}),
+                fomsSyncStatus: 'CallbackSuccess',
+                correctionStatus: 'Corrected',
+            }));
+            await fetchLiquidationDetail();
+            if (onUpdate) {
+                onUpdate({ ...task, taskStatus: 'Completed' });
+            }
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Failed to authorize completion and dispatch callback to FOMS.');
+        } finally {
+            setAuthorizingLiquidation(false);
+        }
+    };
+
+    const handleRetryLiquidationSync = async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setRetryingLiquidationSync(true);
+        try {
+            const res = await api.post(`/api/foms-integration/liquidation-tasks/${task.taskId}/retry`, {});
+            const data = res.data;
+            if (data && (data.isSuccess === false || data.success === false)) {
+                throw new Error(data.message || 'Retry failed.');
+            }
+            toastSuccess(`FOMS sync retry succeeded for ${fomsLiquidation.requestId}.`);
+            await fetchLiquidationDetail();
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Sync retry failed.');
+        } finally {
+            setRetryingLiquidationSync(false);
         }
     };
 
@@ -979,6 +1128,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     const isCoordinator = userRole === 'Coordinator';
     const isEmployee = ['Dispatcher', 'Encoder', 'Courier', 'Accountant'].includes(userRole);
     const isAssignedToMe = task.assignedTo === localStorage.getItem('employeeId');
+    const canAuthorizeLiquidation = !userRole || isCoordOrManager || userRole === 'Admin' || userRole.toLowerCase().includes('coordinator') || userRole.toLowerCase().includes('manager');
 
     const od = isEffectivelyOverdue({ ...task, taskStatus: localStatus });
     const effectiveStatus = od ? 'Overdue' : localStatus;
@@ -2023,6 +2173,212 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         </button>
                                                     )}
                                                 </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── FOMS Liquidation Correction Section (Integration 5) ── */}
+                        {fomsLiquidation && (
+                            <div className="tv-section tv-foms-liquidation-section" data-testid="foms-liquidation-section">
+                                <div className="tv-foms-header">
+                                    <div className="tv-foms-header-title">
+                                        <Receipt size={16} className="tv-foms-icon" />
+                                        <span>FOMS Expense Liquidation Correction (M2M Integration)</span>
+                                    </div>
+                                    <div className="tv-foms-header-status" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                        {/* Liquidation Status Badge */}
+                                        {((liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus || '').toLowerCase().includes('reject')) ? (
+                                            <span className="liq-badge liq-badge-rejected" data-testid="liquidation-status-badge">
+                                                <AlertOctagon size={11} />
+                                                <span>Rejected</span>
+                                            </span>
+                                        ) : (
+                                            <span className="liq-badge liq-badge-for-correction" data-testid="liquidation-status-badge">
+                                                <AlertTriangle size={11} />
+                                                <span>For Correction</span>
+                                            </span>
+                                        )}
+
+                                        {/* Priority Badge */}
+                                        {((liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus || '').toLowerCase().includes('reject') ||
+                                          (fomsLiquidation.dueDate && new Date(fomsLiquidation.dueDate).getTime() < Date.now()) ||
+                                          task.priority === 'Urgent') ? (
+                                            <span className="liq-badge liq-badge-urgent" data-testid="priority-badge">
+                                                Urgent
+                                            </span>
+                                        ) : (
+                                            <span className="liq-badge liq-badge-high" data-testid="priority-badge">
+                                                High
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="tv-foms-card">
+                                    {/* Stats Banner */}
+                                    <div className="tv-foms-stats-banner">
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">DISPUTED AMOUNT</span>
+                                            <span className="tv-foms-stat-amount">
+                                                {liquidationDetail?.amount != null
+                                                    ? `₱${Number(liquidationDetail.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                    : (fomsLiquidation.amountFormatted || '₱0.00')}
+                                            </span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">REQUEST ID</span>
+                                            <span className="tv-foms-invoice-num">{liquidationDetail?.requestId || fomsLiquidation.requestId}</span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">SLA DEADLINE</span>
+                                            <span className="tv-foms-stat-val">
+                                                {liquidationDetail?.dueDate
+                                                    ? new Date(liquidationDetail.dueDate).toLocaleDateString()
+                                                    : (fomsLiquidation.dueDate ? new Date(fomsLiquidation.dueDate).toLocaleDateString() : 'Next Business Day')}
+                                            </span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">FOMS CALLBACK SYNC</span>
+                                            {(liquidationDetail?.fomsSyncStatus === 'CallbackSuccess' || effectiveStatus === 'Completed') ? (
+                                                <span className="liq-sync-pill liq-sync-success" data-testid="sync-success-pill">
+                                                    <CheckCircle2 size={11} /> CallbackSuccess
+                                                </span>
+                                            ) : liquidationDetail?.fomsSyncStatus === 'Failed' ? (
+                                                <span className="liq-sync-pill liq-sync-failed" data-testid="sync-failed-pill">
+                                                    <AlertTriangle size={11} /> Failed
+                                                </span>
+                                            ) : (
+                                                <span className="liq-sync-pill liq-sync-pending" data-testid="sync-pending-pill">
+                                                    <Clock size={11} /> Pending
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Requester & Delivery Metadata Drawer */}
+                                    <div className="liq-meta-drawer" data-testid="requester-metadata-drawer" style={{ margin: '0.75rem 0' }}>
+                                        <div className="liq-meta-row">
+                                            <span className="liq-meta-label">Requester Name:</span>
+                                            <span className="liq-meta-value">
+                                                <User size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                                                {liquidationDetail?.requester || fomsLiquidation.requester}
+                                            </span>
+                                        </div>
+                                        {(liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId) && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">Employee ID:</span>
+                                                <span className="liq-meta-value">{liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId}</span>
+                                            </div>
+                                        )}
+                                        {(liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference) && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">Waybill / Delivery Reference:</span>
+                                                <span className="liq-meta-value" style={{ color: '#2563eb' }}>
+                                                    <Truck size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                                                    {liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {liquidationDetail?.liquidationId && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">FOMS Liquidation ID:</span>
+                                                <span className="liq-meta-value">#{liquidationDetail.liquidationId}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Correction Reason Callout */}
+                                    <div className="liq-reason-callout" data-testid="correction-reason-callout">
+                                        <div className="liq-reason-header">
+                                            <AlertTriangle size={13} />
+                                            <span>Finance Manager Correction Reason</span>
+                                        </div>
+                                        <div className="liq-reason-body">
+                                            {liquidationDetail?.correctionReason || fomsLiquidation.correctionReason}
+                                        </div>
+                                    </div>
+
+                                    {/* Attached Proof and Remarks if submitted */}
+                                    {(liquidationDetail?.correctedReceiptsUrl || liquidationDetail?.resolutionRemarks) && (
+                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.65rem 0.85rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            {liquidationDetail.correctedReceiptsUrl && (
+                                                <div style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <Paperclip size={13} color="#2563eb" />
+                                                    <span style={{ fontWeight: 600, color: '#334155' }}>Corrected Receipts Proof:</span>
+                                                    <a
+                                                        href={liquidationDetail.correctedReceiptsUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        style={{ color: '#2563eb', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                                                        data-testid="corrected-receipts-link"
+                                                    >
+                                                        <span>View Scanned Document</span>
+                                                        <ExternalLink size={11} />
+                                                    </a>
+                                                </div>
+                                            )}
+                                            {liquidationDetail.resolutionRemarks && (
+                                                <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                                                    <span style={{ fontWeight: 600, color: '#334155' }}>Resolution Remarks: </span>
+                                                    <span>{liquidationDetail.resolutionRemarks}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Actions Bar */}
+                                    <div className="tv-foms-action-bar" style={{ marginTop: '0.85rem' }}>
+                                        <span className="tv-foms-action-label">Liquidation FSM Actions:</span>
+                                        <div className="tv-foms-action-buttons">
+                                            {/* InProgress -> Attach Receipts */}
+                                            {(effectiveStatus === 'In Progress' || effectiveStatus === 'Not Started' || effectiveStatus === 'InProgress' || liquidationDetail?.correctionStatus === 'PendingCorrection') && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn-primary-sm"
+                                                    onClick={() => setShowLiquidationModal(true)}
+                                                    data-testid="attach-receipts-btn"
+                                                >
+                                                    <Paperclip size={12} /> Attach Corrected Receipts
+                                                </button>
+                                            )}
+
+                                            {/* PendingReview / DonePendingReview / Corrected -> Authorize Completion */}
+                                            {(effectiveStatus === 'Done/Pending Review' || effectiveStatus === 'DonePendingReview' || effectiveStatus === 'PendingReview' || liquidationDetail?.correctionStatus === 'Corrected') && effectiveStatus !== 'Completed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-success-sm"
+                                                    onClick={handleAuthorizeLiquidation}
+                                                    disabled={authorizingLiquidation || !canAuthorizeLiquidation}
+                                                    title={!canAuthorizeLiquidation ? 'Restricted to Coordinator or Manager per FR-024' : 'Authorize Completion & Return to FOMS'}
+                                                    data-testid="authorize-completion-btn"
+                                                >
+                                                    {authorizingLiquidation ? (
+                                                        <Loader2 size={12} className="spin" />
+                                                    ) : (
+                                                        <Send size={12} />
+                                                    )}
+                                                    Authorize Completion &amp; Return to FOMS
+                                                </button>
+                                            )}
+
+                                            {/* Manual Retry Sync button if sync failed */}
+                                            {liquidationDetail?.fomsSyncStatus === 'Failed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                    onClick={handleRetryLiquidationSync}
+                                                    disabled={retryingLiquidationSync}
+                                                    data-testid="retry-sync-btn"
+                                                >
+                                                    <RefreshCw size={11} className={retryingLiquidationSync ? 'spin' : ''} />
+                                                    {retryingLiquidationSync ? 'Retrying...' : 'Retry FOMS Sync'}
+                                                </button>
                                             )}
                                         </div>
                                     </div>
@@ -3310,6 +3666,45 @@ const TaskView: React.FC<TaskViewProps> = ({
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* FOMS Liquidation Attach Receipts Modal (Integration 5) */}
+            {showLiquidationModal && fomsLiquidation && (
+                <SubmitCorrectionModal
+                    isOpen={showLiquidationModal}
+                    task={{
+                        id: task.taskId,
+                        taskId: task.taskId,
+                        taskNumber: (task as any).taskNumber || task.taskId.substring(0, 8),
+                        requestId: liquidationDetail?.requestId || fomsLiquidation.requestId,
+                        liquidationId: liquidationDetail?.liquidationId || fomsLiquidation.liquidationId,
+                        requester: liquidationDetail?.requester || fomsLiquidation.requester,
+                        requesterEmployeeId: liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId,
+                        deliveryReference: liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference,
+                        liquidationStatus: liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus,
+                        correctionReason: liquidationDetail?.correctionReason || fomsLiquidation.correctionReason,
+                        amount: liquidationDetail?.amount != null ? liquidationDetail.amount : fomsLiquidation.amount,
+                        dueDate: liquidationDetail?.dueDate || fomsLiquidation.dueDate,
+                        fomsSyncStatus: liquidationDetail?.fomsSyncStatus || 'Pending',
+                        correctedReceiptsUrl: liquidationDetail?.correctedReceiptsUrl,
+                        resolutionRemarks: liquidationDetail?.resolutionRemarks,
+                    }}
+                    onClose={() => setShowLiquidationModal(false)}
+                    onSubmitSuccess={async updated => {
+                        setShowLiquidationModal(false);
+                        setLocalStatus('Done/Pending Review');
+                        setLiquidationDetail((prev: any) => ({
+                            ...(prev || {}),
+                            correctedReceiptsUrl: updated?.correctedReceiptsUrl,
+                            resolutionRemarks: updated?.resolutionRemarks,
+                            correctionStatus: 'Corrected',
+                        }));
+                        await fetchLiquidationDetail();
+                        if (onUpdate) {
+                            onUpdate({ ...task, taskStatus: 'Done/Pending Review' });
+                        }
+                    }}
+                />
             )}
         </>
     );

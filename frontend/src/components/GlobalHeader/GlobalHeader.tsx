@@ -464,14 +464,20 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                         n.description?.toLowerCase().includes('account handler') ||
                                         n.description?.toLowerCase().includes('unrecognized account handler')
                                       );
+                                      const isLiquidation = (
+                                        n.title?.toLowerCase().includes('liquidation') ||
+                                        n.description?.toLowerCase().includes('liquidation')
+                                      );
                                       const effectiveActionLabel = n.actionLabel || (
                                         isAccountHandler
                                           ? 'View Client Details'
-                                          : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
-                                            ? 'View Collection Task'
-                                            : (n.taskId || (n as any).relatedEntityId)
-                                              ? 'View Linked Task'
-                                              : undefined
+                                          : isLiquidation && (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Liquidation Task'
+                                            : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                              ? 'View Collection Task'
+                                              : (n.taskId || (n as any).relatedEntityId)
+                                                ? 'View Linked Task'
+                                                : undefined
                                       );
                                       if (!effectiveActionLabel) return null;
 
@@ -560,14 +566,20 @@ const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                                         n.description?.toLowerCase().includes('account handler') ||
                                         n.description?.toLowerCase().includes('unrecognized account handler')
                                       );
+                                      const isLiquidation = (
+                                        n.title?.toLowerCase().includes('liquidation') ||
+                                        n.description?.toLowerCase().includes('liquidation')
+                                      );
                                       const effectiveActionLabel = n.actionLabel || (
                                         isAccountHandler
                                           ? 'View Client Details'
-                                          : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
-                                            ? 'View Collection Task'
-                                            : (n.taskId || (n as any).relatedEntityId)
-                                              ? 'View Linked Task'
-                                              : undefined
+                                          : isLiquidation && (n.taskId || (n as any).relatedEntityId)
+                                            ? 'View Liquidation Task'
+                                            : (n.title?.includes('Collection') || n.title?.includes('Invoice Overdue') || n.title?.includes('Overdue Alert') || n.description?.includes('Collection follow-up')) && (n.taskId || (n as any).relatedEntityId)
+                                              ? 'View Collection Task'
+                                              : (n.taskId || (n as any).relatedEntityId)
+                                                ? 'View Linked Task'
+                                                : undefined
                                       );
                                       if (!effectiveActionLabel) return null;
 

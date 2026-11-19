@@ -138,7 +138,7 @@ export interface FomsFinancialMetricsViewProps {
     embedded?: boolean;
     showHeader?: boolean;
     pollingInterval?: number;
-    initialTab?: 'balances' | 'routing' | 'endorsement' | 'clients';
+    initialTab?: 'balances' | 'routing' | 'endorsement' | 'clients' | 'liquidation';
     onViewClientTasks?: (clientName: string, accountId: string) => void;
     onOpenTask?: (taskId: string) => void;
     onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
@@ -146,4 +146,5 @@ export interface FomsFinancialMetricsViewProps {
 }
 
 export * from '../ClientManagement/types';
+export * from '../LiquidationCorrections/types';
 

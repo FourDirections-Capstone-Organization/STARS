@@ -26,10 +26,12 @@ import {
     UserCheck,
     AlertTriangle,
     Users,
+    Receipt,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
 import ClientManagementView from '../ClientManagement/ClientManagementView';
+import LiquidationCorrectionsView from '../LiquidationCorrections/LiquidationCorrectionsView';
 import {
 
     FomsDashboardFinancialSummary,
@@ -65,7 +67,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     onCreateTaskForEndorsement,
     initialClientAccountId,
 }) => {
-    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement' | 'clients'>(initialTab || 'balances');
+    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement' | 'clients' | 'liquidation'>(initialTab || 'balances');
 
     const [tableTab, setTableTab] = useState<'clients' | 'recent_invoices'>('clients');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
@@ -76,6 +78,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
 
     // Current logged in role for Scoped Metrics Presentation (FR-011 / FR-012)
     const currentUserRole = localStorage.getItem('userRole') || localStorage.getItem('role') || 'Manager';
+    const currentUserId = localStorage.getItem('userId') || localStorage.getItem('employeeId') || undefined;
     const isCoordinator = currentUserRole.toLowerCase() === 'coordinator';
 
     // Filter and Sort states
@@ -442,9 +445,26 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     <span>Client Accounts</span>
                     <span className="foms-tab-badge">FOMS Sync</span>
                 </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'liquidation' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('liquidation')}
+                    data-testid="hub-tab-liquidation"
+                >
+                    <Receipt size={14} />
+                    <span>Liquidation Corrections</span>
+                    <span className="foms-tab-badge badge-endorsement">M2M SLA</span>
+                </button>
             </div>
 
-            {activeHubTab === 'clients' ? (
+            {activeHubTab === 'liquidation' ? (
+                <LiquidationCorrectionsView
+                    showHeader={false}
+                    userRole={currentUserRole}
+                    currentUserId={currentUserId}
+                    onOpenTask={onOpenTask}
+                />
+            ) : activeHubTab === 'clients' ? (
                 <ClientManagementView
                     showHeader={false}
                     initialClientAccountId={initialClientAccountId}
