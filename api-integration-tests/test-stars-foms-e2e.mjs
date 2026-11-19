@@ -241,8 +241,11 @@ async function main() {
   });
 
   console.log("\n[5] Integration 3: FOMS -> STARS Overdue Accounts Collection Routing");
-  await test("FOMS pushes overdue alert; STARS creates Collection Task via Graph Routing Engine", async () => {
-    const overdueInvoiceNo = randomInvoiceNumber();
+  const overdueInvoiceNo = randomInvoiceNumber();
+  let createdCollectionTaskId = null;
+  let createdCollectionTaskNumber = null;
+
+  await test("FOMS pushes overdue alert; STARS creates Collection Follow-up task (FR-039, FR-019)", async () => {
     const payload = {
       invoiceNumber: overdueInvoiceNo,
       clientAccountId: "CLI-OVERDUE-01",
@@ -270,7 +273,119 @@ async function main() {
     expect(data?.starsTaskId, "missing starsTaskId");
     expect(data?.starsTaskNumber && data.starsTaskNumber.length === 8, "expected 8-char TaskNumber");
 
+    createdCollectionTaskId = data.starsTaskId;
+    createdCollectionTaskNumber = data.starsTaskNumber;
     return `Routed Task: ${data.starsTaskId} (${data.starsTaskNumber}) -> Assigned: ${data.assignedTo ?? "Optimal Coordinator"}`;
+  });
+
+  await test("Idempotency & FR-044: Re-sending exact same overdue alert appends remark without duplicate task", async () => {
+    const duplicatePayload = {
+      invoiceNumber: overdueInvoiceNo,
+      clientAccountId: "CLI-OVERDUE-01",
+      clientName: "[INTEGRATION-TEST] Trans-Pacific Express Cargo",
+      amountDue: 145000.00,
+      daysOverdue: 35,
+      agingStatus: "31-60",
+      remarks: "Second alert receipt for same delinquent invoice."
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/overdue-alert`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: duplicatePayload
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    expect(data?.starsTaskId === createdCollectionTaskId, `expected duplicate to return existing taskId ${createdCollectionTaskId}`);
+    expect(data?.message?.includes("FR-044") || data?.message?.includes("already exists"), `expected FR-044 notice in message: ${data?.message}`);
+    return `Existing Task Retained: ${data.starsTaskId} per FR-044`;
+  });
+
+  await test("Coordinator records outcome and dispatches callback to FOMS (FOMS FR-033)", async () => {
+    const dispatchPayload = {
+      taskId: createdCollectionTaskId,
+      outcome: "Promised to Pay",
+      promisedPaymentDate: new Date(Date.now() + 14 * 86400000).toISOString(),
+      actionTaken: "Phone Conference",
+      notes: "Client finance director confirmed payment commitment upon billing reconciliation.",
+      coordinatorName: "STARS Operations Coordinator"
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/dispatch-collection-outcome`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: dispatchPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS dispatch but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Outcome dispatched: ${res.json?.message || "Success"}`;
+  });
+
+  await test("FOMS receives collection outcome callback directly and records InvoiceFollowUpLog (FR-033)", async () => {
+    const outcomeCallbackPayload = {
+      invoiceNumber: overdueInvoiceNo,
+      starsTaskId: createdCollectionTaskId,
+      starsTaskNumber: createdCollectionTaskNumber,
+      outcome: "Promised to Pay",
+      promisedPaymentDate: new Date(Date.now() + 14 * 86400000).toISOString(),
+      actionTaken: "Direct Field Visit",
+      notes: "Promissory settlement agreement signed with accounting manager.",
+      coordinatorName: "STARS Operations Coordinator",
+      completedAt: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${FOMS_URL}/api/integration/stars/collection-outcome`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY },
+      body: outcomeCallbackPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from FOMS but got ${res.status}: ${res.text}`);
+    expect(res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `FOMS response: ${res.json?.message}`;
+  });
+
+  await test("Exclusion verification: Disputed invoices are barred from collection routing (FR-034)", async () => {
+    const disputedInvoiceNo = randomInvoiceNumber();
+
+    // 1. Establish invoice in FOMS as Disputed via collection outcome
+    const disputeSetup = await call("POST", `${FOMS_URL}/api/integration/stars/collection-outcome`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY },
+      body: {
+        invoiceNumber: disputedInvoiceNo,
+        starsTaskId: "b0000000-0000-0000-0000-000000000001",
+        starsTaskNumber: "DISP-001",
+        outcome: "Disputed",
+        actionTaken: "Audit Review",
+        notes: "Client disputed freight surcharge charges.",
+        coordinatorName: "Billing Reviewer",
+        completedAt: new Date().toISOString()
+      }
+    });
+    expect(disputeSetup.status === 200, `expected 200 OK setup: ${disputeSetup.text}`);
+
+    // 2. Trigger overdue alert from FOMS for this disputed invoice
+    const triggerRes = await call("POST", `${FOMS_URL}/api/integration/stars/trigger-overdue-alert/${disputedInvoiceNo}`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY }
+    });
+
+    // Per FR-034, FOMS halts dispatch and returns 400 with disputed explanation
+    expect(triggerRes.status === 400, `expected 400 Bad Request but got ${triggerRes.status}: ${triggerRes.text}`);
+    expect(triggerRes.json?.isSuccess === false, `expected isSuccess=false: ${triggerRes.text}`);
+    expect(triggerRes.json?.message?.includes("disputed (FR-034)"), `expected FR-034 mention in error message: ${triggerRes.json?.message}`);
+    return `Exclusion gate passed: ${triggerRes.json?.message}`;
+  });
+
+  await test("Exclusion verification: Non-existent invoices return clean 400 validation error", async () => {
+    const nonExistentNo = "INV-NON-EXISTENT-" + Math.floor(Math.random() * 99999);
+    const triggerRes = await call("POST", `${FOMS_URL}/api/integration/stars/trigger-overdue-alert/${nonExistentNo}`, {
+      headers: { "X-Api-Key": STARS_TO_FOMS_KEY }
+    });
+
+    expect(triggerRes.status === 400, `expected 400 Bad Request but got ${triggerRes.status}: ${triggerRes.text}`);
+    expect(triggerRes.json?.isSuccess === false, `expected isSuccess=false: ${triggerRes.text}`);
+    return `Non-existent invoice rejected cleanly: ${triggerRes.json?.message}`;
   });
 
   console.log("\n==================================================================");
