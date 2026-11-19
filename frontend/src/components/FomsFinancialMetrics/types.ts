@@ -14,8 +14,25 @@ export interface FomsDashboardFinancialSummary {
     overdueInvoicesCount: number;
     paidInvoicesCount: number;
     pendingInvoicesCount: number;
+    disputedInvoicesCount?: number;
+    dueSoonInvoicesCount?: number;
     topOutstandingClients: FomsClientFinancialSummaryItem[];
+    recentInvoices?: FomsRecentInvoiceItem[];
     lastUpdatedAt: string;
+}
+
+export interface FomsRecentInvoiceItem {
+    invoiceNumber: string;
+    clientAccountId?: string;
+    clientName: string;
+    invoiceStatus?: string;
+    paymentStatus?: 'Unpaid' | 'Paid' | string;
+    dueStatus?: 'Normal' | 'Due Soon' | 'Overdue' | string;
+    agingBucket?: string;
+    outstandingBalance: number;
+    totalAmount?: number;
+    dueDate?: string | null;
+    timestamp?: string;
 }
 
 export interface FomsOverdueAlertItem {
@@ -77,6 +94,7 @@ export interface FomsEndorsementItem {
     fomsSyncStatus: 'Pending' | 'Synced' | 'Failed' | string;
     fomsSyncAttempts?: number;
     lastSyncedAt?: string | null;
+    lastSyncError?: string | null;
     calculatedPaymentDueDate?: string | null;
     assignedCoordinatorName?: string;
     taskStatus?: string;
@@ -86,6 +104,27 @@ export interface SubmitSignedEndorsementPayload {
     actualReceivedDate: string;
     signedCopyUrl?: string;
     deliveryRemarks?: string;
+}
+
+export interface SubmitCollectionOutcomePayload {
+    outcome: 'Promised to Pay' | 'Disputed' | 'Unreachable' | string;
+    promisedPaymentDate?: string | null;
+    actionTaken: string;
+    notes?: string | null;
+}
+
+export interface CollectionFollowUpListProps {
+    alerts?: FomsOverdueAlertItem[];
+    loading?: boolean;
+    onRefresh?: () => void;
+    onOpenTask?: (taskId: string) => void;
+    onOutcomeSubmitted?: (taskId: string, payload: SubmitCollectionOutcomePayload) => void;
+    showFilters?: boolean;
+}
+
+export interface CollectionAlertsViewProps {
+    onOpenTask?: (taskId: string) => void;
+    onViewClientTasks?: (clientName: string, accountId: string) => void;
 }
 
 export interface FomsEndorsementPanelProps {
@@ -99,8 +138,13 @@ export interface FomsFinancialMetricsViewProps {
     embedded?: boolean;
     showHeader?: boolean;
     pollingInterval?: number;
-    initialTab?: 'balances' | 'routing' | 'endorsement';
+    initialTab?: 'balances' | 'routing' | 'endorsement' | 'clients' | 'liquidation';
     onViewClientTasks?: (clientName: string, accountId: string) => void;
     onOpenTask?: (taskId: string) => void;
     onCreateTaskForEndorsement?: (item: FomsEndorsementItem) => void;
+    initialClientAccountId?: string | null;
 }
+
+export * from '../ClientManagement/types';
+export * from '../LiquidationCorrections/types';
+

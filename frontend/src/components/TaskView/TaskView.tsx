@@ -5,6 +5,7 @@ import {
     FileText, Download, Trash2, Paperclip, MessageSquare, Lightbulb, Loader2, AlertCircle, Upload,
     Truck, MapPin, Copy, Check, Send, ExternalLink, RefreshCw, Save, Plus,
     DollarSign, Phone, Mail, ShieldAlert, Sparkles, Zap, FileCheck, Calendar,
+    Receipt, AlertOctagon, User,
 } from 'lucide-react';
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
@@ -17,6 +18,8 @@ import axios from 'axios';
 import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
 import { formatDriverDisplay as formatDriverDisplayShared, FormatDriverOptions } from '../../utils/driverUtils';
 import { syncDmsTaskCompleted } from '../../utils/dmsSyncUtils';
+import SubmitCorrectionModal from '../LiquidationCorrections/SubmitCorrectionModal';
+import '../LiquidationCorrections/LiquidationCorrections.css';
 import './TaskView.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -477,6 +480,79 @@ const parseFomsEndorsement = (title?: string, desc?: string): ParsedFomsEndorsem
     };
 };
 
+// ─── FOMS Liquidation Parser (Integration 5) ──────────────────────────────────
+
+interface ParsedFomsLiquidationInfo {
+    isLiquidationTask: boolean;
+    requestId: string;
+    liquidationId?: number | null;
+    requester: string;
+    requesterEmployeeId?: string | null;
+    deliveryReference?: string | null;
+    liquidationStatus: 'For Correction' | 'Rejected' | string;
+    correctionReason: string;
+    dueDate?: string | null;
+    amount?: number | null;
+    amountFormatted?: string;
+    remarks?: string | null;
+}
+
+const parseFomsLiquidation = (title?: string, desc?: string): ParsedFomsLiquidationInfo | null => {
+    const rawTitle = title || '';
+    const rawDesc = desc || '';
+    const isLiquidation = rawTitle.includes('[Liquidation Correction]') ||
+                          rawDesc.includes('Automated liquidation correction routed from FOMS') ||
+                          rawTitle.toLowerCase().includes('liquidation correction');
+    if (!isLiquidation) return null;
+
+    const reqMatch = rawDesc.match(/Request ID:\s*([^\n]+)/i) || rawTitle.match(/\[Liquidation Correction\]\s*([^\s-]+)/i);
+    const liqIdMatch = rawDesc.match(/Liquidation ID:\s*([^\n]+)/i);
+    const reqerMatch = rawDesc.match(/Requester:\s*([^\n]+)/i);
+    const delMatch = rawDesc.match(/Delivery\/Trip Reference:\s*([^\n]+)/i);
+    const statusMatch = rawDesc.match(/Status:\s*([^\n]+)/i);
+    const reasonMatch = rawDesc.match(/Correction Reason:\s*([^\n]+)/i);
+    const amountMatch = rawDesc.match(/Amount:\s*₱?([^\n]+)/i);
+    const dueMatch = rawDesc.match(/Due Date:\s*([^\n]+)/i);
+    const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
+
+    let requester = 'Courier Staff';
+    let requesterEmployeeId: string | null = null;
+    if (reqerMatch) {
+        const full = reqerMatch[1].trim();
+        const paren = full.match(/\(([^)]+)\)/);
+        if (paren) {
+            requesterEmployeeId = paren[1].trim();
+            requester = full.replace(/\([^)]+\)/, '').trim();
+        } else {
+            requester = full;
+        }
+    } else {
+        const parts = rawTitle.split(' - ');
+        if (parts.length > 1) {
+            requester = parts[parts.length - 1].trim();
+        }
+    }
+
+    const requestId = reqMatch ? reqMatch[1].trim() : 'LIQ-REQ';
+    const rawAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : null;
+    const amountFormatted = rawAmount != null ? `₱${rawAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : undefined;
+
+    return {
+        isLiquidationTask: true,
+        requestId,
+        liquidationId: liqIdMatch ? parseInt(liqIdMatch[1].trim()) : null,
+        requester,
+        requesterEmployeeId,
+        deliveryReference: delMatch ? delMatch[1].trim() : null,
+        liquidationStatus: statusMatch ? statusMatch[1].trim() : (rawTitle.toLowerCase().includes('reject') ? 'Rejected' : 'For Correction'),
+        correctionReason: reasonMatch ? reasonMatch[1].trim() : 'Missing or invalid receipt proof noted by Finance.',
+        dueDate: dueMatch && dueMatch[1].trim() !== 'N/A' ? dueMatch[1].trim() : null,
+        amount: rawAmount,
+        amountFormatted,
+        remarks: remarksMatch ? remarksMatch[1].trim() : null,
+    };
+};
+
 // ─── Reject Modal ─────────────────────────────────────────────────────────────
 
 const RejectModal: React.FC<{
@@ -606,8 +682,24 @@ const TaskView: React.FC<TaskViewProps> = ({
         setTimeout(() => setCopiedFomsKey(null), 2000);
     };
 
+    const isCollectionUrgent = !!fomsCollection && (
+        fomsCollection.daysOverdue >= 30 ||
+        fomsCollection.aging.includes('61-90') ||
+        fomsCollection.aging.includes('90+') ||
+        fomsCollection.aging.includes('60') ||
+        task.priority === 'Urgent'
+    );
+
+    const [showCollectionOutcomeModal, setShowCollectionOutcomeModal] = useState<boolean>(false);
+    const [collectionOutcomeType, setCollectionOutcomeType] = useState<string>('Promised to Pay');
+    const [collectionPromisedDate, setCollectionPromisedDate] = useState<string>('');
+    const [collectionActionTaken, setCollectionActionTaken] = useState<string>('Phone Call');
+    const [collectionOutcomeNotes, setCollectionOutcomeNotes] = useState<string>('');
+    const [submittingCollectionOutcome, setSubmittingCollectionOutcome] = useState<boolean>(false);
+    const [collectionOutcomeError, setCollectionOutcomeError] = useState<string>('');
+
     // ─── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ───────────
-    const fomsEndorsement = parseFomsEndorsement(task.taskTitle, task.taskDescription);
+    const fomsEndorsement = useMemo(() => parseFomsEndorsement(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
     const [endorsementDetail, setEndorsementDetail] = useState<any | null>(null);
     const [endorsementLoading, setEndorsementLoading] = useState(false);
     const [showSignModal, setShowSignModal] = useState(false);
@@ -641,7 +733,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         } finally {
             setEndorsementLoading(false);
         }
-    }, [task.taskId, fomsEndorsement]);
+    }, [task.taskId, fomsEndorsement?.invoiceNumber]);
 
     useEffect(() => {
         fetchEndorsementDetail();
@@ -697,6 +789,79 @@ const TaskView: React.FC<TaskViewProps> = ({
             toastError(err?.message || 'Failed to transmit endorsement callback.');
         } finally {
             setResendingEndorsement(false);
+        }
+    };
+
+    // ─── FOMS Liquidation Correction (Integration 5) ─────────────────────────────
+    const fomsLiquidation = useMemo(() => parseFomsLiquidation(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
+    const [liquidationDetail, setLiquidationDetail] = useState<any | null>(null);
+    const [liquidationLoading, setLiquidationLoading] = useState(false);
+    const [showLiquidationModal, setShowLiquidationModal] = useState(false);
+    const [authorizingLiquidation, setAuthorizingLiquidation] = useState(false);
+    const [retryingLiquidationSync, setRetryingLiquidationSync] = useState(false);
+
+    const fetchLiquidationDetail = useCallback(async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setLiquidationLoading(true);
+        try {
+            const res = await api.get<any>(`/api/foms-integration/liquidation-tasks/${task.taskId}`);
+            const data = res.data?.data ?? res.data;
+            if (data && (data.requestId || data.liquidationStatus)) {
+                setLiquidationDetail(data);
+            }
+        } catch {
+            // Silently fallback to parsed values
+        } finally {
+            setLiquidationLoading(false);
+        }
+    }, [task.taskId, fomsLiquidation?.requestId]);
+
+    useEffect(() => {
+        fetchLiquidationDetail();
+    }, [fetchLiquidationDetail]);
+
+    const handleAuthorizeLiquidation = async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setAuthorizingLiquidation(true);
+        try {
+            const res = await api.post(`/api/foms-integration/liquidation-tasks/${task.taskId}/callback`, {});
+            const data = res.data;
+            if (data && (data.isSuccess === false || data.success === false)) {
+                throw new Error(data.message || 'Callback failed.');
+            }
+            toastSuccess(`Liquidation task for ${fomsLiquidation.requestId} authorized and completion synced to FOMS.`);
+            setLocalStatus('Completed');
+            setLiquidationDetail((prev: any) => ({
+                ...(prev || {}),
+                fomsSyncStatus: 'CallbackSuccess',
+                correctionStatus: 'Corrected',
+            }));
+            await fetchLiquidationDetail();
+            if (onUpdate) {
+                onUpdate({ ...task, taskStatus: 'Completed' });
+            }
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Failed to authorize completion and dispatch callback to FOMS.');
+        } finally {
+            setAuthorizingLiquidation(false);
+        }
+    };
+
+    const handleRetryLiquidationSync = async () => {
+        if (!task.taskId || !fomsLiquidation) return;
+        setRetryingLiquidationSync(true);
+        try {
+            const res = await api.post(`/api/foms-integration/liquidation-tasks/${task.taskId}/retry`, {});
+            const data = res.data;
+            if (data && (data.isSuccess === false || data.success === false)) {
+                throw new Error(data.message || 'Retry failed.');
+            }
+            toastSuccess(`FOMS sync retry succeeded for ${fomsLiquidation.requestId}.`);
+            await fetchLiquidationDetail();
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || 'Sync retry failed.');
+        } finally {
+            setRetryingLiquidationSync(false);
         }
     };
 
@@ -963,6 +1128,7 @@ const TaskView: React.FC<TaskViewProps> = ({
     const isCoordinator = userRole === 'Coordinator';
     const isEmployee = ['Dispatcher', 'Encoder', 'Courier', 'Accountant'].includes(userRole);
     const isAssignedToMe = task.assignedTo === localStorage.getItem('employeeId');
+    const canAuthorizeLiquidation = !userRole || isCoordOrManager || userRole === 'Admin' || userRole.toLowerCase().includes('coordinator') || userRole.toLowerCase().includes('manager');
 
     const od = isEffectivelyOverdue({ ...task, taskStatus: localStatus });
     const effectiveStatus = od ? 'Overdue' : localStatus;
@@ -1149,7 +1315,9 @@ const TaskView: React.FC<TaskViewProps> = ({
                         <span className={priorityDotClass(task.priority)} />
                         <div className="tv-header-text">
                             <h2 className="tv-title">
-                                {task.taskTitle}
+                                {fomsCollection && !task.taskTitle.startsWith('[Collection Follow-up]')
+                                    ? `[Collection Follow-up] Invoice ${fomsCollection.invoiceNumber} - ${fomsCollection.clientName}`
+                                    : task.taskTitle}
                                 {task.classification && (
                                     <span
                                         style={{
@@ -1245,7 +1413,28 @@ const TaskView: React.FC<TaskViewProps> = ({
                             </div>
                             <div className="tv-meta-chip">
                                 <span className="tv-meta-label">Priority</span>
-                                <PrioBadge p={task.priority} />
+                                {isCollectionUrgent ? (
+                                    <span
+                                        className="tv-urgent-priority-pill"
+                                        data-testid="tv-urgent-priority-pill"
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            background: '#fee2e2',
+                                            color: '#b91c1c',
+                                            border: '1px solid #f87171',
+                                            borderRadius: 9999,
+                                            padding: '2px 8px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                        }}
+                                    >
+                                        <ShieldAlert size={12} color="#dc2626" /> Urgent
+                                    </span>
+                                ) : (
+                                    <PrioBadge p={task.priority} />
+                                )}
                             </div>
                             <div className="tv-meta-chip">
                                 <span className="tv-meta-label">Classification</span>
@@ -1528,18 +1717,33 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <span>FOMS Automated Collection &amp; Workload Graph Routing</span>
                                     </div>
                                     <div className="tv-foms-header-status">
-                                        <span className="tv-foms-pill tv-foms-pill-routed">
-                                            <Sparkles size={11} /> Graph Routed to Optimal Coordinator
-                                        </span>
+                                        {effectiveStatus === 'Completed' ? (
+                                            <span className="tv-foms-pill tv-foms-pill-settled" data-testid="foms-collection-settled-pill">
+                                                <CheckCircle2 size={11} color="#059669" /> Settled &amp; Concluded (FOMS)
+                                            </span>
+                                        ) : (
+                                            <span className="tv-foms-pill tv-foms-pill-routed">
+                                                <Sparkles size={11} /> Graph Routed to Optimal Coordinator
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="tv-foms-card">
+                                    {effectiveStatus === 'Completed' && (
+                                        <div className="tv-foms-settled-banner" data-testid="foms-collection-auto-concluded-banner">
+                                            <CheckCircle2 size={16} color="#059669" style={{ flexShrink: 0 }} />
+                                            <span>[FOMS Payment Notification] Full payment settled for invoice {fomsCollection.invoiceNumber}. Outstanding balance cleared. Follow-up concluded.</span>
+                                        </div>
+                                    )}
+
                                     {/* Top Key Overdue Stats Banner */}
                                     <div className="tv-foms-stats-banner">
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">OUTSTANDING AMOUNT</span>
-                                            <span className="tv-foms-stat-amount">{fomsCollection.amountDue}</span>
+                                            <span className="tv-foms-stat-amount" style={effectiveStatus === 'Completed' ? { color: '#059669' } : {}}>
+                                                {effectiveStatus === 'Completed' ? '₱0.00 (Settled)' : fomsCollection.amountDue}
+                                            </span>
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">INVOICE NUMBER</span>
@@ -1557,9 +1761,36 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">AGING DURATION</span>
-                                            <span className={`tv-foms-aging-tag ${fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
-                                                {fomsCollection.aging}
+                                            <span className={`tv-foms-aging-tag ${effectiveStatus === 'Completed' ? 'moderate' : fomsCollection.daysOverdue >= 30 ? 'critical' : 'moderate'}`}>
+                                                {effectiveStatus === 'Completed' ? 'Cleared / Settled' : fomsCollection.aging}
                                             </span>
+                                        </div>
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">PRIORITY LEVEL</span>
+                                            {isCollectionUrgent ? (
+                                                <span
+                                                    className="tv-urgent-priority-pill"
+                                                    data-testid="foms-urgent-priority-badge"
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 4,
+                                                        background: '#fee2e2',
+                                                        color: '#b91c1c',
+                                                        border: '1px solid #f87171',
+                                                        borderRadius: 9999,
+                                                        padding: '2px 8px',
+                                                        fontSize: '0.74rem',
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    <ShieldAlert size={11} color="#dc2626" /> Urgent
+                                                </span>
+                                            ) : (
+                                                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#c2410c' }}>
+                                                    High
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">ORIGINAL DUE DATE</span>
@@ -1639,35 +1870,58 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     {/* Quick Coordinator Collection Action Bar */}
                                     <div className="tv-foms-action-bar">
                                         <span className="tv-foms-action-label">Coordinator Follow-up Actions:</span>
-                                        <div className="tv-foms-action-buttons">
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
-                                                }}
-                                            >
-                                                <Phone size={11} /> Log Call Attempt
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Recorded: Payment promised within 3 business days.');
-                                                }}
-                                            >
-                                                <Clock size={11} /> Promised Payment
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm"
-                                                onClick={() => {
-                                                    toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
-                                                }}
-                                            >
-                                                <CheckCircle2 size={11} /> Mark Settled
-                                            </button>
-                                        </div>
+                                        {effectiveStatus === 'Completed' ? (
+                                            <span className="tv-foms-completed-note" data-testid="foms-followup-concluded-note">
+                                                <CheckCircle2 size={12} color="#059669" /> Collection follow-up concluded — payment settled in full.
+                                            </span>
+                                        ) : (
+                                            <div className="tv-foms-action-buttons">
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Logged: Contact attempt recorded for ' + fomsCollection.clientName);
+                                                    }}
+                                                >
+                                                    <Phone size={11} /> Log Call Attempt
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Recorded: Payment promised within 3 business days.');
+                                                    }}
+                                                >
+                                                    <Clock size={11} /> Promised Payment
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm"
+                                                    onClick={() => {
+                                                        toastSuccess('Settled: Collection marked complete for invoice ' + fomsCollection.invoiceNumber);
+                                                    }}
+                                                >
+                                                    <CheckCircle2 size={11} /> Mark Settled
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-primary-sm tv-foms-outcome-modal-btn"
+                                                    onClick={() => {
+                                                        setCollectionOutcomeType('Promised to Pay');
+                                                        const defDate = new Date();
+                                                        defDate.setDate(defDate.getDate() + 3);
+                                                        setCollectionPromisedDate(defDate.toISOString().split('T')[0]);
+                                                        setCollectionActionTaken('Phone Call');
+                                                        setCollectionOutcomeNotes('');
+                                                        setCollectionOutcomeError('');
+                                                        setShowCollectionOutcomeModal(true);
+                                                    }}
+                                                    data-testid="tv-record-collection-outcome-btn"
+                                                >
+                                                    <FileCheck size={11} /> Record Collection Outcome
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1682,7 +1936,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <span>FOMS Physical Invoice Delivery &amp; Endorsement</span>
                                     </div>
                                     <div className="tv-foms-header-status">
-                                        {endorsementDetail?.endorsementStatus === 'Endorsed' ? (
+                                        {endorsementDetail?.fomsSyncStatus === 'Failed' ? (
+                                            <span className="tv-foms-pill tv-foms-pill-failed" data-testid="foms-sync-failed-badge">
+                                                <AlertCircle size={11} /> Sync Failed
+                                            </span>
+                                        ) : endorsementDetail?.endorsementStatus === 'Endorsed' ? (
                                             <span className="tv-foms-pill tv-foms-pill-endorsed">
                                                 <CheckCircle2 size={11} /> 30-Day Payment Clock Active
                                             </span>
@@ -1695,6 +1953,33 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 </div>
 
                                 <div className="tv-foms-card">
+                                    {/* ── Sync Failure Banner & Retry Button (fomsSyncStatus === "Failed") ── */}
+                                    {endorsementDetail?.fomsSyncStatus === 'Failed' && (
+                                        <div className="tv-foms-sync-fail-banner" role="alert" data-testid="foms-sync-failure-banner">
+                                            <div className="tv-foms-sync-fail-info">
+                                                <AlertTriangle size={18} className="tv-foms-sync-fail-icon" />
+                                                <div>
+                                                    <strong className="tv-foms-sync-fail-title">
+                                                        FOMS Sync Callback Failed
+                                                    </strong>
+                                                    <p className="tv-foms-sync-fail-desc">
+                                                        {endorsementDetail?.lastSyncError || 'The completion callback to FOMS failed to dispatch. Task remains Completed, but re-synchronization is required to activate the 30-day payment term in FOMS.'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                onClick={handleResendEndorsementCallback}
+                                                disabled={resendingEndorsement}
+                                                data-testid="retry-sync-to-foms-btn"
+                                            >
+                                                <RefreshCw size={12} className={resendingEndorsement ? 'spin' : ''} />
+                                                <span>{resendingEndorsement ? 'Retrying Sync...' : 'Retry Sync to FOMS'}</span>
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Stats Banner */}
                                     <div className="tv-foms-stats-banner">
                                         <div className="tv-foms-stat-group">
@@ -1731,9 +2016,14 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">30-DAY PAYMENT DUE</span>
                                             {endorsementDetail?.calculatedPaymentDueDate ? (
-                                                <span className="tv-foms-calc-term">
+                                                <span className="tv-foms-calc-term" data-testid="tv-calculated-due-date">
                                                     <Sparkles size={10} />
                                                     {new Date(endorsementDetail.calculatedPaymentDueDate).toLocaleDateString()}
+                                                </span>
+                                            ) : endorsementDetail?.actualReceivedDate ? (
+                                                <span className="tv-foms-calc-term" data-testid="tv-calculated-due-date">
+                                                    <Sparkles size={10} />
+                                                    {new Date(new Date(endorsementDetail.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString()}
                                                 </span>
                                             ) : (
                                                 <span className="tv-foms-stat-val" style={{ color: '#b45309', fontSize: 11 }}>
@@ -1842,6 +2132,19 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     <div className="tv-foms-action-bar">
                                         <span className="tv-foms-action-label">Endorsement Operations:</span>
                                         <div className="tv-foms-action-buttons">
+                                            {endorsementDetail?.fomsSyncStatus === 'Failed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                    onClick={handleResendEndorsementCallback}
+                                                    disabled={resendingEndorsement}
+                                                    data-testid="foms-retry-sync-action-btn"
+                                                    title="Retry Sync to FOMS"
+                                                >
+                                                    <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} />
+                                                    <span>{resendingEndorsement ? 'Retrying Sync...' : 'Retry Sync to FOMS'}</span>
+                                                </button>
+                                            )}
                                             {endorsementDetail?.endorsementStatus !== 'Endorsed' ? (
                                                 <button
                                                     type="button"
@@ -1859,15 +2162,223 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     >
                                                         <Pencil size={11} /> Update Signed Evidence
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        className="tv-btn tv-btn-outline-sm"
-                                                        onClick={handleResendEndorsementCallback}
-                                                        disabled={resendingEndorsement}
-                                                    >
-                                                        <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} /> Resend Callback to FOMS
-                                                    </button>
+                                                    {endorsementDetail?.fomsSyncStatus !== 'Failed' && (
+                                                        <button
+                                                            type="button"
+                                                            className="tv-btn tv-btn-outline-sm"
+                                                            onClick={handleResendEndorsementCallback}
+                                                            disabled={resendingEndorsement}
+                                                        >
+                                                            <RefreshCw size={11} className={resendingEndorsement ? 'spin' : ''} /> Resend Callback to FOMS
+                                                        </button>
+                                                    )}
                                                 </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── FOMS Liquidation Correction Section (Integration 5) ── */}
+                        {fomsLiquidation && (
+                            <div className="tv-section tv-foms-liquidation-section" data-testid="foms-liquidation-section">
+                                <div className="tv-foms-header">
+                                    <div className="tv-foms-header-title">
+                                        <Receipt size={16} className="tv-foms-icon" />
+                                        <span>FOMS Expense Liquidation Correction (M2M Integration)</span>
+                                    </div>
+                                    <div className="tv-foms-header-status" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                        {/* Liquidation Status Badge */}
+                                        {((liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus || '').toLowerCase().includes('reject')) ? (
+                                            <span className="liq-badge liq-badge-rejected" data-testid="liquidation-status-badge">
+                                                <AlertOctagon size={11} />
+                                                <span>Rejected</span>
+                                            </span>
+                                        ) : (
+                                            <span className="liq-badge liq-badge-for-correction" data-testid="liquidation-status-badge">
+                                                <AlertTriangle size={11} />
+                                                <span>For Correction</span>
+                                            </span>
+                                        )}
+
+                                        {/* Priority Badge */}
+                                        {((liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus || '').toLowerCase().includes('reject') ||
+                                          (fomsLiquidation.dueDate && new Date(fomsLiquidation.dueDate).getTime() < Date.now()) ||
+                                          task.priority === 'Urgent') ? (
+                                            <span className="liq-badge liq-badge-urgent" data-testid="priority-badge">
+                                                Urgent
+                                            </span>
+                                        ) : (
+                                            <span className="liq-badge liq-badge-high" data-testid="priority-badge">
+                                                High
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="tv-foms-card">
+                                    {/* Stats Banner */}
+                                    <div className="tv-foms-stats-banner">
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">DISPUTED AMOUNT</span>
+                                            <span className="tv-foms-stat-amount">
+                                                {liquidationDetail?.amount != null
+                                                    ? `₱${Number(liquidationDetail.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                    : (fomsLiquidation.amountFormatted || '₱0.00')}
+                                            </span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">REQUEST ID</span>
+                                            <span className="tv-foms-invoice-num">{liquidationDetail?.requestId || fomsLiquidation.requestId}</span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">SLA DEADLINE</span>
+                                            <span className="tv-foms-stat-val">
+                                                {liquidationDetail?.dueDate
+                                                    ? new Date(liquidationDetail.dueDate).toLocaleDateString()
+                                                    : (fomsLiquidation.dueDate ? new Date(fomsLiquidation.dueDate).toLocaleDateString() : 'Next Business Day')}
+                                            </span>
+                                        </div>
+
+                                        <div className="tv-foms-stat-group">
+                                            <span className="tv-foms-stat-label">FOMS CALLBACK SYNC</span>
+                                            {(liquidationDetail?.fomsSyncStatus === 'CallbackSuccess' || effectiveStatus === 'Completed') ? (
+                                                <span className="liq-sync-pill liq-sync-success" data-testid="sync-success-pill">
+                                                    <CheckCircle2 size={11} /> CallbackSuccess
+                                                </span>
+                                            ) : liquidationDetail?.fomsSyncStatus === 'Failed' ? (
+                                                <span className="liq-sync-pill liq-sync-failed" data-testid="sync-failed-pill">
+                                                    <AlertTriangle size={11} /> Failed
+                                                </span>
+                                            ) : (
+                                                <span className="liq-sync-pill liq-sync-pending" data-testid="sync-pending-pill">
+                                                    <Clock size={11} /> Pending
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Requester & Delivery Metadata Drawer */}
+                                    <div className="liq-meta-drawer" data-testid="requester-metadata-drawer" style={{ margin: '0.75rem 0' }}>
+                                        <div className="liq-meta-row">
+                                            <span className="liq-meta-label">Requester Name:</span>
+                                            <span className="liq-meta-value">
+                                                <User size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                                                {liquidationDetail?.requester || fomsLiquidation.requester}
+                                            </span>
+                                        </div>
+                                        {(liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId) && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">Employee ID:</span>
+                                                <span className="liq-meta-value">{liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId}</span>
+                                            </div>
+                                        )}
+                                        {(liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference) && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">Waybill / Delivery Reference:</span>
+                                                <span className="liq-meta-value" style={{ color: '#2563eb' }}>
+                                                    <Truck size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                                                    {liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {liquidationDetail?.liquidationId && (
+                                            <div className="liq-meta-row">
+                                                <span className="liq-meta-label">FOMS Liquidation ID:</span>
+                                                <span className="liq-meta-value">#{liquidationDetail.liquidationId}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Correction Reason Callout */}
+                                    <div className="liq-reason-callout" data-testid="correction-reason-callout">
+                                        <div className="liq-reason-header">
+                                            <AlertTriangle size={13} />
+                                            <span>Finance Manager Correction Reason</span>
+                                        </div>
+                                        <div className="liq-reason-body">
+                                            {liquidationDetail?.correctionReason || fomsLiquidation.correctionReason}
+                                        </div>
+                                    </div>
+
+                                    {/* Attached Proof and Remarks if submitted */}
+                                    {(liquidationDetail?.correctedReceiptsUrl || liquidationDetail?.resolutionRemarks) && (
+                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.65rem 0.85rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            {liquidationDetail.correctedReceiptsUrl && (
+                                                <div style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <Paperclip size={13} color="#2563eb" />
+                                                    <span style={{ fontWeight: 600, color: '#334155' }}>Corrected Receipts Proof:</span>
+                                                    <a
+                                                        href={liquidationDetail.correctedReceiptsUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        style={{ color: '#2563eb', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                                                        data-testid="corrected-receipts-link"
+                                                    >
+                                                        <span>View Scanned Document</span>
+                                                        <ExternalLink size={11} />
+                                                    </a>
+                                                </div>
+                                            )}
+                                            {liquidationDetail.resolutionRemarks && (
+                                                <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                                                    <span style={{ fontWeight: 600, color: '#334155' }}>Resolution Remarks: </span>
+                                                    <span>{liquidationDetail.resolutionRemarks}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Actions Bar */}
+                                    <div className="tv-foms-action-bar" style={{ marginTop: '0.85rem' }}>
+                                        <span className="tv-foms-action-label">Liquidation FSM Actions:</span>
+                                        <div className="tv-foms-action-buttons">
+                                            {/* InProgress -> Attach Receipts */}
+                                            {(effectiveStatus === 'In Progress' || effectiveStatus === 'Not Started' || effectiveStatus === 'InProgress' || liquidationDetail?.correctionStatus === 'PendingCorrection') && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn-primary-sm"
+                                                    onClick={() => setShowLiquidationModal(true)}
+                                                    data-testid="attach-receipts-btn"
+                                                >
+                                                    <Paperclip size={12} /> Attach Corrected Receipts
+                                                </button>
+                                            )}
+
+                                            {/* PendingReview / DonePendingReview / Corrected -> Authorize Completion */}
+                                            {(effectiveStatus === 'Done/Pending Review' || effectiveStatus === 'DonePendingReview' || effectiveStatus === 'PendingReview' || liquidationDetail?.correctionStatus === 'Corrected') && effectiveStatus !== 'Completed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-success-sm"
+                                                    onClick={handleAuthorizeLiquidation}
+                                                    disabled={authorizingLiquidation || !canAuthorizeLiquidation}
+                                                    title={!canAuthorizeLiquidation ? 'Restricted to Coordinator or Manager per FR-024' : 'Authorize Completion & Return to FOMS'}
+                                                    data-testid="authorize-completion-btn"
+                                                >
+                                                    {authorizingLiquidation ? (
+                                                        <Loader2 size={12} className="spin" />
+                                                    ) : (
+                                                        <Send size={12} />
+                                                    )}
+                                                    Authorize Completion &amp; Return to FOMS
+                                                </button>
+                                            )}
+
+                                            {/* Manual Retry Sync button if sync failed */}
+                                            {liquidationDetail?.fomsSyncStatus === 'Failed' && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-danger-sm tv-btn-retry-foms"
+                                                    onClick={handleRetryLiquidationSync}
+                                                    disabled={retryingLiquidationSync}
+                                                    data-testid="retry-sync-btn"
+                                                >
+                                                    <RefreshCw size={11} className={retryingLiquidationSync ? 'spin' : ''} />
+                                                    {retryingLiquidationSync ? 'Retrying...' : 'Retry FOMS Sync'}
+                                                </button>
                                             )}
                                         </div>
                                     </div>
@@ -2994,6 +3505,206 @@ const TaskView: React.FC<TaskViewProps> = ({
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* ── Coordinator Collection Outcome Modal (FOMS Integration 3 / FOMS FR-033) ── */}
+            {showCollectionOutcomeModal && fomsCollection && (
+                <div className="tv-modal-overlay" onClick={() => !submittingCollectionOutcome && setShowCollectionOutcomeModal(false)}>
+                    <div className="tv-modal tv-modal-delivery" onClick={e => e.stopPropagation()} data-testid="tv-collection-outcome-modal">
+                        <div className="tv-modal-header">
+                            <div>
+                                <h3 className="tv-modal-title">Submit Collection Follow-up Outcome</h3>
+                                <p className="tv-modal-sub">
+                                    Record final resolution and dispatch outcome callback to FOMS (FOMS FR-033).
+                                </p>
+                            </div>
+                        </div>
+
+                        <form
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (collectionOutcomeType === 'Promised to Pay' && !collectionPromisedDate) {
+                                    setCollectionOutcomeError('Promised payment date is required when outcome is Promised to Pay.');
+                                    return;
+                                }
+                                setSubmittingCollectionOutcome(true);
+                                setCollectionOutcomeError('');
+
+                                try {
+                                    const payload = {
+                                        outcome: collectionOutcomeType,
+                                        promisedPaymentDate: collectionOutcomeType === 'Promised to Pay' && collectionPromisedDate ? new Date(collectionPromisedDate).toISOString() : null,
+                                        actionTaken: collectionActionTaken.trim() || 'Client Contact',
+                                        notes: collectionOutcomeNotes.trim() || null,
+                                    };
+                                    const res = await api.post(`/api/foms-integration/tasks/${task.taskId}/collection-outcome`, payload);
+                                    if (res.data?.isSuccess) {
+                                        toastSuccess('Collection follow-up outcome recorded and dispatched to FOMS.');
+                                        setShowCollectionOutcomeModal(false);
+                                        setLocalStatus('Completed');
+                                        if (onUpdate) {
+                                            onUpdate({ ...task, taskStatus: 'Completed' });
+                                        }
+                                    } else {
+                                        setCollectionOutcomeError(res.data?.message || 'Failed to submit outcome to FOMS.');
+                                    }
+                                } catch (err: any) {
+                                    setCollectionOutcomeError(err?.response?.data?.message || err?.message || 'Error transmitting collection outcome.');
+                                } finally {
+                                    setSubmittingCollectionOutcome(false);
+                                }
+                            }}
+                        >
+                            <div className="tv-modal-body">
+                                {collectionOutcomeError && (
+                                    <div className="tv-delivery-error-box" style={{ marginBottom: 12 }}>
+                                        <AlertCircle size={14} />
+                                        <span>{collectionOutcomeError}</span>
+                                    </div>
+                                )}
+
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Invoice &amp; Client</span>
+                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{fomsCollection.invoiceNumber} - {fomsCollection.clientName}</div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Amount Due</span>
+                                            <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#dc2626' }}>{fomsCollection.amountDue}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Outcome <span className="tv-form-req">*</span>
+                                    </label>
+                                    <select
+                                        className="tv-form-input"
+                                        value={collectionOutcomeType}
+                                        onChange={e => {
+                                            setCollectionOutcomeType(e.target.value);
+                                            setCollectionOutcomeError('');
+                                        }}
+                                        data-testid="tv-outcome-type-select"
+                                    >
+                                        <option value="Promised to Pay">Promised to Pay</option>
+                                        <option value="Disputed">Disputed</option>
+                                        <option value="Unreachable">Unreachable</option>
+                                    </select>
+                                </div>
+
+                                {collectionOutcomeType === 'Promised to Pay' && (
+                                    <div className="tv-form-group">
+                                        <label className="tv-form-label">
+                                            Promised Payment Date <span className="tv-form-req">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            className="tv-form-input"
+                                            value={collectionPromisedDate}
+                                            onChange={e => {
+                                                setCollectionPromisedDate(e.target.value);
+                                                setCollectionOutcomeError('');
+                                            }}
+                                            data-testid="tv-promised-date-input"
+                                            required
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Action Taken <span className="tv-form-req">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        value={collectionActionTaken}
+                                        onChange={e => setCollectionActionTaken(e.target.value)}
+                                        placeholder="e.g. Phone Call, Demand Letter Delivered, On-site Visit"
+                                        data-testid="tv-action-taken-input"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">
+                                        Notes / Discussion Details
+                                    </label>
+                                    <textarea
+                                        className="tv-form-textarea"
+                                        rows={3}
+                                        value={collectionOutcomeNotes}
+                                        onChange={e => setCollectionOutcomeNotes(e.target.value)}
+                                        placeholder="Enter notes from client contact or promise details..."
+                                        data-testid="tv-outcome-notes-textarea"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="tv-modal-footer">
+                                <button
+                                    type="button"
+                                    className="tv-btn tv-btn-secondary"
+                                    disabled={submittingCollectionOutcome}
+                                    onClick={() => setShowCollectionOutcomeModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="tv-btn tv-btn-primary"
+                                    disabled={submittingCollectionOutcome}
+                                    data-testid="tv-submit-outcome-btn"
+                                >
+                                    {submittingCollectionOutcome ? <Loader2 size={13} className="spin" /> : <FileCheck size={13} />}
+                                    {submittingCollectionOutcome ? 'Transmitting Callback…' : 'Submit Outcome to FOMS'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* FOMS Liquidation Attach Receipts Modal (Integration 5) */}
+            {showLiquidationModal && fomsLiquidation && (
+                <SubmitCorrectionModal
+                    isOpen={showLiquidationModal}
+                    task={{
+                        id: task.taskId,
+                        taskId: task.taskId,
+                        taskNumber: (task as any).taskNumber || task.taskId.substring(0, 8),
+                        requestId: liquidationDetail?.requestId || fomsLiquidation.requestId,
+                        liquidationId: liquidationDetail?.liquidationId || fomsLiquidation.liquidationId,
+                        requester: liquidationDetail?.requester || fomsLiquidation.requester,
+                        requesterEmployeeId: liquidationDetail?.requesterEmployeeId || fomsLiquidation.requesterEmployeeId,
+                        deliveryReference: liquidationDetail?.deliveryReference || fomsLiquidation.deliveryReference,
+                        liquidationStatus: liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus,
+                        correctionReason: liquidationDetail?.correctionReason || fomsLiquidation.correctionReason,
+                        amount: liquidationDetail?.amount != null ? liquidationDetail.amount : fomsLiquidation.amount,
+                        dueDate: liquidationDetail?.dueDate || fomsLiquidation.dueDate,
+                        fomsSyncStatus: liquidationDetail?.fomsSyncStatus || 'Pending',
+                        correctedReceiptsUrl: liquidationDetail?.correctedReceiptsUrl,
+                        resolutionRemarks: liquidationDetail?.resolutionRemarks,
+                    }}
+                    onClose={() => setShowLiquidationModal(false)}
+                    onSubmitSuccess={async updated => {
+                        setShowLiquidationModal(false);
+                        setLocalStatus('Done/Pending Review');
+                        setLiquidationDetail((prev: any) => ({
+                            ...(prev || {}),
+                            correctedReceiptsUrl: updated?.correctedReceiptsUrl,
+                            resolutionRemarks: updated?.resolutionRemarks,
+                            correctionStatus: 'Corrected',
+                        }));
+                        await fetchLiquidationDetail();
+                        if (onUpdate) {
+                            onUpdate({ ...task, taskStatus: 'Done/Pending Review' });
+                        }
+                    }}
+                />
             )}
         </>
     );

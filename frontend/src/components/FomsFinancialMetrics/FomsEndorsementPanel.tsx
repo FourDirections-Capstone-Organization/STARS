@@ -19,6 +19,7 @@ import {
     ChevronLeft,
     ChevronRight,
     AlertCircle,
+    AlertTriangle,
     Calendar,
     Sparkles,
     FileCheck,
@@ -153,7 +154,43 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
     // Fetch live endorsement tasks from STARS database
     const fetchLiveEndorsements = useCallback(async () => {
         try {
-            // Priority 1: Query Tasks matching [FOMS Endorsement]
+            // Priority 1: Direct structured records from STARS database (GET /api/foms-integration/endorsements)
+            let directItems: FomsEndorsementItem[] = [];
+            try {
+                const directRes = await api.get('/api/foms-integration/endorsements');
+                const directData = directRes.data;
+                const itemsList: any[] = directData?.isSuccess && Array.isArray(directData.data)
+                    ? directData.data
+                    : Array.isArray(directData?.data?.items)
+                        ? directData.data.items
+                        : Array.isArray(directData)
+                            ? directData
+                            : [];
+                if (itemsList.length > 0) {
+                    directItems = itemsList.map((d: any) => {
+                        const calculatedDue = d.calculatedPaymentDueDate ||
+                            (d.actualReceivedDate ? new Date(new Date(d.actualReceivedDate).getTime() + 30 * 86400000).toISOString() : null);
+                        return {
+                            ...d,
+                            calculatedPaymentDueDate: calculatedDue,
+                        };
+                    });
+                }
+            } catch {
+                directItems = [];
+            }
+
+            if (directItems.length > 0) {
+                const hasPending = directItems.some(m => !isItemCreatedAsTask(m));
+                if (!hasPending) {
+                    setEndorsements([...directItems, ...DEFAULT_PENDING_FOMS_INVOICES]);
+                } else {
+                    setEndorsements(directItems);
+                }
+                return;
+            }
+
+            // Priority 2: Fallback Query Tasks matching [FOMS Endorsement]
             let items: any[] = [];
             try {
                 const res = await api.get('/api/Task?search=[FOMS Endorsement]&pageSize=30');
@@ -165,23 +202,6 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         : [];
             } catch {
                 items = [];
-            }
-
-            // Priority 2: Direct structured records from STARS database
-            if (items.length === 0) {
-                try {
-                    const directRes = await api.get('/api/foms-integration/endorsements');
-                    const directData = directRes.data;
-                    const directItems: any[] = directData.isSuccess && Array.isArray(directData.data)
-                        ? directData.data
-                        : [];
-                    if (directItems.length > 0) {
-                        setEndorsements(directItems as FomsEndorsementItem[]);
-                        return;
-                    }
-                } catch {
-                    // ignore
-                }
             }
 
             if (items.length > 0) {
@@ -203,6 +223,8 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         : t.title.replace(/^\[(FOMS|Invoice)\s+Endorsement\]\s*(Invoice\s+[A-Z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
 
                     const isDone = t.status === 3 || t.taskStatus === 'Completed';
+                    const actualReceived = isDone ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null;
+                    const calculatedDue = actualReceived ? new Date(new Date(actualReceived).getTime() + 30 * 86400000).toISOString() : null;
 
                     return {
                         id: `live-endorse-${t.id}`,
@@ -217,13 +239,13 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         dueDate: t.deadline || new Date(Date.now() + 30 * 86400000).toISOString(),
                         invoiceDocumentUrl: docMatch && docMatch[1] !== 'Attached in FOMS' ? docMatch[1] : undefined,
                         signedReceivingCopyUrl: isDone ? (docMatch ? docMatch[1] : 'https://stars.blob.core.windows.net/invoices/signed-copy.pdf') : null,
-                        actualReceivedDate: isDone ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null,
+                        actualReceivedDate: actualReceived,
                         deliveryRemarks: isDone ? 'Official invoice document received and endorsed with wet signature.' : null,
                         endorsementStatus: isDone ? 'Completed' : 'PendingEndorsement',
-                        fomsSyncStatus: isDone ? 'Synced' : 'Pending',
+                        fomsSyncStatus: t.fomsSyncStatus || (isDone ? 'Synced' : 'Pending'),
                         fomsSyncAttempts: 0,
                         lastSyncedAt: t.updatedAt || null,
-                        calculatedPaymentDueDate: null,
+                        calculatedPaymentDueDate: calculatedDue,
                         assignedCoordinatorName: assignee,
                         taskStatus: t.status === 1 ? 'In Progress' : isDone ? 'Completed' : 'Not Started',
                     };
@@ -262,7 +284,14 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
     // Handler: Create STARS Task for an Endorsement item (like in DMS)
     const handleCreateStarsTask = (item: FomsEndorsementItem) => {
+        // Inactive Account Gate Enforcement: Block new client-linked tasks if client is Inactive
+        if (String((item as any).clientStatus).toLowerCase() === 'inactive' || (item as any).isInactive) {
+            toastError('Client account is inactive in FOMS. Tasks cannot be created for inactive accounts.');
+            return;
+        }
+
         try {
+
             const raw = localStorage.getItem('stars_created_endorsements');
             const arr = raw ? JSON.parse(raw) : [];
             const set = new Set(Array.isArray(arr) ? arr : []);
@@ -316,7 +345,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             if (activeSubTab === 'active') {
                 if (statusFilter === 'all') return true;
                 if (statusFilter === 'pending') return item.endorsementStatus === 'PendingEndorsement';
-                if (statusFilter === 'endorsed') return item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || item.fomsSyncStatus === 'Synced';
+                if (statusFilter === 'endorsed') return (item.endorsementStatus === 'Endorsed' || item.endorsementStatus === 'Completed' || item.fomsSyncStatus === 'Synced') && item.fomsSyncStatus !== 'Failed';
                 if (statusFilter === 'failed') return item.fomsSyncStatus === 'Failed';
             }
             return true;
@@ -341,10 +370,15 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         setCurrentPage(1);
     }, [activeSubTab, searchQuery, statusFilter]);
 
+    // Retry state
+    const [retryingId, setRetryingId] = useState<string | null>(null);
+    const [retryingAll, setRetryingAll] = useState(false);
+
     // KPI Counters
     const totalCount = endorsements.length;
     const pendingCount = endorsements.filter(e => e.endorsementStatus === 'PendingEndorsement').length;
     const endorsedCount = endorsements.filter(e => e.endorsementStatus === 'Endorsed' || e.endorsementStatus === 'Completed').length;
+    const failedCount = endorsements.filter(e => e.fomsSyncStatus === 'Failed').length;
     const totalExposure = endorsements.reduce((acc, e) => acc + (e.invoiceAmount || 0), 0);
 
     // Submit Signed Endorsement Copy
@@ -404,14 +438,51 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
         }
     };
 
-    // Resend Callback to FOMS
+    // Resend Callback to FOMS (POST /api/foms-integration/tasks/{taskId}/resend)
     const handleResendCallback = async (item: FomsEndorsementItem) => {
-        try {
-            await api.post(`/api/foms-integration/tasks/${item.taskId}/resend`);
-            toastSuccess(`Sent endorsement completion callback to FOMS for invoice ${item.invoiceNumber}`);
-        } catch {
-            toastInfo(`Transmitted completion callback for invoice ${item.invoiceNumber} to FOMS`);
+        if (!item.taskId) {
+            toastError('Cannot retry sync: Task ID is missing.');
+            return;
         }
+        setRetryingId(item.id);
+        try {
+            await api.post(`/api/foms-integration/tasks/${item.taskId}/resend`, {});
+            setEndorsements(prev =>
+                prev.map(e => e.id === item.id || e.taskId === item.taskId
+                    ? { ...e, fomsSyncStatus: 'Synced', lastSyncError: null, lastSyncedAt: new Date().toISOString() }
+                    : e
+                )
+            );
+            toastSuccess(`Sent endorsement completion callback to FOMS for invoice ${item.invoiceNumber}`);
+        } catch (err: any) {
+            toastError(err?.response?.data?.message || err?.message || `Failed to re-sync invoice ${item.invoiceNumber} to FOMS`);
+        } finally {
+            setRetryingId(null);
+        }
+    };
+
+    // Retry all failed sync callbacks
+    const handleRetryAllFailed = async () => {
+        const failedItems = endorsements.filter(e => e.fomsSyncStatus === 'Failed' && e.taskId);
+        if (failedItems.length === 0) return;
+        setRetryingAll(true);
+        let successCount = 0;
+        for (const item of failedItems) {
+            try {
+                await api.post(`/api/foms-integration/tasks/${item.taskId}/resend`, {});
+                successCount++;
+            } catch {
+                // proceed
+            }
+        }
+        setEndorsements(prev =>
+            prev.map(e => e.fomsSyncStatus === 'Failed'
+                ? { ...e, fomsSyncStatus: 'Synced', lastSyncError: null, lastSyncedAt: new Date().toISOString() }
+                : e
+            )
+        );
+        toastSuccess(`Re-synchronized ${successCount} of ${failedItems.length} failed endorsement callback(s) to FOMS.`);
+        setRetryingAll(false);
     };
 
     return (
@@ -616,6 +687,7 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                 { key: 'all', label: 'All Invoices', count: activeEndorsements.length },
                                 { key: 'pending', label: 'Pending Sign-off', count: pendingCount, variantClass: 'chip-warning' },
                                 { key: 'endorsed', label: 'Endorsed & Synced', count: endorsedCount, variantClass: 'chip-success' },
+                                ...(failedCount > 0 ? [{ key: 'failed', label: 'Sync Failed', count: failedCount, variantClass: 'chip-danger' }] : []),
                             ].map(filter => (
                                 <button
                                     key={filter.key}
@@ -630,6 +702,33 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         </div>
                     )}
                 </div>
+
+                {/* ── Sync Failure Banner & Bulk Retry Button (When fomsSyncStatus === "Failed") ── */}
+                {activeSubTab === 'active' && failedCount > 0 && (
+                    <div className="foms-sync-failure-banner" role="alert" data-testid="foms-sync-failure-banner" style={{ margin: '0 20px 14px' }}>
+                        <div className="foms-sync-failure-content">
+                            <AlertTriangle size={20} className="foms-sync-failure-icon" />
+                            <div>
+                                <strong className="foms-sync-failure-title">
+                                    FOMS Endorsement Sync Callback Failed ({failedCount} invoice{failedCount > 1 ? 's' : ''})
+                                </strong>
+                                <p className="foms-sync-failure-desc">
+                                    Client wet-signature receiving endorsement was recorded in STARS, but callback synchronization to FOMS failed. The task remains Completed, but the 30-day payment term in FOMS requires re-synchronization.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className="foms-sync-retry-all-btn"
+                            onClick={handleRetryAllFailed}
+                            disabled={retryingAll}
+                            data-testid="retry-sync-to-foms-bulk-btn"
+                        >
+                            <RefreshCw size={13} className={retryingAll ? 'spin' : ''} />
+                            <span>{retryingAll ? 'Retrying Sync...' : 'Retry Sync to FOMS'}</span>
+                        </button>
+                    </div>
+                )}
 
                 {filteredEndorsements.length === 0 ? (
                     <div className="table-card-empty-state">
@@ -718,7 +817,13 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                                 {item.billingDate ? new Date(item.billingDate).toLocaleDateString() : 'Recent'}
                                             </div>
                                             <div style={{ fontSize: '0.75rem', color: 'var(--tt, #6B7280)' }}>
-                                                Due: 30 days upon receipt
+                                                {item.calculatedPaymentDueDate ? (
+                                                    <span className="foms-term-highlight" data-testid="payment-due-date-preview">
+                                                        <Sparkles size={10} /> Due: {new Date(item.calculatedPaymentDueDate).toLocaleDateString()}
+                                                    </span>
+                                                ) : (
+                                                    'Due: 30 days upon receipt'
+                                                )}
                                             </div>
                                         </td>
                                         <td>
@@ -739,15 +844,23 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                             </span>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
-                                            <button
-                                                type="button"
-                                                className="create-task-action-btn"
-                                                title="Create operational endorsement delivery task in STARS"
-                                                onClick={() => handleCreateStarsTask(item)}
-                                            >
-                                                <PlusCircle size={14} /> Create STARS Task
-                                            </button>
+                                            {(() => {
+                                                const isInactive = String((item as any).clientStatus).toLowerCase() === 'inactive' || Boolean((item as any).isInactive);
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        className={`create-task-action-btn ${isInactive ? 'disabled' : ''}`}
+                                                        title={isInactive ? 'Client account is inactive in FOMS. Tasks cannot be created for inactive accounts.' : 'Create operational endorsement delivery task in STARS'}
+                                                        disabled={isInactive}
+                                                        onClick={() => handleCreateStarsTask(item)}
+                                                        style={isInactive ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                                    >
+                                                        <PlusCircle size={14} /> Create STARS Task
+                                                    </button>
+                                                );
+                                            })()}
                                         </td>
+
                                     </tr>
                                 ))}
                             </tbody>
@@ -820,26 +933,39 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                                             {/* Endorsement Status */}
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                    <span className={`foms-aging-pill ${isSigned ? 'duesoon' : 'moderate'}`}>
-                                                        {isSigned ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                                                        {isSigned ? 'Endorsed & Signed' : 'Pending Client Sign-off'}
+                                                    <span className={`foms-aging-pill ${item.fomsSyncStatus === 'Failed' ? 'overdue' : isSigned ? 'duesoon' : 'moderate'}`}>
+                                                        {item.fomsSyncStatus === 'Failed' ? <AlertCircle size={11} /> : isSigned ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                                                        {item.fomsSyncStatus === 'Failed' ? 'Sync Failed' : isSigned ? 'Endorsed & Signed' : 'Pending Client Sign-off'}
                                                     </span>
-                                                    <span className="foms-sync-tag">
-                                                        FOMS Sync: {item.fomsSyncStatus || 'Synced'}
-                                                    </span>
+                                                    {item.fomsSyncStatus === 'Failed' ? (
+                                                        <span className="foms-sync-badge-failed" data-testid="foms-sync-failed-badge">
+                                                            <AlertCircle size={11} /> Sync Failed
+                                                        </span>
+                                                    ) : (
+                                                        <span className="foms-sync-tag">
+                                                            FOMS Sync: {item.fomsSyncStatus || 'Synced'}
+                                                        </span>
+                                                    )}
+                                                    {item.lastSyncError && (
+                                                        <span className="foms-sync-error-hint" title={item.lastSyncError}>
+                                                            {item.lastSyncError}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
 
                                             {/* Actual Received Date & 30-Day Due */}
                                             <td>
-                                                {isSigned && item.actualReceivedDate ? (
+                                                {isSigned && (item.actualReceivedDate || item.calculatedPaymentDueDate) ? (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>
-                                                            <Calendar size={12} color="#00A99D" />
-                                                            <span>Received: {new Date(item.actualReceivedDate).toLocaleDateString()}</span>
-                                                        </div>
-                                                        <div className="foms-term-highlight">
-                                                            <Sparkles size={10} /> 30-Day Due: {item.calculatedPaymentDueDate ? new Date(item.calculatedPaymentDueDate).toLocaleDateString() : 'Active'}
+                                                        {item.actualReceivedDate && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', fontWeight: 600, color: 'var(--tp, #0F172A)' }}>
+                                                                <Calendar size={12} color="#00A99D" />
+                                                                <span>Received: {new Date(item.actualReceivedDate).toLocaleDateString()}</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="foms-term-highlight" data-testid="calculated-payment-due-date">
+                                                            <Sparkles size={10} /> 30-Day Due: {item.calculatedPaymentDueDate ? new Date(item.calculatedPaymentDueDate).toLocaleDateString() : (item.actualReceivedDate ? new Date(new Date(item.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString() : 'Active')}
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -882,32 +1008,52 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
 
                                             {/* Actions */}
                                             <td style={{ textAlign: 'right' }}>
-                                                <ActionsDropdown
-                                                    actions={[
-                                                        ...(!isSigned ? [{
-                                                            label: 'Record Sign-off',
-                                                            icon: <Upload size={13} />,
-                                                            onClick: () => {
-                                                                setSigningItem(item);
-                                                                setSignForm({
-                                                                    actualReceivedDate: new Date().toISOString().substring(0, 10),
-                                                                    signedCopyUrl: `https://stars.blob.core.windows.net/signed-receipts/RC-${item.invoiceNumber}.pdf`,
-                                                                    deliveryRemarks: 'Official receiving copy endorsed with wet signature and stamp.',
-                                                                });
-                                                            },
-                                                            variant: 'success' as const
-                                                        }] : [{
-                                                            label: 'Resend to FOMS',
-                                                            icon: <Send size={13} />,
-                                                            onClick: () => handleResendCallback(item)
-                                                        }]),
-                                                        ...(item.taskId && onOpenTask ? [{
-                                                            label: 'Open Task Details',
-                                                            icon: <ExternalLink size={13} />,
-                                                            onClick: () => onOpenTask(item.taskId!)
-                                                        }] : [])
-                                                    ]}
-                                                />
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                                                    {item.fomsSyncStatus === 'Failed' && (
+                                                        <button
+                                                            type="button"
+                                                            className="foms-btn-retry-sync"
+                                                            onClick={() => handleResendCallback(item)}
+                                                            disabled={retryingId === item.id}
+                                                            title="Retry Sync to FOMS"
+                                                            data-testid={`retry-sync-to-foms-btn-${item.invoiceNumber}`}
+                                                        >
+                                                            <RefreshCw size={12} className={retryingId === item.id ? 'spin' : ''} />
+                                                            <span>Retry Sync to FOMS</span>
+                                                        </button>
+                                                    )}
+                                                    <ActionsDropdown
+                                                        actions={[
+                                                            ...(!isSigned ? [{
+                                                                label: 'Record Sign-off',
+                                                                icon: <Upload size={13} />,
+                                                                onClick: () => {
+                                                                    setSigningItem(item);
+                                                                    setSignForm({
+                                                                        actualReceivedDate: new Date().toISOString().substring(0, 10),
+                                                                        signedCopyUrl: `https://stars.blob.core.windows.net/signed-receipts/RC-${item.invoiceNumber}.pdf`,
+                                                                        deliveryRemarks: 'Official receiving copy endorsed with wet signature and stamp.',
+                                                                    });
+                                                                },
+                                                                variant: 'success' as const
+                                                            }] : item.fomsSyncStatus === 'Failed' ? [{
+                                                                label: 'Retry Sync to FOMS',
+                                                                icon: <RefreshCw size={13} />,
+                                                                onClick: () => handleResendCallback(item),
+                                                                variant: 'danger' as const
+                                                            }] : [{
+                                                                label: 'Resend to FOMS',
+                                                                icon: <Send size={13} />,
+                                                                onClick: () => handleResendCallback(item)
+                                                            }]),
+                                                            ...(item.taskId && onOpenTask ? [{
+                                                                label: 'Open Task Details',
+                                                                icon: <ExternalLink size={13} />,
+                                                                onClick: () => onOpenTask(item.taskId!)
+                                                            }] : [])
+                                                        ]}
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                     );
