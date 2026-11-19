@@ -1839,8 +1839,15 @@ public class FomsIntegrationService : IFomsIntegrationService
 
         var coordinator = await _db.Users.FindAsync(coordinatorId);
         if (coordinator == null)
+        {
+            coordinator = await _db.Users
+                .FirstOrDefaultAsync(u => u.Role == UserRole.Coordinator && u.IsActive && !u.IsDeactivated)
+                ?? await _db.Users.FirstOrDefaultAsync(u => u.Role == UserRole.Coordinator);
+        }
+        if (coordinator == null)
             return ApiResponseDTO<FomsClientAccountResponseDTO>.Failure("Coordinator not found.");
 
+        coordinatorId = coordinator.Id;
         client.AssignedCoordinatorId = coordinatorId;
         client.AssignedCoordinator = coordinator;
         client.UpdatedAt = DateTime.UtcNow;

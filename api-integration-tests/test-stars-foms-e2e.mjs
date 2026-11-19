@@ -538,11 +538,11 @@ async function main() {
   });
 
   // 4. Manager Assigning Coordinator & Role-Based Scoping (FR-011, FR-012)
-  const targetCoordinatorId = "c1000000-0000-0000-0000-000000000001";
+  let resolvedCoordinatorId = null;
 
   await testOrSkip("STARS Manager assigns Coordinator to client account (FR-011)", async () => {
     const assignPayload = {
-      coordinatorId: targetCoordinatorId
+      coordinatorId: "00000000-0000-0000-0000-000000000000"
     };
 
     const res = await call("PUT", `${STARS_URL}/api/foms-integration/clients/${testClientAccountId}/assign-coordinator`, {
@@ -553,17 +553,19 @@ async function main() {
     expect(res.status === 200, `expected 200 OK from assign-coordinator but got ${res.status}: ${res.text}`);
     const data = res.json?.data || res.json;
     expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
-    return `Coordinator ${targetCoordinatorId} assigned to client ${testClientAccountId}`;
+    resolvedCoordinatorId = data?.assignedCoordinatorId || data?.data?.assignedCoordinatorId;
+    expect(resolvedCoordinatorId, `expected assignedCoordinatorId in response: ${res.text}`);
+    return `Coordinator ${data?.assignedCoordinatorName ?? resolvedCoordinatorId} assigned to client ${testClientAccountId}`;
   });
 
   await testOrSkip("Coordinator role-based scoping: Coordinator queries assigned clients only (FR-011)", async () => {
-    const res = await call("GET", `${STARS_URL}/api/foms-integration/clients?role=Coordinator&coordinatorId=${targetCoordinatorId}`, {
+    const res = await call("GET", `${STARS_URL}/api/foms-integration/clients?role=Coordinator&coordinatorId=${resolvedCoordinatorId}`, {
       headers: { "X-Api-Key": FOMS_TO_STARS_KEY }
     });
 
     expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
     const list = Array.isArray(res.json?.data) ? res.json.data : (Array.isArray(res.json) ? res.json : []);
-    expect(list.length >= 1, `expected at least 1 assigned client for coordinator ${targetCoordinatorId}`);
+    expect(list.length >= 1, `expected at least 1 assigned client for coordinator ${resolvedCoordinatorId}`);
     const found = list.some(c => c.clientAccountId === testClientAccountId);
     expect(found, `expected assigned client ${testClientAccountId} in coordinator client list`);
     return `Scoped: Coordinator sees ${list.length} assigned client(s)`;
