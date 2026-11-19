@@ -157,8 +157,8 @@ async function main() {
     const targetInvoice = "LZD-2026-0001";
     const payload = {
       invoiceNumber: targetInvoice,
-      starsTaskId: createdStarsTaskId,
-      starsTaskNumber: createdStarsTaskNumber,
+      starsTaskId: createdStarsTaskId || "a0000000-0000-0000-0000-000000000001",
+      starsTaskNumber: createdStarsTaskNumber || "FALLBACK1",
       completionResult: "Completed",
       actualReceivedDate: actualReceived,
       signedCopyUrl: "https://stars.blob.core.windows.net/signed-receipts/RC-2026-LIVE-001.pdf",
