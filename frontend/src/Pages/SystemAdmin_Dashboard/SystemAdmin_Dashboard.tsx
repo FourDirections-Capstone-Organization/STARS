@@ -4700,18 +4700,24 @@ export default function Dashboard() {
         const createdDate = new Date(createdAt);
         const isToday = createdDate.toDateString() === now.toDateString();
         const timeStr = createdDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const rawTitle = n.title || n.Title || '';
+        const rawMsg = n.message || n.Message || n.description || n.Description || '';
+        const titleText = rawTitle || rawMsg || 'Notification';
+        const descText = rawTitle && rawMsg ? rawMsg : (n.description || n.Description || '');
+        const isFollowUp = titleText.includes('Delivery Follow-up') || titleText.includes('Follow-up');
         return {
             id: String(n.id ?? n.notificationId ?? ''),
-            title: n.message ?? n.title ?? '',
-            description: n.description ?? '',
+            title: titleText,
+            description: descText,
             timestamp: timeStr,
             date: isToday ? 'Today' : createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             createdAt: createdAt,
             read: n.isRead ?? false,
-            type: typeLabels[type] || 'info',
-            category: 'system',
+            type: isFollowUp ? 'alert' : (typeLabels[type] || 'info'),
+            category: isFollowUp ? 'logistics' : 'system',
             isToday,
             source: 'System',
+            actionLabel: (n.relatedTaskId ?? n.taskId) ? (isFollowUp ? 'View Follow-up' : 'View Task') : undefined,
             relatedEntityId: n.relatedTaskId ?? n.taskId ?? null,
             relatedEntityType: n.relatedTaskId || n.taskId ? 'task' as const : undefined,
         };

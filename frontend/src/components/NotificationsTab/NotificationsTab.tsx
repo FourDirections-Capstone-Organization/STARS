@@ -73,7 +73,8 @@ export function classifyNotification(item: NotificationRecord): NotificationClas
     }
     if (
         title.includes('update') || title.includes('status') || title.includes('resumed') || title.includes('hold') ||
-        typeStr.includes('taskupdated') || typeStr.includes('resumed') || typeStr.includes('onhold')
+        title.includes('cancelled') || title.includes('canceled') || title.includes('cancellation') ||
+        typeStr.includes('taskupdated') || typeStr.includes('taskcancelled') || typeStr.includes('resumed') || typeStr.includes('onhold')
     ) {
         return 'Task Updates';
     }
@@ -99,10 +100,12 @@ const NOTIF_TYPE_NAMES: Record<number, string> = {
     9: 'TemplateTaskUnassigned',
 };
 
+const EMPTY_EXTRA_NOTIFICATIONS: any[] = [];
+
 export const NotificationsTab: React.FC<NotificationsTabProps> = ({
     onViewTask,
     canViewTasks = true,
-    extraNotifications = [],
+    extraNotifications = EMPTY_EXTRA_NOTIFICATIONS,
 }) => {
     const { success, error } = useToast();
 
@@ -494,7 +497,11 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
                                         onViewTask(item.taskId!);
                                     }}
                                 >
-                                    View Linked Task <ArrowRight size={13} />
+                                    {item.title?.includes('Follow-up')
+                                        ? 'View Follow-up Task'
+                                        : (item.title?.includes('Cancelled') || item.title?.includes('Cancellation'))
+                                        ? 'View Cancelled Order Task'
+                                        : 'View Linked Task'} <ArrowRight size={13} />
                                 </button>
                             ) : <div />}
 

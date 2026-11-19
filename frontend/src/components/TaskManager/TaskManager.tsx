@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw } from 'lucide-react';
+import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw, Truck } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import { formatStatus } from '../../utils/statusUtils';
@@ -88,6 +88,17 @@ const PRIO_BG: Record<string, string> = { Urgent: '#fef2f2', High: '#fff7ed', Me
 const ASSIGNEE_COLORS = ['#4318ff', '#059669', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#c026d3'];
 const getAc = (n: string) => ASSIGNEE_COLORS[n.length % ASSIGNEE_COLORS.length];
 const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
+
+export const isSpecialTask = (c?: string | number): boolean => {
+    if (!c && c !== 0) return false;
+    const str = String(c).toLowerCase().trim();
+    return str === 'special' || str === 'specialtask' || str === '1';
+};
+
+export const isFollowUpTask = (name?: string): boolean => {
+    if (!name) return false;
+    return name.startsWith('Delivery Follow-up - ') || name.startsWith('[Delivery Follow-up]');
+};
 
 const PriorityBadge = ({ p }: { p: string }) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: PRIO_BG[p] || '#f1f5f9', color: PRIO_COLORS[p] || '#475569' }}>
@@ -284,18 +295,40 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
 
                                             <div className="tm-board-card-title">{t.name}</div>
 
-                                            {(t.classification || t.isConfidential) && (
+                                            {(t.classification || t.isConfidential || isFollowUpTask(t.name)) && (
                                                 <div className="tm-board-card-badges">
+                                                    {isFollowUpTask(t.name) && (
+                                                        <span
+                                                            className="tm-followup-badge"
+                                                            title="DMS Failed Delivery / Pickup Follow-up Task"
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: 3,
+                                                                fontSize: 9,
+                                                                fontWeight: 700,
+                                                                padding: '1px 6px',
+                                                                borderRadius: 4,
+                                                                background: 'rgba(234, 88, 12, 0.1)',
+                                                                color: '#ea580c',
+                                                                border: '1px solid rgba(234, 88, 12, 0.25)',
+                                                                whiteSpace: 'nowrap',
+                                                                letterSpacing: '0.03em'
+                                                            }}
+                                                        >
+                                                            <Truck size={9} /> DELIVERY FOLLOW-UP
+                                                        </span>
+                                                    )}
                                                     {t.classification && (
                                                         <span
                                                             style={{
                                                                 fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                                                                background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
-                                                                color: t.classification === 'special' ? '#4318FF' : '#059669',
+                                                                background: isSpecialTask(t.classification) ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
+                                                                color: isSpecialTask(t.classification) ? '#4318FF' : '#059669',
                                                                 whiteSpace: 'nowrap', letterSpacing: '0.03em'
                                                             }}
                                                         >
-                                                            {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
+                                                            {isSpecialTask(t.classification) ? 'SPECIAL' : 'ROUTINE'}
                                                         </span>
                                                     )}
                                                     {t.isConfidential && (
@@ -672,7 +705,13 @@ export default function TaskManager({
                 }
             });
         }
-        if (filterClassification) list = list.filter(t => t.classification === filterClassification);
+        if (filterClassification) {
+            list = list.filter(t => {
+                if (filterClassification === 'special') return isSpecialTask(t.classification);
+                if (filterClassification === 'routine') return !isSpecialTask(t.classification);
+                return t.classification === filterClassification;
+            });
+        }
         if (filterAssignee) {
             const target = filterAssignee.toLowerCase().trim();
             list = list.filter(t =>
@@ -953,19 +992,41 @@ export default function TaskManager({
                                         <span>{t.name}</span>
                                         {tab !== 'bin' && (
                                             <span title="AI Insights available — click to view" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)', cursor: 'help' }}>
-                                                 <Brain size={13} />
+                                                <Brain size={13} />
+                                            </span>
+                                        )}
+                                        {isFollowUpTask(t.name) && tab !== 'bin' && (
+                                            <span
+                                                className="tm-followup-badge"
+                                                title="DMS Failed Delivery / Pickup Follow-up Task"
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 3,
+                                                    fontSize: 9,
+                                                    fontWeight: 700,
+                                                    padding: '1px 6px',
+                                                    borderRadius: 4,
+                                                    background: 'rgba(234, 88, 12, 0.1)',
+                                                    color: '#ea580c',
+                                                    border: '1px solid rgba(234, 88, 12, 0.25)',
+                                                    whiteSpace: 'nowrap',
+                                                    letterSpacing: '0.03em'
+                                                }}
+                                            >
+                                                <Truck size={9} /> DELIVERY FOLLOW-UP
                                             </span>
                                         )}
                                         {t.classification && tab !== 'bin' && (
                                             <span
                                                 style={{
                                                     fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                                                    background: t.classification === 'special' ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
-                                                    color: t.classification === 'special' ? '#4318FF' : '#059669',
+                                                    background: isSpecialTask(t.classification) ? 'rgba(67,24,255,0.08)' : 'rgba(5,150,105,0.08)',
+                                                    color: isSpecialTask(t.classification) ? '#4318FF' : '#059669',
                                                     whiteSpace: 'nowrap', letterSpacing: '0.03em'
                                                 }}
                                             >
-                                                {t.classification === 'special' ? 'SPECIAL' : 'ROUTINE'}
+                                                {isSpecialTask(t.classification) ? 'SPECIAL' : 'ROUTINE'}
                                             </span>
                                         )}
                                         {t.isConfidential && tab !== 'bin' && (
@@ -1040,4 +1101,4 @@ export default function TaskManager({
             )}
         </div>
     );
-}
+}
