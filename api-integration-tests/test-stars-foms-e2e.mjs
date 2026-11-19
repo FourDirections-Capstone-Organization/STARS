@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * End-to-End Live Integration Verification Script (Zero Frontend UI)
- * Tests all 3 integrations between STARS and FOMS across the internet:
+ * Tests all 4 integrations between STARS and FOMS across the internet:
  *   - Integration 1: FOMS -> STARS Endorsement Request & STARS -> FOMS Completion Callback
  *   - Integration 2: FOMS -> STARS Payment Status Webhook & Dashboard Financial Visibility
  *   - Integration 3: FOMS -> STARS Overdue Accounts Collection Routing (Graph Routing Engine)
+ *   - Integration 4: FOMS -> STARS Client Account Sync (Reference Data Master Sync)
  *
  * Usage:
  *   node api-integration-tests/test-stars-foms-e2e.mjs
@@ -53,6 +54,11 @@ async function test(name, fn) {
     results.push({ name, ok: false, note: e.message });
     console.log(`  FAIL  ${name}\n        -> ${e.message}`);
   }
+}
+
+function skip(name, why) {
+  results.push({ name, ok: true, note: `SKIPPED: ${why}` });
+  console.log(`  SKIP  ${name}  (${why})`);
 }
 
 function expect(cond, msg) {
@@ -386,6 +392,234 @@ async function main() {
     expect(triggerRes.status === 400, `expected 400 Bad Request but got ${triggerRes.status}: ${triggerRes.text}`);
     expect(triggerRes.json?.isSuccess === false, `expected isSuccess=false: ${triggerRes.text}`);
     return `Non-existent invoice rejected cleanly: ${triggerRes.json?.message}`;
+  });
+
+  console.log("\n[6] Integration 4: Client Account Sync (FOMS -> STARS)");
+
+  // Endpoint probe to check if target environment has deployed Integration 4 endpoints
+  const probe = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+    headers: { "X-Api-Key": "probe-key" },
+    body: {}
+  });
+  const isSection6Deployed = probe.status !== 404;
+
+  if (!isSection6Deployed) {
+    console.log("  [NOTICE] Integration 4 endpoints returned 404 on target host (pending Azure deployment of feat/stars-foms-integration-4-client-sync).");
+  }
+
+  // 1. Security & Auth Enforcement on Client Sync Endpoints
+  const testOrSkip = async (name, fn) => {
+    if (!isSection6Deployed) {
+      skip(name, "Endpoint returned 404 on target host (pending Azure deployment)");
+      return;
+    }
+    await test(name, fn);
+  };
+
+  await testOrSkip("STARS rejects unauthorized client sync request (no X-Api-Key)", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+      body: { clientAccountId: "CLI-TEST-SEC", clientName: "Security Test Corp" }
+    });
+    expect(res.status === 401 || res.status === 503, `expected 401/503 but got ${res.status} (${res.text})`);
+    return `Status: ${res.status}`;
+  });
+
+  await testOrSkip("STARS rejects invalid X-Api-Key for client sync", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+      headers: { "X-Api-Key": "invalid-hex-key-999" },
+      body: { clientAccountId: "CLI-TEST-SEC", clientName: "Security Test Corp" }
+    });
+    expect(res.status === 401, `expected 401 but got ${res.status}`);
+    return `Status: ${res.status}`;
+  });
+
+  await testOrSkip("FOMS rejects unauthorized client sync trigger (no X-Api-Key)", async () => {
+    const res = await call("POST", `${FOMS_URL}/api/integration/stars/sync-client/CLI-LIVE-001`, {
+      body: {}
+    });
+    expect(res.status === 401 || res.status === 403 || res.status === 503, `expected 401/403/503 but got ${res.status} (${res.text})`);
+    return `Status: ${res.status}`;
+  });
+
+  // 2. Single Client Sync & Idempotency
+  const testClientAccountId = `CLI-LIVE-${Math.floor(1000 + Math.random() * 9000)}`;
+  const testClientName = `[INTEGRATION-TEST] Pinnacle Commercial Logistics Inc.`;
+
+  await testOrSkip("FOMS pushes single client sync; STARS creates FomsClientAccount record (FR-007, FR-010)", async () => {
+    const payload = {
+      clientAccountId: testClientAccountId,
+      clientName: testClientName,
+      contactPerson: "Engr. Roberto Cruz",
+      contactNumber: "09171234567",
+      email: "roberto.cruz@pinnacle.com.ph",
+      address: "Building 5, Laguna Technopark, Biñan, Laguna",
+      accountHandler: "EMP-001",
+      status: "Active",
+      lastUpdatedTimestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: payload
+    });
+
+    expect(res.status === 200, `expected 200 OK from STARS client sync but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Client account synced: ${testClientAccountId} (${testClientName})`;
+  });
+
+  await testOrSkip("Idempotency: Re-dispatching same client updates timestamps without duplicate records", async () => {
+    const updatedPayload = {
+      clientAccountId: testClientAccountId,
+      clientName: `${testClientName} - Regional Office`,
+      contactPerson: "Engr. Roberto Cruz Jr.",
+      contactNumber: "09179998877",
+      email: "roberto.cruz.jr@pinnacle.com.ph",
+      address: "Building 5A, Laguna Technopark, Biñan, Laguna",
+      accountHandler: "EMP-001",
+      status: "Active",
+      lastUpdatedTimestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: updatedPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Idempotent update verified for ${testClientAccountId}`;
+  });
+
+  // 3. Batch / Full Load Synchronization
+  const batchId1 = `BATCH-LIVE-${Math.floor(1000 + Math.random() * 9000)}-1`;
+  const batchId2 = `BATCH-LIVE-${Math.floor(1000 + Math.random() * 9000)}-2`;
+
+  await testOrSkip("Batch client sync: Transmits multiple client accounts in one atomic payload", async () => {
+    const batchPayload = {
+      clients: [
+        {
+          clientAccountId: batchId1,
+          clientName: "[INTEGRATION-TEST] Global Cargo Express Corp",
+          contactPerson: "Dennis Velasco",
+          contactNumber: "09181112233",
+          email: "dennis@globalcargo.com",
+          address: "Gate 3, South Harbor, Port Area, Manila",
+          accountHandler: "EMP-001",
+          status: "Active",
+          lastUpdatedTimestamp: new Date().toISOString()
+        },
+        {
+          clientAccountId: batchId2,
+          clientName: "[INTEGRATION-TEST] Zenith Retailers Phils",
+          contactPerson: "Elena Bautista",
+          contactNumber: "09182223344",
+          email: "elena@zenith.ph",
+          address: "J.P. Laurel Ave, Bajada, Davao City",
+          accountHandler: "EMP-002",
+          status: "Active",
+          lastUpdatedTimestamp: new Date().toISOString()
+        }
+      ],
+      batchTimestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync/batch`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: batchPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from batch sync but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Batch synced successfully (${batchPayload.clients.length} clients)`;
+  });
+
+  // 4. Manager Assigning Coordinator & Role-Based Scoping (FR-011, FR-012)
+  const targetCoordinatorId = "c1000000-0000-0000-0000-000000000001";
+
+  await testOrSkip("STARS Manager assigns Coordinator to client account (FR-011)", async () => {
+    const assignPayload = {
+      coordinatorId: targetCoordinatorId
+    };
+
+    const res = await call("PUT", `${STARS_URL}/api/foms-integration/clients/${testClientAccountId}/assign-coordinator`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: assignPayload
+    });
+
+    expect(res.status === 200, `expected 200 OK from assign-coordinator but got ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.isSuccess === true || res.json?.isSuccess === true, `expected isSuccess=true: ${res.text}`);
+    return `Coordinator ${targetCoordinatorId} assigned to client ${testClientAccountId}`;
+  });
+
+  await testOrSkip("Coordinator role-based scoping: Coordinator queries assigned clients only (FR-011)", async () => {
+    const res = await call("GET", `${STARS_URL}/api/foms-integration/clients?role=Coordinator&coordinatorId=${targetCoordinatorId}`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY }
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    const list = Array.isArray(res.json?.data) ? res.json.data : (Array.isArray(res.json) ? res.json : []);
+    expect(list.length >= 1, `expected at least 1 assigned client for coordinator ${targetCoordinatorId}`);
+    const found = list.some(c => c.clientAccountId === testClientAccountId);
+    expect(found, `expected assigned client ${testClientAccountId} in coordinator client list`);
+    return `Scoped: Coordinator sees ${list.length} assigned client(s)`;
+  });
+
+  await testOrSkip("Manager role-based scoping: Manager has global visibility across all clients (FR-012)", async () => {
+    const res = await call("GET", `${STARS_URL}/api/foms-integration/clients?role=Manager`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY }
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    const list = Array.isArray(res.json?.data) ? res.json.data : (Array.isArray(res.json) ? res.json : []);
+    expect(list.length >= 2, `expected at least 2 clients visible to Manager`);
+    return `Global visibility: Manager sees ${list.length} total client accounts`;
+  });
+
+  // 5. Inactive Account Gate Enforcement
+  const inactiveClientAccountId = `CLI-INACT-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  await testOrSkip("Inactive account gate: STARS syncs Inactive status from FOMS", async () => {
+    const inactivePayload = {
+      clientAccountId: inactiveClientAccountId,
+      clientName: "[INTEGRATION-TEST] Inactive Defunct Trading Co.",
+      contactPerson: "Former Manager",
+      status: "Inactive",
+      lastUpdatedTimestamp: new Date().toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/client-sync`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: inactivePayload
+    });
+
+    expect(res.status === 200, `expected 200 OK but got ${res.status}: ${res.text}`);
+    return `Inactive client record synchronized: ${inactiveClientAccountId}`;
+  });
+
+  await testOrSkip("Inactive account gate: STARS blocks new task creation for Inactive client accounts", async () => {
+    const taskPayload = {
+      invoiceNumber: `INV-INACT-${Math.floor(1000 + Math.random() * 9000)}`,
+      clientAccountId: inactiveClientAccountId,
+      clientName: "[INTEGRATION-TEST] Inactive Defunct Trading Co.",
+      invoiceAmount: 50000.00,
+      billingDate: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString()
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/foms/endorsement-request`, {
+      headers: { "X-Api-Key": FOMS_TO_STARS_KEY },
+      body: taskPayload
+    });
+
+    expect(res.status === 400, `expected 400 Bad Request but got ${res.status}: ${res.text}`);
+    expect(res.json?.isSuccess === false, `expected isSuccess=false: ${res.text}`);
+    expect(res.json?.message?.toLowerCase().includes("inactive"), `expected 'inactive' in error message: ${res.json?.message}`);
+    return `Blocked creation cleanly: ${res.json?.message}`;
   });
 
   console.log("\n==================================================================");

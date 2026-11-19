@@ -385,6 +385,22 @@ public class AssignClientCoordinatorDTO
 {
     [Required]
     public Guid CoordinatorId { get; set; }
+
+    public Guid? ManagerUserId { get; set; }
+}
+
+/// <summary>
+/// M2M trigger payload for assigning a coordinator to a synchronized FOMS client account in testing environments.
+/// </summary>
+public class TriggerAssignCoordinatorDTO
+{
+    [Required]
+    public string ClientAccountId { get; set; } = string.Empty;
+
+    [Required]
+    public Guid CoordinatorId { get; set; }
+
+    public Guid? ManagerUserId { get; set; }
 }
 
 /// <summary>

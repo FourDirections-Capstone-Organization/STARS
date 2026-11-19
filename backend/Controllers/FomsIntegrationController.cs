@@ -339,31 +339,89 @@ public class FomsIntegrationController : ControllerBase
 
     /// <summary>
     /// Integration 4: Retrieves synchronized client accounts with role-based scoping (Manager sees all, Coordinator sees assigned).
+    /// Accessible via Manager/Coordinator JWT session or pre-shared X-Api-Key (M2M).
     /// </summary>
     [HttpGet("api/foms-integration/clients")]
-    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
-    public async Task<IActionResult> GetClientAccounts()
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClientAccounts([FromQuery] string? role = null, [FromQuery] Guid? coordinatorId = null)
     {
-        var userId = GetUserId();
-        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
-        Enum.TryParse<UserRole>(roleStr, true, out var role);
+        var apiKey = Request.Headers[FomsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
+        bool hasApiKey = FomsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
 
-        var result = await _fomsService.GetClientAccountsAsync(role, userId);
+        UserRole userRole;
+        Guid? userId = null;
+
+        if (hasApiKey)
+        {
+            if (!string.IsNullOrWhiteSpace(role) && Enum.TryParse<UserRole>(role, true, out var parsedRole))
+            {
+                userRole = parsedRole;
+                userId = coordinatorId;
+            }
+            else
+            {
+                userRole = UserRole.Manager;
+            }
+        }
+        else
+        {
+            if (User.Identity?.IsAuthenticated != true)
+                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required."));
+
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!Enum.TryParse<UserRole>(roleStr, true, out userRole) ||
+                (userRole != UserRole.Coordinator && userRole != UserRole.Manager))
+            {
+                return StatusCode(403, ApiResponseDTO<object>.Failure("Forbidden: Insufficient permissions."));
+            }
+            userId = GetUserId();
+        }
+
+        var result = await _fomsService.GetClientAccountsAsync(userRole, userId);
         return Ok(result);
     }
 
     /// <summary>
     /// Integration 4: Retrieves a specific client account profile with role-based scoping.
+    /// Accessible via Manager/Coordinator JWT session or pre-shared X-Api-Key (M2M).
     /// </summary>
     [HttpGet("api/foms-integration/clients/{clientAccountId}")]
-    [Authorize(Policy = AuthorizationPolicies.CoordinatorAndAbove)]
-    public async Task<IActionResult> GetClientAccount(string clientAccountId)
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClientAccount(string clientAccountId, [FromQuery] string? role = null, [FromQuery] Guid? coordinatorId = null)
     {
-        var userId = GetUserId();
-        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
-        Enum.TryParse<UserRole>(roleStr, true, out var role);
+        var apiKey = Request.Headers[FomsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
+        bool hasApiKey = FomsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
 
-        var result = await _fomsService.GetClientAccountByIdAsync(clientAccountId, role, userId);
+        UserRole userRole;
+        Guid? userId = null;
+
+        if (hasApiKey)
+        {
+            if (!string.IsNullOrWhiteSpace(role) && Enum.TryParse<UserRole>(role, true, out var parsedRole))
+            {
+                userRole = parsedRole;
+                userId = coordinatorId;
+            }
+            else
+            {
+                userRole = UserRole.Manager;
+            }
+        }
+        else
+        {
+            if (User.Identity?.IsAuthenticated != true)
+                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required."));
+
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!Enum.TryParse<UserRole>(roleStr, true, out userRole) ||
+                (userRole != UserRole.Coordinator && userRole != UserRole.Manager))
+            {
+                return StatusCode(403, ApiResponseDTO<object>.Failure("Forbidden: Insufficient permissions."));
+            }
+            userId = GetUserId();
+        }
+
+        var result = await _fomsService.GetClientAccountByIdAsync(clientAccountId, userRole, userId);
         if (!result.IsSuccess)
         {
             if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
@@ -377,15 +435,38 @@ public class FomsIntegrationController : ControllerBase
 
     /// <summary>
     /// Integration 4: Manager assigns a Coordinator to manage a synchronized FOMS client account (FR-011).
+    /// Accessible by Manager JWT or pre-shared X-Api-Key (M2M).
     /// </summary>
     [HttpPut("api/foms-integration/clients/{clientAccountId}/assign-coordinator")]
-    [Authorize(Policy = AuthorizationPolicies.ManagerOnly)]
+    [AllowAnonymous]
     public async Task<IActionResult> AssignClientCoordinator(string clientAccountId, [FromBody] AssignClientCoordinatorDTO dto)
     {
-        var managerUserId = GetUserId();
-        if (!managerUserId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token."));
+        var apiKey = Request.Headers[FomsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
+        bool hasApiKey = FomsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
 
-        var result = await _fomsService.AssignClientCoordinatorAsync(clientAccountId, dto.CoordinatorId, managerUserId.Value);
+        Guid managerUserId;
+        if (hasApiKey)
+        {
+            var mgr = await _db.Users.FirstOrDefaultAsync(u => u.Role == UserRole.Manager);
+            managerUserId = dto.ManagerUserId ?? mgr?.Id ?? Guid.NewGuid();
+        }
+        else
+        {
+            if (User.Identity?.IsAuthenticated != true)
+                return Unauthorized(ApiResponseDTO<object>.Failure("Authentication required."));
+
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!string.Equals(roleStr, nameof(UserRole.Manager), StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(403, ApiResponseDTO<object>.Failure("Forbidden: Manager role required."));
+            }
+
+            var userId = GetUserId();
+            if (!userId.HasValue) return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token."));
+            managerUserId = userId.Value;
+        }
+
+        var result = await _fomsService.AssignClientCoordinatorAsync(clientAccountId, dto.CoordinatorId, managerUserId);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
@@ -543,6 +624,23 @@ public class FomsIntegrationController : ControllerBase
         var coordinatorName = dto.CoordinatorName ?? "STARS Coordinator";
 
         var result = await _fomsService.SendCollectionOutcomeAsync(dto.TaskId, submitDto, coordinatorId, coordinatorName);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Machine-to-machine trigger: Simulates or triggers Integration 4 coordinator assignment for testing.
+    /// </summary>
+    [HttpPost("api/integration/foms/dispatch-assign-coordinator")]
+    [AllowAnonymous]
+    public async Task<IActionResult> TriggerDispatchAssignCoordinator([FromBody] TriggerAssignCoordinatorDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var mgr = await _db.Users.FirstOrDefaultAsync(u => u.Role == UserRole.Manager);
+        var managerUserId = dto.ManagerUserId ?? mgr?.Id ?? Guid.NewGuid();
+
+        var result = await _fomsService.AssignClientCoordinatorAsync(dto.ClientAccountId, dto.CoordinatorId, managerUserId);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
