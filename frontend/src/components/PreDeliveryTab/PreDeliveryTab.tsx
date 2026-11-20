@@ -19,6 +19,7 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
+import { ActionsDropdown } from '../ui/DataTable';
 import { formatDeadlineWithRemaining, formatDateOnly } from '../../utils/dateUtils';
 import { formatDriverDisplay } from '../../utils/driverUtils';
 import { formatStatus } from '../../utils/statusUtils';
@@ -913,33 +914,22 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td>
-                                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                                        {onViewTask && (
-                                                            <button
-                                                                className="pre-delivery-btn pre-delivery-btn-secondary"
-                                                                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                                                                onClick={() => onViewTask(t._id)}
-                                                            >
-                                                                <ExternalLink size={13} /> View
-                                                            </button>
-                                                        )}
-                                                        {onNavigateToDeliveryTracker && (
-                                                            <button
-                                                                className="pre-delivery-btn pre-delivery-btn-secondary"
-                                                                style={{
-                                                                    padding: '4px 10px',
-                                                                    fontSize: '0.8rem',
-                                                                    borderColor: 'var(--teal, #00A99D)',
-                                                                    color: 'var(--teal, #00A99D)'
-                                                                }}
-                                                                title="Track delivery progress in Delivery Management System Tracker"
-                                                                onClick={() => onNavigateToDeliveryTracker()}
-                                                            >
-                                                                <Truck size={13} /> Track Delivery
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                                                    <ActionsDropdown
+                                                        triggerTitle="Select action"
+                                                        actions={[
+                                                            ...(onViewTask ? [{
+                                                                label: 'View Task',
+                                                                icon: <ExternalLink size={13} />,
+                                                                onClick: () => onViewTask(t._id),
+                                                            }] : []),
+                                                            ...(onNavigateToDeliveryTracker ? [{
+                                                                label: 'Track Delivery',
+                                                                icon: <Truck size={13} />,
+                                                                onClick: () => onNavigateToDeliveryTracker(),
+                                                            }] : []),
+                                                        ]}
+                                                    />
                                                 </td>
                                             </tr>
                                         ))}

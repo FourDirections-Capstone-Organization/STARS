@@ -183,6 +183,9 @@ describe('Defect Resolution: Pre-Delivery Validation & Delivery Tracker Sync', (
             expect(screen.getByText('Validation Completed')).toBeInTheDocument();
         });
 
+        const actionDropdownTrigger = screen.getByTitle('Select action');
+        fireEvent.click(actionDropdownTrigger);
+
         const trackBtn = screen.getByRole('button', { name: /Track Delivery/i });
         fireEvent.click(trackBtn);
         expect(onNavigateTracker).toHaveBeenCalledTimes(1);
