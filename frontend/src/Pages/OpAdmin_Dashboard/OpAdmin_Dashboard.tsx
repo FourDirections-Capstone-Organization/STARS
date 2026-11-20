@@ -11685,6 +11685,10 @@ export default function OpsAdminDashboard() {
                             initialTaskId={trackerTargetTaskId}
                             initialWaybill={trackerTargetWaybill}
                             onViewTask={handleOpenTaskById}
+                            onClearInitialTarget={() => {
+                                setTrackerTargetTaskId(undefined);
+                                setTrackerTargetWaybill(undefined);
+                            }}
                         />
                     </div>
                 )}

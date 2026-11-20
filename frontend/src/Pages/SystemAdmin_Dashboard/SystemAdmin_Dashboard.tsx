@@ -5410,6 +5410,10 @@ export default function Dashboard() {
                             tasks={tmTasks}
                             initialTaskId={tmTrackerTaskId}
                             initialWaybill={tmTrackerWaybill}
+                            onClearInitialTarget={() => {
+                                setTmTrackerTaskId(undefined);
+                                setTmTrackerWaybill(undefined);
+                            }}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {

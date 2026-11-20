@@ -94,6 +94,7 @@ interface DmsDeliveryTabProps {
     initialWaybillNo?: string;
     initialTaskId?: string;
     initialWaybill?: string;
+    onClearInitialTarget?: () => void;
 }
 
 const EMPTY_TASKS: any[] = [];
@@ -104,6 +105,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     initialWaybillNo,
     initialTaskId,
     initialWaybill,
+    onClearInitialTarget,
 }) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -157,17 +159,39 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
 
     const targetWaybill = initialWaybill || initialWaybillNo;
+    const handledTargetRef = React.useRef<string | null>(null);
+    const targetKey = targetWaybill ? `wb:${targetWaybill.toLowerCase()}` : initialTaskId ? `task:${initialTaskId}` : null;
 
-    // Initial delivery selection from props or event
+    const handleCloseTracker = useCallback(() => {
+        setSelectedDelivery(null);
+        if (targetKey) {
+            handledTargetRef.current = targetKey;
+        }
+        onClearInitialTarget?.();
+    }, [targetKey, onClearInitialTarget]);
+
+    // Initial delivery selection from props or event - only consumes new target once
     useEffect(() => {
+        if (!targetKey) {
+            handledTargetRef.current = null;
+            return;
+        }
+        if (handledTargetRef.current === targetKey) return;
+
         if (targetWaybill) {
             const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === targetWaybill.toLowerCase());
-            if (match) setSelectedDelivery(match);
+            if (match) {
+                setSelectedDelivery(match);
+                handledTargetRef.current = targetKey;
+            }
         } else if (initialTaskId) {
             const match = deliveries.find(d => d.taskId === initialTaskId);
-            if (match) setSelectedDelivery(match);
+            if (match) {
+                setSelectedDelivery(match);
+                handledTargetRef.current = targetKey;
+            }
         }
-    }, [targetWaybill, initialTaskId, deliveries]);
+    }, [targetKey, targetWaybill, initialTaskId, deliveries]);
 
     useEffect(() => {
         const handleNav = (e: any) => {
@@ -1250,7 +1274,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         <button
                             type="button"
                             className="dms-detail-back-btn"
-                            onClick={() => setSelectedDelivery(null)}
+                            onClick={handleCloseTracker}
                         >
                             <ArrowLeft size={15} />
                             <span>Back to Deliveries</span>
@@ -1895,7 +1919,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     <button
                         type="button"
                         className="dms-detail-footer-btn-secondary"
-                        onClick={() => setSelectedDelivery(null)}
+                        onClick={handleCloseTracker}
                     >
                         <ArrowLeft size={14} />
                         <span>Return to Deliveries List</span>
@@ -1919,7 +1943,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         <button
                             type="button"
                             className="dms-detail-footer-btn-primary"
-                            onClick={() => setSelectedDelivery(null)}
+                            onClick={handleCloseTracker}
                         >
                             <span>Done</span>
                         </button>
