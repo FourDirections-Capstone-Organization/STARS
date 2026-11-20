@@ -31,7 +31,7 @@ import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
-import { formatStatus } from '../../utils/statusUtils';
+import { formatStatus, formatDeliveryStatus } from '../../utils/statusUtils';
 import DeliveryAnalyticsCharts from './DeliveryAnalyticsCharts';
 import {
     downloadDeliveryPdfReport,
@@ -428,13 +428,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                         const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
                         if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
-                            item.dmsStatus = 'Delivered';
-                            item.dmsRawStatus = 'Delivered';
+                            item.dmsStatus = 'Pending for Delivery';
+                            item.dmsRawStatus = 'Pending for Delivery';
+                        } else if (s === 'pending' || s === 'pending approval') {
+                            item.dmsStatus = 'Pending for Delivery';
+                            item.dmsRawStatus = 'Pending for Delivery';
                         }
                         const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                        if (curS.includes('delivered') || curS.includes('completed')) {
-                            const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                        const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                        if (!curS.includes('pending') && (curS.includes('delivered') || curS.includes('completed'))) {
                             if (key) deliveredOrdersRef.current.set(key, item);
+                        } else if (key) {
+                            deliveredOrdersRef.current.delete(key);
                         }
                     });
                     deliveredOrdersRef.current.forEach((savedDelivered) => {
@@ -584,13 +589,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                 const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
                 if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
-                    item.dmsStatus = 'Delivered';
-                    item.dmsRawStatus = 'Delivered';
+                    item.dmsStatus = 'Pending for Delivery';
+                    item.dmsRawStatus = 'Pending for Delivery';
+                } else if (s === 'pending' || s === 'pending approval') {
+                    item.dmsStatus = 'Pending for Delivery';
+                    item.dmsRawStatus = 'Pending for Delivery';
                 }
                 const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                if (curS.includes('delivered') || curS.includes('completed')) {
-                    const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                if (!curS.includes('pending') && (curS.includes('delivered') || curS.includes('completed'))) {
                     if (key) deliveredOrdersRef.current.set(key, item);
+                } else if (key) {
+                    deliveredOrdersRef.current.delete(key);
                 }
             });
             deliveredOrdersRef.current.forEach((savedDelivered) => {
@@ -788,7 +798,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     const getStatusPill = (status: string, syncState?: string) => {
         const s = (status || '').toLowerCase();
-        if (s.includes('delivered') || s.includes('completed')) {
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) {
             return <span className="dms-status-pill dms-status-delivered"><CheckCircle2 size={11} /> Delivered (POD)</span>;
         }
         if (s.includes('out') || s.includes('transit') || s.includes('pickup')) {
@@ -797,12 +807,12 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         if (s.includes('fail') || s.includes('cancel') || syncState === 'Failed') {
             return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Issue</span>;
         }
-        return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Ready / Dispatched</span>;
+        return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Pending for Delivery</span>;
     };
 
     const getJourneyStepIndex = (status?: string, rawStatus?: string) => {
         const s = `${rawStatus || ''} ${status || ''}`.toLowerCase();
-        if (s.includes('delivered') || s.includes('completed')) return 6;
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) return 6;
         if (s.includes('out for delivery') || s.includes('doorstep')) return 5;
         if (s.includes('transit')) return 4;
         if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 3;
@@ -813,7 +823,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     if (selectedDelivery) {
         const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
-        const isDelivered = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
+        const selS = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase();
+        const isDelivered = !selS.includes('pending') && (selS.includes('delivered') || selS.includes('completed'));
         const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 6) / 6) * 100;
 
         const journeySteps = [
@@ -942,7 +953,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     <div className="dms-detail-stepper-header">
                         <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
                         <span className="dms-detail-stepper-summary">
-                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
+                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
                         </span>
                     </div>
 
@@ -1171,8 +1182,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Current Status</span>
                                 <span className="dms-detail-val">
-                                    <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
-                                    {selectedDelivery.dmsRawStatus && selectedDelivery.dmsRawStatus !== selectedDelivery.dmsStatus && (
+                                    <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
+                                    {selectedDelivery.dmsRawStatus && formatDeliveryStatus(selectedDelivery.dmsRawStatus) !== formatDeliveryStatus(selectedDelivery.dmsStatus) && (
                                         <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>
                                             ({selectedDelivery.dmsRawStatus})
                                         </span>

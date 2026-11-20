@@ -30,8 +30,8 @@ export const recordCreatedDmsOrder = (orderId?: number | string, waybillNo?: str
  * Synchronizes delivery status when a STARS validation task is completed.
  * 1. Best-effort triggers /resend (if still Pending/unsynced) so DMS receives the completed task payload
  *    even when completed via status transition rather than /review.
- * 2. Updates delivery-details with dmsStatus = 'Delivered' if DMS status is still Pending / Pending Approval,
- *    ensuring STARS and Delivery Tracker stay in sync without backend changes.
+ * 2. Updates delivery-details with dmsStatus = 'Pending for Delivery' if DMS status is still Pending / Pending Approval,
+ *    ensuring STARS accurately reflects that the order is awaiting courier delivery in DMS instead of prematurely 'Delivered'.
  */
 export const syncDmsTaskCompleted = async (taskId: string): Promise<void> => {
     if (!taskId) return;
@@ -66,7 +66,7 @@ export const syncDmsTaskCompleted = async (taskId: string): Promise<void> => {
         }
 
         const postResendStatus = String(data.dmsStatus || '').toLowerCase();
-        if (!postResendStatus.includes('delivered') && !postResendStatus.includes('completed')) {
+        if (!postResendStatus.includes('delivered') && !postResendStatus.includes('completed') && !postResendStatus.includes('transit') && !postResendStatus.includes('out for delivery')) {
             await api.put(`/api/dms-integration/tasks/${taskId}/delivery-details`, {
                 recipientName: data.recipientName || 'Operations Dispatch',
                 recipientContact: data.recipientContact || '09123456789',
@@ -77,9 +77,13 @@ export const syncDmsTaskCompleted = async (taskId: string): Promise<void> => {
                 specialInstructions: data.specialInstructions || '',
                 courierEmployeeId: data.courierEmployeeId || '',
                 courierFullName: data.courierFullName || '',
+                taskType: data.taskType,
+                packageType: data.packageType,
+                weight: data.weight,
+                itemCount: data.itemCount,
                 dmsOrderId: data.dmsOrderId,
                 dmsWaybillNo: data.dmsWaybillNo,
-                dmsStatus: 'Delivered',
+                dmsStatus: 'Pending for Delivery',
             });
         }
     } catch {

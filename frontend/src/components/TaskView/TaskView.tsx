@@ -10,7 +10,7 @@ import {
 import TaskComments from '../TaskComments/TaskComments';
 import TaskRecommendations from '../TaskRecommendations/TaskRecommendations';
 import StatusBadge from '../ui/StatusBadge';
-import { formatStatus } from '../../utils/statusUtils';
+import { formatStatus, formatDeliveryStatus } from '../../utils/statusUtils';
 import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import { useToast } from '../Toast/Toast';
 import api from '../../api';
@@ -2470,7 +2470,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     className={`tv-dms-status-tag ${deliveryDetail.dmsStatus.toLowerCase() === 'cancelled' ? 'tv-dms-status-cancelled' : ''}`}
                                                     data-testid="tv-dms-status-badge"
                                                 >
-                                                    Status: <strong className={deliveryDetail.dmsStatus.toLowerCase() === 'cancelled' ? 'tv-badge-cancelled' : ''}>{formatStatus(deliveryDetail.dmsStatus)}</strong>
+                                                    Status: <strong className={deliveryDetail.dmsStatus.toLowerCase() === 'cancelled' ? 'tv-badge-cancelled' : ''}>{formatDeliveryStatus(deliveryDetail.dmsStatus)}</strong>
                                                 </span>
                                             )}
                                         </div>
@@ -2490,7 +2490,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             ];
                                             const s = `${deliveryDetail.dmsRawStatus || ''} ${deliveryDetail.dmsStatus || ''}`.toLowerCase();
                                             let activeIdx = 0;
-                                            if (s.includes('delivered') || s.includes('completed')) activeIdx = 6;
+                                            if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) activeIdx = 6;
                                             else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 5;
                                             else if (s.includes('transit')) activeIdx = 4;
                                             else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 3;

@@ -902,7 +902,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                             gap: 4
                                                         }}
                                                     >
-                                                        <CheckCircle2 size={12} /> {String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase().includes('delivered') ? 'Delivered' : 'Completed'}
+                                                        <CheckCircle2 size={12} /> {String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase().includes('delivered') && !String(t.deliveryDetails?.dmsStatus || t.dmsStatus || '').toLowerCase().includes('pending') ? 'Delivered' : 'Completed'}
                                                     </span>
                                                 </td>
                                                 <td style={{ fontSize: '0.8125rem' }}>
