@@ -8750,7 +8750,7 @@ function ProfileTab() {
     const middleName = localStorage.getItem('middleName') ?? '';
     const lastName = localStorage.getItem('lastName') ?? '';
     const employeeNameStored = [firstName, middleName, lastName].filter(Boolean).join(' ');
-    const profileRole = localStorage.getItem('role') ?? '';
+    const profileRole = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
     const displayProfileRole = profileRole === 'Manager' ? 'Manager' : 'Coordinator';
     const employeeContact = localStorage.getItem('contactNumber') ?? '';
     const storedEmail = localStorage.getItem('email') ?? '';
@@ -9753,7 +9753,7 @@ export default function OpsAdminDashboard() {
     const firstName = localStorage.getItem('firstName') ?? '';
     const lastName = localStorage.getItem('lastName') ?? '';
     const middleName = localStorage.getItem('middleName') ?? '';
-    const rawRole = localStorage.getItem('role') ?? '';
+    const rawRole = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
     const displayRole = rawRole === 'Manager' ? 'Manager' : 'Coordinator';
     const employeeName = [firstName, middleName, lastName].filter(Boolean).join(' ') || displayRole;
     const { success, error } = useToast();
@@ -9856,7 +9856,8 @@ export default function OpsAdminDashboard() {
         referenceNumber: t.taskNumber || t.taskReferenceNumber,
         classification: CLASSIFICATION_MAP[t.classification] ?? CLASSIFICATION_MAP[(t as any).Classification] ?? (String(t.classification).toLowerCase().includes('special') ? 'special' : (t.taskTitle?.startsWith('Delivery Follow-up - ') ? 'special' : '')),
         project: t.taskCategory,
-        assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
+        assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : (t.assignees && t.assignees.length > 0 ? { id: (t.assignees[0] as any).userId || (t.assignees[0] as any).id, name: t.assignees[0].fullName || 'Unassigned' } : undefined),
+        assignees: t.assignees?.map((a: any) => ({ id: a.userId ?? a.id ?? '', name: a.fullName ?? a.name ?? '' })) || (t.assignedTo ? [{ id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' }] : undefined),
         priority: t.priority as TMTask['priority'],
         status: ({
             Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', NotStarted: 'To do',
@@ -10037,7 +10038,7 @@ export default function OpsAdminDashboard() {
             const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
             const STATUS_LABELS: Record<number, string> = { 0: 'Assigned', 1: 'In Progress', 2: 'Pending Admin Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled' };
             const now = new Date();
-            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const isCoordinator = ((localStorage.getItem('userRole') || localStorage.getItem('role')) ?? '').toLowerCase() === 'coordinator';
             const currentAccountId = localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? localStorage.getItem('employeeId') ?? '';
             const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
 
@@ -10454,9 +10455,10 @@ export default function OpsAdminDashboard() {
                     statusStr = t.taskStatus || 'Assigned';
                 }
                 const priorityStr = normalizeCoordinatorPriority(t.priorityLevel ?? t.priority);
+                const rawTitle = t.title ?? t.taskTitle ?? '';
                 return {
                     taskId: t.id ?? t.taskId,
-                    taskTitle: t.title ?? t.taskTitle ?? '',
+                    taskTitle: rawTitle,
                     taskDescription: t.description ?? t.taskDescription ?? '',
                     taskCategory: t.taskCategory ?? '',
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
@@ -10471,6 +10473,7 @@ export default function OpsAdminDashboard() {
                     createdByEmployee: t.createdByName ?? t.createdByEmployee ?? '',
                     assignedTo: t.assignees?.length > 0 ? t.assignees[0].userId ?? '' : '',
                     assignees: (t.assignees ?? []).map((a: any) => ({
+                        userId: a.userId ?? a.id ?? '',
                         fullName: a.fullName ?? a.FullName ?? '',
                         completionPercentage: a.completionPercentage ?? a.CompletionPercentage ?? 0,
                     })),
@@ -10485,13 +10488,16 @@ export default function OpsAdminDashboard() {
                 };
             });
 
-            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const isCoordinator = ((localStorage.getItem('userRole') || localStorage.getItem('role')) ?? '').toLowerCase() === 'coordinator';
             const currentAccountId = (localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? '').toLowerCase();
             const currentEmployeeNum = (localStorage.getItem('employeeId') ?? '').toLowerCase();
             const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
 
             const scopedTasks = isCoordinator
                 ? normalized.filter(t => {
+                    // If coordinator identity is not stored, preserve server-scoped tasks
+                    if (!currentAccountId && !currentEmployeeNum && !currentEmployeeName) return true;
+
                     const cId = (t.createdById ?? '').toLowerCase();
                     const cEmp = (t.createdByEmployee ?? '').trim().toLowerCase();
                     const aTo = (t.assignedTo ?? '').toLowerCase();
@@ -10501,6 +10507,17 @@ export default function OpsAdminDashboard() {
                     if (currentAccountId && cId === currentAccountId) return true;
                     if (currentEmployeeNum && cId === currentEmployeeNum) return true;
                     if (currentEmployeeName && cEmp && (cEmp === currentEmployeeName || currentEmployeeName.includes(cEmp) || cEmp.includes(currentEmployeeName))) return true;
+
+                    // Flexible name match (e.g., middle name differences)
+                    if (currentEmployeeName && cEmp) {
+                        const nameParts = currentEmployeeName.split(' ').filter(Boolean);
+                        const cEmpParts = cEmp.split(' ').filter(Boolean);
+                        if (nameParts.length >= 2 && cEmpParts.length >= 2) {
+                            if (nameParts[0] === cEmpParts[0] && nameParts[nameParts.length - 1] === cEmpParts[cEmpParts.length - 1]) {
+                                return true;
+                            }
+                        }
+                    }
 
                     // Assignee match (handling task)
                     if (currentAccountId && aTo === currentAccountId) return true;
@@ -10515,6 +10532,9 @@ export default function OpsAdminDashboard() {
                     })) {
                         return true;
                     }
+
+                    // If task has no creator id/name attached, retain it because server GetAllAsync already filtered by user token
+                    if (!cId && !cEmp) return true;
 
                     return false;
                 })
@@ -11231,6 +11251,7 @@ export default function OpsAdminDashboard() {
     // -- Silent auto-refresh of the task list while the Tasks tab is open --
     useEffect(() => {
         if (activeTab !== 'tasks') return;
+        fetchTasks(true);
         const interval = setInterval(() => {
             fetchTasks(true);
         }, 30000);
@@ -11422,6 +11443,7 @@ export default function OpsAdminDashboard() {
                                     <div className="dashboard-content">
                                         <AIAssignmentView
                                             onTaskCreated={() => {
+                                                setTaskSubTab('list');
                                                 fetchTasks().catch(() => { });
                                                 doFetchDashboard().catch(() => { });
                                             }}

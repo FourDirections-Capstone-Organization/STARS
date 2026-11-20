@@ -191,6 +191,7 @@ export default function Login() {
                 localStorage.setItem('refreshToken', d.refreshToken);
             }
             localStorage.setItem('userRole', normalizedRole);
+            localStorage.setItem('role', normalizedRole);
             localStorage.setItem('employeeId', d.employeeNumber ?? employeeId.trim());
             localStorage.setItem('isPasswordChanged', (d.isPasswordChanged ?? false).toString());
             localStorage.setItem('hasAcceptedTerms', (d.hasAcceptedTerms ?? false).toString());
