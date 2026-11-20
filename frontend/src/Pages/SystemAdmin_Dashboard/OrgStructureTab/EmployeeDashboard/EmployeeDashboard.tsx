@@ -14,7 +14,7 @@ import employeeDashboardService, {
 } from '../../../../services/employeeDashboardService';
 import EmployeeHeader from './EmployeeHeader';
 import EmployeeCharts from './EmployeeCharts';
-import EmployeeTaskLists, { TaskListTab } from './EmployeeTaskLists';
+import EmployeeTaskLists, { TaskListTab, canEmployeeCreateTasks } from './EmployeeTaskLists';
 import './EmployeeDashboard.css';
 
 // ── Types & Interfaces ────────────────────────────────────────────────────────
@@ -206,6 +206,17 @@ export default function EmployeeDashboard({
     useEffect(() => {
         fetchDashboard(resolvedEmployeeId);
     }, [resolvedEmployeeId, refreshIndex, fetchDashboard]);
+
+    // Ensure operational staff cannot stay on 'created' tab
+    const canCreate = useMemo(() => {
+        return data ? canEmployeeCreateTasks(data.role) : false;
+    }, [data]);
+
+    useEffect(() => {
+        if (data && !canCreate && activeTab === 'created') {
+            setActiveTab('assigned');
+        }
+    }, [data, canCreate, activeTab]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const handleRefresh = useCallback(() => {
@@ -427,7 +438,7 @@ export default function EmployeeDashboard({
                 <EmployeeCharts data={data} />
             </section>
 
-            {/* 3. Tabbed Task Lists ("Assigned to Them" & "Created by Them") */}
+            {/* 3. Tabbed Task Lists ("Assigned Tasks" & "Tasks Created") */}
             <section
                 className="ed-tasks-section"
                 aria-label="Employee Task Registry"

@@ -8,6 +8,7 @@ import EmployeeTaskLists, {
     formatDate,
     isTaskOverdue,
     getCompletionPercentage,
+    canEmployeeCreateTasks,
 } from '../Pages/SystemAdmin_Dashboard/OrgStructureTab/EmployeeDashboard/EmployeeTaskLists';
 import employeeDashboardService, {
     EmployeeTaskItem,
@@ -240,15 +241,43 @@ describe('EmployeeTaskLists Component', () => {
             expect(getCompletionPercentage({ id: '4', title: 'T', priorityLevel: 1, status: 1 })).toBe(50);
             expect(getCompletionPercentage({ id: '5', title: 'T', priorityLevel: 1, status: 0 })).toBe(0);
         });
+
+        it('canEmployeeCreateTasks allows only Managers and Coordinators to create tasks', () => {
+            // Managers & Coordinators allowed
+            expect(canEmployeeCreateTasks('Manager')).toBe(true);
+            expect(canEmployeeCreateTasks('Coordinator')).toBe(true);
+            expect(canEmployeeCreateTasks('manager')).toBe(true);
+            expect(canEmployeeCreateTasks('coordinator')).toBe(true);
+            expect(canEmployeeCreateTasks('Operations Coordinator')).toBe(true);
+            expect(canEmployeeCreateTasks('General Manager')).toBe(true);
+            expect(canEmployeeCreateTasks(0)).toBe(true); // UserRole.Manager
+            expect(canEmployeeCreateTasks(1)).toBe(true); // UserRole.Coordinator
+            expect(canEmployeeCreateTasks('0')).toBe(true);
+            expect(canEmployeeCreateTasks('1')).toBe(true);
+
+            // Operational staff & others not allowed
+            expect(canEmployeeCreateTasks('Encoder')).toBe(false);
+            expect(canEmployeeCreateTasks('Dispatcher')).toBe(false);
+            expect(canEmployeeCreateTasks('Courier')).toBe(false);
+            expect(canEmployeeCreateTasks('Accountant')).toBe(false);
+            expect(canEmployeeCreateTasks(2)).toBe(false); // Dispatcher
+            expect(canEmployeeCreateTasks(3)).toBe(false); // Encoder
+            expect(canEmployeeCreateTasks(4)).toBe(false); // Courier
+            expect(canEmployeeCreateTasks(5)).toBe(false); // Accountant
+            expect(canEmployeeCreateTasks(undefined)).toBe(false);
+            expect(canEmployeeCreateTasks(null)).toBe(false);
+            expect(canEmployeeCreateTasks('')).toBe(false);
+        });
     });
 
     // ── 2. Tab Switching & Headers ────────────────────────────────────────────
 
     describe('Tab Switching & Navigation', () => {
-        it('renders tab buttons for Assigned and Created tasks with badge counts', () => {
+        it('renders tab buttons for Assigned Tasks and Tasks Created with badge counts for Managers', () => {
             render(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Manager"
                     assignedTasksData={mockAssignedData}
                     createdTasksData={mockCreatedData}
                 />
@@ -259,6 +288,8 @@ describe('EmployeeTaskLists Component', () => {
 
             expect(assignedTab).toBeInTheDocument();
             expect(createdTab).toBeInTheDocument();
+            expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+            expect(screen.getByText('Tasks Created')).toBeInTheDocument();
             expect(assignedTab).toHaveClass('active');
             expect(createdTab).not.toHaveClass('active');
 
@@ -266,11 +297,50 @@ describe('EmployeeTaskLists Component', () => {
             expect(screen.getByTestId('created-count-badge')).toHaveTextContent('2');
         });
 
-        it('switches to Created Tasks tab on click and updates active styling', () => {
+        it('hides Tasks Created tab for operational employees (e.g. Encoder, Dispatcher, Courier)', () => {
+            const { rerender } = render(
+                <EmployeeTaskLists
+                    employeeId="emp-102"
+                    employeeRole="Encoder"
+                    assignedTasksData={mockAssignedData}
+                    createdTasksData={mockCreatedData}
+                />
+            );
+
+            expect(screen.getByTestId('tab-assigned')).toBeInTheDocument();
+            expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+            expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
+            expect(screen.queryByText('Tasks Created')).not.toBeInTheDocument();
+
+            // Test with Courier
+            rerender(
+                <EmployeeTaskLists
+                    employeeId="emp-103"
+                    employeeRole="Courier"
+                    assignedTasksData={mockAssignedData}
+                    createdTasksData={mockCreatedData}
+                />
+            );
+            expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
+
+            // Test with Dispatcher
+            rerender(
+                <EmployeeTaskLists
+                    employeeId="emp-104"
+                    employeeRole="Dispatcher"
+                    assignedTasksData={mockAssignedData}
+                    createdTasksData={mockCreatedData}
+                />
+            );
+            expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
+        });
+
+        it('switches to Tasks Created tab on click and updates active styling for Coordinators', () => {
             const handleTabChange = vi.fn();
             render(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Coordinator"
                     assignedTasksData={mockAssignedData}
                     createdTasksData={mockCreatedData}
                     onTabChange={handleTabChange}
@@ -294,10 +364,11 @@ describe('EmployeeTaskLists Component', () => {
             expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
         });
 
-        it('supports controlled activeTab prop', () => {
+        it('supports controlled activeTab prop for authorized creator roles', () => {
             const { rerender } = render(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Manager"
                     activeTab="assigned"
                     assignedTasksData={mockAssignedData}
                     createdTasksData={mockCreatedData}
@@ -309,6 +380,7 @@ describe('EmployeeTaskLists Component', () => {
             rerender(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Manager"
                     activeTab="created"
                     assignedTasksData={mockAssignedData}
                     createdTasksData={mockCreatedData}
@@ -373,6 +445,7 @@ describe('EmployeeTaskLists Component', () => {
             render(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Manager"
                     defaultTab="created"
                     createdTasksData={mockCreatedData}
                 />
@@ -459,6 +532,45 @@ describe('EmployeeTaskLists Component', () => {
             expect(screen.getByText('Emergency Medical Supply Dispatch')).toBeInTheDocument();
             expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
             expect(screen.queryByText('Warehouse Standard Safety Review')).not.toBeInTheDocument();
+        });
+
+        it('filters cancelled tasks via the Cancelled status option', () => {
+            const dataWithCancelled: PaginatedTasksResponse = {
+                items: [
+                    ...mockAssignedTasks,
+                    {
+                        id: 'task-cancelled-1',
+                        taskNumber: 'TSK-9999',
+                        title: 'Cancelled Urgent Route',
+                        description: 'This delivery task was cancelled by coordinator.',
+                        priorityLevel: 1,
+                        status: 5, // Cancelled
+                        deadline: '2026-11-20T17:00:00Z',
+                    },
+                ],
+                totalCount: 4,
+                pageNumber: 1,
+                pageSize: 10,
+                totalPages: 1,
+                hasPreviousPage: false,
+                hasNextPage: false,
+            };
+
+            render(
+                <EmployeeTaskLists
+                    employeeId="emp-101"
+                    assignedTasksData={dataWithCancelled}
+                />
+            );
+
+            const statusSelect = screen.getByTestId('task-status-filter');
+            expect(screen.getByRole('option', { name: 'Cancelled' })).toBeInTheDocument();
+
+            fireEvent.change(statusSelect, { target: { value: 'Cancelled' } });
+
+            expect(screen.getByText('Cancelled Urgent Route')).toBeInTheDocument();
+            expect(screen.queryByText('Audit Cold Chain Temperature Logs')).not.toBeInTheDocument();
+            expect(screen.queryByText('Emergency Medical Supply Dispatch')).not.toBeInTheDocument();
         });
 
         it('resets search and status filter when clicking Reset button', () => {
@@ -569,7 +681,7 @@ describe('EmployeeTaskLists Component', () => {
             expect(screen.getByTestId('task-lists-count-info')).toHaveTextContent('No tasks found');
         });
 
-        it('displays exact specified message and staff note for empty created tasks', () => {
+        it('displays exact specified message for empty created tasks when viewed for a creator role', () => {
             const emptyCreatedData: PaginatedTasksResponse = {
                 items: [],
                 totalCount: 0,
@@ -583,20 +695,14 @@ describe('EmployeeTaskLists Component', () => {
             render(
                 <EmployeeTaskLists
                     employeeId="emp-101"
+                    employeeRole="Manager"
                     activeTab="created"
                     createdTasksData={emptyCreatedData}
                 />
             );
 
-            // Exact message from docs/PLAN.md
             expect(
-                screen.getByText('No tasks created by this employee (Staff members typically execute assigned tasks)')
-            ).toBeInTheDocument();
-
-            // Staff note banner
-            expect(screen.getByTestId('staff-created-note')).toBeInTheDocument();
-            expect(
-                screen.getByText(/Staff members typically execute assigned tasks rather than create them/i)
+                screen.getByText('No tasks created by this employee')
             ).toBeInTheDocument();
         });
 

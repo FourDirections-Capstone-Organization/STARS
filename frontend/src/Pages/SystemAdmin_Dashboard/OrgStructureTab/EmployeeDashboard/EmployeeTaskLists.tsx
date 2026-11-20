@@ -57,6 +57,21 @@ export interface EmployeeTaskListsProps {
 
 // ── Pure Formatting & Normalization Helpers ──────────────────────────────────
 
+export function canEmployeeCreateTasks(role?: string | number | null): boolean {
+    if (role === undefined || role === null || role === '') {
+        return false;
+    }
+    if (typeof role === 'number') {
+        // UserRole enum: 0 = Manager, 1 = Coordinator
+        return role === 0 || role === 1;
+    }
+    const str = String(role).trim().toLowerCase();
+    if (str === '0' || str === '1') {
+        return true;
+    }
+    return str.includes('manager') || str.includes('coordinator');
+}
+
 export function formatStatus(status: string | number | undefined | null): string {
     if (status === undefined || status === null) return 'Not Started';
     if (typeof status === 'number') {
@@ -181,15 +196,21 @@ export default function EmployeeTaskLists({
     const [fetchLoading, setFetchLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
-    // Active tab resolution (controlled vs uncontrolled)
-    const currentTab = controlledTab ?? internalTab;
+    // Check if employee has task creator privileges (Manager or Coordinator only)
+    const canCreateTasks = useMemo(() => {
+        return canEmployeeCreateTasks(employeeRole);
+    }, [employeeRole]);
+
+    // Active tab resolution (controlled vs uncontrolled, restricted by creator permissions)
+    const currentTab: TaskListTab = !canCreateTasks ? 'assigned' : (controlledTab ?? internalTab);
 
     const handleTabChange = useCallback((tab: TaskListTab) => {
+        if (tab === 'created' && !canCreateTasks) return;
         if (tab === currentTab) return;
         setInternalTab(tab);
         setPage(1);
         onTabChange?.(tab);
-    }, [currentTab, onTabChange]);
+    }, [currentTab, canCreateTasks, onTabChange]);
 
     // ── Data Fetching Effect (when not controlled by external props) ───────────
     const isExternallyControlled =
@@ -218,7 +239,7 @@ export default function EmployeeTaskLists({
                     if (!isCancelled) {
                         setInternalAssignedData(result);
                     }
-                } else {
+                } else if (canCreateTasks) {
                     const result = await employeeDashboardService.getEmployeeCreatedTasks(
                         employeeId,
                         page,
@@ -561,7 +582,7 @@ export default function EmployeeTaskLists({
             return 'No tasks assigned to this employee matching your filter';
         } else {
             if (activeTotalCount === 0 && !searchQuery && statusFilter === 'All') {
-                return 'No tasks created by this employee (Staff members typically execute assigned tasks)';
+                return 'No tasks created by this employee';
             }
             return 'No tasks created by this employee matching your filter';
         }
@@ -591,7 +612,7 @@ export default function EmployeeTaskLists({
                         onClick={() => handleTabChange('assigned')}
                     >
                         <ClipboardList size={16} />
-                        <span>Tasks Assigned to Them</span>
+                        <span>Assigned Tasks</span>
                         {assignedBadgeCount !== undefined && (
                             <span className="task-tab-badge" data-testid="assigned-count-badge">
                                 {assignedBadgeCount}
@@ -599,24 +620,26 @@ export default function EmployeeTaskLists({
                         )}
                     </button>
 
-                    <button
-                        type="button"
-                        role="tab"
-                        id="tab-created"
-                        aria-selected={currentTab === 'created'}
-                        aria-controls="panel-task-table"
-                        data-testid="tab-created"
-                        className={`task-tab-btn ${currentTab === 'created' ? 'active' : ''}`}
-                        onClick={() => handleTabChange('created')}
-                    >
-                        <UserCheck size={16} />
-                        <span>Tasks Created by Them</span>
-                        {createdBadgeCount !== undefined && (
-                            <span className="task-tab-badge" data-testid="created-count-badge">
-                                {createdBadgeCount}
-                            </span>
-                        )}
-                    </button>
+                    {canCreateTasks && (
+                        <button
+                            type="button"
+                            role="tab"
+                            id="tab-created"
+                            aria-selected={currentTab === 'created'}
+                            aria-controls="panel-task-table"
+                            data-testid="tab-created"
+                            className={`task-tab-btn ${currentTab === 'created' ? 'active' : ''}`}
+                            onClick={() => handleTabChange('created')}
+                        >
+                            <UserCheck size={16} />
+                            <span>Tasks Created</span>
+                            {createdBadgeCount !== undefined && (
+                                <span className="task-tab-badge" data-testid="created-count-badge">
+                                    {createdBadgeCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
                 </div>
 
                 {onRefresh && (
@@ -633,16 +656,6 @@ export default function EmployeeTaskLists({
                     </button>
                 )}
             </div>
-
-            {/* ── Informational banner for execution staff on Created Tab ── */}
-            {currentTab === 'created' && activeTotalCount === 0 && !isLoading && (
-                <div className="task-lists-info-banner" data-testid="staff-created-note">
-                    <CheckCircle2 size={15} />
-                    <span>
-                        Staff members typically execute assigned tasks rather than create them. Coordinators and Managers are the primary task creators.
-                    </span>
-                </div>
-            )}
 
             {/* ── Error Banner ── */}
             {errorMessage && (
@@ -684,6 +697,7 @@ export default function EmployeeTaskLists({
                                     <option value="Completed">Completed</option>
                                     <option value="Overdue">Overdue</option>
                                     <option value="On Hold">On Hold</option>
+                                    <option value="Cancelled">Cancelled</option>
                                     <option value="Pending">Pending / Not Started</option>
                                 </select>
                             </div>
