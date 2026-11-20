@@ -186,31 +186,55 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         return () => window.removeEventListener('stars:navigate-dms-tracker' as any, handleNav);
     }, [deliveries]);
 
-    // Fetch POD data when a delivery is selected
+    // Fetch POD data & delivery details when a delivery is selected
     useEffect(() => {
         let active = true;
+        setPodImageError(false);
         if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') {
             setPodData(null);
             setPodPreviewUrl(null);
             return;
         }
 
-        const fetchPod = async () => {
+        const fetchPodAndDetail = async () => {
             setPodLoading(true);
             setPodError(null);
             try {
-                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`);
-                const json = res.data;
-                const d = json?.data ?? json;
-                if (active) {
+                const [podRes, ddRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                ]);
+
+                if (active && ddRes.status === 'fulfilled') {
+                    const ddData = ddRes.value?.data?.data ?? ddRes.value?.data;
+                    if (ddData) {
+                        setSelectedDelivery(prev => {
+                            if (!prev || prev.taskId !== selectedDelivery.taskId) return prev;
+                            return {
+                                ...prev,
+                                ...ddData,
+                                courierFullName: ddData.courierFullName || prev.courierFullName,
+                                courierEmployeeId: ddData.courierEmployeeId || prev.courierEmployeeId,
+                                courierIsActive: ddData.courierIsActive !== undefined ? ddData.courierIsActive : prev.courierIsActive,
+                                podUrl: ddData.podUrl || prev.podUrl,
+                                podFileName: ddData.podFileName || prev.podFileName,
+                                podUploadedAt: ddData.podUploadedAt || prev.podUploadedAt,
+                                podUploadedBy: ddData.podUploadedBy || prev.podUploadedBy,
+                            };
+                        });
+                    }
+                }
+
+                if (active && podRes.status === 'fulfilled') {
+                    const json = podRes.value?.data;
+                    const d = json?.data ?? json;
                     if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
                         setPodData(d);
                     } else {
                         setPodData(null);
                     }
-                }
-            } catch (err: any) {
-                if (active) {
+                } else if (active && podRes.status === 'rejected') {
+                    const err: any = podRes.reason;
                     if (err?.response?.status === 403) {
                         setPodError('Access denied: You do not have permission to view Proof of Delivery.');
                     } else if (err?.response?.status !== 404) {
@@ -224,7 +248,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             }
         };
 
-        fetchPod();
+        fetchPodAndDetail();
 
         return () => {
             active = false;
@@ -232,28 +256,35 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     }, [selectedDelivery?.taskId]);
 
     const effectivePod = useMemo(() => {
-        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
-            return podData;
-        }
-        if (selectedDelivery?.podUrl) {
-            const fileName = selectedDelivery.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
-            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : '.jpg';
-            return {
-                taskId: selectedDelivery.taskId,
-                waybillNo: selectedDelivery.dmsWaybillNo,
-                podUrl: selectedDelivery.podUrl,
-                downloadUrl: selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
-                    ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
-                    : selectedDelivery.podUrl,
-                fileName,
-                fileType: ext,
-                fileSize: selectedDelivery.podFileSize ?? 245760,
-                uploadedAt: selectedDelivery.podUploadedAt,
-                uploadedByName: selectedDelivery.podUploadedBy || selectedDelivery.courierFullName || 'Field Courier',
-                hasPod: true,
-            };
-        }
-        return podData;
+        const rawPod = podData && (podData.hasPod || podData.podUrl || podData.downloadUrl) ? podData : null;
+        const itemPod = selectedDelivery?.podUrl ? selectedDelivery : null;
+        const base = rawPod || itemPod;
+        if (!base) return null;
+
+        const fileName = base.fileName || base.podFileName || (base.waybillNo || selectedDelivery?.dmsWaybillNo ? `POD_${base.waybillNo || selectedDelivery?.dmsWaybillNo}.jpg` : 'POD_Document.jpg');
+        const ext = (base.fileType || (fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg')).toLowerCase();
+        const contentType = base.contentType || (ext === '.pdf' ? 'application/pdf' : ext === '.png' ? 'image/png' : 'image/jpeg');
+        const podUrl = base.podUrl || base.fileUrl || (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+            ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download?inline=true`
+            : undefined);
+        const downloadUrl = base.downloadUrl || (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+            ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
+            : podUrl);
+
+        return {
+            taskId: base.taskId || selectedDelivery?.taskId,
+            waybillNo: base.waybillNo || selectedDelivery?.dmsWaybillNo,
+            fileName,
+            fileType: ext,
+            contentType,
+            fileSize: base.fileSize ?? base.podFileSize ?? 245760,
+            uploadedAt: base.uploadedAt || base.podUploadedAt || selectedDelivery?.dmsLastSyncedAt,
+            uploadedByName: base.uploadedByName || base.podUploadedBy || selectedDelivery?.courierFullName || 'Field Courier',
+            podUrl,
+            downloadUrl,
+            fileUrl: podUrl || downloadUrl,
+            hasPod: true,
+        };
     }, [podData, selectedDelivery]);
 
     useEffect(() => {
@@ -261,7 +292,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         let createdUrl: string | null = null;
 
         const loadPreview = async () => {
-            const url = effectivePod?.podUrl || effectivePod?.downloadUrl;
+            const url = effectivePod?.podUrl || effectivePod?.downloadUrl || effectivePod?.fileUrl;
             if (!url) {
                 setPodPreviewUrl(null);
                 return;
@@ -298,7 +329,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 URL.revokeObjectURL(createdUrl);
             }
         };
-    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.hasPod]);
+    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.fileUrl, effectivePod?.hasPod]);
 
     const handleOpenPodPreview = () => {
         setShowPodModal(true);
@@ -1026,9 +1057,21 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                 <span className="dms-detail-label">Assigned Courier</span>
                                 <span className="dms-detail-val">
                                     {(() => {
-                                        const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
-                                        const pairedInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
-                                        const nameOnlyInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'name-only' });
+                                        const resolvedFullName = (() => {
+                                            const rawName = selectedDelivery.courierFullName;
+                                            const empId = selectedDelivery.courierEmployeeId;
+                                            if (rawName && rawName.trim() && (!empId || rawName.trim().toLowerCase() !== empId.trim().toLowerCase()) && rawName.trim().toLowerCase() !== 'unassigned') {
+                                                return rawName;
+                                            }
+                                            const matched = deliveries.find(d =>
+                                                (empId && d.courierEmployeeId === empId && d.courierFullName && d.courierFullName !== d.courierEmployeeId) ||
+                                                (selectedDelivery.dmsWaybillNo && d.dmsWaybillNo === selectedDelivery.dmsWaybillNo && d.courierFullName)
+                                            );
+                                            return matched?.courierFullName || rawName;
+                                        })();
+                                        const driverInfo = formatDriverDisplay(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
+                                        const pairedInfo = formatDriverDisplayShared(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
+                                        const nameOnlyInfo = formatDriverDisplayShared(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'name-only' });
                                         if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
                                             return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
                                         }
@@ -1192,58 +1235,72 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                             ) : effectivePod ? (
                                 <div className="dms-pod-content" data-testid="dms-pod-content">
                                     <div className="dms-pod-preview-wrapper">
-                                        {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) && !podImageError ? (
-                                            <div
-                                                className="dms-pod-thumbnail-wrapper"
-                                                onClick={handleOpenPodPreview}
-                                                title="Click to preview POD image"
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        handleOpenPodPreview();
-                                                    }
-                                                }}
-                                            >
-                                                <img
-                                                    src={effectivePod.fileUrl}
-                                                    alt="Proof of Delivery thumbnail"
-                                                    className="dms-pod-thumbnail-img"
-                                                    onError={() => setPodImageError(true)}
-                                                />
-                                                <div className="dms-pod-thumbnail-overlay">
-                                                    <Eye size={18} />
-                                                    <span>View Preview</span>
+                                        {(() => {
+                                            const isImage = isImageFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                            const isPdf = isPdfFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                            const podDisplayUrl = podPreviewUrl || effectivePod.fileUrl || effectivePod.podUrl || effectivePod.downloadUrl;
+
+                                            if (isImage && !podImageError) {
+                                                return (
+                                                    <div
+                                                        className="dms-pod-thumbnail-wrapper"
+                                                        onClick={handleOpenPodPreview}
+                                                        title="Click to preview POD image"
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleOpenPodPreview();
+                                                            }
+                                                        }}
+                                                    >
+                                                        <img
+                                                            src={podDisplayUrl}
+                                                            alt="Proof of Delivery thumbnail"
+                                                            className="dms-pod-thumbnail-img"
+                                                            onError={() => setPodImageError(true)}
+                                                        />
+                                                        <div className="dms-pod-thumbnail-overlay">
+                                                            <Eye size={18} />
+                                                            <span>View Preview</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (isPdf) {
+                                                return (
+                                                    <div
+                                                        className="dms-pod-pdf-preview"
+                                                        onClick={handleOpenPodPreview}
+                                                        title="Click to preview PDF document"
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleOpenPodPreview();
+                                                            }
+                                                        }}
+                                                    >
+                                                        <FileText size={36} color="var(--primary, #00A99D)" />
+                                                        <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
+                                                        <div className="dms-pod-thumbnail-overlay">
+                                                            <Eye size={18} />
+                                                            <span>View PDF</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div className="dms-pod-doc-icon-preview">
+                                                    <FileCheck size={36} color="var(--primary, #00A99D)" />
+                                                    <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
                                                 </div>
-                                            </div>
-                                        ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                            <div
-                                                className="dms-pod-pdf-preview"
-                                                onClick={handleOpenPodPreview}
-                                                title="Click to preview PDF document"
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        handleOpenPodPreview();
-                                                    }
-                                                }}
-                                            >
-                                                <FileText size={36} color="var(--primary, #00A99D)" />
-                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
-                                                <div className="dms-pod-thumbnail-overlay">
-                                                    <Eye size={18} />
-                                                    <span>View PDF</span>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="dms-pod-doc-icon-preview">
-                                                <FileCheck size={36} color="var(--primary, #00A99D)" />
-                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
                                     </div>
 
                                     <div className="dms-pod-meta-grid">
@@ -1341,37 +1398,51 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                 </button>
                             </div>
                             <div className="dms-modal-body dms-pod-modal-body">
-                                {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                    <div className="dms-pod-modal-img-container">
-                                        <img
-                                            src={podPreviewUrl || effectivePod.fileUrl}
-                                            alt="Proof of Delivery Full Preview"
-                                            className="dms-pod-modal-full-img"
-                                        />
-                                    </div>
-                                ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                    <div className="dms-pod-modal-pdf-container">
-                                        <iframe
-                                            src={podPreviewUrl || effectivePod.fileUrl}
-                                            title="Proof of Delivery PDF Viewer"
-                                            className="dms-pod-modal-iframe"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="dms-pod-modal-fallback">
-                                        <FileCheck size={48} color="var(--primary, #00A99D)" />
-                                        <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
-                                        <button
-                                            type="button"
-                                            className="dms-btn-action dms-pod-download-btn"
-                                            onClick={handleDownloadPod}
-                                            disabled={podDownloading}
-                                        >
-                                            <Download size={13} />
-                                            <span>Download to view</span>
-                                        </button>
-                                    </div>
-                                )}
+                                {(() => {
+                                    const isImage = isImageFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                    const isPdf = isPdfFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                    const podDisplayUrl = podPreviewUrl || effectivePod.fileUrl || effectivePod.podUrl || effectivePod.downloadUrl;
+
+                                    if (isImage) {
+                                        return (
+                                            <div className="dms-pod-modal-img-container">
+                                                <img
+                                                    src={podDisplayUrl}
+                                                    alt="Proof of Delivery Full Preview"
+                                                    className="dms-pod-modal-full-img"
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    if (isPdf) {
+                                        return (
+                                            <div className="dms-pod-modal-pdf-container">
+                                                <iframe
+                                                    src={podDisplayUrl}
+                                                    title="Proof of Delivery PDF Viewer"
+                                                    className="dms-pod-modal-iframe"
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="dms-pod-modal-fallback">
+                                            <FileCheck size={48} color="var(--primary, #00A99D)" />
+                                            <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
+                                            <button
+                                                type="button"
+                                                className="dms-btn-action dms-pod-download-btn"
+                                                onClick={handleDownloadPod}
+                                                disabled={podDownloading}
+                                            >
+                                                <Download size={13} />
+                                                <span>Download to view</span>
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div className="dms-modal-footer dms-pod-modal-footer">
                                 <div className="dms-pod-modal-meta">

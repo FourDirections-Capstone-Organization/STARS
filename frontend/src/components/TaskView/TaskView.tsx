@@ -865,6 +865,10 @@ const TaskView: React.FC<TaskViewProps> = ({
         }
     };
 
+    const fetchPodData = useCallback(async (_silent: boolean = false) => {
+        // Safe stub for DMS POD data handling in TaskView
+    }, []);
+
     const fetchDeliveryDetail = useCallback(async (silent: boolean = false) => {
         if (!task.taskId) return;
         if (!silent) setDeliveryLoading(true);
@@ -874,8 +878,24 @@ const TaskView: React.FC<TaskViewProps> = ({
             const data = json?.data ?? json;
             if (data && (data.recipientName || data.dmsWaybillNo || data.syncStatus)) {
                 const taskDel = (task as any).deliveryDetails;
+                let resolvedCourierName = data.courierFullName;
+                const cleanEmpId = (data.courierEmployeeId || '').trim();
+                if (!resolvedCourierName || resolvedCourierName.trim() === cleanEmpId || resolvedCourierName.trim().toLowerCase() === 'unassigned') {
+                    if (taskDel?.courierFullName && taskDel.courierFullName !== cleanEmpId) {
+                        resolvedCourierName = taskDel.courierFullName;
+                    } else if (task.assignees?.length) {
+                        const matchedAssignee = task.assignees.find(a => (a as any).employeeNumber === cleanEmpId || a.fullName);
+                        if (matchedAssignee?.fullName) {
+                            resolvedCourierName = matchedAssignee.fullName;
+                        }
+                    }
+                    if (!resolvedCourierName && task.assignedEmployee && task.assignedEmployee.trim() !== cleanEmpId && task.assignedEmployee.trim().toLowerCase() !== 'unassigned') {
+                        resolvedCourierName = task.assignedEmployee;
+                    }
+                }
                 const enriched: TaskDeliveryDetailData = {
                     ...data,
+                    courierFullName: resolvedCourierName || data.courierFullName,
                     taskType: data.taskType || taskDel?.taskType || (task as any).taskType || 'Standard Delivery',
                     packageType: data.packageType || taskDel?.packageType || (task as any).packageType || 'Parcel',
                     weight: data.weight || taskDel?.weight || (task as any).weight || '1.0 kg',
@@ -892,7 +912,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                         senderAddress: data.senderAddress || 'STARS Operations Office',
                         specialInstructions: data.specialInstructions || '',
                         courierEmployeeId: data.courierEmployeeId || '',
-                        courierFullName: data.courierFullName || '',
+                        courierFullName: resolvedCourierName || data.courierFullName || '',
                     });
                 }
             } else if (!silent) {
@@ -903,7 +923,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         } finally {
             if (!silent) setDeliveryLoading(false);
         }
-    }, [task.taskId]);
+    }, [task.taskId, task.assignees, task.assignedEmployee, (task as any).deliveryDetails]);
 
     useEffect(() => {
         fetchDeliveryDetail(false);

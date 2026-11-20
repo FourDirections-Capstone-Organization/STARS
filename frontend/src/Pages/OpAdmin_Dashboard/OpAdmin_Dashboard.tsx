@@ -227,6 +227,7 @@ type NavTab =
 export interface TeamMember {
     accountId: string;
     employeeName: string;
+    employeeNumber?: string;
     role: string;
     presenceStatus?: string;
     departmentId?: string;
@@ -5445,6 +5446,108 @@ export const ReportsTab: React.FC<{
     const [dmsCopiedWb, setDmsCopiedWb] = useState<string | null>(null);
     const [dmsExportFormat, setDmsExportFormat] = useState<'Csv' | 'Excel'>('Csv');
 
+    const augmentDmsRecords = useCallback(async (summaryData: any) => {
+        if (!summaryData || !Array.isArray(summaryData.records)) return summaryData;
+
+        let deliveryList: any[] = [];
+        try {
+            const delRes = await api.get('/api/dms-integration/deliveries');
+            const list = delRes?.data?.data ?? delRes?.data;
+            if (Array.isArray(list)) deliveryList = list;
+        } catch {
+            deliveryList = [];
+        }
+
+        const waybillToDeliveryMap = new Map<string, any>();
+        const driverIdToNameMap = new Map<string, { name: string; isActive?: boolean }>();
+
+        if (Array.isArray(teamMembers)) {
+            teamMembers.forEach(tm => {
+                const name = (tm.employeeName || (tm as any).fullName || '').trim();
+                if (!name) return;
+                const empNo = ((tm as any).employeeNumber || '').toLowerCase().trim();
+                const accId = (tm.accountId || '').toLowerCase().trim();
+                if (empNo) driverIdToNameMap.set(empNo, { name, isActive: (tm as any).presenceStatus !== 'Inactive' });
+                if (accId) driverIdToNameMap.set(accId, { name, isActive: (tm as any).presenceStatus !== 'Inactive' });
+            });
+        }
+
+        if (Array.isArray(tasks)) {
+            tasks.forEach((t: any) => {
+                const taskId = t.taskId || t.id;
+                const wb = (t.deliveryDetails?.dmsWaybillNo || t.taskReferenceNumber || '').toLowerCase().trim();
+                if (wb && taskId) {
+                    waybillToDeliveryMap.set(wb, { taskId, courierFullName: t.deliveryDetails?.courierFullName });
+                }
+
+                if (Array.isArray(t.assignees)) {
+                    t.assignees.forEach((a: any) => {
+                        const aName = (a.fullName || a.employeeName || '').trim();
+                        const aEmpNo = (a.employeeNumber || a.employeeId || a.userId || '').toLowerCase().trim();
+                        if (aName && aEmpNo) {
+                            driverIdToNameMap.set(aEmpNo, { name: aName, isActive: a.isActive !== false });
+                        }
+                    });
+                }
+            });
+        }
+
+        deliveryList.forEach(d => {
+            const wb = (d.dmsWaybillNo || d.waybillNo || '').toLowerCase().trim();
+            if (wb) {
+                waybillToDeliveryMap.set(wb, d);
+            }
+            const empId = (d.courierEmployeeId || d.driverEmployeeId || d.driverId || '').toLowerCase().trim();
+            const fullName = (d.courierFullName || d.driverName || '').trim();
+            if (empId && fullName && fullName.toLowerCase() !== empId && fullName.toLowerCase() !== 'unassigned') {
+                driverIdToNameMap.set(empId, { name: fullName, isActive: d.courierIsActive });
+            }
+        });
+
+        const augmentedRecords = summaryData.records.map((r: any) => {
+            const wbKey = (r.waybillNo || '').toLowerCase().trim();
+            const driverKey = (r.driverId || '').toLowerCase().trim();
+            const matchedDel = wbKey ? waybillToDeliveryMap.get(wbKey) : null;
+            const matchedDriver = driverKey ? driverIdToNameMap.get(driverKey) : null;
+
+            let resolvedDriverName = r.driverName;
+            let resolvedDriverIsActive = r.driverIsActive;
+
+            if (!resolvedDriverName || resolvedDriverName.toLowerCase().trim() === driverKey || resolvedDriverName.toLowerCase().trim() === 'unassigned') {
+                if (matchedDriver?.name) {
+                    resolvedDriverName = matchedDriver.name;
+                    if (resolvedDriverIsActive === undefined || resolvedDriverIsActive === null) {
+                        resolvedDriverIsActive = matchedDriver.isActive;
+                    }
+                } else if (matchedDel?.courierFullName && matchedDel.courierFullName.toLowerCase().trim() !== driverKey) {
+                    resolvedDriverName = matchedDel.courierFullName;
+                    if (resolvedDriverIsActive === undefined || resolvedDriverIsActive === null) {
+                        resolvedDriverIsActive = matchedDel.courierIsActive;
+                    }
+                }
+            }
+
+            let resolvedTaskId = r.starsTaskId;
+            if (!resolvedTaskId || resolvedTaskId === '00000000-0000-0000-0000-000000000000') {
+                if (matchedDel?.taskId && matchedDel.taskId !== '00000000-0000-0000-0000-000000000000') {
+                    resolvedTaskId = matchedDel.taskId;
+                }
+            }
+
+            return {
+                ...r,
+                driverName: resolvedDriverName || r.driverName,
+                driverIsActive: resolvedDriverIsActive !== undefined ? resolvedDriverIsActive : r.driverIsActive,
+                starsTaskId: resolvedTaskId || r.starsTaskId,
+            };
+        });
+
+        return {
+            ...summaryData,
+            records: augmentedRecords,
+        };
+    }, [teamMembers, tasks]);
+
     const fetchDmsPerfData = useCallback(async (driver?: string) => {
         setDmsPerfLoading(true);
         try {
@@ -5453,7 +5556,8 @@ export const ReportsTab: React.FC<{
             const res = await api.get(`/api/integration/dms/performance-summary?${params.toString()}`);
             const json = res.data;
             if (json?.isSuccess && json?.data && Array.isArray(json.data.records) && json.data.records.length > 0) {
-                setDmsPerfData(json.data);
+                const augmented = await augmentDmsRecords(json.data);
+                setDmsPerfData(augmented);
                 return;
             }
         } catch {
@@ -5593,7 +5697,7 @@ export const ReportsTab: React.FC<{
         } finally {
             setDmsPerfLoading(false);
         }
-    }, [tasks]);
+    }, [tasks, augmentDmsRecords]);
 
     useEffect(() => {
         fetchDmsPerfData(dmsDriverFilter);
@@ -5620,7 +5724,7 @@ export const ReportsTab: React.FC<{
                     onTime: 0,
                     late: 0,
                 };
-            } else if (!driverMap[dId].driverName && r.driverName) {
+            } else if ((!driverMap[dId].driverName || driverMap[dId].driverName === dId) && r.driverName && r.driverName !== dId) {
                 driverMap[dId].driverName = r.driverName;
                 driverMap[dId].driverIsActive = r.driverIsActive;
             }
@@ -8084,28 +8188,36 @@ export const ReportsTab: React.FC<{
                                         <tbody>
                                             {pagedDmsRecords.map(r => {
                                                 const hasTaskId = Boolean(r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000');
+                                                const handleRecordClick = () => {
+                                                    if (hasTaskId && onViewTask) {
+                                                        onViewTask(r.starsTaskId!);
+                                                    } else {
+                                                        window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                                                            detail: { waybillNo: r.waybillNo }
+                                                        }));
+                                                        if (onNavigateToTab) {
+                                                            onNavigateToTab('dms');
+                                                        }
+                                                    }
+                                                };
                                                 return (
                                                     <tr
                                                         key={r.waybillNo}
-                                                        tabIndex={hasTaskId ? 0 : undefined}
-                                                        role={hasTaskId ? 'button' : undefined}
-                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : undefined}
-                                                        onClick={() => {
-                                                            if (hasTaskId && onViewTask) {
-                                                                onViewTask(r.starsTaskId!);
-                                                            }
-                                                        }}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : `Track delivery in DMS for waybill ${r.waybillNo}`}
+                                                        onClick={handleRecordClick}
                                                         onKeyDown={(e) => {
-                                                            if ((e.key === 'Enter' || e.key === ' ') && hasTaskId && onViewTask) {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
                                                                 e.preventDefault();
-                                                                onViewTask(r.starsTaskId!);
+                                                                handleRecordClick();
                                                             }
                                                         }}
                                                         style={{
                                                             borderBottom: '1px solid var(--border)',
-                                                            cursor: hasTaskId ? 'pointer' : 'default',
+                                                            cursor: 'pointer',
                                                         }}
-                                                        className={`dms-completion-row ${hasTaskId ? 'clickable-row' : ''}`}
+                                                        className="dms-completion-row clickable-row"
                                                         data-testid={`dms-record-row-${r.waybillNo}`}
                                                     >
                                                         <td style={{ padding: '8px 10px' }}>
@@ -8235,7 +8347,32 @@ export const ReportsTab: React.FC<{
                                                                     <ChevronRight size={12} />
                                                                 </a>
                                                             ) : (
-                                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No Task</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm btn-secondary"
+                                                                    data-testid={`dms-view-task-btn-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                                                                            detail: { waybillNo: r.waybillNo }
+                                                                        }));
+                                                                        if (onNavigateToTab) {
+                                                                            onNavigateToTab('dms');
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        fontSize: 11,
+                                                                        padding: '3px 8px',
+                                                                        height: 26,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                    }}
+                                                                    title="Track in DMS"
+                                                                >
+                                                                    <span>Track in DMS</span>
+                                                                    <ChevronRight size={12} />
+                                                                </button>
                                                             )}
                                                         </td>
                                                     </tr>
@@ -10461,6 +10598,7 @@ export default function OpsAdminDashboard() {
             setTeamMembers(rawList.map(e => ({
                 accountId: e.userId ?? e.UserId ?? e.id,
                 employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? '').trim(),
+                employeeNumber: (e.employeeNumber ?? e.EmployeeNumber ?? e.employeeId ?? e.EmployeeId ?? '').trim(),
                 role: e.role ?? '',
                 presenceStatus: e.availabilityStatus ?? e.AvailabilityStatus ?? 'Active',
                 departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : undefined),
