@@ -367,7 +367,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     useEffect(() => {
         if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
         const s = (selectedDelivery.dmsStatus || selectedDelivery.dmsRawStatus || '').toLowerCase();
-        const isTerminal = s.includes('delivered') || s.includes('completed') || s.includes('cancel');
+        const isTerminal = !s.includes('pending') && (s.includes('delivered') || s.includes('completed') || s.includes('cancel'));
         if (isTerminal) return;
 
         const intervalId = setInterval(async () => {
@@ -375,8 +375,16 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
                 const data = res?.data?.data ?? res?.data;
                 if (data) {
-                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
-                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...data } : d));
+                    const normStatus = (data.dmsStatus?.toLowerCase() === 'pending' || data.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (data.dmsStatus || 'Pending for Delivery');
+                    const updated = {
+                        ...data,
+                        dmsStatus: normStatus,
+                        dmsRawStatus: data.dmsRawStatus || data.dmsStatus || normStatus,
+                    };
+                    setSelectedDelivery(prev => prev ? { ...prev, ...updated } : null);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updated } : d));
                 }
             } catch {
                 // Silently ignore polling errors
@@ -460,6 +468,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
                     });
                     setDeliveries(sorted);
+                    setSelectedDelivery(prev => {
+                        if (!prev) return null;
+                        const match = sorted.find(d =>
+                            (prev.taskId && prev.taskId !== '00000000-0000-0000-0000-000000000000' && d.taskId === prev.taskId) ||
+                            (prev.dmsWaybillNo && d.dmsWaybillNo && d.dmsWaybillNo.toLowerCase() === prev.dmsWaybillNo.toLowerCase()) ||
+                            (prev.dmsOrderId && d.dmsOrderId === prev.dmsOrderId)
+                        );
+                        return match ? { ...prev, ...match } : prev;
+                    });
                     return;
                 }
             } catch {
@@ -622,6 +639,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             });
 
             setDeliveries(fetchedDeliveries);
+            setSelectedDelivery(prev => {
+                if (!prev) return null;
+                const match = fetchedDeliveries.find(d =>
+                    (prev.taskId && prev.taskId !== '00000000-0000-0000-0000-000000000000' && d.taskId === prev.taskId) ||
+                    (prev.dmsWaybillNo && d.dmsWaybillNo && d.dmsWaybillNo.toLowerCase() === prev.dmsWaybillNo.toLowerCase()) ||
+                    (prev.dmsOrderId && d.dmsOrderId === prev.dmsOrderId)
+                );
+                return match ? { ...prev, ...match } : prev;
+            });
         } catch {
             // Silently handle
         } finally {
@@ -670,12 +696,32 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         }
         setSyncingId(taskId);
         try {
-            await api.post(`/api/dms-integration/tasks/${taskId}/sync`, {});
+            const syncRes = await api.post(`/api/dms-integration/tasks/${taskId}/sync`, {});
+            const syncData = syncRes?.data?.data ?? syncRes?.data;
+            if (syncData) {
+                const normSt = (syncData.dmsStatus?.toLowerCase() === 'pending' || syncData.dmsStatus?.toLowerCase() === 'pending approval')
+                    ? 'Pending for Delivery'
+                    : (syncData.dmsStatus || 'Pending for Delivery');
+                setDeliveries(prev => prev.map(d => d.taskId === taskId ? { ...d, ...syncData, dmsStatus: normSt, dmsRawStatus: syncData.dmsRawStatus || normSt } : d));
+                if (selectedDelivery?.taskId === taskId) {
+                    setSelectedDelivery(prev => prev ? { ...prev, ...syncData, dmsStatus: normSt, dmsRawStatus: syncData.dmsRawStatus || normSt } : null);
+                }
+            }
             toastSuccess('Re-synced with DMS successfully.');
             await fetchDeliveries();
         } catch (err: any) {
             try {
-                await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+                const resendRes = await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+                const resendData = resendRes?.data?.data ?? resendRes?.data;
+                if (resendData) {
+                    const normSt = (resendData.dmsStatus?.toLowerCase() === 'pending' || resendData.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (resendData.dmsStatus || 'Pending for Delivery');
+                    setDeliveries(prev => prev.map(d => d.taskId === taskId ? { ...d, ...resendData, dmsStatus: normSt, dmsRawStatus: resendData.dmsRawStatus || normSt } : d));
+                    if (selectedDelivery?.taskId === taskId) {
+                        setSelectedDelivery(prev => prev ? { ...prev, ...resendData, dmsStatus: normSt, dmsRawStatus: resendData.dmsRawStatus || normSt } : null);
+                    }
+                }
                 toastSuccess('Dispatched and re-synced with DMS.');
                 await fetchDeliveries();
             } catch (fallbackErr: any) {
@@ -691,22 +737,80 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         if (!selectedDelivery?.taskId) return;
         setSyncingId(selectedDelivery.taskId);
         try {
-            await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
-            const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-            const data = res?.data?.data ?? res?.data;
-            if (data) {
-                setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+            const syncRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
+            const syncData = syncRes?.data?.data ?? syncRes?.data;
+
+            const [podRes, ddRes] = await Promise.allSettled([
+                api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+            ]);
+
+            const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || syncData;
+            if (ddData) {
+                const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
+                    ? 'Pending for Delivery'
+                    : (ddData.dmsStatus || 'Pending for Delivery');
+
+                const updatedItem: DmsDeliveryItem = {
+                    ...selectedDelivery,
+                    ...ddData,
+                    dmsStatus: normalizedStatus,
+                    dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
+                };
+
+                setSelectedDelivery(updatedItem);
+                setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updatedItem } : d));
             }
+
+            if (podRes.status === 'fulfilled') {
+                const pJson = podRes.value?.data;
+                const pData = pJson?.data ?? pJson;
+                if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                    setPodData(pData);
+                } else {
+                    setPodData(null);
+                }
+            }
+
             toastSuccess('Re-synced with DMS successfully.');
             await fetchDeliveries();
         } catch (err: any) {
             try {
-                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
-                const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-                const data = res?.data?.data ?? res?.data;
-                if (data) {
-                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+                const resendRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
+                const resendData = resendRes?.data?.data ?? resendRes?.data;
+
+                const [podRes, ddRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                ]);
+
+                const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || resendData;
+                if (ddData) {
+                    const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (ddData.dmsStatus || 'Pending for Delivery');
+
+                    const updatedItem: DmsDeliveryItem = {
+                        ...selectedDelivery,
+                        ...ddData,
+                        dmsStatus: normalizedStatus,
+                        dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
+                    };
+
+                    setSelectedDelivery(updatedItem);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updatedItem } : d));
                 }
+
+                if (podRes.status === 'fulfilled') {
+                    const pJson = podRes.value?.data;
+                    const pData = pJson?.data ?? pJson;
+                    if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                        setPodData(pData);
+                    } else {
+                        setPodData(null);
+                    }
+                }
+
                 toastSuccess('Dispatched and re-synced with DMS.');
                 await fetchDeliveries();
             } catch (fallbackErr: any) {
@@ -716,6 +820,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         } finally {
             setSyncingId(null);
         }
+    };
+
+    const handleRefreshAll = async () => {
+        if (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000') {
+            try {
+                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
+            } catch {
+                // Best effort sync on refresh
+            }
+        }
+        await fetchDeliveries();
     };
 
     // Filter, search, and sort (most recent created record first)
@@ -1636,7 +1751,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     <button
                         type="button"
                         className="dms-action-btn dms-refresh-btn"
-                        onClick={() => fetchDeliveries()}
+                        onClick={handleRefreshAll}
                         disabled={loading}
                     >
                         <RefreshCw size={13} className={loading ? 'spin' : ''} />

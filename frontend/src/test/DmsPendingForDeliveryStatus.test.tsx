@@ -194,6 +194,83 @@ describe('STARS-DMS Integ 2: "Pending for Delivery" Status Display Fix', () => {
                 expect(screen.queryByText(/Stage 7 of 7/i)).not.toBeInTheDocument();
             });
         });
+        it('single click on "Sync with DMS" updates delivery status and POD immediately without multiple refreshes', async () => {
+            const initialMockDelivery: DmsDeliveryItem = {
+                taskId: 'task-sync-single-01',
+                taskTitle: 'Express Logistics Parcel',
+                recipientName: 'Apex Health',
+                recipientContact: '09191112222',
+                deliveryAddress: 'Quezon City Hospital',
+                dmsWaybillNo: 'WB-2026-SYNC-01',
+                dmsStatus: 'Pending',
+                dmsRawStatus: 'Pending',
+                syncStatus: 'Synced',
+            };
+
+            const updatedMockDelivery: DmsDeliveryItem = {
+                ...initialMockDelivery,
+                dmsStatus: 'In Transit',
+                dmsRawStatus: 'In Transit',
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [initialMockDelivery] } };
+                }
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { isSuccess: true, data: { totalDeliveries: 1, onTimeCount: 0, lateCount: 0, onTimePercentage: 100 } } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: initialMockDelivery } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            vi.mocked(api.post).mockImplementation(async (url: string) => {
+                if (url.includes('/sync')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: updatedMockDelivery,
+                        },
+                    };
+                }
+                return { data: { isSuccess: true } };
+            });
+
+            const { fireEvent } = await import('@testing-library/react');
+            render(<DmsDeliveryTab tasks={[]} onViewTask={vi.fn()} initialWaybillNo="WB-2026-SYNC-01" />);
+
+            await waitFor(() => {
+                expect(screen.getByText(/Stage 1 of 7/i)).toBeInTheDocument();
+            });
+
+            // Mock subsequent GET returns updated delivery after sync
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries') || url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: [updatedMockDelivery] } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            const syncBtn = screen.getByRole('button', { name: /Sync with DMS/i });
+            fireEvent.click(syncBtn);
+
+            // After a single sync click, status must immediately advance to In Transit
+            await waitFor(() => {
+                expect(screen.getByText(/In Transit/i)).toBeInTheDocument();
+            });
+            expect(api.post).toHaveBeenCalledWith(
+                expect.stringContaining('/tasks/task-sync-single-01/sync'),
+                expect.anything()
+            );
+        });
     });
 
     describe('TaskView delivery status tag', () => {

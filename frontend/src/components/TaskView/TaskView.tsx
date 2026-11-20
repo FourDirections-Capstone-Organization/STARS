@@ -981,16 +981,22 @@ const TaskView: React.FC<TaskViewProps> = ({
 
             const res = await api.post(endpoint, {});
             const savedData = res?.data?.data ?? res?.data;
-            setDeliveryDetail(savedData);
-            await fetchPodData(true);
+            if (savedData) {
+                const normSt = (savedData?.dmsRawStatus || savedData?.dmsStatus || '').toLowerCase();
+                const displaySt = formatDeliveryStatus(savedData.dmsStatus);
+                setDeliveryDetail({
+                    ...savedData,
+                    dmsStatus: displaySt,
+                });
+                await fetchPodData(true);
 
-            const normSt = (savedData?.dmsRawStatus || savedData?.dmsStatus || '').toLowerCase();
-            if (normSt.includes('delivered') || normSt.includes('completed')) {
-                toastSuccess('Delivery confirmed as Delivered in DMS! STARS task updated.');
-            } else if (savedData?.dmsWaybillNo) {
-                toastSuccess(`Delivery synced with DMS! Status: ${savedData.dmsStatus || 'Active'}`);
-            } else {
-                toastSuccess('Dispatched to DMS successfully.');
+                if (!normSt.includes('pending') && (normSt.includes('delivered') || normSt.includes('completed'))) {
+                    toastSuccess('Delivery confirmed as Delivered in DMS! STARS task updated.');
+                } else if (savedData?.dmsWaybillNo) {
+                    toastSuccess(`Delivery synced with DMS! Status: ${displaySt}`);
+                } else {
+                    toastSuccess('Dispatched to DMS successfully.');
+                }
             }
         } catch (err: any) {
             // Re-fetch latest delivery state silently to check if order reached Delivered
