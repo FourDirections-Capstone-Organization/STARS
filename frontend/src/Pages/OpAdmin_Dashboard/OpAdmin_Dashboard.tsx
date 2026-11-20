@@ -986,6 +986,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
         dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
         dmsStatus: (initial as any)?.deliveryDetails?.dmsStatus ?? '',
+        taskType: (initial as any)?.deliveryDetails?.taskType ?? '',
+        packageType: (initial as any)?.deliveryDetails?.packageType ?? '',
+        weight: (initial as any)?.deliveryDetails?.weight ?? '',
+        itemCount: (initial as any)?.deliveryDetails?.itemCount ?? undefined,
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1423,6 +1427,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
+                taskType: (deliveryForm as any).taskType || undefined,
+                packageType: (deliveryForm as any).packageType || undefined,
+                weight: (deliveryForm as any).weight || undefined,
+                itemCount: (deliveryForm as any).itemCount != null ? Number((deliveryForm as any).itemCount) : undefined,
                 isHistoricalDeadline,
                 originalExpectedDelivery: originalExpectedDelivery || (deliveryForm as any).originalExpectedDelivery || undefined,
             };
@@ -2325,6 +2333,50 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     placeholder="e.g. Ricardo Bautista"
                                                     style={{ fontSize: 12 }}
                                                     data-testid="pre-delivery-courier-name-input"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Item Count</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={(deliveryForm as any).itemCount ?? ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, itemCount: e.target.value ? parseInt(e.target.value, 10) : undefined } as any))}
+                                                    placeholder="e.g. 3"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-item-count"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Weight</label>
+                                                <input
+                                                    value={(deliveryForm as any).weight || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, weight: e.target.value } as any))}
+                                                    placeholder="e.g. 2.5 kg"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-weight"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Package Type</label>
+                                                <input
+                                                    value={(deliveryForm as any).packageType || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, packageType: e.target.value } as any))}
+                                                    placeholder="e.g. Box, Parcel"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-package-type"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Task Type</label>
+                                                <input
+                                                    value={(deliveryForm as any).taskType || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, taskType: e.target.value } as any))}
+                                                    placeholder="e.g. Standard Delivery"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-task-type"
                                                 />
                                             </div>
                                         </div>
@@ -9736,6 +9788,10 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
+            taskType: order.taskType,
+            packageType: order.packageType,
+            weight: order.weight,
+            itemCount: order.itemCount,
             isHistoricalDeadline,
             originalExpectedDelivery,
         }

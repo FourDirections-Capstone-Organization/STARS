@@ -84,6 +84,10 @@ export interface UpsertDeliveryDetailPayload {
     specialInstructions?: string;
     courierEmployeeId?: string;
     courierFullName?: string;
+    taskType?: string;
+    packageType?: string;
+    weight?: string;
+    itemCount?: number;
 }
 
 type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';
@@ -873,10 +877,24 @@ const TaskView: React.FC<TaskViewProps> = ({
         if (!task.taskId) return;
         if (!silent) setDeliveryLoading(true);
         try {
-            const res = await api.get<any>(`/api/dms-integration/tasks/${task.taskId}/delivery-details`);
-            const json = res.data;
+            const [res, pendingRes] = await Promise.allSettled([
+                api.get<any>(`/api/dms-integration/tasks/${task.taskId}/delivery-details`),
+                api.get<any>('/api/dms-integration/pending-orders'),
+            ]);
+            const json = res.status === 'fulfilled' ? res.value?.data : null;
             const data = json?.data ?? json;
             if (data && (data.recipientName || data.dmsWaybillNo || data.syncStatus)) {
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (data.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(data.dmsWaybillNo).toLowerCase()) ||
+                            (data.dmsOrderId && p.orderId && p.orderId === data.dmsOrderId)
+                        );
+                    }
+                }
+
                 const taskDel = (task as any).deliveryDetails;
                 let resolvedCourierName = data.courierFullName;
                 const cleanEmpId = (data.courierEmployeeId || '').trim();
@@ -893,13 +911,39 @@ const TaskView: React.FC<TaskViewProps> = ({
                         resolvedCourierName = task.assignedEmployee;
                     }
                 }
+
+                // Check accurate logistics details from DMS
+                let itemCount = data.itemCount ?? taskDel?.itemCount ?? (task as any).itemCount;
+                if ((itemCount == null || itemCount <= 1) && matchedPending?.itemCount && matchedPending.itemCount > 1) {
+                    itemCount = matchedPending.itemCount;
+                }
+                if (itemCount == null) itemCount = 1;
+
+                let taskType = data.taskType || taskDel?.taskType || (task as any).taskType;
+                if ((!taskType || taskType === 'Standard Delivery') && matchedPending?.taskType) {
+                    taskType = matchedPending.taskType;
+                }
+                if (!taskType) taskType = 'Standard Delivery';
+
+                let packageType = data.packageType || taskDel?.packageType || (task as any).packageType;
+                if ((!packageType || packageType === 'Parcel') && matchedPending?.packageType) {
+                    packageType = matchedPending.packageType;
+                }
+                if (!packageType) packageType = 'Parcel';
+
+                let weight = data.weight || taskDel?.weight || (task as any).weight;
+                if ((!weight || weight === '—' || weight === '1.0 kg') && matchedPending?.weight) {
+                    weight = matchedPending.weight;
+                }
+                if (!weight) weight = '1.0 kg';
+
                 const enriched: TaskDeliveryDetailData = {
                     ...data,
                     courierFullName: resolvedCourierName || data.courierFullName,
-                    taskType: data.taskType || taskDel?.taskType || (task as any).taskType || 'Standard Delivery',
-                    packageType: data.packageType || taskDel?.packageType || (task as any).packageType || 'Parcel',
-                    weight: data.weight || taskDel?.weight || (task as any).weight || '1.0 kg',
-                    itemCount: data.itemCount ?? taskDel?.itemCount ?? (task as any).itemCount ?? 1,
+                    taskType,
+                    packageType,
+                    weight,
+                    itemCount,
                 };
                 setDeliveryDetail(enriched);
                 if (!silent) {
@@ -913,6 +957,10 @@ const TaskView: React.FC<TaskViewProps> = ({
                         specialInstructions: data.specialInstructions || '',
                         courierEmployeeId: data.courierEmployeeId || '',
                         courierFullName: resolvedCourierName || data.courierFullName || '',
+                        taskType,
+                        packageType,
+                        weight,
+                        itemCount,
                     });
                 }
             } else if (!silent) {
@@ -953,7 +1001,14 @@ const TaskView: React.FC<TaskViewProps> = ({
         try {
             const res = await api.put(`/api/dms-integration/tasks/${task.taskId}/delivery-details`, editingDelivery);
             const savedData = res?.data?.data ?? res?.data;
-            setDeliveryDetail(savedData);
+            setDeliveryDetail(prev => ({
+                ...(prev || {}),
+                ...(savedData || {}),
+                itemCount: savedData?.itemCount ?? editingDelivery.itemCount ?? prev?.itemCount ?? 1,
+                taskType: savedData?.taskType || editingDelivery.taskType || prev?.taskType,
+                packageType: savedData?.packageType || editingDelivery.packageType || prev?.packageType,
+                weight: savedData?.weight || editingDelivery.weight || prev?.weight,
+            }));
             setShowEditDeliveryModal(false);
             toastSuccess('Delivery details saved successfully.');
         } catch (err: any) {
@@ -3369,6 +3424,51 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 courierFullName: (deliveryDetail?.courierEmployeeId === val ? deliveryDetail?.courierFullName : prev.courierFullName) || ''
                                             }));
                                         }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="tv-form-row tv-form-row-2">
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Item Count</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        className="tv-form-input"
+                                        placeholder="e.g. 3"
+                                        value={editingDelivery.itemCount ?? ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, itemCount: e.target.value ? parseInt(e.target.value, 10) : undefined }))}
+                                    />
+                                </div>
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Weight</label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. 2.5 kg"
+                                        value={editingDelivery.weight || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, weight: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="tv-form-row tv-form-row-2">
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Package Type</label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. Parcel, Box"
+                                        value={editingDelivery.packageType || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, packageType: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="tv-form-group">
+                                    <label className="tv-form-label">Task Type</label>
+                                    <input
+                                        type="text"
+                                        className="tv-form-input"
+                                        placeholder="e.g. Standard Delivery"
+                                        value={editingDelivery.taskType || ''}
+                                        onChange={e => setEditingDelivery(prev => ({ ...prev, taskType: e.target.value }))}
                                     />
                                 </div>
                             </div>

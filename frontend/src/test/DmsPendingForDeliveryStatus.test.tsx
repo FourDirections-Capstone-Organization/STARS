@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { formatDeliveryStatus } from '../utils/statusUtils';
 import { syncDmsTaskCompleted } from '../utils/dmsSyncUtils';
 import { DmsDeliveryTab, DmsDeliveryItem } from '../components/DmsDeliveryTab/DmsDeliveryTab';
@@ -309,6 +309,155 @@ describe('STARS-DMS Integ 2: "Pending for Delivery" Status Display Fix', () => {
                 expect(statusBadge).toBeInTheDocument();
                 expect(statusBadge).toHaveTextContent('Status: Pending for Delivery');
                 expect(statusBadge).not.toHaveTextContent('Status: Delivered');
+            });
+        });
+    });
+
+    describe('DMS Order Details & POD Synchronization (Bug 3 & Bug 4)', () => {
+        it('accurately displays DMS order item count 3 instead of default 1 in DmsDeliveryTab', async () => {
+            const mockDeliveryWithDefaultItem: DmsDeliveryItem = {
+                taskId: 'task-item-count-test',
+                taskTitle: 'Pre-Delivery Validation',
+                recipientName: 'Metro Client',
+                recipientContact: '09191112222',
+                deliveryAddress: '456 Business Ave',
+                dmsWaybillNo: 'WB-ITEM-333',
+                dmsOrderId: 888,
+                dmsStatus: 'Pending for Delivery',
+                itemCount: 1, // Backend or STARS default
+                weight: '1.0 kg',
+                packageType: 'Parcel',
+            };
+
+            const mockPendingDmsOrders = [
+                {
+                    orderId: 888,
+                    waybillNo: 'WB-ITEM-333',
+                    recipientName: 'Metro Client',
+                    recipientContact: '09191112222',
+                    recipientAddress: '456 Business Ave',
+                    itemCount: 3, // Actual DMS order has 3 items
+                    weight: '4.5 kg',
+                    packageType: 'Heavy Carton',
+                    taskType: 'Priority Cargo',
+                    status: 'Pending',
+                },
+            ];
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [mockDeliveryWithDefaultItem] } };
+                }
+                if (url.includes('/api/dms-integration/pending-orders')) {
+                    return { data: { isSuccess: true, data: mockPendingDmsOrders } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                ...mockDeliveryWithDefaultItem,
+                                itemCount: 1, // Default from backend detail
+                            },
+                        },
+                    };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} initialWaybillNo="WB-ITEM-333" />);
+
+            await waitFor(() => {
+                const itemCountVal = screen.getByTestId('dms-detail-item-count');
+                expect(itemCountVal).toHaveTextContent('3 item(s)');
+                expect(screen.getByTestId('dms-detail-weight')).toHaveTextContent('4.5 kg');
+                expect(screen.getByTestId('dms-detail-package-type')).toHaveTextContent('Heavy Carton');
+                expect(screen.getByTestId('dms-detail-task-type')).toHaveTextContent('Priority Cargo');
+            });
+        });
+
+        it('shows POD empty state while pending, and displays POD preview when courier uploads POD on DMS', async () => {
+            const pendingDelivery: DmsDeliveryItem = {
+                taskId: 'task-pod-sync-test',
+                taskTitle: 'Deliver Electronics',
+                recipientName: 'Gadget Store',
+                recipientContact: '09170001111',
+                deliveryAddress: 'Tech Mall',
+                dmsWaybillNo: 'WB-POD-999',
+                dmsOrderId: 999,
+                dmsStatus: 'Pending for Delivery',
+                itemCount: 3,
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [pendingDelivery] } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: pendingDelivery } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            const { rerender } = render(<DmsDeliveryTab onViewTask={vi.fn()} initialWaybillNo="WB-POD-999" />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('dms-pod-empty')).toBeInTheDocument();
+                expect(screen.getByText(/No Proof of Delivery Attached/i)).toBeInTheDocument();
+            });
+
+            // Courier uploads POD on DMS side and delivery completes
+            const deliveredWithPod: DmsDeliveryItem = {
+                ...pendingDelivery,
+                dmsStatus: 'Delivered',
+                podUrl: 'https://dms.example/pod/WB-POD-999.jpg',
+            };
+
+            vi.mocked(api.post).mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    data: deliveredWithPod,
+                },
+            } as any);
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [deliveredWithPod] } };
+                }
+                if (url.includes('/pod')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'task-pod-sync-test',
+                                waybillNo: 'WB-POD-999',
+                                fileName: 'POD_WB-POD-999.jpg',
+                                contentType: 'image/jpeg',
+                                hasPod: true,
+                                podUrl: 'https://dms.example/pod/WB-POD-999.jpg',
+                                downloadUrl: '/api/dms-integration/tasks/task-pod-sync-test/pod/download',
+                            },
+                        },
+                    };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: deliveredWithPod } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            // Trigger sync to reflect uploaded POD on STARS
+            const syncBtn = screen.getByRole('button', { name: /Sync with DMS/i });
+            fireEvent.click(syncBtn);
+
+            await waitFor(() => {
+                expect(screen.queryByTestId('dms-pod-empty')).not.toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-content')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-view-btn')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-download-btn')).toBeInTheDocument();
             });
         });
     });

@@ -200,19 +200,49 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             setPodLoading(true);
             setPodError(null);
             try {
-                const [podRes, ddRes] = await Promise.allSettled([
+                const [podRes, ddRes, pendingRes] = await Promise.allSettled([
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get('/api/dms-integration/pending-orders'),
                 ]);
 
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
+                }
+
+                let ddData: any = null;
                 if (active && ddRes.status === 'fulfilled') {
-                    const ddData = ddRes.value?.data?.data ?? ddRes.value?.data;
+                    ddData = ddRes.value?.data?.data ?? ddRes.value?.data;
                     if (ddData) {
+                        const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                            ? ddData.itemCount
+                            : (matchedPending?.itemCount ?? ddData.itemCount);
+                        const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                            ? ddData.taskType
+                            : (matchedPending?.taskType || ddData.taskType);
+                        const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                            ? ddData.packageType
+                            : (matchedPending?.packageType || ddData.packageType);
+                        const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                            ? ddData.weight
+                            : (matchedPending?.weight || ddData.weight);
+
                         setSelectedDelivery(prev => {
                             if (!prev || prev.taskId !== selectedDelivery.taskId) return prev;
                             return {
                                 ...prev,
                                 ...ddData,
+                                itemCount: accurateItemCount ?? prev.itemCount,
+                                taskType: accurateTaskType || prev.taskType,
+                                packageType: accuratePackageType || prev.packageType,
+                                weight: accurateWeight || prev.weight,
                                 courierFullName: ddData.courierFullName || prev.courierFullName,
                                 courierEmployeeId: ddData.courierEmployeeId || prev.courierEmployeeId,
                                 courierIsActive: ddData.courierIsActive !== undefined ? ddData.courierIsActive : prev.courierIsActive,
@@ -230,6 +260,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     const d = json?.data ?? json;
                     if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
                         setPodData(d);
+                    } else if (ddData?.podUrl || selectedDelivery?.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery?.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
                     } else {
                         setPodData(null);
                     }
@@ -237,6 +278,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     const err: any = podRes.reason;
                     if (err?.response?.status === 403) {
                         setPodError('Access denied: You do not have permission to view Proof of Delivery.');
+                    } else if (ddData?.podUrl || selectedDelivery?.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery?.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
                     } else if (err?.response?.status !== 404) {
                         setPodError('Unable to load Proof of Delivery details.');
                     } else {
@@ -372,19 +424,59 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
         const intervalId = setInterval(async () => {
             try {
-                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-                const data = res?.data?.data ?? res?.data;
+                const [ddRes, podRes, pendingRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+                const data = ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null;
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
+                }
+
                 if (data) {
+                    const accurateItemCount = (data.itemCount != null && data.itemCount > 1)
+                        ? data.itemCount
+                        : (matchedPending?.itemCount ?? data.itemCount);
+                    const accurateTaskType = (data.taskType && data.taskType !== 'Standard Delivery')
+                        ? data.taskType
+                        : (matchedPending?.taskType || data.taskType);
+                    const accuratePackageType = (data.packageType && data.packageType !== 'Parcel')
+                        ? data.packageType
+                        : (matchedPending?.packageType || data.packageType);
+                    const accurateWeight = (data.weight && data.weight !== '—' && data.weight !== '1.0 kg')
+                        ? data.weight
+                        : (matchedPending?.weight || data.weight);
+
                     const normStatus = (data.dmsStatus?.toLowerCase() === 'pending' || data.dmsStatus?.toLowerCase() === 'pending approval')
                         ? 'Pending for Delivery'
                         : (data.dmsStatus || 'Pending for Delivery');
                     const updated = {
                         ...data,
+                        itemCount: accurateItemCount ?? data.itemCount,
+                        taskType: accurateTaskType || data.taskType,
+                        packageType: accuratePackageType || data.packageType,
+                        weight: accurateWeight || data.weight,
                         dmsStatus: normStatus,
                         dmsRawStatus: data.dmsRawStatus || data.dmsStatus || normStatus,
                     };
                     setSelectedDelivery(prev => prev ? { ...prev, ...updated } : null);
                     setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updated } : d));
+                }
+
+                if (podRes.status === 'fulfilled') {
+                    const pJson = podRes.value?.data;
+                    const pData = pJson?.data ?? pJson;
+                    if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                        setPodData(pData);
+                    }
                 }
             } catch {
                 // Silently ignore polling errors
@@ -429,10 +521,65 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
             // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
             try {
-                const res = await api.get('/api/dms-integration/deliveries');
-                const list = res?.data?.data ?? res?.data;
+                const [res, pendingRes] = await Promise.allSettled([
+                    api.get('/api/dms-integration/deliveries'),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+                const list = res.status === 'fulfilled' ? (res.value?.data?.data ?? res.value?.data) : null;
+                const pendingList = pendingRes.status === 'fulfilled' ? (pendingRes.value?.data?.data ?? pendingRes.value?.data) : null;
+
+                const pendingMapByWaybill = new Map<string, any>();
+                const pendingMapById = new Map<number, any>();
+                if (Array.isArray(pendingList)) {
+                    pendingList.forEach((p: any) => {
+                        if (p.waybillNo) pendingMapByWaybill.set(String(p.waybillNo).toLowerCase(), p);
+                        if (p.orderId) pendingMapById.set(Number(p.orderId), p);
+                    });
+                }
+
                 if (Array.isArray(list) && list.length > 0) {
                     list.forEach((item: DmsDeliveryItem) => {
+                        const matchedPending = (item.dmsWaybillNo ? pendingMapByWaybill.get(item.dmsWaybillNo.toLowerCase()) : null) ||
+                            (item.dmsOrderId ? pendingMapById.get(Number(item.dmsOrderId)) : null);
+                        if (matchedPending) {
+                            if (matchedPending.itemCount != null && (!item.itemCount || (item.itemCount <= 1 && matchedPending.itemCount > 1))) {
+                                item.itemCount = matchedPending.itemCount;
+                            }
+                            if (matchedPending.taskType && (!item.taskType || item.taskType === 'Standard Delivery')) {
+                                item.taskType = matchedPending.taskType;
+                            }
+                            if (matchedPending.packageType && (!item.packageType || item.packageType === 'Parcel')) {
+                                item.packageType = matchedPending.packageType;
+                            }
+                            if (matchedPending.weight && (!item.weight || item.weight === '—' || item.weight === '1.0 kg')) {
+                                item.weight = matchedPending.weight;
+                            }
+                            if (matchedPending.packageDescription && (!item.packageDescription || item.packageDescription === 'Delivery Task' || item.packageDescription === 'Parcel')) {
+                                item.packageDescription = matchedPending.packageDescription;
+                            }
+                            if (matchedPending.specialInstructions && !item.specialInstructions) {
+                                item.specialInstructions = matchedPending.specialInstructions;
+                            }
+                            if (matchedPending.recipientName && (!item.recipientName || item.recipientName === 'Operations Dispatch')) {
+                                item.recipientName = matchedPending.recipientName;
+                            }
+                            if (matchedPending.recipientContact && (!item.recipientContact || item.recipientContact === '—')) {
+                                item.recipientContact = matchedPending.recipientContact;
+                            }
+                            if (matchedPending.recipientAddress && (!item.deliveryAddress || item.deliveryAddress === 'Metro Manila')) {
+                                item.deliveryAddress = matchedPending.recipientAddress;
+                            }
+                            if (matchedPending.area && !item.area) {
+                                item.area = matchedPending.area;
+                            }
+                            if ((matchedPending.driverName || matchedPending.courierFullName) && (!item.courierFullName || item.courierFullName === 'Unassigned')) {
+                                item.courierFullName = matchedPending.driverName || matchedPending.courierFullName;
+                            }
+                            if (matchedPending.driverEmployeeId && !item.courierEmployeeId) {
+                                item.courierEmployeeId = matchedPending.driverEmployeeId;
+                            }
+                        }
+
                         const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                         const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
                         if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
@@ -460,6 +607,47 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                             list.push(savedDelivered);
                         }
                     });
+
+                    // Merge unlinked pending orders from DMS
+                    if (Array.isArray(pendingList) && pendingList.length > 0) {
+                        const existingWaybills = new Set(list.map((d: any) => d.dmsWaybillNo?.toLowerCase()).filter(Boolean));
+                        const existingOrderIds = new Set(list.map((d: any) => d.dmsOrderId).filter((id: any) => id != null));
+                        const unlinkedPending = pendingList
+                            .filter((p: any) => {
+                                if (p.orderId && existingOrderIds.has(p.orderId)) return false;
+                                if (p.waybillNo && existingWaybills.has(String(p.waybillNo).toLowerCase())) return false;
+                                return true;
+                            })
+                            .map((p: any) => ({
+                                taskId: '',
+                                taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
+                                taskNumber: undefined,
+                                taskReferenceNumber: undefined,
+                                recipientName: p.recipientName || 'Operations Dispatch',
+                                recipientContact: p.recipientContact || p.contactNumber || '—',
+                                deliveryAddress: p.recipientAddress || 'Metro Manila',
+                                area: p.area || '',
+                                packageDescription: p.packageDescription || '',
+                                senderAddress: p.senderAddress,
+                                specialInstructions: p.specialInstructions,
+                                courierEmployeeId: p.driverEmployeeId || p.driverId || '',
+                                courierFullName: p.courierFullName || p.driverName,
+                                courierIsActive: p.driverIsActive,
+                                dmsWaybillNo: p.waybillNo,
+                                taskType: p.taskType || 'Standard Delivery',
+                                packageType: p.packageType || 'Parcel',
+                                weight: p.weight || '1.0 kg',
+                                itemCount: p.itemCount != null ? p.itemCount : 1,
+                                dmsOrderId: p.orderId,
+                                dmsStatus: (p.status?.toLowerCase() === 'pending' || p.status?.toLowerCase() === 'pending approval') ? 'Pending for Delivery' : (p.status || 'Pending for Delivery'),
+                                dmsRawStatus: p.status || 'Pending',
+                                syncStatus: 'Synced',
+                                createdAt: p.orderDate || p.createdAt,
+                                expectedDelivery: p.expectedDelivery,
+                                expectedDeliveryDate: p.expectedDeliveryDate,
+                            } as DmsDeliveryItem));
+                        list.push(...unlinkedPending);
+                    }
 
                     const sorted = [...list].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -740,20 +928,49 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             const syncRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
             const syncData = syncRes?.data?.data ?? syncRes?.data;
 
-            const [podRes, ddRes] = await Promise.allSettled([
+            const [podRes, ddRes, pendingRes] = await Promise.allSettled([
                 api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
                 api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                api.get('/api/dms-integration/pending-orders'),
             ]);
 
             const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || syncData;
+            let matchedPending: any = null;
+            if (pendingRes.status === 'fulfilled') {
+                const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                if (Array.isArray(pList)) {
+                    matchedPending = pList.find((p: any) =>
+                        (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                        (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                    );
+                }
+            }
+
             if (ddData) {
                 const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
                     ? 'Pending for Delivery'
                     : (ddData.dmsStatus || 'Pending for Delivery');
 
+                const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                    ? ddData.itemCount
+                    : (matchedPending?.itemCount ?? ddData.itemCount ?? selectedDelivery.itemCount);
+                const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                    ? ddData.taskType
+                    : (matchedPending?.taskType || ddData.taskType || selectedDelivery.taskType);
+                const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                    ? ddData.packageType
+                    : (matchedPending?.packageType || ddData.packageType || selectedDelivery.packageType);
+                const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                    ? ddData.weight
+                    : (matchedPending?.weight || ddData.weight || selectedDelivery.weight);
+
                 const updatedItem: DmsDeliveryItem = {
                     ...selectedDelivery,
                     ...ddData,
+                    itemCount: accurateItemCount,
+                    taskType: accurateTaskType,
+                    packageType: accuratePackageType,
+                    weight: accurateWeight,
                     dmsStatus: normalizedStatus,
                     dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
                 };
@@ -767,9 +984,31 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const pData = pJson?.data ?? pJson;
                 if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
                     setPodData(pData);
+                } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                    setPodData({
+                        taskId: selectedDelivery.taskId,
+                        waybillNo: selectedDelivery.dmsWaybillNo,
+                        hasPod: true,
+                        podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                        downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                        fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                        uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                        uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                    });
                 } else {
                     setPodData(null);
                 }
+            } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                setPodData({
+                    taskId: selectedDelivery.taskId,
+                    waybillNo: selectedDelivery.dmsWaybillNo,
+                    hasPod: true,
+                    podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                    downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                    fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                    uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                    uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                });
             }
 
             toastSuccess('Re-synced with DMS successfully.');
@@ -779,20 +1018,49 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const resendRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
                 const resendData = resendRes?.data?.data ?? resendRes?.data;
 
-                const [podRes, ddRes] = await Promise.allSettled([
+                const [podRes, ddRes, pendingRes] = await Promise.allSettled([
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get('/api/dms-integration/pending-orders'),
                 ]);
 
                 const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || resendData;
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
+                }
+
                 if (ddData) {
                     const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
                         ? 'Pending for Delivery'
                         : (ddData.dmsStatus || 'Pending for Delivery');
 
+                    const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                        ? ddData.itemCount
+                        : (matchedPending?.itemCount ?? ddData.itemCount ?? selectedDelivery.itemCount);
+                    const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                        ? ddData.taskType
+                        : (matchedPending?.taskType || ddData.taskType || selectedDelivery.taskType);
+                    const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                        ? ddData.packageType
+                        : (matchedPending?.packageType || ddData.packageType || selectedDelivery.packageType);
+                    const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                        ? ddData.weight
+                        : (matchedPending?.weight || ddData.weight || selectedDelivery.weight);
+
                     const updatedItem: DmsDeliveryItem = {
                         ...selectedDelivery,
                         ...ddData,
+                        itemCount: accurateItemCount,
+                        taskType: accurateTaskType,
+                        packageType: accuratePackageType,
+                        weight: accurateWeight,
                         dmsStatus: normalizedStatus,
                         dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
                     };
@@ -806,9 +1074,31 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     const pData = pJson?.data ?? pJson;
                     if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
                         setPodData(pData);
+                    } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
                     } else {
                         setPodData(null);
                     }
+                } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                    setPodData({
+                        taskId: selectedDelivery.taskId,
+                        waybillNo: selectedDelivery.dmsWaybillNo,
+                        hasPod: true,
+                        podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                        downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                        fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                        uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                        uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                    });
                 }
 
                 toastSuccess('Dispatched and re-synced with DMS.');
@@ -1489,7 +1779,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                     <FileCheck size={28} className="dms-pod-empty-icon" />
                                     <p className="dms-pod-empty-title">No Proof of Delivery Attached</p>
                                     <p className="dms-pod-empty-sub">
-                                        The courier has not uploaded a digital POD signature or delivery photo yet.
+                                        The courier has not uploaded a digital POD signature or delivery photo yet. Once the courier completes delivery on DMS and uploads the POD, it will automatically reflect here.
                                     </p>
                                 </div>
                             )}

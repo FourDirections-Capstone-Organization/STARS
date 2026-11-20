@@ -685,7 +685,7 @@ export const PreDeliveryTab: React.FC<PreDeliveryTabProps> = ({
                                                 <td>
                                                     <div>{order.packageDescription || 'Parcel'}</div>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                        {order.weight || '1.0 kg'} • {order.packageType || 'Standard'}
+                                                        {order.weight || '1.0 kg'} • {order.packageType || 'Standard'}{order.itemCount ? ` • ${order.itemCount} item(s)` : ''}
                                                     </div>
                                                 </td>
                                                 <td>
