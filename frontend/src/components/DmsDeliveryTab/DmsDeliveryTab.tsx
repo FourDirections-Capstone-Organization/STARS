@@ -26,6 +26,8 @@ import {
     FileCheck,
     AlertTriangle,
     Eye,
+    XCircle,
+    Info,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
@@ -1227,33 +1229,55 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     const getStatusPill = (status: string, syncState?: string) => {
         const s = (status || '').toLowerCase();
-        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) {
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) {
             return <span className="dms-status-pill dms-status-delivered"><CheckCircle2 size={11} /> Delivered (POD)</span>;
+        }
+        if (s.includes('cancel') || s.includes('void')) {
+            return <span className="dms-status-pill dms-status-cancelled"><XCircle size={11} /> Cancelled</span>;
+        }
+        if (s.includes('fail') || s.includes('undelivered') || syncState === 'Failed') {
+            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Failed</span>;
+        }
+        if (s.includes('issue')) {
+            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Issue</span>;
         }
         if (s.includes('out') || s.includes('transit') || s.includes('pickup')) {
             return <span className="dms-status-pill dms-status-transit"><Truck size={11} /> In Transit</span>;
-        }
-        if (s.includes('fail') || s.includes('cancel') || syncState === 'Failed') {
-            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Issue</span>;
         }
         return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Pending for Delivery</span>;
     };
 
     const getJourneyStepIndex = (status?: string, rawStatus?: string) => {
         const s = `${rawStatus || ''} ${status || ''}`.toLowerCase();
-        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) return 6;
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) return 6;
         if (s.includes('out for delivery') || s.includes('doorstep')) return 5;
         if (s.includes('transit')) return 4;
         if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 3;
-        if (s.includes('assigned') || s.includes('for pickup')) return 2;
+        if (s.includes('assigned') || s.includes('for pickup') || s.includes('driver')) return 2;
         if (s.includes('processing') || s.includes('preparing')) return 1;
         return 0;
     };
 
     if (selectedDelivery) {
+        const selRaw = (selectedDelivery.dmsRawStatus || '').toLowerCase();
+        const selNorm = (selectedDelivery.dmsStatus || '').toLowerCase();
+        const selCombined = `${selNorm} ${selRaw}`;
+
+        const isCancelled = selCombined.includes('cancel') || selCombined.includes('void');
+        const isFailed = !isCancelled && (
+            selCombined.includes('fail') ||
+            selCombined.includes('undelivered') ||
+            selectedDelivery.syncStatus === 'Failed' ||
+            selCombined.includes('issue')
+        );
+        const isDelivered = !isCancelled && !isFailed && !selCombined.includes('pending') && (
+            selNorm === 'delivered' ||
+            selRaw === 'delivered' ||
+            selCombined.includes('completed') ||
+            (selCombined.includes('delivered') && !selCombined.includes('undelivered'))
+        );
+
         const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
-        const selS = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase();
-        const isDelivered = !selS.includes('pending') && (selS.includes('delivered') || selS.includes('completed'));
         const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 6) / 6) * 100;
 
         const journeySteps = [
@@ -1372,69 +1396,365 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     </div>
 
                     <div className="dms-detail-hero-pulse-wrap">
-                        <span className="dms-detail-pulse-beacon" />
-                        <span className="dms-detail-pulse-text">Live DMS Dispatch Active</span>
+                        {isCancelled ? (
+                            <>
+                                <span className="dms-detail-pulse-beacon cancelled" />
+                                <span className="dms-detail-pulse-text cancelled">Delivery Cancelled</span>
+                            </>
+                        ) : isFailed ? (
+                            <>
+                                <span className="dms-detail-pulse-beacon failed" />
+                                <span className="dms-detail-pulse-text failed">Delivery Failed</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="dms-detail-pulse-beacon" />
+                                <span className="dms-detail-pulse-text">Live DMS Dispatch Active</span>
+                            </>
+                        )}
                     </div>
                 </div>
 
-                {/* ── 7-Stage Milestone Tracker (Full-Width, Single-Page, No-Scroll) ── */}
-                <div className="dms-detail-stepper-card">
-                    <div className="dms-detail-stepper-header">
-                        <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
-                        <span className="dms-detail-stepper-summary">
-                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
-                        </span>
-                    </div>
-
-                    <div className="dms-detail-stepper-track-wrap">
-                        <div className="dms-detail-stepper-inner">
-                        <div className="dms-detail-stepper-track">
-                            <div
-                                className="dms-detail-stepper-progress"
-                                style={{ width: `${progressPct}%` }}
-                            />
+                {/* ── Milestone Tracker / Terminal Status Card ── */}
+                {isCancelled ? (
+                    <div className="dms-detail-stepper-card dms-detail-terminal-card dms-detail-cancelled-card" data-testid="dms-terminal-cancelled-view">
+                        <div className="dms-detail-stepper-header">
+                            <div className="dms-detail-header-left">
+                                <h4 className="dms-detail-section-title">Delivery Status: Cancelled</h4>
+                                <span className="dms-detail-stepper-subtitle">Shipment was cancelled in DMS and delivery progression has been terminated.</span>
+                            </div>
+                            <span className="dms-detail-terminal-pill cancelled" data-testid="dms-detail-cancelled-pill">
+                                <XCircle size={13} strokeWidth={2.5} /> Cancelled in DMS
+                            </span>
                         </div>
 
-                        <div className="dms-detail-stepper">
-                            {journeySteps.map((step, idx) => {
-                                const isDone = isDelivered ? true : idx < activeIdx;
-                                const isCurrent = !isDelivered && idx === activeIdx;
-                                const isUpcoming = idx > activeIdx;
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        className={`dms-detail-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
-                                    >
-                                        <div className="dms-detail-step-dot">
-                                            {isDone ? (
-                                                <Check size={16} strokeWidth={2.8} />
-                                            ) : isCurrent ? (
-                                                <Clock size={16} strokeWidth={2.5} />
-                                            ) : (
-                                                <span>{idx + 1}</span>
-                                            )}
-                                        </div>
-                                        <div className="dms-detail-step-text">
-                                            <span className="dms-detail-step-title">{step.title}</span>
-                                            <span className="dms-detail-step-desc">{step.desc}</span>
-                                            {isCurrent && (
-                                                <span className="dms-detail-step-badge current">In Progress</span>
-                                            )}
-                                            {isDone && (
-                                                <span className="dms-detail-step-badge done">Completed</span>
-                                            )}
-                                        </div>
+                        {/* Prominent Cancellation Banner */}
+                        <div className="dms-terminal-hero-banner cancelled">
+                            <div className="dms-terminal-banner-icon-box cancelled">
+                                <XCircle size={28} strokeWidth={2.2} />
+                            </div>
+                            <div className="dms-terminal-banner-content">
+                                <div className="dms-terminal-banner-header">
+                                    <span className="dms-terminal-banner-title">Delivery Order Cancelled</span>
+                                    <span className="dms-terminal-banner-badge cancelled">Lifecycle Terminated</span>
+                                </div>
+                                <p className="dms-terminal-banner-text">
+                                    This logistical dispatch has been marked as cancelled. No further courier route progression, parcel movement, or delivery confirmation will take place.
+                                </p>
+                                {selectedDelivery.dmsFailureReason && (
+                                    <div className="dms-terminal-reason-callout cancelled" data-testid="dms-cancelled-reason">
+                                        <strong className="dms-terminal-reason-label">Cancellation Rationale:</strong>
+                                        <span className="dms-terminal-reason-text">{selectedDelivery.dmsFailureReason}</span>
                                     </div>
-                                );
-                            })}
+                                )}
+                            </div>
                         </div>
+
+                        {/* Milestone Lifecycle Termination Timeline */}
+                        <div className="dms-terminal-lifecycle-section">
+                            <div className="dms-terminal-lifecycle-header">
+                                <span className="dms-terminal-lifecycle-title">Lifecycle Milestone Termination Point</span>
+                                <span className="dms-terminal-lifecycle-desc">
+                                    Halted at <strong>{journeySteps[Math.min(activeIdx, 6)].title}</strong> — Subsequent stages voided
+                                </span>
+                            </div>
+                            <div className="dms-detail-stepper-track-wrap">
+                                <div className="dms-detail-stepper-inner">
+                                    <div className="dms-detail-stepper-track cancelled">
+                                        <div
+                                            className="dms-detail-stepper-progress cancelled"
+                                            style={{ width: `${(Math.max(0, activeIdx) / (journeySteps.length - 1)) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="dms-detail-stepper">
+                                        {journeySteps.map((step, idx) => {
+                                            const isPassed = idx < activeIdx;
+                                            const isHaltedAt = idx === activeIdx;
+                                            const isVoided = idx > activeIdx;
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`dms-detail-step terminal-step ${isPassed ? 'terminal-passed' : ''} ${isHaltedAt ? 'terminal-halted cancelled' : ''} ${isVoided ? 'terminal-voided' : ''}`}
+                                                >
+                                                    <div className="dms-detail-step-dot">
+                                                        {isPassed ? (
+                                                            <Check size={15} strokeWidth={2.8} />
+                                                        ) : isHaltedAt ? (
+                                                            <X size={16} strokeWidth={2.8} />
+                                                        ) : (
+                                                            <span>{idx + 1}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="dms-detail-step-text">
+                                                        <span className="dms-detail-step-title">{step.title}</span>
+                                                        <span className="dms-detail-step-desc">{isHaltedAt ? 'Cancelled Here' : isVoided ? 'Voided' : step.desc}</span>
+                                                        {isHaltedAt && (
+                                                            <span className="dms-detail-step-badge terminal-badge cancelled">Cancelled</span>
+                                                        )}
+                                                        {isVoided && (
+                                                            <span className="dms-detail-step-badge terminal-badge voided">Not Reached</span>
+                                                        )}
+                                                        {isPassed && (
+                                                            <span className="dms-detail-step-badge terminal-badge passed">Passed</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Comprehensive Operational Insights & Actions */}
+                        <div className="dms-terminal-meta-grid">
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Info size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Operational Task Status</h6>
+                                </div>
+                                <p className="dms-terminal-meta-body">
+                                    {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+                                        ? 'The primary STARS operational task remains intact. Dispatchers and coordinators can update task assignments, re-issue waybills, or review audit remarks.'
+                                        : 'Unlinked DMS shipment cancelled prior to STARS task assignment. No operational task modification is required.'}
+                                </p>
+                                {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000' && (
+                                    <button
+                                        type="button"
+                                        className="dms-terminal-link-btn"
+                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                    >
+                                        <span>Open Associated Task in STARS</span>
+                                        <ArrowRight size={13} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Clock size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Telemetry & Sync Log</h6>
+                                </div>
+                                <div className="dms-terminal-meta-list">
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Waybill:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.dmsWaybillNo || 'Not Assigned'}</span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Last Logged Sync:</span>
+                                        <span className="dms-terminal-row-val">
+                                            {selectedDelivery.dmsLastSyncedAt
+                                                ? new Date(selectedDelivery.dmsLastSyncedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                                                : 'Recent'}
+                                        </span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Assigned Courier:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.courierFullName || 'Unassigned / Auto Pool'}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                ) : isFailed ? (
+                    <div className="dms-detail-stepper-card dms-detail-terminal-card dms-detail-failed-card" data-testid="dms-terminal-failed-view">
+                        <div className="dms-detail-stepper-header">
+                            <div className="dms-detail-header-left">
+                                <h4 className="dms-detail-section-title">Delivery Status: Failed</h4>
+                                <span className="dms-detail-stepper-subtitle">Courier was unable to fulfill delivery; exception reported in DMS.</span>
+                            </div>
+                            <span className="dms-detail-terminal-pill failed" data-testid="dms-detail-failed-pill">
+                                <AlertCircle size={13} strokeWidth={2.5} /> Delivery Failed
+                            </span>
+                        </div>
 
-                {/* ── Failure / Exception Alert if Any ── */}
-                {selectedDelivery.dmsFailureReason && (
+                        {/* Prominent Failure Banner */}
+                        <div className="dms-terminal-hero-banner failed">
+                            <div className="dms-terminal-banner-icon-box failed">
+                                <AlertCircle size={28} strokeWidth={2.2} />
+                            </div>
+                            <div className="dms-terminal-banner-content">
+                                <div className="dms-terminal-banner-header">
+                                    <span className="dms-terminal-banner-title">Delivery Attempt Failed</span>
+                                    <span className="dms-terminal-banner-badge failed">Exception Logged</span>
+                                </div>
+                                <p className="dms-terminal-banner-text">
+                                    The delivery attempt could not be completed. Check the reported failure rationale below and coordinate next steps with dispatch or the recipient.
+                                </p>
+                                <div className="dms-terminal-reason-callout failed" data-testid="dms-failed-reason">
+                                    <strong className="dms-terminal-reason-label">Failure / Exception Reason:</strong>
+                                    <span className="dms-terminal-reason-text">
+                                        {selectedDelivery.dmsFailureReason || 'Courier was unable to complete the delivery attempt (e.g. consignee unavailable, invalid destination address, or package rejected).'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Milestone Lifecycle Failure Timeline */}
+                        <div className="dms-terminal-lifecycle-section">
+                            <div className="dms-terminal-lifecycle-header">
+                                <span className="dms-terminal-lifecycle-title">Lifecycle Milestone Exception Point</span>
+                                <span className="dms-terminal-lifecycle-desc">
+                                    Interrupted at <strong>{journeySteps[Math.min(activeIdx, 6)].title}</strong> — Delivery unconfirmed
+                                </span>
+                            </div>
+                            <div className="dms-detail-stepper-track-wrap">
+                                <div className="dms-detail-stepper-inner">
+                                    <div className="dms-detail-stepper-track failed">
+                                        <div
+                                            className="dms-detail-stepper-progress failed"
+                                            style={{ width: `${(Math.max(0, activeIdx) / (journeySteps.length - 1)) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="dms-detail-stepper">
+                                        {journeySteps.map((step, idx) => {
+                                            const isPassed = idx < activeIdx;
+                                            const isFailedAt = idx === activeIdx;
+                                            const isUnreached = idx > activeIdx;
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`dms-detail-step terminal-step ${isPassed ? 'terminal-passed' : ''} ${isFailedAt ? 'terminal-halted failed' : ''} ${isUnreached ? 'terminal-voided' : ''}`}
+                                                >
+                                                    <div className="dms-detail-step-dot">
+                                                        {isPassed ? (
+                                                            <Check size={15} strokeWidth={2.8} />
+                                                        ) : isFailedAt ? (
+                                                            <AlertCircle size={16} strokeWidth={2.8} />
+                                                        ) : (
+                                                            <span>{idx + 1}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="dms-detail-step-text">
+                                                        <span className="dms-detail-step-title">{step.title}</span>
+                                                        <span className="dms-detail-step-desc">{isFailedAt ? 'Failed Here' : isUnreached ? 'Not Completed' : step.desc}</span>
+                                                        {isFailedAt && (
+                                                            <span className="dms-detail-step-badge terminal-badge failed">Failed</span>
+                                                        )}
+                                                        {isUnreached && (
+                                                            <span className="dms-detail-step-badge terminal-badge voided">Incomplete</span>
+                                                        )}
+                                                        {isPassed && (
+                                                            <span className="dms-detail-step-badge terminal-badge passed">Passed</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Comprehensive Operational Insights & Actions */}
+                        <div className="dms-terminal-meta-grid">
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <AlertTriangle size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Recommended Dispatch Actions</h6>
+                                </div>
+                                <p className="dms-terminal-meta-body">
+                                    Contact the recipient to confirm address and availability, or schedule a re-delivery attempt with the assigned driver.
+                                </p>
+                                {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000' && (
+                                    <button
+                                        type="button"
+                                        className="dms-terminal-link-btn"
+                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                    >
+                                        <span>Open Task & Update Notes in STARS</span>
+                                        <ArrowRight size={13} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Clock size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Exception Telemetry</h6>
+                                </div>
+                                <div className="dms-terminal-meta-list">
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Waybill:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.dmsWaybillNo || 'Not Assigned'}</span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Failure Logged At:</span>
+                                        <span className="dms-terminal-row-val">
+                                            {selectedDelivery.dmsLastSyncedAt
+                                                ? new Date(selectedDelivery.dmsLastSyncedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                                                : 'Recent'}
+                                        </span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Assigned Courier:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.courierFullName || 'Unassigned / Auto Pool'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="dms-detail-stepper-card">
+                        <div className="dms-detail-stepper-header">
+                            <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
+                            <span className="dms-detail-stepper-summary">
+                                Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
+                            </span>
+                        </div>
+
+                        <div className="dms-detail-stepper-track-wrap">
+                            <div className="dms-detail-stepper-inner">
+                            <div className="dms-detail-stepper-track">
+                                <div
+                                    className="dms-detail-stepper-progress"
+                                    style={{ width: `${progressPct}%` }}
+                                />
+                            </div>
+
+                            <div className="dms-detail-stepper">
+                                {journeySteps.map((step, idx) => {
+                                    const isDone = isDelivered ? true : idx < activeIdx;
+                                    const isCurrent = !isDelivered && idx === activeIdx;
+                                    const isUpcoming = idx > activeIdx;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`dms-detail-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
+                                        >
+                                            <div className="dms-detail-step-dot">
+                                                {isDone ? (
+                                                    <Check size={16} strokeWidth={2.8} />
+                                                ) : isCurrent ? (
+                                                    <Clock size={16} strokeWidth={2.5} />
+                                                ) : (
+                                                    <span>{idx + 1}</span>
+                                                )}
+                                            </div>
+                                            <div className="dms-detail-step-text">
+                                                <span className="dms-detail-step-title">{step.title}</span>
+                                                <span className="dms-detail-step-desc">{step.desc}</span>
+                                                {isCurrent && (
+                                                    <span className="dms-detail-step-badge current">In Progress</span>
+                                                )}
+                                                {isDone && (
+                                                    <span className="dms-detail-step-badge done">Completed</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Failure / Exception Alert if Any (non-terminal) ── */}
+                {!isCancelled && !isFailed && selectedDelivery.dmsFailureReason && (
                     <div className="dms-detail-alert-box">
                         <AlertCircle size={18} className="dms-detail-alert-icon" />
                         <div>
