@@ -3219,15 +3219,19 @@
     color: #1e293b;
 }
 
+.tv-dms-stepper-container {
+    width: 100%;
+}
+
 .tv-dms-cancelled-stepper-notice {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
-    padding: 6px 10px;
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
-    border-radius: 6px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
     font-size: 0.75rem;
 }
 
@@ -3242,10 +3246,36 @@
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.02em;
+    flex-shrink: 0;
 }
 
 .tv-dms-cancelled-subtext {
-    color: #64748b;
-    font-size: 0.72rem;
-    font-style: italic;
+    color: #991b1b;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.tv-dms-step.cancelled-current .tv-dms-step-dot {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.tv-dms-step.cancelled-current .tv-dms-step-label {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.tv-dms-step-time.cancelled {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.tv-dms-step.cancelled-upcoming {
+    opacity: 0.45;
+}
+
+.tv-dms-stepper-progress.cancelled {
+    background: #ef4444;
 }

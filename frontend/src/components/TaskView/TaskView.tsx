@@ -154,6 +154,8 @@ interface ReviewHistoryEntry {
 
 interface TaskViewProps {
     task: TaskViewTask;
+    backLabel?: string;
+    breadcrumbRoot?: string;
     onEdit?: () => void;
     onReopen?: () => void;
     onClose?: () => void;
@@ -603,6 +605,8 @@ const RejectModal: React.FC<{
 
 const TaskView: React.FC<TaskViewProps> = ({
     task,
+    backLabel,
+    breadcrumbRoot,
     onEdit = () => {},
     onReopen = () => {},
     onClose = () => {},
@@ -1378,12 +1382,12 @@ const TaskView: React.FC<TaskViewProps> = ({
 
                 {/* ── Navigation Top Bar ── */}
                 <div className="tv-nav-header">
-                    <button className="tv-back-btn" onClick={onClose} aria-label="Back to Task List">
+                    <button className="tv-back-btn" onClick={onClose} aria-label={backLabel || "Back to Task List"}>
                         <ArrowLeft size={15} />
-                        <span>Back to Task List</span>
+                        <span>{backLabel || "Back to Task List"}</span>
                     </button>
                     <div className="tv-breadcrumbs">
-                        <span className="tv-breadcrumb-muted">Task Management</span>
+                        <span className="tv-breadcrumb-muted">{breadcrumbRoot || "Task Management"}</span>
                         <span className="tv-breadcrumb-sep">/</span>
                         <span className="tv-breadcrumb-active">Task Details</span>
                         {task.taskId && <span className="tv-breadcrumb-id">#{task.taskNumber || task.taskReferenceNumber || task.taskId.slice(0, 8).toUpperCase()}</span>}
@@ -2561,13 +2565,13 @@ const TaskView: React.FC<TaskViewProps> = ({
 
                                             const isCancelled = s.includes('cancelled') || s.includes('canceled');
                                             const isAllDelivered = activeIdx === 6;
-                                            const progressPct = (Math.max(0, activeIdx) / (stages.length - 1)) * 100;
+                                            const progressPct = isCancelled ? 0 : (Math.max(0, activeIdx) / (stages.length - 1)) * 100;
                                             const formattedTime = deliveryDetail.dmsLastSyncedAt
                                                 ? new Date(deliveryDetail.dmsLastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                                                 : 'Now';
 
                                             return (
-                                                <div className="tv-dms-stepper-inner">
+                                                <div className={`tv-dms-stepper-container ${isCancelled ? 'tv-dms-stepper-cancelled' : ''}`}>
                                                     {isCancelled && (
                                                         <div className="tv-dms-cancelled-stepper-notice" data-testid="tv-dms-cancelled-notice">
                                                             <span className="tv-dms-cancelled-pill">
@@ -2578,40 +2582,44 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <div className="tv-dms-stepper-track">
-                                                        <div
-                                                            className="tv-dms-stepper-progress"
-                                                            style={{ width: `${progressPct}%` }}
-                                                        />
-                                                    </div>
-                                                    <div className="tv-dms-stepper">
-                                                        {stages.map((step, idx) => {
-                                                            const isDone = isAllDelivered ? true : idx < activeIdx;
-                                                            const isCurrent = !isAllDelivered && idx === activeIdx;
+                                                    <div className="tv-dms-stepper-inner">
+                                                        <div className="tv-dms-stepper-track">
+                                                            <div
+                                                                className={`tv-dms-stepper-progress ${isCancelled ? 'cancelled' : ''}`}
+                                                                style={{ width: `${progressPct}%` }}
+                                                            />
+                                                        </div>
+                                                        <div className="tv-dms-stepper">
+                                                            {stages.map((step, idx) => {
+                                                                const isDone = isAllDelivered ? true : idx < activeIdx;
+                                                                const isCurrent = !isAllDelivered && idx === activeIdx;
 
-                                                            return (
-                                                                <div
-                                                                    key={step.key}
-                                                                    className={`tv-dms-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
-                                                                >
-                                                                    <div className="tv-dms-step-dot">
-                                                                        {isDone ? (
-                                                                            <Check size={13} strokeWidth={2.8} />
-                                                                        ) : isCurrent ? (
-                                                                            <Clock size={13} strokeWidth={2.5} />
-                                                                        ) : idx === 6 ? (
-                                                                            <MapPin size={12} />
-                                                                        ) : (
-                                                                            <span>{idx + 1}</span>
+                                                                return (
+                                                                    <div
+                                                                        key={step.key}
+                                                                        className={`tv-dms-step ${isCancelled && isCurrent ? 'cancelled-current current' : isCancelled && idx > activeIdx ? 'cancelled-upcoming' : ''} ${isDone ? 'done' : ''} ${isCurrent && !isCancelled ? 'current' : ''}`}
+                                                                    >
+                                                                        <div className="tv-dms-step-dot">
+                                                                            {isCancelled && isCurrent ? (
+                                                                                <X size={12} strokeWidth={2.8} />
+                                                                            ) : isDone ? (
+                                                                                <Check size={13} strokeWidth={2.8} />
+                                                                            ) : isCurrent ? (
+                                                                                <Clock size={13} strokeWidth={2.5} />
+                                                                            ) : idx === 6 ? (
+                                                                                <MapPin size={12} />
+                                                                            ) : (
+                                                                                <span>{idx + 1}</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <span className="tv-dms-step-label" title={step.label}>{step.label}</span>
+                                                                        {isCurrent && (
+                                                                            <span className={`tv-dms-step-time ${isCancelled ? 'cancelled' : ''}`}>{formattedTime}</span>
                                                                         )}
                                                                     </div>
-                                                                    <span className="tv-dms-step-label" title={step.label}>{step.label}</span>
-                                                                    {isCurrent && (
-                                                                        <span className="tv-dms-step-time">{formattedTime}</span>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })}
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );

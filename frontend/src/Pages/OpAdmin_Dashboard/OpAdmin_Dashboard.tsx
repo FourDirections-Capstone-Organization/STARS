@@ -9824,6 +9824,7 @@ export default function OpsAdminDashboard() {
         setEditingTask(null);
         setViewingTask(null);
         setDetailTask(null);
+        setTaskReturnTab(null);
         setOverrideTask(null);
         setReviewTask(null);
         setViewingDuplicateTask(null);
@@ -10070,6 +10071,7 @@ export default function OpsAdminDashboard() {
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [viewingTask, setViewingTask] = useState<Task | null>(null);
     const [detailTask, setDetailTask] = useState<TaskViewTask | null>(null);
+    const [taskReturnTab, setTaskReturnTab] = useState<NavTab | null>(null);
     const [overrideTask, setOverrideTask] = useState<Task | null>(null);
     const [reviewTask, setReviewTask] = useState<Task | null>(null);
 
@@ -11428,9 +11430,17 @@ export default function OpsAdminDashboard() {
                             <div className="dashboard-content">
                                 <TaskView
                                     task={detailTask}
+                                    backLabel={taskReturnTab === 'reports' ? 'Return to Reports Dashboard' : undefined}
+                                    breadcrumbRoot={taskReturnTab === 'reports' ? 'Reports' : undefined}
                                     onEdit={() => { setEditingTask(detailTask); setDetailTask(null); }}
                                     onReopen={() => handleReopenTask(detailTask.taskId)}
-                                    onClose={() => setDetailTask(null)}
+                                    onClose={() => {
+                                        setDetailTask(null);
+                                        if (taskReturnTab === 'reports') {
+                                            setActiveTab('reports');
+                                            setTaskReturnTab(null);
+                                        }
+                                    }}
                                     onApprove={(id) => handleReviewTask(id, 'Approve & Close', 'Approved via TaskView.')}
                                     onReject={(id, reason) => handleReviewTask(id, 'Return for Rework', reason)}
                                     onDeleteAttachment={handleDeleteAttachment}
@@ -11524,7 +11534,10 @@ export default function OpsAdminDashboard() {
                         tasks={tasks}
                         teamMembers={teamMembers}
                         onNavigateToTab={handleNavChange}
-                        onViewTask={handleOpenTaskById}
+                        onViewTask={(taskId) => {
+                            setTaskReturnTab('reports');
+                            handleOpenTaskById(taskId);
+                        }}
                     />
                 )}
                 {activeTab === 'profile' && <ProfileTab />}
