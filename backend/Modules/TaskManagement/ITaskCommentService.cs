@@ -1,5 +1,6 @@
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Microsoft.AspNetCore.Http;
 
 namespace Backend.Modules.TaskManagement;
@@ -14,4 +15,5 @@ public interface ITaskCommentService
     Task<ApiResponseDTO<bool>> DeleteAsync(Guid commentId, Guid userId);
     Task<ApiResponseDTO<TaskCommentAttachment>> GetAttachmentAsync(Guid commentId, Guid attachmentId);
     Task<ApiResponseDTO<TaskComment>> GetLegacyAttachmentAsync(Guid commentId);
+    Task<ApiResponseDTO<bool>> CanUserAccessTaskCommentsAsync(Guid taskId, Guid userId, UserRole userRole);
 }
