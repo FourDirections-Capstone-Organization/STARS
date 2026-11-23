@@ -261,7 +261,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-13-sec13-dockerfile-production`
 
-- [ ] **Step 14: Token Storage Hardening Architectural Migration Plan (SEC-14)**
+- [x] **Step 14: Token Storage Hardening Architectural Migration Plan (SEC-14)**
   - **Targets:**
     - `docs/rfc-cookie-based-authentication.md`
   - **Remediation Action:**
