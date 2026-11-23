@@ -609,6 +609,10 @@ public class UserService : IUserService
         // Soft deactivate
         user.IsDeactivated = true;
         user.IsActive = false;
+        // Invalidate active session and refresh token (SEC-20)
+        user.RefreshToken = null;
+        user.RefreshTokenExpiry = null;
+        user.LastActivityAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
