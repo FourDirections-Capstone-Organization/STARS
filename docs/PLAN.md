@@ -104,7 +104,7 @@ flowchart TD
     - Verify all existing backend & frontend tests pass cleanly.
   - **Branch:** `step-2-sec02-security-headers`
 
-- [ ] **Step 3: Strict CORS Whitelist Lockdown (SEC-03)**
+- [x] **Step 3: Strict CORS Whitelist Lockdown (SEC-03)**
   - **Targets:**
     - `backend/Program.cs` (lines 33–54)
   - **Remediation Action:**
