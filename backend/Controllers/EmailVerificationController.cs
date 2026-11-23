@@ -47,7 +47,7 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in VerifyEmail");
-            return StatusCode(500, ApiResponseDTO<bool>.Failure($"Verification failed: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<bool>.Failure("Verification request could not be processed. Please try again later."));
         }
     }
 
@@ -85,7 +85,7 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResendVerification for identifier {Identifier}", dto?.Identifier ?? dto?.EmployeeNumber);
-            return StatusCode(500, ApiResponseDTO<bool>.Failure($"Failed to send verification email: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<bool>.Failure("Failed to send verification email. Please try again later."));
         }
     }
 
@@ -104,7 +104,7 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GetVerificationStatus for user {UserId}", userId);
-            return StatusCode(500, ApiResponseDTO<EmailVerificationStatusDTO>.Failure($"Failed to retrieve status: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<EmailVerificationStatusDTO>.Failure("Failed to retrieve verification status. Please try again later."));
         }
     }
 
