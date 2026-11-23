@@ -87,6 +87,17 @@ if (string.IsNullOrWhiteSpace(connectionString))
 try
 {
     var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    if (!connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
+        csb.MaxPoolSize = 150;
+    if (!connectionString.Contains("MinPoolSize", StringComparison.OrdinalIgnoreCase))
+        csb.MinPoolSize = 10;
+    if (!connectionString.Contains("ConnectionLifetime", StringComparison.OrdinalIgnoreCase))
+        csb.ConnectionLifetime = 300;
+    if (!connectionString.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        csb.Timeout = 15;
+    if (!connectionString.Contains("CommandTimeout", StringComparison.OrdinalIgnoreCase))
+        csb.CommandTimeout = 30;
+    connectionString = csb.ConnectionString;
     Console.WriteLine($"[STARTUP] PostgreSQL Connection Configured -> Host: '{csb.Host}', Port: {csb.Port}, Database: '{csb.Database}', User: '{csb.Username}', SSL: {csb.SslMode}");
 }
 catch
@@ -94,8 +105,8 @@ catch
     Console.WriteLine("[STARTUP] PostgreSQL Connection Configured (Raw string provided)");
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddDbContextPool<AppDbContext>(options =>
+    options.UseNpgsql(connectionString), poolSize: 128);
 
 // Configure settings
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));

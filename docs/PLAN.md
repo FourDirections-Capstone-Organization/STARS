@@ -245,18 +245,16 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-2-perf-n1-query-elimination`
 
-- [ ] **Step 3: Enable `AddDbContextPool` and Tune Npgsql Connection Parameters**
+- [x] **Step 3: Enable `AddDbContextPool` and Tune Npgsql Connection Parameters**
   - **Targets:**
     - `backend/Program.cs` (line 97)
     - `backend/appsettings.json`
   - **Remediation Action:**
-    - Replace `builder.Services.AddDbContext<AppDbContext>` with `builder.Services.AddDbContextPool<AppDbContext>(..., poolSize: 128)`.
-    - In connection string builder / environment configuration, configure optimized connection pool defaults:
-      ```
-      MaxPoolSize=150;MinPoolSize=10;ConnectionLifetime=300;Timeout=15;CommandTimeout=30;Pooling=true;
-      ```
-    - This eliminates DbContext instantiation overhead on high-concurrency requests and prevents premature pool exhaustion.
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+    - Replaced `builder.Services.AddDbContext<AppDbContext>` with `builder.Services.AddDbContextPool<AppDbContext>(..., poolSize: 128)`.
+    - Configured optimized connection pool parameters in `NpgsqlConnectionStringBuilder`:
+      - `MaxPoolSize = 150`, `MinPoolSize = 10`, `ConnectionLifetime = 300`, `Timeout = 15`, `CommandTimeout = 30`.
+    - Reuses DbContext instances and prevents connection starvation during high-concurrency requests.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-3-perf-dbcontext-pooling`
 
 - [ ] **Step 4: Implement Decoupled Background Health Probe & In-Memory Reference Caching**
