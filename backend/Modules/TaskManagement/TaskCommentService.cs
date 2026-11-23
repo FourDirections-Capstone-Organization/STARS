@@ -4,6 +4,7 @@ using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
 using Backend.Modules.Notifications;
+using Backend.Modules.Utilities;
 using Microsoft.Extensions.Options;
 
 namespace Backend.Modules.TaskManagement;
@@ -70,6 +71,11 @@ public class TaskCommentService : ITaskCommentService
                 if (file.Length > _fileSettings.MaxFileSizeBytes)
                     return ApiResponseDTO<TaskCommentResponseDTO>.Failure(
                         $"File exceeds the maximum allowed size ({_fileSettings.MaxFileSizeBytes / 1024 / 1024}MB)");
+
+                // SEC-16: Binary magic byte inspection
+                if (!FileSignatureValidator.HasValidMagicBytes(file))
+                    return ApiResponseDTO<TaskCommentResponseDTO>.Failure(
+                        "File signature mismatch or invalid file header. File content does not match the declared extension.");
 
                 var uniqueFileName = $"{Guid.NewGuid()}{extension}";
                 var filePath = Path.Combine(uploadDir, uniqueFileName);
