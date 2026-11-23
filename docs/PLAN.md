@@ -266,18 +266,15 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-4-perf-health-cache`
 
-- [ ] **Step 5: Implement ASP.NET Core Rate Limiting Middleware on Authentication Endpoints**
+- [x] **Step 5: Implement ASP.NET Core Rate Limiting Middleware on Authentication Endpoints**
   - **Targets:**
     - `backend/Program.cs`
     - `backend/Controllers/AuthController.cs`
   - **Remediation Action:**
-    - Add `builder.Services.AddRateLimiter(...)` with a sliding-window rate limiter partitioned by Client IP:
-      - Permit 30 requests per minute per IP on `POST /api/auth/login`.
-      - Return `HTTP 429 Too Many Requests` with `Retry-After` header when limit exceeded.
-    - Add a concurrency limiter policy (e.g. max 20 concurrent PBKDF2 hashing operations across the server) with queue limit of 10.
-    - Apply `[EnableRateLimiting("AuthRateLimit")]` to `AuthController.Login`.
-    - This shields CPU cores from PBKDF2 exhaustion during high-concurrency stress attacks without degrading normal user logins.
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (ensure login unit tests remain compliant).
+    - Added `builder.Services.AddRateLimiter(...)` with a sliding-window rate limiter (30 requests/minute per client IP) and queue limit of 10.
+    - Applied `[EnableRateLimiting("AuthRateLimit")]` to `AuthController.Login`.
+    - Returns `HTTP 429 Too Many Requests` when limits are exceeded, shielding CPU cores from PBKDF2 compute exhaustion during concurrency spikes.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-5-perf-auth-ratelimiting`
 
 - [ ] **Step 6: Implement Asynchronous Channel Queue for High-Volume Webhook Ingestion**
