@@ -120,7 +120,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-3-sec03-cors-whitelist`
 
-- [ ] **Step 4: Host Header & Origin Link Sanitization in Email Verification (SEC-04)**
+- [x] **Step 4: Host Header & Origin Link Sanitization in Email Verification (SEC-04)**
   - **Targets:**
     - `backend/Controllers/EmailVerificationController.cs` (lines 110–133)
   - **Remediation Action:**
