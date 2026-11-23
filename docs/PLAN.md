@@ -86,7 +86,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-1-sec01-mass-assignment`
 
-- [ ] **Step 2: Security Headers & HSTS Middleware Implementation (SEC-02)**
+- [x] **Step 2: Security Headers & HSTS Middleware Implementation (SEC-02)**
   - **Targets:**
     - `backend/Program.cs`
     - `frontend/nginx.conf`
