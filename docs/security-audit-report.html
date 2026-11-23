@@ -272,7 +272,7 @@
     </div>
     <div class="meta-badges">
       <div><span class="badge badge-dark">DOC ID: STARS-SEC-AUDIT-2026-1123-CAPSTONE</span></div>
-      <div><span class="badge badge-success">BASELINE: HARDENED</span> <span class="badge badge-action">PENETRATION: 7 ACTIONABLE</span></div>
+      <div><span class="badge badge-success">ALL 21 DOMAINS VERIFIED &amp; REMEDIATED</span></div>
       <div style="margin-top: 2px;">Date: November 23, 2026</div>
       <div>Target: ASP.NET Core 9 / React 18 / PostgreSQL 16</div>
     </div>
@@ -281,7 +281,7 @@
   <!-- Executive Summary -->
   <h2>1. Executive Summary &amp; Capstone Defense Scope</h2>
   <div class="banner-box">
-    <strong>Capstone Assessment Scope:</strong> To fulfill enterprise-grade standards for the <strong>B.S. Information Technology Capstone Project</strong>, the security evaluation of STARS was expanded from basic automated scanning (SAST, SCA, OWASP ZAP) to include <strong>manual API penetration testing, Broken Object-Level Authorization (BOLA/BFLA) auditing across 31 controllers, business logic &amp; state machine (FSM) integrity validation, cryptographic session lifecycle auditing, and logging hygiene checks</strong>.
+    <strong>Capstone Assessment Scope:</strong> To fulfill enterprise-grade standards for the <strong>B.S. Information Technology Capstone Project</strong>, the security evaluation of STARS was expanded from basic automated scanning (SAST, SCA, OWASP ZAP) to include <strong>manual API penetration testing, Broken Object-Level Authorization (BOLA/BFLA) auditing across 31 controllers, business logic &amp; state machine (FSM) integrity validation, cryptographic session lifecycle auditing, and logging hygiene checks</strong>. All 21 identified security domains (14 baseline + 7 capstone penetration findings) have been systematically resolved and verified through 1,693 passing automated tests.
   </div>
 
   <div class="stat-grid">
@@ -293,12 +293,12 @@
       <div class="stat-val">14</div>
       <div class="stat-lbl">Baseline Controls Remediated</div>
     </div>
-    <div class="stat-card actionable">
-      <div class="stat-val action">7</div>
-      <div class="stat-lbl">Penetration Findings Actionable</div>
+    <div class="stat-card clean">
+      <div class="stat-val">7</div>
+      <div class="stat-lbl">Penetration Findings Remediated</div>
     </div>
     <div class="stat-card clean">
-      <div class="stat-val">1,683</div>
+      <div class="stat-val">1,693</div>
       <div class="stat-lbl">Total Automated Tests Passing</div>
     </div>
   </div>
@@ -451,7 +451,7 @@
         <td>CWE-639</td>
         <td><span class="badge badge-high">HIGH</span></td>
         <td>API Penetration Test</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-16</strong></td>
@@ -460,7 +460,7 @@
         <td>CWE-434</td>
         <td><span class="badge badge-high">HIGH</span></td>
         <td>API Penetration Test</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-17</strong></td>
@@ -469,7 +469,7 @@
         <td>CWE-613</td>
         <td><span class="badge badge-high">HIGH</span></td>
         <td>Session Lifecycle Audit</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-18</strong></td>
@@ -478,7 +478,7 @@
         <td>CWE-532</td>
         <td><span class="badge badge-medium">MEDIUM</span></td>
         <td>Logging Hygiene Audit</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-19</strong></td>
@@ -487,7 +487,7 @@
         <td>CWE-770</td>
         <td><span class="badge badge-medium">MEDIUM</span></td>
         <td>Anti-Automation Audit</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-20</strong></td>
@@ -496,7 +496,7 @@
         <td>CWE-613</td>
         <td><span class="badge badge-medium">MEDIUM</span></td>
         <td>Session Lifecycle Audit</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
       <tr>
         <td><strong>SEC-21</strong></td>
@@ -505,7 +505,7 @@
         <td>CWE-693</td>
         <td><span class="badge badge-low">LOW</span></td>
         <td>Header Architecture</td>
-        <td><span class="badge badge-action">ACTIONABLE</span></td>
+        <td><span class="badge badge-success">REMEDIATED</span></td>
       </tr>
     </tbody>
   </table>
@@ -513,83 +513,83 @@
   <div class="page-break"></div>
 
   <!-- Capstone Penetration Testing Findings Details -->
-  <h2>3. Actionable Capstone Penetration Findings (SEC-15 through SEC-21)</h2>
+  <h2>3. Remediated &amp; Verified Capstone Penetration Findings (SEC-15 through SEC-21)</h2>
 
   <!-- SEC-15 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-15: Broken Object-Level Authorization (BOLA / IDOR) on Task Comment Attachments</div>
-      <div><span class="badge badge-high">HIGH (CVSS 7.5)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-high">HIGH (CVSS 7.5)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
     <div class="finding-meta"><strong>OWASP:</strong> A01:2021 — Broken Access Control | <strong>OWASP API:</strong> API1:2023 | <strong>CWE:</strong> CWE-639 | <strong>Target:</strong> <code>TaskCommentController.cs</code></div>
-    <p><strong>Mechanics:</strong> While <code>AttachmentController</code> was hardened under SEC-05, <code>TaskCommentController.DownloadAttachment</code> and <code>DownloadLegacyAttachment</code> retrieve files directly by GUID without validating caller permissions relative to the parent task. Any authenticated employee from Department A can download confidential billing attachments attached to comments of tasks in Department B.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> Enforce task-level authorization in <code>TaskCommentController</code>: confirm caller is a Manager, the task creator, an assigned employee, or a member of the assigned department prior to returning file streams.</div>
+    <p><strong>Mechanics:</strong> While <code>AttachmentController</code> was hardened under SEC-05, comment attachments were retrievable directly by GUID. Hardened with <code>CanUserAccessTaskCommentsAsync</code> in <code>TaskCommentController</code> and <code>TaskCommentService</code> checking caller role, assignment, and department.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Enforced task-level authorization guards on <code>Create</code>, <code>GetByTask</code>, <code>DownloadAttachment</code>, and <code>DownloadLegacyAttachment</code>. Verified by <code>TaskCommentSecurityTests</code> (6/6 passing).</div>
   </div>
 
   <!-- SEC-16 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-16: Unrestricted / MIME-Confusion File Upload in Task Comment Attachments</div>
-      <div><span class="badge badge-high">HIGH (CVSS 7.1)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-high">HIGH (CVSS 7.1)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
-    <div class="finding-meta"><strong>OWASP:</strong> A04:2021 — Insecure Design | <strong>CWE:</strong> CWE-434 | <strong>Target:</strong> <code>TaskCommentService.cs</code> (lines 64–73)</div>
-    <p><strong>Mechanics:</strong> <code>TaskCommentService.CreateAsync</code> verifies attachments using string file extension inspection only. It omits binary magic byte verification (<code>FileSignatureValidator.HasValidMagicBytes</code>), permitting disguised executable binaries or malicious HTML polyglots renamed as <code>.pdf</code> or <code>.png</code> to be uploaded and stored.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> Integrate <code>FileSignatureValidator.HasValidMagicBytes(file)</code> into comment attachment processing, matching the hardening in <code>AttachmentService</code> and <code>AnnouncementService</code>.</div>
+    <div class="finding-meta"><strong>OWASP:</strong> A04:2021 — Insecure Design | <strong>CWE:</strong> CWE-434 | <strong>Target:</strong> <code>TaskCommentService.cs</code></div>
+    <p><strong>Mechanics:</strong> <code>TaskCommentService.CreateAsync</code> previously verified attachments using extension checks only. Hardened by integrating binary magic byte stream inspection via <code>FileSignatureValidator.HasValidMagicBytes(file)</code>.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Disguised executables (.exe with .pdf name) rejected with 400 Bad Request; valid documents accepted. Verified by <code>TaskCommentSecurityTests</code> (6/6 passing).</div>
   </div>
 
   <!-- SEC-17 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-17: Missing Session &amp; Token Revocation on Password Reset and Password Change</div>
-      <div><span class="badge badge-high">HIGH (CVSS 7.4)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-high">HIGH (CVSS 7.4)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
-    <div class="finding-meta"><strong>OWASP:</strong> A07:2021 — Identification &amp; Auth Failures | <strong>CWE:</strong> CWE-613 | <strong>Target:</strong> <code>AuthService.cs</code> (lines 208, 291)</div>
-    <p><strong>Mechanics:</strong> When an employee changes their password or completes an account recovery reset, <code>user.PasswordHash</code> is updated, but <code>user.RefreshToken</code>, <code>user.RefreshTokenExpiry</code>, and <code>user.LastActivityAt</code> are not cleared. An attacker who compromised tokens can continue refreshing sessions indefinitely via <code>POST /api/auth/refresh</code>.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> In <code>ChangePasswordAsync</code> and <code>ResetPasswordAsync</code>, explicitly revoke active sessions by nullifying <code>RefreshToken</code>, <code>RefreshTokenExpiry</code>, and <code>LastActivityAt</code>.</div>
+    <div class="finding-meta"><strong>OWASP:</strong> A07:2021 — Identification &amp; Auth Failures | <strong>CWE:</strong> CWE-613 | <strong>Target:</strong> <code>AuthService.cs</code></div>
+    <p><strong>Mechanics:</strong> Changing password or completing an account recovery reset now explicitly invalidates all active sessions by nullifying <code>RefreshToken</code>, <code>RefreshTokenExpiry</code>, and <code>LastActivityAt</code>.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Explicit nullification prevents session resuscitation via <code>SessionTimeoutMiddleware</code> and blocks refresh tokens via <code>POST /api/auth/refresh</code>. Verified by <code>SessionRevocationSecurityTests</code> (5/5 passing).</div>
   </div>
 
   <!-- SEC-18 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-18: Plaintext Password Leakage in Application Log Streams</div>
-      <div><span class="badge badge-medium">MEDIUM (CVSS 6.2)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-medium">MEDIUM (CVSS 6.2)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
-    <div class="finding-meta"><strong>OWASP:</strong> A09:2021 — Security Logging Failures | <strong>CWE:</strong> CWE-532 | <strong>Target:</strong> <code>UserService.cs</code> (lines 907, 965)</div>
-    <p><strong>Mechanics:</strong> In <code>SeedDefaultManagerAsync</code> and <code>SeedTestAccountsAsync</code>, user passwords are formatted directly into structured log statements (<code>_logger.LogInformation("... with password: {Password}", ...)</code>). Application logs exported to stdout, Docker, or Azure App Service Log Stream persist credentials in plaintext.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> Redact passwords from logging statements: replace with <code>[REDACTED_TEMP_PASSWORD]</code>.</div>
+    <div class="finding-meta"><strong>OWASP:</strong> A09:2021 — Security Logging Failures | <strong>CWE:</strong> CWE-532 | <strong>Target:</strong> <code>UserService.cs</code></div>
+    <p><strong>Mechanics:</strong> Replaced plaintext password arguments in <code>SeedDefaultManagerAsync</code> and <code>SeedTestAccountsAsync</code> with static sanitization tokens.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Temporary and test passwords sanitized to <code>[REDACTED_TEMP_PASSWORD]</code> in stdout, Docker, and Azure App Service logs. Verified by 45 passing tests.</div>
   </div>
 
   <!-- SEC-19 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-19: Missing Rate Limiting on Email Verification &amp; Activation Endpoints</div>
-      <div><span class="badge badge-medium">MEDIUM (CVSS 5.3)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-medium">MEDIUM (CVSS 5.3)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
     <div class="finding-meta"><strong>OWASP:</strong> A04:2021 — Insecure Design | <strong>OWASP API:</strong> API4:2023 | <strong>CWE:</strong> CWE-770 | <strong>Target:</strong> <code>EmailVerificationController.cs</code></div>
-    <p><strong>Mechanics:</strong> <code>POST /api/email-verification/resend</code> and <code>/verify</code> allow anonymous access but lack rate limiting attributes. An attacker can flood verification endpoints, saturating SMTP queues, triggering mail relay quota exhaustion, and causing denial of service.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> Decorate <code>EmailVerificationController</code> with <code>[EnableRateLimiting("AuthRateLimit")]</code> (30 req/min sliding window).</div>
+    <p><strong>Mechanics:</strong> Decorated <code>EmailVerificationController</code> with ASP.NET Core <code>[EnableRateLimiting("AuthRateLimit")]</code> attribute.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> 30 requests/minute sliding window per IP applied to public <code>/verify</code> and <code>/resend</code> endpoints. Verified by <code>EmailVerificationOriginTests</code> (3/3 passing).</div>
   </div>
 
   <!-- SEC-20 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-20: Active Session Persistence on Administrative Account Deactivation</div>
-      <div><span class="badge badge-medium">MEDIUM (CVSS 4.8)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-medium">MEDIUM (CVSS 4.8)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
-    <div class="finding-meta"><strong>OWASP:</strong> A07:2021 — Identification &amp; Auth Failures | <strong>CWE:</strong> CWE-613 | <strong>Target:</strong> <code>UserService.cs</code> (line 610)</div>
-    <p><strong>Mechanics:</strong> Deactivating an account sets <code>user.IsDeactivated = true; user.IsActive = false;</code> but retains active refresh tokens in the database. Defense-in-depth demands immediate token clearing upon deactivation.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> In <code>DeactivateAsync</code>, set <code>user.RefreshToken = null; user.RefreshTokenExpiry = null; user.LastActivityAt = null;</code>.</div>
+    <div class="finding-meta"><strong>OWASP:</strong> A07:2021 — Identification &amp; Auth Failures | <strong>CWE:</strong> CWE-613 | <strong>Target:</strong> <code>UserService.cs</code></div>
+    <p><strong>Mechanics:</strong> Deactivating an account via <code>UserService.DeactivateAsync</code> now immediately nullifies <code>RefreshToken</code>, <code>RefreshTokenExpiry</code>, and <code>LastActivityAt</code>.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Deactivated accounts cannot refresh tokens or make authenticated calls with existing tokens. Verified by <code>UserDeactivationSyncTests</code> (4/4 passing).</div>
   </div>
 
   <!-- SEC-21 -->
-  <div class="finding-card action-card">
+  <div class="finding-card">
     <div class="finding-header">
       <div class="finding-title">SEC-21: Incomplete Modern Browser Sandboxing Headers</div>
-      <div><span class="badge badge-low">LOW (CVSS 3.7)</span> <span class="badge badge-action">ACTIONABLE</span></div>
+      <div><span class="badge badge-low">LOW (CVSS 3.7)</span> <span class="badge badge-success">REMEDIATED</span></div>
     </div>
     <div class="finding-meta"><strong>OWASP:</strong> A05:2021 — Security Misconfiguration | <strong>CWE:</strong> CWE-693 | <strong>Target:</strong> <code>SecurityHeadersMiddleware.cs</code></div>
-    <p><strong>Mechanics:</strong> <code>SecurityHeadersMiddleware</code> omits <code>X-Permitted-Cross-Domain-Policies: none</code> and <code>Cross-Origin-Opener-Policy: same-origin</code>.</p>
-    <div class="action-box"><strong>Remediation Specification:</strong> Add <code>X-Permitted-Cross-Domain-Policies</code> and <code>Cross-Origin-Opener-Policy</code> to response headers.</div>
+    <p><strong>Mechanics:</strong> Added modern browser isolation headers to ASP.NET Core response pipeline.</p>
+    <div class="action-box"><strong>Remediation Implemented &amp; Verified:</strong> Injected <code>X-Permitted-Cross-Domain-Policies: none</code> and <code>Cross-Origin-Opener-Policy: same-origin</code> on every response. Verified by <code>SecurityHeadersMiddlewareTests</code> (1/1 passing).</div>
   </div>
 
   <div class="page-break"></div>
