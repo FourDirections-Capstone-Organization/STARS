@@ -184,9 +184,11 @@ public class TaskService : ITaskService
         var query = _db.Tasks
             .Include(t => t.CreatedBy)
             .Include(t => t.AssignedDepartment)
+            .Include(t => t.Team)
             .Include(t => t.Assignments)
                 .ThenInclude(a => a.AssignedUser)
             .Include(t => t.Attachments)
+            .AsNoTracking()
             .AsQueryable();
 
         // TASK VISIBILITY FILTER (FR-010, FR-011, FR-012, FR-013)
@@ -209,28 +211,38 @@ public class TaskService : ITaskService
         }
 
         // Summary counts are computed from the visibility-filtered query BEFORE the
-        // optional status/priority/classification filters are applied. This keeps the
-        // tab badge counts accurate across ALL pages no matter which tab the caller
-        // is currently viewing (e.g., narrowing to status=Completed must not zero out
-        // the Active/Overdue badge counts).
+        // optional status/priority/classification filters are applied.
         var nowUtc = DateTime.UtcNow;
-        var activeCount = await query.CountAsync(t =>
-            t.Status != Models.Enums.TaskStatus.Completed &&
-            t.Status != Models.Enums.TaskStatus.Cancelled &&
-            t.Status != Models.Enums.TaskStatus.OnHold);
-        var inProgressCount = await query.CountAsync(t =>
-            t.Status == Models.Enums.TaskStatus.InProgress);
-        var completedCount = await query.CountAsync(t =>
-            t.Status == Models.Enums.TaskStatus.Completed);
-        var overdueCount = await query.CountAsync(t =>
-            t.Status != Models.Enums.TaskStatus.Completed &&
-            t.Status != Models.Enums.TaskStatus.Cancelled &&
-            t.Status != Models.Enums.TaskStatus.OnHold &&
-            (t.RevisedDeadline ?? t.Deadline) < nowUtc);
-        var cancelledCount = await query.CountAsync(t =>
-            t.Status == Models.Enums.TaskStatus.Cancelled);
-        var onHoldCount = await query.CountAsync(t =>
-            t.Status == Models.Enums.TaskStatus.OnHold);
+        var counts = await query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                ActiveCount = g.Count(t =>
+                    t.Status != Models.Enums.TaskStatus.Completed &&
+                    t.Status != Models.Enums.TaskStatus.Cancelled &&
+                    t.Status != Models.Enums.TaskStatus.OnHold),
+                InProgressCount = g.Count(t =>
+                    t.Status == Models.Enums.TaskStatus.InProgress),
+                CompletedCount = g.Count(t =>
+                    t.Status == Models.Enums.TaskStatus.Completed),
+                OverdueCount = g.Count(t =>
+                    t.Status != Models.Enums.TaskStatus.Completed &&
+                    t.Status != Models.Enums.TaskStatus.Cancelled &&
+                    t.Status != Models.Enums.TaskStatus.OnHold &&
+                    (t.RevisedDeadline ?? t.Deadline) < nowUtc),
+                CancelledCount = g.Count(t =>
+                    t.Status == Models.Enums.TaskStatus.Cancelled),
+                OnHoldCount = g.Count(t =>
+                    t.Status == Models.Enums.TaskStatus.OnHold)
+            })
+            .FirstOrDefaultAsync();
+
+        var activeCount = counts?.ActiveCount ?? 0;
+        var inProgressCount = counts?.InProgressCount ?? 0;
+        var completedCount = counts?.CompletedCount ?? 0;
+        var overdueCount = counts?.OverdueCount ?? 0;
+        var cancelledCount = counts?.CancelledCount ?? 0;
+        var onHoldCount = counts?.OnHoldCount ?? 0;
 
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
@@ -740,19 +752,35 @@ public class TaskService : ITaskService
 
     private async Task<TaskResponseDTO> MapToResponseDTOAsync(Models.Task task, Guid? currentUserId = null)
     {
-        // Explicit Loading to Task
-        await _db.Entry(task).Reference(t => t.CreatedBy).LoadAsync();
-        await _db.Entry(task).Reference(t => t.AssignedDepartment).LoadAsync();
-        await _db.Entry(task).Reference(t => t.Team).LoadAsync();
-        await _db.Entry(task).Collection(t => t.Assignments).LoadAsync();
-
-        foreach (var assignment in task.Assignments)
+        // If entity is tracked and navigation properties were not eager-loaded, load them on-demand
+        var entry = _db.Entry(task);
+        if (entry.State != EntityState.Detached)
         {
-            await _db.Entry(assignment).Reference(a => a.AssignedUser).LoadAsync();
+            if (task.CreatedBy == null && task.CreatedById != Guid.Empty && !entry.Reference(t => t.CreatedBy).IsLoaded)
+                await entry.Reference(t => t.CreatedBy).LoadAsync();
+
+            if (task.AssignedDepartment == null && task.AssignedDepartmentId.HasValue && !entry.Reference(t => t.AssignedDepartment).IsLoaded)
+                await entry.Reference(t => t.AssignedDepartment).LoadAsync();
+
+            if (task.Team == null && task.TeamId.HasValue && !entry.Reference(t => t.Team).IsLoaded)
+                await entry.Reference(t => t.Team).LoadAsync();
+
+            if (task.Assignments == null || !entry.Collection(t => t.Assignments).IsLoaded)
+                await entry.Collection(t => t.Assignments).LoadAsync();
+
+            if (task.Assignments != null)
+            {
+                foreach (var assignment in task.Assignments)
+                {
+                    var aEntry = _db.Entry(assignment);
+                    if (aEntry.State != EntityState.Detached && assignment.AssignedUser == null && !aEntry.Reference(a => a.AssignedUser).IsLoaded)
+                        await aEntry.Reference(a => a.AssignedUser).LoadAsync();
+                }
+            }
         }
 
         var myAssignment = currentUserId.HasValue
-            ? task.Assignments.FirstOrDefault(a => a.AssignedUserId == currentUserId.Value)
+            ? task.Assignments?.FirstOrDefault(a => a.AssignedUserId == currentUserId.Value)
             : null;
 
         return new TaskResponseDTO
@@ -788,7 +816,7 @@ public class TaskService : ITaskService
             PreviousStatus = task.PreviousStatus,
             RevisedDeadline = task.RevisedDeadline,
             HeldAt = task.HeldAt,
-                Assignees = task.Assignments.Select(a => new TaskAssigneeDTO
+            Assignees = (task.Assignments ?? Enumerable.Empty<TaskAssignment>()).Select(a => new TaskAssigneeDTO
                 {
                     UserId = a.AssignedUserId,
                     FullName = a.AssignedUser is not null
