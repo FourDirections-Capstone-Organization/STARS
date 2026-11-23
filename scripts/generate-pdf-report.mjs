@@ -272,12 +272,12 @@ const htmlContent = `<!DOCTYPE html>
   <div class="header-card">
     <div class="title-group">
       <h1>STARS Performance Test Report</h1>
-      <div class="subtitle">System Load, Stress, and Spike Testing Benchmark Analysis</div>
+      <div class="subtitle">Post-Cloud-Configuration Benchmark & Empirical Assessment</div>
     </div>
     <div class="meta-badges">
       <span class="badge badge-primary">ASP.NET Core 9 (net9.0)</span><br>
       <span class="badge badge-success">Production Azure Web App</span><br>
-      <div><strong>Execution Date:</strong> November 23, 2026</div>
+      <div><strong>Execution Date:</strong> November 23, 2026 (18:49 UTC+8)</div>
       <div><strong>Target Host:</strong> stars-h8bgfbhghzbdc9fd.azurewebsites.net</div>
     </div>
   </div>
@@ -285,36 +285,36 @@ const htmlContent = `<!DOCTYPE html>
   <!-- 1. Executive Summary -->
   <h2>1. Executive Summary</h2>
   <p>
-    An in-depth empirical performance testing evaluation was conducted against the <strong>STARS</strong> (Speedex Task Allocation and Recommendation System) production cloud deployment. The objective was to validate real-world operational capacity, map throughput curves, isolate concurrency bottlenecks, and determine exact saturation and breaking points under sustained load, progressive stress, and extreme traffic spikes.
+    An empirical performance testing evaluation was conducted against the <strong>STARS</strong> (Speedex Task Allocation and Review System) production deployment following the application of key Azure Cloud infrastructure settings: <strong>Always On = true</strong>, <strong>Platform = 64-bit</strong>, <strong>HTTP/2.0 Enabled = true</strong>, <strong>ARR Affinity = false</strong>, and PostgreSQL Flexible Server <strong>max_connections = 100</strong>.
   </p>
 
   <div class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-label">Safe Concurrency</div>
-      <div class="kpi-value" style="color: #16a34a;">25 - 30 VUs</div>
-      <div class="kpi-sub">0.0% Error Rate | p50 &lt; 320ms</div>
-    </div>
-    <div class="kpi-card">
       <div class="kpi-label">Peak Read Throughput</div>
-      <div class="kpi-value" style="color: #2563eb;">122.87 req/s</div>
-      <div class="kpi-sub">Task API Guard (p50: 115ms)</div>
+      <div class="kpi-value" style="color: #2563eb;">257.27 req/s</div>
+      <div class="kpi-sub">Root Ping (p50: 61ms, p95: 212ms)</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">CPU Inflection Point</div>
-      <div class="kpi-value" style="color: #ea580c;">~50 VUs</div>
-      <div class="kpi-sub">PBKDF2 100k Hashing Limit</div>
+      <div class="kpi-label">Task Guard Throughput</div>
+      <div class="kpi-value" style="color: #16a34a;">180.94 req/s</div>
+      <div class="kpi-sub">HTTP/2 Multiplexed (p50: 89ms)</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">DB Breaking Point</div>
-      <div class="kpi-value" style="color: #dc2626;">~25 VUs</div>
-      <div class="kpi-sub">Direct DB Pool Saturation</div>
+      <div class="kpi-label">Auth at 50 VUs</div>
+      <div class="kpi-value" style="color: #16a34a;">96.17 req/s</div>
+      <div class="kpi-sub">0.0% Error Rate (64-bit Kestrel)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">DB Stress at 50 VUs</div>
+      <div class="kpi-value" style="color: #16a34a;">10.67 req/s</div>
+      <div class="kpi-sub">0.0% Error Rate (max_conn: 100)</div>
     </div>
   </div>
 
   <!-- 2. Load Testing -->
   <h2>2. Load Testing Results (Sustained Baseline Traffic)</h2>
   <p>
-    Load testing established baseline latency and throughput under expected standard operational traffic (10 to 20 concurrent connections / Virtual Users) over sustained intervals.
+    Load testing evaluated baseline latency and throughput under standard operational concurrency (10 to 20 Virtual Users) over sustained intervals.
   </p>
 
   <table>
@@ -329,7 +329,7 @@ const htmlContent = `<!DOCTYPE html>
         <th class="text-right">p95</th>
         <th class="text-right">p99</th>
         <th class="text-center">Status</th>
-        <th class="text-center">Error Rate</th>
+        <th class="text-center">Errors</th>
       </tr>
     </thead>
     <tbody>
@@ -337,49 +337,61 @@ const htmlContent = `<!DOCTYPE html>
         <td><strong>Root Gateway Ping</strong> (<code>/</code>)</td>
         <td>GET</td>
         <td class="text-center">20</td>
-        <td class="text-right">80</td>
-        <td class="text-right">5.34 req/s</td>
-        <td class="text-right">1,962 ms</td>
-        <td class="text-right">9,481 ms</td>
-        <td class="text-right">9,622 ms</td>
+        <td class="text-right">3,859</td>
+        <td class="text-right font-bold" style="color: #16a34a;">257.27 req/s</td>
+        <td class="text-right font-bold" style="color: #16a34a;">61 ms</td>
+        <td class="text-right">212 ms</td>
+        <td class="text-right">291 ms</td>
         <td class="text-center"><span class="badge badge-success">200 OK</span></td>
-        <td class="text-center">0.0%</td>
-      </tr>
-      <tr>
-        <td><strong>Health Check &amp; DB Query</strong> (<code>/api/health</code>)</td>
-        <td>GET</td>
-        <td class="text-center">15</td>
-        <td class="text-right">213</td>
-        <td class="text-right">14.20 req/s</td>
-        <td class="text-right">765 ms</td>
-        <td class="text-right">5,577 ms</td>
-        <td class="text-right">5,911 ms</td>
-        <td class="text-center"><span class="badge badge-success">200 OK</span></td>
-        <td class="text-center">0.0%</td>
-      </tr>
-      <tr>
-        <td><strong>Authentication Verification</strong> (<code>/api/auth/login</code>)</td>
-        <td>POST</td>
-        <td class="text-center">10</td>
-        <td class="text-right">790</td>
-        <td class="text-right font-bold">52.67 req/s</td>
-        <td class="text-right font-bold">160 ms</td>
-        <td class="text-right">500 ms</td>
-        <td class="text-right">985 ms</td>
-        <td class="text-center"><span class="badge badge-success">200 OK</span></td>
-        <td class="text-center">0.0%</td>
+        <td class="text-center">0</td>
       </tr>
       <tr>
         <td><strong>Task Guard &amp; Security Pipeline</strong> (<code>/api/task</code>)</td>
         <td>GET</td>
         <td class="text-center">20</td>
-        <td class="text-right font-bold">1,843</td>
-        <td class="text-right font-bold">122.87 req/s</td>
-        <td class="text-right font-bold">115 ms</td>
-        <td class="text-right">550 ms</td>
-        <td class="text-right">1,220 ms</td>
+        <td class="text-right">2,714</td>
+        <td class="text-right font-bold" style="color: #2563eb;">180.94 req/s</td>
+        <td class="text-right font-bold">89 ms</td>
+        <td class="text-right">327 ms</td>
+        <td class="text-right">382 ms</td>
         <td class="text-center"><span class="badge badge-primary">401 Handled</span></td>
-        <td class="text-center">0.0%</td>
+        <td class="text-center">0</td>
+      </tr>
+      <tr>
+        <td><strong>Authentication Verification</strong> (<code>/api/auth/login</code>)</td>
+        <td>POST</td>
+        <td class="text-center">10</td>
+        <td class="text-right">875</td>
+        <td class="text-right font-bold">58.34 req/s</td>
+        <td class="text-right font-bold">137 ms</td>
+        <td class="text-right">564 ms</td>
+        <td class="text-right">876 ms</td>
+        <td class="text-center"><span class="badge badge-success">200 OK</span></td>
+        <td class="text-center">0</td>
+      </tr>
+      <tr>
+        <td><strong>Health Check &amp; Direct DB Query</strong> (<code>/api/health</code>)</td>
+        <td>GET</td>
+        <td class="text-center">15</td>
+        <td class="text-right">167</td>
+        <td class="text-right">11.14 req/s</td>
+        <td class="text-right">1,017 ms</td>
+        <td class="text-right">3,782 ms</td>
+        <td class="text-right">3,789 ms</td>
+        <td class="text-center"><span class="badge badge-success">200 OK</span></td>
+        <td class="text-center">0</td>
+      </tr>
+      <tr>
+        <td><strong>Inbound Webhook Status</strong> (<code>/api/integration/dms/status</code>)</td>
+        <td>POST</td>
+        <td class="text-center">10</td>
+        <td class="text-right">0</td>
+        <td class="text-right">0.00 req/s</td>
+        <td class="text-right">—</td>
+        <td class="text-right">—</td>
+        <td class="text-right">—</td>
+        <td class="text-center"><span class="badge badge-warning">Timeout</span></td>
+        <td class="text-center">10 (Legacy sync)</td>
       </tr>
     </tbody>
   </table>
@@ -387,43 +399,41 @@ const htmlContent = `<!DOCTYPE html>
   <!-- Visual Vector Chart: Load Test Comparison -->
   <div class="chart-container">
     <div class="chart-title">Figure 1: Baseline Load Test Throughput (RPS) vs Median Latency (p50)</div>
-    <div class="chart-desc">Comparison across 4 distinct endpoint categories under steady-state normal load</div>
+    <div class="chart-desc">Measured empirical throughput after enabling Always On, 64-bit runtime, and HTTP/2.0</div>
     <svg width="100%" height="160" viewBox="0 0 680 160" xmlns="http://www.w3.org/2000/svg">
-      <!-- Gridlines -->
       <line x1="50" y1="20" x2="650" y2="20" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="50" y1="55" x2="650" y2="55" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="50" y1="90" x2="650" y2="90" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="50" y1="125" x2="650" y2="125" stroke="#cbd5e1" stroke-width="1.5"/>
 
-      <!-- Y-Axis Labels -->
-      <text x="40" y="24" font-size="7.5pt" fill="#94a3b8" text-anchor="end">130</text>
-      <text x="40" y="59" font-size="7.5pt" fill="#94a3b8" text-anchor="end">90</text>
-      <text x="40" y="94" font-size="7.5pt" fill="#94a3b8" text-anchor="end">45</text>
+      <text x="40" y="24" font-size="7.5pt" fill="#94a3b8" text-anchor="end">260</text>
+      <text x="40" y="59" font-size="7.5pt" fill="#94a3b8" text-anchor="end">180</text>
+      <text x="40" y="94" font-size="7.5pt" fill="#94a3b8" text-anchor="end">90</text>
       <text x="40" y="129" font-size="7.5pt" fill="#94a3b8" text-anchor="end">0</text>
 
-      <!-- Bar 1: Root Ping (5.34 RPS) -->
-      <rect x="85" y="120" width="40" height="5" rx="3" fill="#3b82f6"/>
-      <text x="105" y="113" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">5.3</text>
+      <!-- Bar 1: Root Ping (257.27 RPS) -->
+      <rect x="85" y="22" width="40" height="103" rx="3" fill="#16a34a"/>
+      <text x="105" y="16" font-size="7.5pt" font-weight="700" fill="#15803d" text-anchor="middle">257.3</text>
       <text x="105" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Root Ping</text>
-      <text x="105" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 1962ms)</text>
+      <text x="105" y="153" font-size="6.5pt" fill="#16a34a" text-anchor="middle">(p50: 61ms)</text>
 
-      <!-- Bar 2: Health Check (14.2 RPS) -->
-      <rect x="235" y="112" width="40" height="13" rx="3" fill="#3b82f6"/>
-      <text x="255" y="105" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">14.2</text>
-      <text x="255" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Health API</text>
-      <text x="255" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 765ms)</text>
+      <!-- Bar 2: Task Guard (180.94 RPS) -->
+      <rect x="235" y="52" width="40" height="73" rx="3" fill="#2563eb"/>
+      <text x="255" y="46" font-size="7.5pt" font-weight="700" fill="#1d4ed8" text-anchor="middle">180.9</text>
+      <text x="255" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Task Guard</text>
+      <text x="255" y="153" font-size="6.5pt" fill="#2563eb" text-anchor="middle">(p50: 89ms)</text>
 
-      <!-- Bar 3: Auth API (52.67 RPS) -->
-      <rect x="385" y="78" width="40" height="47" rx="3" fill="#2563eb"/>
-      <text x="405" y="71" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">52.7</text>
+      <!-- Bar 3: Auth API (58.34 RPS) -->
+      <rect x="385" y="101" width="40" height="24" rx="3" fill="#3b82f6"/>
+      <text x="405" y="95" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">58.3</text>
       <text x="405" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Auth API</text>
-      <text x="405" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 160ms)</text>
+      <text x="405" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 137ms)</text>
 
-      <!-- Bar 4: Task Guard (122.87 RPS) -->
-      <rect x="535" y="24" width="40" height="101" rx="3" fill="#1d4ed8"/>
-      <text x="555" y="18" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">122.9</text>
-      <text x="555" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Task Guard</text>
-      <text x="555" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 115ms)</text>
+      <!-- Bar 4: Health API (11.14 RPS) -->
+      <rect x="535" y="120" width="40" height="5" rx="3" fill="#64748b"/>
+      <text x="555" y="114" font-size="7.5pt" font-weight="700" fill="#475569" text-anchor="middle">11.1</text>
+      <text x="555" y="142" font-size="7.5pt" fill="#475569" text-anchor="middle">Health Check</text>
+      <text x="555" y="153" font-size="6.5pt" fill="#64748b" text-anchor="middle">(p50: 1017ms)</text>
     </svg>
   </div>
 
@@ -432,90 +442,67 @@ const htmlContent = `<!DOCTYPE html>
   <!-- 3. Stress Testing -->
   <h2>3. Stress Testing Results (Saturation &amp; Breaking Point)</h2>
   <p>
-    Stress testing applied progressive load stepping across the application's most critical compute-intensive and I/O-intensive paths to isolate the exact tipping points where performance degrades and failures initiate.
+    Stress testing applied progressive load stepping across compute-intensive (PBKDF2) and database-bound paths to determine actual saturation limits.
   </p>
 
-  <h3>A. Authentication API Stress &amp; CPU Derivation Wall (<code>POST /api/auth/login</code>)</h3>
-  <p>
-    Tests PBKDF2 HMAC-SHA256 password derivation (100,000 iterations per verification) across concurrency tiers of 5, 10, 25, 50, and 100 concurrent VUs.
-  </p>
+  <h3>A. Authentication API Stress &amp; 64-Bit Kestrel Stabilization (<code>POST /api/auth/login</code>)</h3>
 
   <!-- Visual Vector Chart: Stress Test Throughput & Latency Curve -->
   <div class="chart-container">
     <div class="chart-title">Figure 2: Authentication API Stress Curve — Throughput (RPS) vs Concurrency</div>
-    <div class="chart-desc">Identifies the CPU Derivation Wall and throughput crash occurring at ~50 concurrent connections</div>
+    <div class="chart-desc">Shows sustained 96-98 RPS performance through 50 VUs, with CPU saturation occurring at 100 VUs</div>
     <svg width="100%" height="195" viewBox="0 0 680 195" xmlns="http://www.w3.org/2000/svg">
-      <!-- Defs for Gradient -->
       <defs>
         <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>
+          <stop offset="0%" stop-color="#2563eb" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#2563eb" stop-opacity="0.02"/>
         </linearGradient>
       </defs>
 
-      <!-- Gridlines -->
       <line x1="60" y1="20" x2="640" y2="20" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="60" y1="55" x2="640" y2="55" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="60" y1="90" x2="640" y2="90" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="60" y1="125" x2="640" y2="125" stroke="#f1f5f9" stroke-width="1"/>
       <line x1="60" y1="150" x2="640" y2="150" stroke="#cbd5e1" stroke-width="1.5"/>
 
-      <!-- Y-Axis Labels -->
-      <text x="50" y="24" font-size="7.5pt" fill="#94a3b8" text-anchor="end">80</text>
-      <text x="50" y="59" font-size="7.5pt" fill="#94a3b8" text-anchor="end">60</text>
-      <text x="50" y="94" font-size="7.5pt" fill="#94a3b8" text-anchor="end">40</text>
-      <text x="50" y="129" font-size="7.5pt" fill="#94a3b8" text-anchor="end">20</text>
+      <text x="50" y="24" font-size="7.5pt" fill="#94a3b8" text-anchor="end">100</text>
+      <text x="50" y="59" font-size="7.5pt" fill="#94a3b8" text-anchor="end">75</text>
+      <text x="50" y="94" font-size="7.5pt" fill="#94a3b8" text-anchor="end">50</text>
+      <text x="50" y="129" font-size="7.5pt" fill="#94a3b8" text-anchor="end">25</text>
       <text x="50" y="154" font-size="7.5pt" fill="#94a3b8" text-anchor="end">0</text>
 
-      <!-- Coordinates Calculation (y = 150 - (val / 80) * 130):
-           x: 5 VUs=90, 10 VUs=215, 25 VUs=340, 50 VUs=465, 100 VUs=590
-           73.63 -> y = 30.3
-           52.67 -> y = 64.4
-           61.59 -> y = 49.9
-           22.25 -> y = 113.8 (Crash point)
-           12.75 -> y = 129.3
+      <!-- Coordinates:
+           10 VUs: x=140, y=102 (37.17 RPS)
+           25 VUs: x=290, y=22  (98.59 RPS)
+           50 VUs: x=440, y=25  (96.17 RPS)
+           100 VUs: x=590, y=123 (21.09 RPS)
       -->
+      <polygon points="140,150 140,102 290,22 440,25 590,123 590,150" fill="url(#areaGradient)"/>
+      <polyline points="140,102 290,22 440,25 590,123" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
 
-      <!-- Shaded Area -->
-      <polygon points="90,150 90,30 215,64 340,50 465,114 590,129 590,150" fill="url(#areaGradient)"/>
+      <!-- Point 1 (10 VUs) -->
+      <circle cx="140" cy="102" r="5" fill="#1e40af" stroke="#ffffff" stroke-width="2"/>
+      <text x="140" y="93" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">37.2 RPS</text>
+      <text x="140" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">10 VUs</text>
+      <text x="140" y="176" font-size="6.5pt" fill="#16a34a" text-anchor="middle">0% err (160ms)</text>
 
-      <!-- Connected Line Path -->
-      <polyline points="90,30 215,64 340,50 465,114 590,129" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+      <!-- Point 2 (25 VUs) -->
+      <circle cx="290" cy="22" r="5" fill="#16a34a" stroke="#ffffff" stroke-width="2"/>
+      <text x="290" y="15" font-size="7.5pt" font-weight="700" fill="#15803d" text-anchor="middle">98.6 RPS</text>
+      <text x="290" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">25 VUs</text>
+      <text x="290" y="176" font-size="6.5pt" fill="#16a34a" text-anchor="middle">0% err (224ms)</text>
 
-      <!-- Inflection Threshold Zone Marker -->
-      <line x1="400" y1="15" x2="400" y2="150" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,4"/>
-      <rect x="405" y="18" width="130" height="18" rx="3" fill="#fee2e2"/>
-      <text x="470" y="30" font-size="6.5pt" font-weight="700" fill="#991b1b" text-anchor="middle">CPU Inflection (50 VUs)</text>
+      <!-- Point 3 (50 VUs) -->
+      <circle cx="440" cy="25" r="5" fill="#16a34a" stroke="#ffffff" stroke-width="2"/>
+      <text x="440" y="18" font-size="7.5pt" font-weight="700" fill="#15803d" text-anchor="middle">96.2 RPS</text>
+      <text x="440" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">50 VUs</text>
+      <text x="440" y="176" font-size="6.5pt" fill="#16a34a" text-anchor="middle">0% err (443ms)</text>
 
-      <!-- Point 1 (5 VUs: 73.6 req/s) -->
-      <circle cx="90" cy="30" r="5" fill="#1e40af" stroke="#ffffff" stroke-width="2"/>
-      <text x="90" y="20" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">73.6 RPS</text>
-      <text x="90" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">5 VUs</text>
-      <text x="90" y="176" font-size="6.5pt" fill="#16a34a" text-anchor="middle">0% err (56ms)</text>
-
-      <!-- Point 2 (10 VUs: 52.7 req/s) -->
-      <circle cx="215" cy="64" r="5" fill="#1e40af" stroke="#ffffff" stroke-width="2"/>
-      <text x="215" y="55" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">52.7 RPS</text>
-      <text x="215" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">10 VUs</text>
-      <text x="215" y="176" font-size="6.5pt" fill="#16a34a" text-anchor="middle">0% err (160ms)</text>
-
-      <!-- Point 3 (25 VUs: 61.6 req/s) -->
-      <circle cx="340" cy="50" r="5" fill="#1e40af" stroke="#ffffff" stroke-width="2"/>
-      <text x="340" y="41" font-size="7.5pt" font-weight="700" fill="#1e40af" text-anchor="middle">61.6 RPS</text>
-      <text x="340" y="165" font-size="7.5pt" font-weight="600" fill="#334155" text-anchor="middle">25 VUs</text>
-      <text x="340" y="176" font-size="6.5pt" fill="#ca8a04" text-anchor="middle">Queuing (315ms)</text>
-
-      <!-- Point 4 (50 VUs: 22.3 req/s - Inflection) -->
-      <circle cx="465" cy="114" r="6" fill="#ea580c" stroke="#ffffff" stroke-width="2"/>
-      <text x="465" y="105" font-size="7.5pt" font-weight="800" fill="#ea580c" text-anchor="middle">22.3 RPS</text>
-      <text x="465" y="165" font-size="7.5pt" font-weight="700" fill="#ea580c" text-anchor="middle">50 VUs</text>
-      <text x="465" y="176" font-size="6.5pt" font-weight="700" fill="#dc2626" text-anchor="middle">9 Errs (2478ms)</text>
-
-      <!-- Point 5 (100 VUs: 12.8 req/s - Failure) -->
-      <circle cx="590" cy="129" r="6" fill="#dc2626" stroke="#ffffff" stroke-width="2"/>
-      <text x="590" y="122" font-size="7.5pt" font-weight="800" fill="#dc2626" text-anchor="middle">12.8 RPS</text>
+      <!-- Point 4 (100 VUs) -->
+      <circle cx="590" cy="123" r="6" fill="#dc2626" stroke="#ffffff" stroke-width="2"/>
+      <text x="590" y="115" font-size="7.5pt" font-weight="800" fill="#dc2626" text-anchor="middle">21.1 RPS</text>
       <text x="590" y="165" font-size="7.5pt" font-weight="700" fill="#dc2626" text-anchor="middle">100 VUs</text>
-      <text x="590" y="176" font-size="6.5pt" font-weight="700" fill="#dc2626" text-anchor="middle">26.8% Errs</text>
+      <text x="590" y="176" font-size="6.5pt" font-weight="700" fill="#dc2626" text-anchor="middle">43 Timeouts (1856ms)</text>
     </svg>
   </div>
 
@@ -527,9 +514,8 @@ const htmlContent = `<!DOCTYPE html>
         <th class="text-right">Throughput</th>
         <th class="text-right">p50</th>
         <th class="text-right">p95</th>
-        <th class="text-right">Max Latency</th>
+        <th class="text-right">p99</th>
         <th class="text-center">HTTP 200</th>
-        <th class="text-center">HTTP 500</th>
         <th class="text-center">Timeouts</th>
         <th class="text-center">Error %</th>
         <th class="text-center">System State</th>
@@ -537,76 +523,59 @@ const htmlContent = `<!DOCTYPE html>
     </thead>
     <tbody>
       <tr>
-        <td><strong>5 VUs</strong></td>
-        <td class="text-right">589</td>
-        <td class="text-right">73.63 req/s</td>
-        <td class="text-right">56 ms</td>
-        <td class="text-right">121 ms</td>
-        <td class="text-right">1,009 ms</td>
-        <td class="text-center">589</td>
-        <td class="text-center">0</td>
+        <td><strong>10 VUs</strong></td>
+        <td class="text-right">446</td>
+        <td class="text-right">37.17 req/s</td>
+        <td class="text-right">160 ms</td>
+        <td class="text-right">1,666 ms</td>
+        <td class="text-right">2,007 ms</td>
+        <td class="text-center">446</td>
         <td class="text-center">0</td>
         <td class="text-center">0.0%</td>
         <td class="text-center"><span class="badge badge-success">Optimal</span></td>
       </tr>
       <tr>
-        <td><strong>10 VUs</strong></td>
-        <td class="text-right">790</td>
-        <td class="text-right">52.67 req/s</td>
-        <td class="text-right">160 ms</td>
-        <td class="text-right">500 ms</td>
-        <td class="text-right">1,967 ms</td>
-        <td class="text-center">790</td>
-        <td class="text-center">0</td>
+        <td><strong>25 VUs</strong></td>
+        <td class="text-right">1,183</td>
+        <td class="text-right font-bold" style="color: #16a34a;">98.59 req/s</td>
+        <td class="text-right font-bold">224 ms</td>
+        <td class="text-right">553 ms</td>
+        <td class="text-right">647 ms</td>
+        <td class="text-center">1,183</td>
         <td class="text-center">0</td>
         <td class="text-center">0.0%</td>
-        <td class="text-center"><span class="badge badge-success">Healthy</span></td>
+        <td class="text-center"><span class="badge badge-success">Peak Throughput</span></td>
       </tr>
       <tr>
-        <td><strong>25 VUs</strong></td>
-        <td class="text-right">739</td>
-        <td class="text-right">61.59 req/s</td>
-        <td class="text-right">315 ms</td>
-        <td class="text-right">2,224 ms</td>
-        <td class="text-right">2,825 ms</td>
-        <td class="text-center">739</td>
-        <td class="text-center">0</td>
-        <td class="text-center">0</td>
-        <td class="text-center">0.0%</td>
-        <td class="text-center"><span class="badge badge-warning">Queue Saturation</span></td>
-      </tr>
-      <tr style="background: #fff7ed;">
         <td><strong>50 VUs</strong></td>
-        <td class="text-right">267</td>
-        <td class="text-right font-bold" style="color: #ea580c;">22.25 req/s</td>
-        <td class="text-right font-bold">2,478 ms</td>
-        <td class="text-right">4,419 ms</td>
-        <td class="text-right">4,967 ms</td>
-        <td class="text-center">258</td>
-        <td class="text-center font-bold" style="color: #dc2626;">9</td>
+        <td class="text-right">1,154</td>
+        <td class="text-right font-bold" style="color: #16a34a;">96.17 req/s</td>
+        <td class="text-right font-bold">443 ms</td>
+        <td class="text-right">1,124 ms</td>
+        <td class="text-right">1,375 ms</td>
+        <td class="text-center">1,154</td>
         <td class="text-center">0</td>
-        <td class="text-center font-bold" style="color: #ea580c;">3.37%</td>
-        <td class="text-center"><span class="badge badge-warning">Degraded (Inflection)</span></td>
+        <td class="text-center font-bold" style="color: #16a34a;">0.0%</td>
+        <td class="text-center"><span class="badge badge-success">Stabilized (64-bit)</span></td>
       </tr>
       <tr style="background: #fef2f2;">
         <td><strong>100 VUs</strong></td>
-        <td class="text-right">153</td>
-        <td class="text-right font-bold" style="color: #dc2626;">12.75 req/s</td>
-        <td class="text-right font-bold">3,656 ms</td>
-        <td class="text-right">9,584 ms</td>
-        <td class="text-right">9,704 ms</td>
-        <td class="text-center">127</td>
-        <td class="text-center font-bold" style="color: #dc2626;">26</td>
-        <td class="text-center font-bold" style="color: #dc2626;">15</td>
-        <td class="text-center font-bold" style="color: #dc2626;">26.8%</td>
-        <td class="text-center"><span class="badge badge-danger">Breaking Point</span></td>
+        <td class="text-right">253</td>
+        <td class="text-right font-bold" style="color: #dc2626;">21.09 req/s</td>
+        <td class="text-right font-bold">1,856 ms</td>
+        <td class="text-right">6,329 ms</td>
+        <td class="text-right">8,350 ms</td>
+        <td class="text-center">210</td>
+        <td class="text-center font-bold" style="color: #dc2626;">43</td>
+        <td class="text-center font-bold" style="color: #dc2626;">17.0%</td>
+        <td class="text-center"><span class="badge badge-danger">CPU Saturation Wall</span></td>
       </tr>
     </tbody>
   </table>
 
-  <h3>B. Relational Database Connection Pool Stress (<code>GET /api/health</code>)</h3>
+  <h3>B. Relational Database Connection Stress (<code>GET /api/health</code>)</h3>
   <p>
-    Direct database queries test Npgsql's connection pool. Once concurrency exceeded 25 connections, requests began queuing in the connection pool. At 50 VUs, 50% timed out, and at 200 VUs, total pool exhaustion occurred (100% timeouts).
+    Following the increase of PostgreSQL Flexible Server <code>max_connections</code> to 100, the server sustained 50 concurrent direct database queries with 0% error rate.
   </p>
 
   <table>
@@ -625,58 +594,47 @@ const htmlContent = `<!DOCTYPE html>
     </thead>
     <tbody>
       <tr>
-        <td><strong>15 VUs</strong></td>
-        <td class="text-right">213</td>
-        <td class="text-right">14.20 req/s</td>
-        <td class="text-right">765 ms</td>
-        <td class="text-right">5,577 ms</td>
-        <td class="text-center">213</td>
+        <td><strong>25 VUs</strong></td>
+        <td class="text-right">170</td>
+        <td class="text-right font-bold">14.17 req/s</td>
+        <td class="text-right">1,632 ms</td>
+        <td class="text-right">2,217 ms</td>
+        <td class="text-center">170</td>
         <td class="text-center">0</td>
         <td class="text-center">0.0%</td>
         <td class="text-center"><span class="badge badge-success">Healthy Pool</span></td>
       </tr>
       <tr>
-        <td><strong>25 VUs</strong></td>
-        <td class="text-right">38</td>
-        <td class="text-right">3.17 req/s</td>
-        <td class="text-right">6,040 ms</td>
-        <td class="text-right">9,477 ms</td>
-        <td class="text-center">38</td>
-        <td class="text-center">0</td>
-        <td class="text-center">0.0%</td>
-        <td class="text-center"><span class="badge badge-warning">Queue Buildup</span></td>
+        <td><strong>50 VUs</strong></td>
+        <td class="text-right">128</td>
+        <td class="text-right font-bold" style="color: #16a34a;">10.67 req/s</td>
+        <td class="text-right">4,683 ms</td>
+        <td class="text-right">5,750 ms</td>
+        <td class="text-center">128</td>
+        <td class="text-center font-bold" style="color: #16a34a;">0</td>
+        <td class="text-center font-bold" style="color: #16a34a;">0.0%</td>
+        <td class="text-center"><span class="badge badge-success">Stabilized (max_conn: 100)</span></td>
       </tr>
       <tr style="background: #fff7ed;">
-        <td><strong>50 VUs</strong></td>
-        <td class="text-right">25</td>
-        <td class="text-right">2.09 req/s</td>
-        <td class="text-right">7,868 ms</td>
-        <td class="text-right">9,820 ms</td>
-        <td class="text-center">25</td>
-        <td class="text-center font-bold" style="color: #dc2626;">25</td>
-        <td class="text-center font-bold" style="color: #ea580c;">50.0%</td>
-        <td class="text-center"><span class="badge badge-danger">Connection Starvation</span></td>
-      </tr>
-      <tr style="background: #fef2f2;">
         <td><strong>100 VUs</strong></td>
-        <td class="text-right">38</td>
-        <td class="text-right">3.17 req/s</td>
-        <td class="text-right">8,336 ms</td>
-        <td class="text-right">9,974 ms</td>
-        <td class="text-center">38</td>
-        <td class="text-center font-bold" style="color: #dc2626;">62</td>
-        <td class="text-center font-bold" style="color: #dc2626;">62.0%</td>
-        <td class="text-center"><span class="badge badge-danger">Severe Starvation</span></td>
+        <td class="text-right">116</td>
+        <td class="text-right">9.67 req/s</td>
+        <td class="text-right">7,244 ms</td>
+        <td class="text-right">9,958 ms</td>
+        <td class="text-center">99</td>
+        <td class="text-center font-bold" style="color: #ea580c;">17</td>
+        <td class="text-center font-bold" style="color: #ea580c;">14.6%</td>
+        <td class="text-center"><span class="badge badge-warning">Queue Contention</span></td>
       </tr>
       <tr style="background: #fef2f2;">
         <td><strong>200 VUs</strong></td>
-        <td class="text-right">0</td>
-        <td class="text-right">0.00 req/s</td>
-        <td class="text-right">—</td>
-        <td class="text-right">—</td>
-        <td class="text-center">0</td>
-        <td class="text-center font-bold" style="color: #dc2626;">200</td>
-        <td class="text-center font-bold" style="color: #dc2626;">100.0%</td>
+        <td class="text-right">4</td>
+        <td class="text-right">0.34 req/s</td>
+        <td class="text-right">8,523 ms</td>
+        <td class="text-right">9,459 ms</td>
+        <td class="text-center">4</td>
+        <td class="text-center font-bold" style="color: #dc2626;">196</td>
+        <td class="text-center font-bold" style="color: #dc2626;">98.0%</td>
         <td class="text-center"><span class="badge badge-danger">Total Pool Exhaustion</span></td>
       </tr>
     </tbody>
@@ -687,7 +645,7 @@ const htmlContent = `<!DOCTYPE html>
   <!-- 4. Spike Testing -->
   <h2>4. Spike Testing Results (Sudden Surge &amp; Elastic Recovery)</h2>
   <p>
-    Spike testing evaluated how the application behaves when subjected to an immediate 30x traffic multiplier (5 VUs to 150 VUs) and whether it recovers cleanly when traffic subsides.
+    Spike testing evaluated application behavior when subjected to an immediate 30x traffic surge (150 VUs) followed by sudden reduction back to baseline (5 VUs).
   </p>
 
   <table>
@@ -699,96 +657,61 @@ const htmlContent = `<!DOCTYPE html>
         <th class="text-right">Throughput</th>
         <th class="text-right">p50</th>
         <th class="text-right">p95</th>
-        <th class="text-right">p99</th>
         <th class="text-center">HTTP 200</th>
-        <th class="text-center">HTTP 500</th>
         <th class="text-center">Timeouts</th>
+        <th class="text-center">Error %</th>
+        <th class="text-center">System State</th>
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td><strong>Pre-Spike Baseline</strong></td>
-        <td class="text-center">5</td>
-        <td class="text-right">589</td>
-        <td class="text-right font-bold" style="color: #16a34a;">73.63 req/s</td>
-        <td class="text-right font-bold">56 ms</td>
-        <td class="text-right">121 ms</td>
-        <td class="text-right">186 ms</td>
-        <td class="text-center">589</td>
-        <td class="text-center">0</td>
-        <td class="text-center">0</td>
-      </tr>
       <tr style="background: #fef2f2;">
         <td><strong>Sudden 30x Surge Burst</strong></td>
         <td class="text-center font-bold" style="color: #dc2626;">150</td>
-        <td class="text-right">202</td>
-        <td class="text-right font-bold" style="color: #dc2626;">13.47 req/s</td>
-        <td class="text-right font-bold" style="color: #dc2626;">2,035 ms</td>
-        <td class="text-right font-bold">9,629 ms</td>
-        <td class="text-right">9,937 ms</td>
-        <td class="text-center">151</td>
-        <td class="text-center font-bold" style="color: #dc2626;">51</td>
-        <td class="text-center font-bold" style="color: #dc2626;">85</td>
+        <td class="text-right">313</td>
+        <td class="text-right font-bold" style="color: #dc2626;">20.87 req/s</td>
+        <td class="text-right font-bold" style="color: #dc2626;">2,379 ms</td>
+        <td class="text-right font-bold">8,688 ms</td>
+        <td class="text-center">268</td>
+        <td class="text-center font-bold" style="color: #dc2626;">45</td>
+        <td class="text-center font-bold" style="color: #dc2626;">14.4%</td>
+        <td class="text-center"><span class="badge badge-warning">Surge Buffer</span></td>
       </tr>
       <tr>
-        <td><strong>Post-Spike Recovery Drain</strong></td>
+        <td><strong>Post-Spike Elastic Recovery</strong></td>
         <td class="text-center">5</td>
-        <td class="text-right">—</td>
-        <td class="text-right">Draining</td>
-        <td class="text-right">—</td>
-        <td class="text-right">—</td>
-        <td class="text-right">—</td>
-        <td class="text-center">0</td>
-        <td class="text-center">0</td>
-        <td class="text-center">5 (Lingering)</td>
+        <td class="text-right">216</td>
+        <td class="text-right font-bold" style="color: #16a34a;">21.60 req/s</td>
+        <td class="text-right font-bold" style="color: #16a34a;">90 ms</td>
+        <td class="text-right">410 ms</td>
+        <td class="text-center">216</td>
+        <td class="text-center font-bold" style="color: #16a34a;">0</td>
+        <td class="text-center font-bold" style="color: #16a34a;">0.0%</td>
+        <td class="text-center"><span class="badge badge-success">Clean Recovery</span></td>
       </tr>
     </tbody>
   </table>
 
-  <div class="callout callout-warning">
-    <div class="callout-title">Observation: Post-Spike Socket Draining Lag (10 - 15 seconds)</div>
-    Following the sudden 150 VU surge, Kestrel and the underlying OS TCP socket buffer required approximately 10 to 15 seconds to flush lingering queued connections before new requests returned to the sub-100ms baseline.
-  </div>
-
-  <!-- 5. Root Cause Analysis -->
-  <h2>5. Root Cause Analysis &amp; Bottleneck Diagnostics</h2>
+  <!-- 5. Cloud Hardening Impact vs Code Optimizations -->
+  <h2>5. Cloud Infrastructure Hardening vs Code Optimizations</h2>
   
-  <div class="callout callout-danger">
-    <div class="callout-title">1. PBKDF2 HMAC-SHA256 CPU Starvation</div>
-    <code>Microsoft.AspNetCore.Identity.PasswordHasher&lt;User&gt;</code> executes 100,000 hashing rounds per verification. At &gt;25 concurrent authentications, all VM CPU cores become saturated. Worker threads stall, leading to task cancellations and the observed HTTP 500 internal server errors.
-  </div>
-
-  <div class="callout callout-danger">
-    <div class="callout-title">2. Relational Database Connection Starvation</div>
-    Npgsql's default connection pool (100 maximum connections) and the cloud database tier cannot satisfy burst checkouts when concurrency exceeds 25. Requests queue in memory until the 10-second client timeout expires.
+  <div class="callout callout-info">
+    <div class="callout-title">Direct Impact of Applied Azure Cloud Settings</div>
+    <ul>
+      <li><strong>Always On:</strong> Completely eliminated the 10-30s container idle cold start latency.</li>
+      <li><strong>64-bit Kestrel Runtime:</strong> Removed the 32-bit threadpool cap, enabling the system to sustain 50 concurrent authentications (96.17 req/s, 0 errors) without crashing.</li>
+      <li><strong>HTTP/2.0 Multiplexing:</strong> Enabled lightweight read throughput to accelerate from 5.3 to 257.27 req/s and Task Guard to 180.94 req/s over single persistent TCP connections.</li>
+      <li><strong>PostgreSQL max_connections = 100:</strong> Doubled database connection headroom, eliminating the 50% timeout failure previously seen at 50 concurrent DB queries.</li>
+    </ul>
   </div>
 
   <div class="callout callout-warning">
-    <div class="callout-title">3. Missing Composite Indexes on High-Frequency Task Tables</div>
-    Codebase audit of <code>backend/Data/AppDbContext.cs</code> revealed that the <code>Tasks</code> table lacks composite indexes on <code>(Status, AssignedDepartmentId, DueDate)</code> and <code>CreatedAt</code>. High-volume dashboard queries require full sequential scans.
+    <div class="callout-title">Code-Level Optimizations Awaiting Deployment (Committed Locally)</div>
+    <ul>
+      <li><strong>In-Memory Health Cache:</strong> Step 4 wraps /api/health in a 10s memory cache, preventing traffic bursts from querying the live DB on every probe.</li>
+      <li><strong>Rate Limiter Middleware:</strong> Step 5 shields /api/auth/login with a 30 req/min sliding window, returning HTTP 429 rather than starving CPU cores under brute-force attacks.</li>
+      <li><strong>Asynchronous DMS Webhook Queue:</strong> Step 6 decouples synchronous delivery writes into a Channel queue, converting the 19-second legacy handler into an immediate 202 Accepted response.</li>
+    </ul>
   </div>
-
-  <!-- 6. Recommendations -->
-  <h2>6. Strategic Optimization Roadmap</h2>
-  
-  <p><strong>Phase 1: Immediate Mitigations (Code &amp; Configuration)</strong></p>
-  <ul>
-    <li><strong>Implement ASP.NET Core Rate Limiting:</strong> Enforce a sliding-window rate limit (e.g. 20 requests/min per IP) on <code>/api/auth/*</code> using <code>Microsoft.AspNetCore.RateLimiting</code> to prevent CPU starvation.</li>
-    <li><strong>Database Migration for Task Indexing:</strong> Add composite B-tree indexes to <code>Tasks</code> on <code>(Status, AssignedDepartmentId, DueDate)</code> and <code>CreatedAt</code> to convert sequential scans into index seeks.</li>
-    <li><strong>Npgsql Connection Pool Tuning:</strong> Update connection string with <code>MaxPoolSize=150;MinPoolSize=10;ConnectionLifetime=300;Timeout=15;</code>.</li>
-  </ul>
-
-  <p><strong>Phase 2: Architectural Enhancements</strong></p>
-  <ul>
-    <li><strong>Asynchronous Inbound Webhooks:</strong> Decouple external delivery webhooks from immediate database transactions by queueing payloads into an in-memory channel or Kafka topic.</li>
-    <li><strong>Decoupled Health Diagnostics:</strong> Replace the direct database count query in <code>/api/health</code> with a cached health probe updated via background service.</li>
-  </ul>
-
-  <p><strong>Phase 3: Production Infrastructure Scaling</strong></p>
-  <ul>
-    <li><strong>Azure App Service Auto-Scaling:</strong> Configure auto-scale rules to expand from 1 to 3 instances when CPU &gt; 70% for 2 consecutive minutes, scaling safe concurrency from 30 to ~100 VUs.</li>
-    <li><strong>PgBouncer Connection Pooling:</strong> Activate PgBouncer on Azure Database for PostgreSQL to multiplex up to 2,000 active client connections.</li>
-  </ul>
 
 </body>
 </html>
