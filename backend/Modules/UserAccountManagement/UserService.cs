@@ -908,7 +908,7 @@ public class UserService : IUserService
         _db.Users.Add(manager);
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("Default manager created: {Email} with temporary password: {Password}", managerEmail, tempPassword);
+        _logger.LogInformation("Default manager created: {Email} with temporary password: [REDACTED_TEMP_PASSWORD]", managerEmail);
     }
 
     public async System.Threading.Tasks.Task SeedTestAccountsAsync()
@@ -966,7 +966,7 @@ public class UserService : IUserService
             user.PasswordHash = passwordHasher.HashPassword(user, tempPassword);
             _db.Users.Add(user);
 
-            _logger.LogInformation("Test account created: {Email} ({Role}) with password: {Password}", account.Email, account.Role, tempPassword);
+            _logger.LogInformation("Test account created: {Email} ({Role}) with password: [REDACTED_TEMP_PASSWORD]", account.Email, account.Role);
         }
 
         await _db.SaveChangesAsync();
