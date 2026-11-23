@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.TaskManagement;
 using Backend.Modules.RoleBasedAccessControl;
 
@@ -52,6 +53,22 @@ public class AttachmentController : ControllerBase
     [HttpGet("attachments/{id:guid}/download")]
     public async Task<IActionResult> GetById(Guid id)
     {
+        var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var roleStr = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        Enum.TryParse<UserRole>(roleStr, true, out var userRole);
+
+        // SEC-05: Broken Object-Level Authorization (BOLA/IDOR) Check
+        var accessCheck = await _attachmentService.CanUserAccessAttachmentAsync(id, userId, userRole);
+        if (!accessCheck.IsSuccess)
+        {
+            if (accessCheck.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                return NotFound(accessCheck);
+            return StatusCode(403, ApiResponseDTO<object>.Failure("You do not have permission to download this attachment."));
+        }
+
         var result = await _attachmentService.GetByIdAsync(id);
         if (!result.IsSuccess)
             return NotFound(result);

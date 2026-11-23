@@ -30,23 +30,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin =>
-        {
-            if (string.IsNullOrEmpty(origin)) return false;
-            try
-            {
-                var uri = new Uri(origin);
-                return uri.Host == "localhost"
-                    || uri.Host == "127.0.0.1"
-                    || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.Equals("speedex-system.vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        })
+        policy.SetIsOriginAllowed(origin => CorsPolicyHelper.IsOriginAllowed(origin, builder.Environment.IsDevelopment()))
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials();
@@ -324,11 +308,12 @@ app.MapGet("/api/health", async (AppDbContext db) =>
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"[HEALTH ERROR] {ex.Message}");
         return Results.Json(new
         {
             status = "unhealthy",
-            database = "error",
-            error = ex.Message,
+            database = "unavailable",
+            message = "Service temporarily unavailable",
             timestamp = DateTime.UtcNow
         }, statusCode: 500);
     }
@@ -341,8 +326,11 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
+    app.UseHsts();
     app.UseHttpsRedirection();
 }
+
+app.UseSecurityHeaders();
 
 app.UseExceptionHandler(errorApp =>
 {

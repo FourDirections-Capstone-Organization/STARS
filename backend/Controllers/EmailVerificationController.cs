@@ -4,6 +4,7 @@ using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Modules.AuthenticationAndCredentials;
 using Backend.Modules.RoleBasedAccessControl;
+using Backend.Modules.Utilities;
 
 namespace Backend.Controllers;
 
@@ -46,7 +47,7 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in VerifyEmail");
-            return StatusCode(500, ApiResponseDTO<bool>.Failure($"Verification failed: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<bool>.Failure("Verification request could not be processed. Please try again later."));
         }
     }
 
@@ -84,7 +85,7 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResendVerification for identifier {Identifier}", dto?.Identifier ?? dto?.EmployeeNumber);
-            return StatusCode(500, ApiResponseDTO<bool>.Failure($"Failed to send verification email: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<bool>.Failure("Failed to send verification email. Please try again later."));
         }
     }
 
@@ -103,24 +104,32 @@ public class EmailVerificationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GetVerificationStatus for user {UserId}", userId);
-            return StatusCode(500, ApiResponseDTO<EmailVerificationStatusDTO>.Failure($"Failed to retrieve status: {ex.Message}"));
+            return StatusCode(500, ApiResponseDTO<EmailVerificationStatusDTO>.Failure("Failed to retrieve verification status. Please try again later."));
         }
     }
 
-    private string GetClientBaseUrl()
+    internal string GetClientBaseUrl()
     {
         try
         {
             if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
             {
-                return origin.ToString().TrimEnd('/');
+                var originStr = origin.ToString().TrimEnd('/');
+                if (CorsPolicyHelper.IsOriginAllowed(originStr))
+                {
+                    return originStr;
+                }
             }
 
             if (Request.Headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
             {
                 if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
                 {
-                    return $"{uri.Scheme}://{uri.Authority}";
+                    var refererAuthority = $"{uri.Scheme}://{uri.Authority}";
+                    if (CorsPolicyHelper.IsOriginAllowed(refererAuthority))
+                    {
+                        return refererAuthority;
+                    }
                 }
             }
         }

@@ -38,10 +38,11 @@ public class EmailVerificationService : IEmailVerificationService
         if (string.IsNullOrWhiteSpace(token))
             return ApiResponseDTO<bool>.Failure("Verification token is required.");
 
-        var cleanToken = token.Trim().ToLowerInvariant();
+        var cleanToken = token.Trim();
+        var tokenHash = TokenHasher.HashToken(cleanToken);
 
         var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.EmailVerificationToken != null && u.EmailVerificationToken.ToLower() == cleanToken);
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken != null && (u.EmailVerificationToken == tokenHash || u.EmailVerificationToken == cleanToken || u.EmailVerificationToken.ToLower() == cleanToken.ToLowerInvariant()));
 
         if (user is null)
         {
@@ -174,7 +175,7 @@ public class EmailVerificationService : IEmailVerificationService
             }
 
             var token = GenerateToken();
-            user.EmailVerificationToken = token;
+            user.EmailVerificationToken = TokenHasher.HashToken(token);
             user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
             user.UpdatedAt = DateTime.UtcNow;
 
@@ -258,7 +259,7 @@ public class EmailVerificationService : IEmailVerificationService
             }
 
             var token = GenerateToken();
-            user.EmailVerificationToken = token;
+            user.EmailVerificationToken = TokenHasher.HashToken(token);
             user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
             await _db.SaveChangesAsync();
 

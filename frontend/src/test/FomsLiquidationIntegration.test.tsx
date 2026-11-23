@@ -53,7 +53,7 @@ describe('Integration 5: FOMS Late/Invalid Liquidation → STARS Liquidation Cor
             deliveryReference: 'WB-2026-NCR-8841',
             liquidationStatus: 'For Correction',
             correctionReason: 'Missing official fuel receipt from Shell station',
-            dueDate: '2026-11-20T17:00:00Z',
+            dueDate: '2028-11-20T17:00:00Z',
             amount: 1450.00,
             correctionStatus: 'InProgress',
             correctedReceiptsUrl: 'https://speedex.blob.core.windows.net/receipts/LIQ-2026-LIVE-9921-receipt.pdf',
@@ -101,7 +101,7 @@ describe('Integration 5: FOMS Late/Invalid Liquidation → STARS Liquidation Cor
             deliveryReference: 'WB-2026-VIS-5521',
             liquidationStatus: 'For Correction',
             correctionReason: 'Maintenance receipt missing VAT breakdown',
-            dueDate: '2026-11-25T12:00:00Z',
+            dueDate: '2028-11-25T12:00:00Z',
             amount: 3200.00,
             correctionStatus: 'Corrected',
             correctedReceiptsUrl: 'https://speedex.blob.core.windows.net/receipts/LIQ-2026-REV-9923-vat.pdf',
@@ -417,11 +417,11 @@ describe('Integration 5: FOMS Late/Invalid Liquidation → STARS Liquidation Cor
                 'Status: For Correction\n' +
                 'Correction Reason: Missing official fuel receipt from Shell station\n' +
                 'Amount: ₱1,450.00\n' +
-                'Due Date: 2026-11-20\n' +
+                'Due Date: 2028-11-20\n' +
                 'Remarks: Please collect corrected receipts and resolve discrepancy with requester.',
             priority: 'High',
             taskStatus: 'In Progress',
-            dueAt: '2026-11-20T17:00:00Z',
+            dueAt: '2028-11-20T17:00:00Z',
             assignedEmployee: 'Jane Coordinator',
             createdByEmployee: 'System (FOMS Integration)',
             createdAt: '2026-11-19T06:29:50Z',

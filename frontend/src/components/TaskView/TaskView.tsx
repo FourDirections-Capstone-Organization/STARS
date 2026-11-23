@@ -2421,8 +2421,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     <div className="tv-foms-action-bar" style={{ marginTop: '0.85rem' }}>
                                         <span className="tv-foms-action-label">Liquidation FSM Actions:</span>
                                         <div className="tv-foms-action-buttons">
-                                            {/* InProgress -> Attach Receipts */}
-                                            {(effectiveStatus === 'In Progress' || effectiveStatus === 'Not Started' || effectiveStatus === 'InProgress' || liquidationDetail?.correctionStatus === 'PendingCorrection') && (
+                                            {/* InProgress / Overdue -> Attach Receipts */}
+                                            {(effectiveStatus === 'In Progress' || effectiveStatus === 'Not Started' || effectiveStatus === 'InProgress' || effectiveStatus === 'Overdue' || liquidationDetail?.correctionStatus === 'PendingCorrection') && effectiveStatus !== 'Completed' && (
                                                 <button
                                                     type="button"
                                                     className="tv-btn-primary-sm"
