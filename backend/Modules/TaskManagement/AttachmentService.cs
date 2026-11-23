@@ -3,6 +3,7 @@ using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Models.Enums;
+using Backend.Modules.Utilities;
 using Microsoft.Extensions.Options;
 using Task = System.Threading.Tasks.Task;
 
@@ -215,6 +216,10 @@ public class AttachmentService : IAttachmentService
 
         if (file.Length > _fileSettings.MaxFileSizeBytes)
             return (false, $"File exceeds the maximum allowed size ({_fileSettings.MaxFileSizeBytes / 1024 / 1024}MB)");
+
+        // SEC-10: Inspect magic byte signature to verify actual content matches extension
+        if (!FileSignatureValidator.HasValidMagicBytes(file))
+            return (false, "File signature mismatch or invalid file header. File content does not match the declared extension.");
 
         return (true, null);
     }
