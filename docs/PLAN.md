@@ -226,7 +226,7 @@ flowchart TD
 
 ### Phase 3: Infrastructure, Container & Dependency Hardening
 
-- [ ] **Step 11: Frontend Dependency Vulnerability Remediation (SEC-11)**
+- [x] **Step 11: Frontend Dependency Vulnerability Remediation (SEC-11)**
   - **Targets:**
     - `frontend/package.json`
     - `frontend/package-lock.json`
