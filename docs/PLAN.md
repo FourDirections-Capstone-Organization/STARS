@@ -283,7 +283,7 @@ flowchart TD
     - `node api-integration-tests/test-stars-foms-e2e.mjs` (M2M integration passing).
   - **Branch:** `step-15-regression-gates`
 
-- [ ] **Step 16: Security Audit Report & PDF Regeneration**
+- [x] **Step 16: Security Audit Report & PDF Regeneration**
   - **Targets:**
     - `scripts/generate-security-audit-pdf.mjs`
     - `docs/security-audit-report.html`
