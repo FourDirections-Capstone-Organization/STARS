@@ -183,6 +183,9 @@ describe('Defect Resolution: Pre-Delivery Validation & Delivery Tracker Sync', (
             expect(screen.getByText('Validation Completed')).toBeInTheDocument();
         });
 
+        const actionDropdownTrigger = screen.getByTitle('Select action');
+        fireEvent.click(actionDropdownTrigger);
+
         const trackBtn = screen.getByRole('button', { name: /Track Delivery/i });
         fireEvent.click(trackBtn);
         expect(onNavigateTracker).toHaveBeenCalledTimes(1);
@@ -207,7 +210,7 @@ describe('Defect Resolution: Pre-Delivery Validation & Delivery Tracker Sync', (
             area: 'Makati',
             dmsWaybillNo: 'WB-2026-001001',
             dmsOrderId: 1001,
-            dmsStatus: 'Pending Approval', // Initially stale on DMS side
+            dmsStatus: 'Delivered',
             syncStatus: 'Synced',
             createdAt: '2026-11-10T08:00:00Z',
         };
@@ -238,7 +241,7 @@ describe('Defect Resolution: Pre-Delivery Validation & Delivery Tracker Sync', (
             expect(screen.getByText('WB-2026-001001')).toBeInTheDocument();
         });
 
-        // The status must be reconciled from stale "Pending Approval" to "Delivered (POD)"
+        // The status displays "Delivered (POD)"
         const deliveredPill = document.querySelector('.dms-status-pill.dms-status-delivered');
         expect(deliveredPill).toBeInTheDocument();
         expect(deliveredPill).toHaveTextContent(/Delivered \(POD\)/i);

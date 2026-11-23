@@ -340,12 +340,27 @@ public class UserService : IUserService
         // Check permissions: only Manager or the user themselves can update
         if (!requestUserId.HasValue)
             return ApiResponseDTO<UserResponseDTO>.Failure("Authentication required");
-        
-        if (requestUserId != id)
+
+        var requestUser = await _db.Users.FindAsync(requestUserId.Value);
+        var isCallerManager = requestUser != null && requestUser.Role == UserRole.Manager;
+
+        if (requestUserId != id && !isCallerManager)
         {
-            var requestUser = await _db.Users.FindAsync(requestUserId.Value);
-            if (requestUser is null || requestUser.Role != UserRole.Manager)
-                return ApiResponseDTO<UserResponseDTO>.Failure("You don't have permission to update this user");
+            return ApiResponseDTO<UserResponseDTO>.Failure("You don't have permission to update this user");
+        }
+
+        // SEC-01: Mass Assignment Prevention
+        // If caller is not a verified Manager, strip administrative privilege fields to prevent self-escalation
+        if (!isCallerManager)
+        {
+            dto.Role = null;
+            dto.DepartmentId = null;
+            dto.JobPositionId = null;
+            dto.TargetSystems = null;
+            dto.AllowedSystems = null;
+            dto.DmsRole = null;
+            dto.DmsAreas = null;
+            dto.FomsRole = null;
         }
 
         // Check email uniqueness if changing

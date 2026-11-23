@@ -227,6 +227,7 @@ type NavTab =
 export interface TeamMember {
     accountId: string;
     employeeName: string;
+    employeeNumber?: string;
     role: string;
     presenceStatus?: string;
     departmentId?: string;
@@ -985,6 +986,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         dmsOrderId: (initial as any)?.deliveryDetails?.dmsOrderId ?? undefined,
         dmsWaybillNo: (initial as any)?.deliveryDetails?.dmsWaybillNo ?? '',
         dmsStatus: (initial as any)?.deliveryDetails?.dmsStatus ?? '',
+        taskType: (initial as any)?.deliveryDetails?.taskType ?? '',
+        packageType: (initial as any)?.deliveryDetails?.packageType ?? '',
+        weight: (initial as any)?.deliveryDetails?.weight ?? '',
+        itemCount: (initial as any)?.deliveryDetails?.itemCount ?? undefined,
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1422,6 +1427,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 dmsOrderId: (deliveryForm as any).dmsOrderId,
                 dmsWaybillNo: (deliveryForm as any).dmsWaybillNo || undefined,
                 dmsStatus: (deliveryForm as any).dmsStatus || undefined,
+                taskType: (deliveryForm as any).taskType || undefined,
+                packageType: (deliveryForm as any).packageType || undefined,
+                weight: (deliveryForm as any).weight || undefined,
+                itemCount: (deliveryForm as any).itemCount != null ? Number((deliveryForm as any).itemCount) : undefined,
                 isHistoricalDeadline,
                 originalExpectedDelivery: originalExpectedDelivery || (deliveryForm as any).originalExpectedDelivery || undefined,
             };
@@ -2324,6 +2333,50 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                                     placeholder="e.g. Ricardo Bautista"
                                                     style={{ fontSize: 12 }}
                                                     data-testid="pre-delivery-courier-name-input"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Item Count</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={(deliveryForm as any).itemCount ?? ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, itemCount: e.target.value ? parseInt(e.target.value, 10) : undefined } as any))}
+                                                    placeholder="e.g. 3"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-item-count"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Weight</label>
+                                                <input
+                                                    value={(deliveryForm as any).weight || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, weight: e.target.value } as any))}
+                                                    placeholder="e.g. 2.5 kg"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-weight"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Package Type</label>
+                                                <input
+                                                    value={(deliveryForm as any).packageType || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, packageType: e.target.value } as any))}
+                                                    placeholder="e.g. Box, Parcel"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-package-type"
+                                                />
+                                            </div>
+                                            <div className="field" style={{ margin: 0 }}>
+                                                <label style={{ fontSize: 11 }}>Task Type</label>
+                                                <input
+                                                    value={(deliveryForm as any).taskType || ''}
+                                                    onChange={e => setDeliveryForm(prev => ({ ...prev, taskType: e.target.value } as any))}
+                                                    placeholder="e.g. Standard Delivery"
+                                                    style={{ fontSize: 12 }}
+                                                    data-testid="delivery-form-task-type"
                                                 />
                                             </div>
                                         </div>
@@ -5445,6 +5498,108 @@ export const ReportsTab: React.FC<{
     const [dmsCopiedWb, setDmsCopiedWb] = useState<string | null>(null);
     const [dmsExportFormat, setDmsExportFormat] = useState<'Csv' | 'Excel'>('Csv');
 
+    const augmentDmsRecords = useCallback(async (summaryData: any) => {
+        if (!summaryData || !Array.isArray(summaryData.records)) return summaryData;
+
+        let deliveryList: any[] = [];
+        try {
+            const delRes = await api.get('/api/dms-integration/deliveries');
+            const list = delRes?.data?.data ?? delRes?.data;
+            if (Array.isArray(list)) deliveryList = list;
+        } catch {
+            deliveryList = [];
+        }
+
+        const waybillToDeliveryMap = new Map<string, any>();
+        const driverIdToNameMap = new Map<string, { name: string; isActive?: boolean }>();
+
+        if (Array.isArray(teamMembers)) {
+            teamMembers.forEach(tm => {
+                const name = (tm.employeeName || (tm as any).fullName || '').trim();
+                if (!name) return;
+                const empNo = ((tm as any).employeeNumber || '').toLowerCase().trim();
+                const accId = (tm.accountId || '').toLowerCase().trim();
+                if (empNo) driverIdToNameMap.set(empNo, { name, isActive: (tm as any).presenceStatus !== 'Inactive' });
+                if (accId) driverIdToNameMap.set(accId, { name, isActive: (tm as any).presenceStatus !== 'Inactive' });
+            });
+        }
+
+        if (Array.isArray(tasks)) {
+            tasks.forEach((t: any) => {
+                const taskId = t.taskId || t.id;
+                const wb = (t.deliveryDetails?.dmsWaybillNo || t.taskReferenceNumber || '').toLowerCase().trim();
+                if (wb && taskId) {
+                    waybillToDeliveryMap.set(wb, { taskId, courierFullName: t.deliveryDetails?.courierFullName });
+                }
+
+                if (Array.isArray(t.assignees)) {
+                    t.assignees.forEach((a: any) => {
+                        const aName = (a.fullName || a.employeeName || '').trim();
+                        const aEmpNo = (a.employeeNumber || a.employeeId || a.userId || '').toLowerCase().trim();
+                        if (aName && aEmpNo) {
+                            driverIdToNameMap.set(aEmpNo, { name: aName, isActive: a.isActive !== false });
+                        }
+                    });
+                }
+            });
+        }
+
+        deliveryList.forEach(d => {
+            const wb = (d.dmsWaybillNo || d.waybillNo || '').toLowerCase().trim();
+            if (wb) {
+                waybillToDeliveryMap.set(wb, d);
+            }
+            const empId = (d.courierEmployeeId || d.driverEmployeeId || d.driverId || '').toLowerCase().trim();
+            const fullName = (d.courierFullName || d.driverName || '').trim();
+            if (empId && fullName && fullName.toLowerCase() !== empId && fullName.toLowerCase() !== 'unassigned') {
+                driverIdToNameMap.set(empId, { name: fullName, isActive: d.courierIsActive });
+            }
+        });
+
+        const augmentedRecords = summaryData.records.map((r: any) => {
+            const wbKey = (r.waybillNo || '').toLowerCase().trim();
+            const driverKey = (r.driverId || '').toLowerCase().trim();
+            const matchedDel = wbKey ? waybillToDeliveryMap.get(wbKey) : null;
+            const matchedDriver = driverKey ? driverIdToNameMap.get(driverKey) : null;
+
+            let resolvedDriverName = r.driverName;
+            let resolvedDriverIsActive = r.driverIsActive;
+
+            if (!resolvedDriverName || resolvedDriverName.toLowerCase().trim() === driverKey || resolvedDriverName.toLowerCase().trim() === 'unassigned') {
+                if (matchedDriver?.name) {
+                    resolvedDriverName = matchedDriver.name;
+                    if (resolvedDriverIsActive === undefined || resolvedDriverIsActive === null) {
+                        resolvedDriverIsActive = matchedDriver.isActive;
+                    }
+                } else if (matchedDel?.courierFullName && matchedDel.courierFullName.toLowerCase().trim() !== driverKey) {
+                    resolvedDriverName = matchedDel.courierFullName;
+                    if (resolvedDriverIsActive === undefined || resolvedDriverIsActive === null) {
+                        resolvedDriverIsActive = matchedDel.courierIsActive;
+                    }
+                }
+            }
+
+            let resolvedTaskId = r.starsTaskId;
+            if (!resolvedTaskId || resolvedTaskId === '00000000-0000-0000-0000-000000000000') {
+                if (matchedDel?.taskId && matchedDel.taskId !== '00000000-0000-0000-0000-000000000000') {
+                    resolvedTaskId = matchedDel.taskId;
+                }
+            }
+
+            return {
+                ...r,
+                driverName: resolvedDriverName || r.driverName,
+                driverIsActive: resolvedDriverIsActive !== undefined ? resolvedDriverIsActive : r.driverIsActive,
+                starsTaskId: resolvedTaskId || r.starsTaskId,
+            };
+        });
+
+        return {
+            ...summaryData,
+            records: augmentedRecords,
+        };
+    }, [teamMembers, tasks]);
+
     const fetchDmsPerfData = useCallback(async (driver?: string) => {
         setDmsPerfLoading(true);
         try {
@@ -5453,7 +5608,8 @@ export const ReportsTab: React.FC<{
             const res = await api.get(`/api/integration/dms/performance-summary?${params.toString()}`);
             const json = res.data;
             if (json?.isSuccess && json?.data && Array.isArray(json.data.records) && json.data.records.length > 0) {
-                setDmsPerfData(json.data);
+                const augmented = await augmentDmsRecords(json.data);
+                setDmsPerfData(augmented);
                 return;
             }
         } catch {
@@ -5593,7 +5749,7 @@ export const ReportsTab: React.FC<{
         } finally {
             setDmsPerfLoading(false);
         }
-    }, [tasks]);
+    }, [tasks, augmentDmsRecords]);
 
     useEffect(() => {
         fetchDmsPerfData(dmsDriverFilter);
@@ -5620,7 +5776,7 @@ export const ReportsTab: React.FC<{
                     onTime: 0,
                     late: 0,
                 };
-            } else if (!driverMap[dId].driverName && r.driverName) {
+            } else if ((!driverMap[dId].driverName || driverMap[dId].driverName === dId) && r.driverName && r.driverName !== dId) {
                 driverMap[dId].driverName = r.driverName;
                 driverMap[dId].driverIsActive = r.driverIsActive;
             }
@@ -8084,28 +8240,36 @@ export const ReportsTab: React.FC<{
                                         <tbody>
                                             {pagedDmsRecords.map(r => {
                                                 const hasTaskId = Boolean(r.starsTaskId && r.starsTaskId !== '00000000-0000-0000-0000-000000000000');
+                                                const handleRecordClick = () => {
+                                                    if (hasTaskId && onViewTask) {
+                                                        onViewTask(r.starsTaskId!);
+                                                    } else {
+                                                        window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                                                            detail: { waybillNo: r.waybillNo }
+                                                        }));
+                                                        if (onNavigateToTab) {
+                                                            onNavigateToTab('dms');
+                                                        }
+                                                    }
+                                                };
                                                 return (
                                                     <tr
                                                         key={r.waybillNo}
-                                                        tabIndex={hasTaskId ? 0 : undefined}
-                                                        role={hasTaskId ? 'button' : undefined}
-                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : undefined}
-                                                        onClick={() => {
-                                                            if (hasTaskId && onViewTask) {
-                                                                onViewTask(r.starsTaskId!);
-                                                            }
-                                                        }}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-label={hasTaskId ? `View STARS task details for waybill ${r.waybillNo}` : `Track delivery in DMS for waybill ${r.waybillNo}`}
+                                                        onClick={handleRecordClick}
                                                         onKeyDown={(e) => {
-                                                            if ((e.key === 'Enter' || e.key === ' ') && hasTaskId && onViewTask) {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
                                                                 e.preventDefault();
-                                                                onViewTask(r.starsTaskId!);
+                                                                handleRecordClick();
                                                             }
                                                         }}
                                                         style={{
                                                             borderBottom: '1px solid var(--border)',
-                                                            cursor: hasTaskId ? 'pointer' : 'default',
+                                                            cursor: 'pointer',
                                                         }}
-                                                        className={`dms-completion-row ${hasTaskId ? 'clickable-row' : ''}`}
+                                                        className="dms-completion-row clickable-row"
                                                         data-testid={`dms-record-row-${r.waybillNo}`}
                                                     >
                                                         <td style={{ padding: '8px 10px' }}>
@@ -8235,7 +8399,32 @@ export const ReportsTab: React.FC<{
                                                                     <ChevronRight size={12} />
                                                                 </a>
                                                             ) : (
-                                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No Task</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm btn-secondary"
+                                                                    data-testid={`dms-view-task-btn-${r.waybillNo}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        window.dispatchEvent(new CustomEvent('stars:navigate-dms-tracker', {
+                                                                            detail: { waybillNo: r.waybillNo }
+                                                                        }));
+                                                                        if (onNavigateToTab) {
+                                                                            onNavigateToTab('dms');
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        fontSize: 11,
+                                                                        padding: '3px 8px',
+                                                                        height: 26,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 4,
+                                                                    }}
+                                                                    title="Track in DMS"
+                                                                >
+                                                                    <span>Track in DMS</span>
+                                                                    <ChevronRight size={12} />
+                                                                </button>
                                                             )}
                                                         </td>
                                                     </tr>
@@ -8613,7 +8802,7 @@ function ProfileTab() {
     const middleName = localStorage.getItem('middleName') ?? '';
     const lastName = localStorage.getItem('lastName') ?? '';
     const employeeNameStored = [firstName, middleName, lastName].filter(Boolean).join(' ');
-    const profileRole = localStorage.getItem('role') ?? '';
+    const profileRole = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
     const displayProfileRole = profileRole === 'Manager' ? 'Manager' : 'Coordinator';
     const employeeContact = localStorage.getItem('contactNumber') ?? '';
     const storedEmail = localStorage.getItem('email') ?? '';
@@ -9599,6 +9788,10 @@ export const buildPreDeliveryTaskInitialData = (order: DmsPendingOrder) => {
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
+            taskType: order.taskType,
+            packageType: order.packageType,
+            weight: order.weight,
+            itemCount: order.itemCount,
             isHistoricalDeadline,
             originalExpectedDelivery,
         }
@@ -9616,7 +9809,7 @@ export default function OpsAdminDashboard() {
     const firstName = localStorage.getItem('firstName') ?? '';
     const lastName = localStorage.getItem('lastName') ?? '';
     const middleName = localStorage.getItem('middleName') ?? '';
-    const rawRole = localStorage.getItem('role') ?? '';
+    const rawRole = localStorage.getItem('userRole') || localStorage.getItem('role') || '';
     const displayRole = rawRole === 'Manager' ? 'Manager' : 'Coordinator';
     const employeeName = [firstName, middleName, lastName].filter(Boolean).join(' ') || displayRole;
     const { success, error } = useToast();
@@ -9631,6 +9824,7 @@ export default function OpsAdminDashboard() {
         setEditingTask(null);
         setViewingTask(null);
         setDetailTask(null);
+        setTaskReturnTab(null);
         setOverrideTask(null);
         setReviewTask(null);
         setViewingDuplicateTask(null);
@@ -9719,7 +9913,8 @@ export default function OpsAdminDashboard() {
         referenceNumber: t.taskNumber || t.taskReferenceNumber,
         classification: CLASSIFICATION_MAP[t.classification] ?? CLASSIFICATION_MAP[(t as any).Classification] ?? (String(t.classification).toLowerCase().includes('special') ? 'special' : (t.taskTitle?.startsWith('Delivery Follow-up - ') ? 'special' : '')),
         project: t.taskCategory,
-        assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : undefined,
+        assignee: t.assignedTo ? { id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' } : (t.assignees && t.assignees.length > 0 ? { id: (t.assignees[0] as any).userId || (t.assignees[0] as any).id, name: t.assignees[0].fullName || 'Unassigned' } : undefined),
+        assignees: t.assignees?.map((a: any) => ({ id: a.userId ?? a.id ?? '', name: a.fullName ?? a.name ?? '' })) || (t.assignedTo ? [{ id: t.assignedTo, name: t.assignedEmployee || 'Unassigned' }] : undefined),
         priority: t.priority as TMTask['priority'],
         status: ({
             Draft: 'Backlog', Assigned: 'To do', Pending: 'To do', NotStarted: 'To do',
@@ -9876,6 +10071,7 @@ export default function OpsAdminDashboard() {
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [viewingTask, setViewingTask] = useState<Task | null>(null);
     const [detailTask, setDetailTask] = useState<TaskViewTask | null>(null);
+    const [taskReturnTab, setTaskReturnTab] = useState<NavTab | null>(null);
     const [overrideTask, setOverrideTask] = useState<Task | null>(null);
     const [reviewTask, setReviewTask] = useState<Task | null>(null);
 
@@ -9900,7 +10096,7 @@ export default function OpsAdminDashboard() {
             const PRIORITY_LABELS: Record<number, string> = { 0: 'Low', 1: 'Medium', 2: 'High', 3: 'Urgent' };
             const STATUS_LABELS: Record<number, string> = { 0: 'Assigned', 1: 'In Progress', 2: 'Pending Admin Review', 3: 'Completed', 4: 'On Hold', 5: 'Cancelled' };
             const now = new Date();
-            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const isCoordinator = ((localStorage.getItem('userRole') || localStorage.getItem('role')) ?? '').toLowerCase() === 'coordinator';
             const currentAccountId = localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? localStorage.getItem('employeeId') ?? '';
             const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
 
@@ -10317,9 +10513,10 @@ export default function OpsAdminDashboard() {
                     statusStr = t.taskStatus || 'Assigned';
                 }
                 const priorityStr = normalizeCoordinatorPriority(t.priorityLevel ?? t.priority);
+                const rawTitle = t.title ?? t.taskTitle ?? '';
                 return {
                     taskId: t.id ?? t.taskId,
-                    taskTitle: t.title ?? t.taskTitle ?? '',
+                    taskTitle: rawTitle,
                     taskDescription: t.description ?? t.taskDescription ?? '',
                     taskCategory: t.taskCategory ?? '',
                     taskNumber: t.taskNumber ?? t.taskReferenceNumber ?? '',
@@ -10334,6 +10531,7 @@ export default function OpsAdminDashboard() {
                     createdByEmployee: t.createdByName ?? t.createdByEmployee ?? '',
                     assignedTo: t.assignees?.length > 0 ? t.assignees[0].userId ?? '' : '',
                     assignees: (t.assignees ?? []).map((a: any) => ({
+                        userId: a.userId ?? a.id ?? '',
                         fullName: a.fullName ?? a.FullName ?? '',
                         completionPercentage: a.completionPercentage ?? a.CompletionPercentage ?? 0,
                     })),
@@ -10348,13 +10546,16 @@ export default function OpsAdminDashboard() {
                 };
             });
 
-            const isCoordinator = (localStorage.getItem('role') ?? '').toLowerCase() === 'coordinator';
+            const isCoordinator = ((localStorage.getItem('userRole') || localStorage.getItem('role')) ?? '').toLowerCase() === 'coordinator';
             const currentAccountId = (localStorage.getItem('accountId') ?? localStorage.getItem('userId') ?? '').toLowerCase();
             const currentEmployeeNum = (localStorage.getItem('employeeId') ?? '').toLowerCase();
             const currentEmployeeName = (localStorage.getItem('employeeName') ?? `${localStorage.getItem('firstName') ?? ''} ${localStorage.getItem('lastName') ?? ''}`).trim().toLowerCase();
 
             const scopedTasks = isCoordinator
                 ? normalized.filter(t => {
+                    // If coordinator identity is not stored, preserve server-scoped tasks
+                    if (!currentAccountId && !currentEmployeeNum && !currentEmployeeName) return true;
+
                     const cId = (t.createdById ?? '').toLowerCase();
                     const cEmp = (t.createdByEmployee ?? '').trim().toLowerCase();
                     const aTo = (t.assignedTo ?? '').toLowerCase();
@@ -10364,6 +10565,17 @@ export default function OpsAdminDashboard() {
                     if (currentAccountId && cId === currentAccountId) return true;
                     if (currentEmployeeNum && cId === currentEmployeeNum) return true;
                     if (currentEmployeeName && cEmp && (cEmp === currentEmployeeName || currentEmployeeName.includes(cEmp) || cEmp.includes(currentEmployeeName))) return true;
+
+                    // Flexible name match (e.g., middle name differences)
+                    if (currentEmployeeName && cEmp) {
+                        const nameParts = currentEmployeeName.split(' ').filter(Boolean);
+                        const cEmpParts = cEmp.split(' ').filter(Boolean);
+                        if (nameParts.length >= 2 && cEmpParts.length >= 2) {
+                            if (nameParts[0] === cEmpParts[0] && nameParts[nameParts.length - 1] === cEmpParts[cEmpParts.length - 1]) {
+                                return true;
+                            }
+                        }
+                    }
 
                     // Assignee match (handling task)
                     if (currentAccountId && aTo === currentAccountId) return true;
@@ -10378,6 +10590,9 @@ export default function OpsAdminDashboard() {
                     })) {
                         return true;
                     }
+
+                    // If task has no creator id/name attached, retain it because server GetAllAsync already filtered by user token
+                    if (!cId && !cEmp) return true;
 
                     return false;
                 })
@@ -10461,6 +10676,7 @@ export default function OpsAdminDashboard() {
             setTeamMembers(rawList.map(e => ({
                 accountId: e.userId ?? e.UserId ?? e.id,
                 employeeName: (e.fullName ?? e.FullName ?? e.employeeName ?? e.EmployeeName ?? '').trim(),
+                employeeNumber: (e.employeeNumber ?? e.EmployeeNumber ?? e.employeeId ?? e.EmployeeId ?? '').trim(),
                 role: e.role ?? '',
                 presenceStatus: e.availabilityStatus ?? e.AvailabilityStatus ?? 'Active',
                 departmentId: e.departmentId ? String(e.departmentId) : (e.DepartmentId ? String(e.DepartmentId) : undefined),
@@ -11093,6 +11309,7 @@ export default function OpsAdminDashboard() {
     // -- Silent auto-refresh of the task list while the Tasks tab is open --
     useEffect(() => {
         if (activeTab !== 'tasks') return;
+        fetchTasks(true);
         const interval = setInterval(() => {
             fetchTasks(true);
         }, 30000);
@@ -11213,9 +11430,17 @@ export default function OpsAdminDashboard() {
                             <div className="dashboard-content">
                                 <TaskView
                                     task={detailTask}
+                                    backLabel={taskReturnTab === 'reports' ? 'Return to Reports Dashboard' : undefined}
+                                    breadcrumbRoot={taskReturnTab === 'reports' ? 'Reports' : undefined}
                                     onEdit={() => { setEditingTask(detailTask); setDetailTask(null); }}
                                     onReopen={() => handleReopenTask(detailTask.taskId)}
-                                    onClose={() => setDetailTask(null)}
+                                    onClose={() => {
+                                        setDetailTask(null);
+                                        if (taskReturnTab === 'reports') {
+                                            setActiveTab('reports');
+                                            setTaskReturnTab(null);
+                                        }
+                                    }}
                                     onApprove={(id) => handleReviewTask(id, 'Approve & Close', 'Approved via TaskView.')}
                                     onReject={(id, reason) => handleReviewTask(id, 'Return for Rework', reason)}
                                     onDeleteAttachment={handleDeleteAttachment}
@@ -11284,6 +11509,7 @@ export default function OpsAdminDashboard() {
                                     <div className="dashboard-content">
                                         <AIAssignmentView
                                             onTaskCreated={() => {
+                                                setTaskSubTab('list');
                                                 fetchTasks().catch(() => { });
                                                 doFetchDashboard().catch(() => { });
                                             }}
@@ -11308,7 +11534,10 @@ export default function OpsAdminDashboard() {
                         tasks={tasks}
                         teamMembers={teamMembers}
                         onNavigateToTab={handleNavChange}
-                        onViewTask={handleOpenTaskById}
+                        onViewTask={(taskId) => {
+                            setTaskReturnTab('reports');
+                            handleOpenTaskById(taskId);
+                        }}
                     />
                 )}
                 {activeTab === 'profile' && <ProfileTab />}
@@ -11469,6 +11698,10 @@ export default function OpsAdminDashboard() {
                             initialTaskId={trackerTargetTaskId}
                             initialWaybill={trackerTargetWaybill}
                             onViewTask={handleOpenTaskById}
+                            onClearInitialTarget={() => {
+                                setTrackerTargetTaskId(undefined);
+                                setTrackerTargetWaybill(undefined);
+                            }}
                         />
                     </div>
                 )}

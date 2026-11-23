@@ -118,6 +118,12 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(t => t.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // High-Performance Query & Filter Indexes
+            entity.HasIndex(e => new { e.Status, e.AssignedDepartmentId, e.Deadline });
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.CreatedById, e.Status });
+            entity.HasIndex(e => e.TaskNumber);
         });
 
         // Team Configuration
@@ -342,6 +348,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.TaskId).IsUnique();
             entity.HasIndex(e => e.DmsWaybillNo);
+            entity.HasIndex(e => e.DmsOrderId);
 
             entity.HasOne(d => d.Task)
                 .WithMany()

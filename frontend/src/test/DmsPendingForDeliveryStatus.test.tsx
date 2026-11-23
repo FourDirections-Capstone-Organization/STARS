@@ -1,0 +1,464 @@
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { formatDeliveryStatus } from '../utils/statusUtils';
+import { syncDmsTaskCompleted } from '../utils/dmsSyncUtils';
+import { DmsDeliveryTab, DmsDeliveryItem } from '../components/DmsDeliveryTab/DmsDeliveryTab';
+import TaskView, { TaskViewTask } from '../components/TaskView/TaskView';
+import api from '../api';
+
+// Mock Recharts
+vi.mock('recharts', async () => {
+    const actual: any = await vi.importActual('recharts');
+    return {
+        ...actual,
+        ResponsiveContainer: ({ children }: any) => <div className="recharts-responsive-container">{children}</div>,
+    };
+});
+
+// Mock api
+vi.mock('../api', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
+
+// Mock Toast
+vi.mock('../components/Toast/Toast', () => ({
+    useToast: () => ({
+        success: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+    }),
+}));
+
+describe('STARS-DMS Integ 2: "Pending for Delivery" Status Display Fix', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        localStorage.setItem('userRole', 'Coordinator');
+        localStorage.setItem('authToken', 'test-token');
+    });
+
+    describe('formatDeliveryStatus helper', () => {
+        it('normalizes "Pending", "pending", and "Pending Approval" to "Pending for Delivery"', () => {
+            expect(formatDeliveryStatus('Pending')).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus('pending')).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus('pending approval')).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus('Pending for Delivery')).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus(null)).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus(undefined)).toBe('Pending for Delivery');
+            expect(formatDeliveryStatus('')).toBe('Pending for Delivery');
+        });
+
+        it('preserves other legitimate statuses like Delivered, In Transit, Cancelled', () => {
+            expect(formatDeliveryStatus('Delivered')).toBe('Delivered');
+            expect(formatDeliveryStatus('In Transit')).toBe('In Transit');
+            expect(formatDeliveryStatus('Cancelled')).toBe('Cancelled');
+            expect(formatDeliveryStatus('Out for Delivery')).toBe('Out for Delivery');
+        });
+    });
+
+    describe('syncDmsTaskCompleted utility', () => {
+        it('sets dmsStatus to "Pending for Delivery" instead of "Delivered" when task is completed', async () => {
+            const taskId = 'task-test-sync-1';
+            vi.mocked(api.get).mockResolvedValueOnce({
+                data: {
+                    isSuccess: true,
+                    data: {
+                        taskId,
+                        recipientName: 'Acme Logistics',
+                        recipientContact: '09123456789',
+                        deliveryAddress: '456 Manila Ave',
+                        dmsOrderId: 101,
+                        dmsWaybillNo: 'WB-2026-9999',
+                        dmsStatus: 'Pending',
+                        itemCount: 3,
+                    },
+                },
+            });
+            vi.mocked(api.post).mockResolvedValueOnce({
+                data: {
+                    isSuccess: true,
+                    data: {
+                        dmsStatus: 'Pending',
+                    },
+                },
+            });
+            vi.mocked(api.put).mockResolvedValueOnce({
+                data: { isSuccess: true },
+            });
+
+            await syncDmsTaskCompleted(taskId);
+
+            expect(api.put).toHaveBeenCalledWith(
+                `/api/dms-integration/tasks/${taskId}/delivery-details`,
+                expect.objectContaining({
+                    dmsStatus: 'Pending for Delivery',
+                    itemCount: 3,
+                })
+            );
+            // Must NOT have sent 'Delivered'
+            expect(api.put).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    dmsStatus: 'Delivered',
+                })
+            );
+        });
+    });
+
+    describe('DmsDeliveryTab status display', () => {
+        it('displays "Pending for Delivery" and does NOT override to "Delivered" when STARS task is completed', async () => {
+            const mockDelivery: DmsDeliveryItem = {
+                taskId: 'completed-task-01',
+                taskTitle: 'Deliver Medical Supplies',
+                recipientName: 'Hospital Pharmacy',
+                recipientContact: '09181234567',
+                deliveryAddress: 'Manila Medical Center',
+                dmsWaybillNo: 'WB-2026-PND-01',
+                dmsStatus: 'Pending',
+                dmsRawStatus: 'Pending',
+                syncStatus: 'Synced',
+                itemCount: 3,
+            };
+
+            const completedTasks = [
+                {
+                    taskId: 'completed-task-01',
+                    taskTitle: 'Deliver Medical Supplies',
+                    taskStatus: 'Completed',
+                },
+            ];
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [mockDelivery] } };
+                }
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { isSuccess: true, data: { totalDeliveries: 1, onTimeCount: 0, lateCount: 0, onTimePercentage: 100 } } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab tasks={completedTasks} onViewTask={vi.fn()} />);
+
+            await waitFor(() => {
+                // Table should display "Pending for Delivery", NOT "Delivered"
+                const pendingPills = screen.getAllByText(/Pending for Delivery/i);
+                expect(pendingPills.length).toBeGreaterThan(0);
+                expect(document.querySelector('.dms-status-delivered')).not.toBeInTheDocument();
+            });
+        });
+
+        it('renders "Pending for Delivery" in detail view stepper summary and does NOT mark stage 7 (Delivered)', async () => {
+            const mockDelivery: DmsDeliveryItem = {
+                taskId: 'completed-task-02',
+                taskTitle: 'Deliver Medical Supplies',
+                recipientName: 'Hospital Pharmacy',
+                recipientContact: '09181234567',
+                deliveryAddress: 'Manila Medical Center',
+                dmsWaybillNo: 'WB-2026-PND-02',
+                dmsStatus: 'Pending',
+                dmsRawStatus: 'Pending',
+                syncStatus: 'Synced',
+                itemCount: 3,
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [mockDelivery] } };
+                }
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { isSuccess: true, data: { totalDeliveries: 1, onTimeCount: 0, lateCount: 0, onTimePercentage: 100 } } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: mockDelivery } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab tasks={[]} onViewTask={vi.fn()} initialWaybillNo="WB-2026-PND-02" />);
+
+            await waitFor(() => {
+                // Stepper summary must show Stage 1 of 7: Pending for Delivery
+                expect(screen.getByText(/Stage 1 of 7/i)).toBeInTheDocument();
+                expect(screen.getAllByText(/Pending for Delivery/i).length).toBeGreaterThan(0);
+                // Must not claim Stage 7
+                expect(screen.queryByText(/Stage 7 of 7/i)).not.toBeInTheDocument();
+            });
+        });
+        it('single click on "Sync with DMS" updates delivery status and POD immediately without multiple refreshes', async () => {
+            const initialMockDelivery: DmsDeliveryItem = {
+                taskId: 'task-sync-single-01',
+                taskTitle: 'Express Logistics Parcel',
+                recipientName: 'Apex Health',
+                recipientContact: '09191112222',
+                deliveryAddress: 'Quezon City Hospital',
+                dmsWaybillNo: 'WB-2026-SYNC-01',
+                dmsStatus: 'Pending',
+                dmsRawStatus: 'Pending',
+                syncStatus: 'Synced',
+            };
+
+            const updatedMockDelivery: DmsDeliveryItem = {
+                ...initialMockDelivery,
+                dmsStatus: 'In Transit',
+                dmsRawStatus: 'In Transit',
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [initialMockDelivery] } };
+                }
+                if (url.includes('/api/integration/dms/performance-summary')) {
+                    return { data: { isSuccess: true, data: { totalDeliveries: 1, onTimeCount: 0, lateCount: 0, onTimePercentage: 100 } } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: initialMockDelivery } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            vi.mocked(api.post).mockImplementation(async (url: string) => {
+                if (url.includes('/sync')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: updatedMockDelivery,
+                        },
+                    };
+                }
+                return { data: { isSuccess: true } };
+            });
+
+            const { fireEvent } = await import('@testing-library/react');
+            render(<DmsDeliveryTab tasks={[]} onViewTask={vi.fn()} initialWaybillNo="WB-2026-SYNC-01" />);
+
+            await waitFor(() => {
+                expect(screen.getByText(/Stage 1 of 7/i)).toBeInTheDocument();
+            });
+
+            // Mock subsequent GET returns updated delivery after sync
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries') || url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: [updatedMockDelivery] } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            const syncBtn = screen.getByRole('button', { name: /Sync with DMS/i });
+            fireEvent.click(syncBtn);
+
+            // After a single sync click, status must immediately advance to In Transit
+            await waitFor(() => {
+                expect(screen.getByText(/In Transit/i)).toBeInTheDocument();
+            });
+            expect(api.post).toHaveBeenCalledWith(
+                expect.stringContaining('/tasks/task-sync-single-01/sync'),
+                expect.anything()
+            );
+        });
+    });
+
+    describe('TaskView delivery status tag', () => {
+        it('renders Status: Pending for Delivery on TaskView when dmsStatus is Pending', async () => {
+            const mockTask: TaskViewTask = {
+                taskId: 'task-tv-pending-01',
+                taskTitle: 'Pre-Delivery Operational Validation',
+                priority: 'High',
+                taskStatus: 'Completed',
+                assignedEmployee: 'Jane Coordinator',
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/delivery-details')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: mockTask.taskId,
+                                recipientName: 'Acme Logistics',
+                                deliveryAddress: '123 Harbor Rd',
+                                dmsWaybillNo: 'WB-2026-449612',
+                                dmsStatus: 'Pending',
+                                itemCount: 3,
+                            },
+                        },
+                    };
+                }
+                return { data: { isSuccess: true, data: null } };
+            });
+
+            render(<TaskView task={mockTask} />);
+
+            await waitFor(() => {
+                const statusBadge = screen.getByTestId('tv-dms-status-badge');
+                expect(statusBadge).toBeInTheDocument();
+                expect(statusBadge).toHaveTextContent('Status: Pending for Delivery');
+                expect(statusBadge).not.toHaveTextContent('Status: Delivered');
+            });
+        });
+    });
+
+    describe('DMS Order Details & POD Synchronization (Bug 3 & Bug 4)', () => {
+        it('accurately displays DMS order item count 3 instead of default 1 in DmsDeliveryTab', async () => {
+            const mockDeliveryWithDefaultItem: DmsDeliveryItem = {
+                taskId: 'task-item-count-test',
+                taskTitle: 'Pre-Delivery Validation',
+                recipientName: 'Metro Client',
+                recipientContact: '09191112222',
+                deliveryAddress: '456 Business Ave',
+                dmsWaybillNo: 'WB-ITEM-333',
+                dmsOrderId: 888,
+                dmsStatus: 'Pending for Delivery',
+                itemCount: 1, // Backend or STARS default
+                weight: '1.0 kg',
+                packageType: 'Parcel',
+            };
+
+            const mockPendingDmsOrders = [
+                {
+                    orderId: 888,
+                    waybillNo: 'WB-ITEM-333',
+                    recipientName: 'Metro Client',
+                    recipientContact: '09191112222',
+                    recipientAddress: '456 Business Ave',
+                    itemCount: 3, // Actual DMS order has 3 items
+                    weight: '4.5 kg',
+                    packageType: 'Heavy Carton',
+                    taskType: 'Priority Cargo',
+                    status: 'Pending',
+                },
+            ];
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [mockDeliveryWithDefaultItem] } };
+                }
+                if (url.includes('/api/dms-integration/pending-orders')) {
+                    return { data: { isSuccess: true, data: mockPendingDmsOrders } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                ...mockDeliveryWithDefaultItem,
+                                itemCount: 1, // Default from backend detail
+                            },
+                        },
+                    };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            render(<DmsDeliveryTab onViewTask={vi.fn()} initialWaybillNo="WB-ITEM-333" />);
+
+            await waitFor(() => {
+                const itemCountVal = screen.getByTestId('dms-detail-item-count');
+                expect(itemCountVal).toHaveTextContent('3 item(s)');
+                expect(screen.getByTestId('dms-detail-weight')).toHaveTextContent('4.5 kg');
+                expect(screen.getByTestId('dms-detail-package-type')).toHaveTextContent('Heavy Carton');
+                expect(screen.getByTestId('dms-detail-task-type')).toHaveTextContent('Priority Cargo');
+            });
+        });
+
+        it('shows POD empty state while pending, and displays POD preview when courier uploads POD on DMS', async () => {
+            const pendingDelivery: DmsDeliveryItem = {
+                taskId: 'task-pod-sync-test',
+                taskTitle: 'Deliver Electronics',
+                recipientName: 'Gadget Store',
+                recipientContact: '09170001111',
+                deliveryAddress: 'Tech Mall',
+                dmsWaybillNo: 'WB-POD-999',
+                dmsOrderId: 999,
+                dmsStatus: 'Pending for Delivery',
+                itemCount: 3,
+            };
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [pendingDelivery] } };
+                }
+                if (url.includes('/pod')) {
+                    return { data: { isSuccess: true, data: null } };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: pendingDelivery } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            const { rerender } = render(<DmsDeliveryTab onViewTask={vi.fn()} initialWaybillNo="WB-POD-999" />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('dms-pod-empty')).toBeInTheDocument();
+                expect(screen.getByText(/No Proof of Delivery Attached/i)).toBeInTheDocument();
+            });
+
+            // Courier uploads POD on DMS side and delivery completes
+            const deliveredWithPod: DmsDeliveryItem = {
+                ...pendingDelivery,
+                dmsStatus: 'Delivered',
+                podUrl: 'https://dms.example/pod/WB-POD-999.jpg',
+            };
+
+            vi.mocked(api.post).mockResolvedValue({
+                data: {
+                    isSuccess: true,
+                    data: deliveredWithPod,
+                },
+            } as any);
+
+            vi.mocked(api.get).mockImplementation(async (url: string) => {
+                if (url.includes('/api/dms-integration/deliveries')) {
+                    return { data: { isSuccess: true, data: [deliveredWithPod] } };
+                }
+                if (url.includes('/pod')) {
+                    return {
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'task-pod-sync-test',
+                                waybillNo: 'WB-POD-999',
+                                fileName: 'POD_WB-POD-999.jpg',
+                                contentType: 'image/jpeg',
+                                hasPod: true,
+                                podUrl: 'https://dms.example/pod/WB-POD-999.jpg',
+                                downloadUrl: '/api/dms-integration/tasks/task-pod-sync-test/pod/download',
+                            },
+                        },
+                    };
+                }
+                if (url.includes('/delivery-details')) {
+                    return { data: { isSuccess: true, data: deliveredWithPod } };
+                }
+                return { data: { isSuccess: true, data: [] } };
+            });
+
+            // Trigger sync to reflect uploaded POD on STARS
+            const syncBtn = screen.getByRole('button', { name: /Sync with DMS/i });
+            fireEvent.click(syncBtn);
+
+            await waitFor(() => {
+                expect(screen.queryByTestId('dms-pod-empty')).not.toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-content')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-view-btn')).toBeInTheDocument();
+                expect(screen.getByTestId('dms-pod-download-btn')).toBeInTheDocument();
+            });
+        });
+    });
+});

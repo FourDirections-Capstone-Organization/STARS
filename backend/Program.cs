@@ -1,4 +1,9 @@
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Scalar.AspNetCore;
 using Backend.Data;
 using Backend.Modules.OrganizationalStructure;
@@ -30,23 +35,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin =>
-        {
-            if (string.IsNullOrEmpty(origin)) return false;
-            try
-            {
-                var uri = new Uri(origin);
-                return uri.Host == "localhost"
-                    || uri.Host == "127.0.0.1"
-                    || uri.Host.Equals("stars-two-chi.vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.Equals("speedex-system.vercel.app", StringComparison.OrdinalIgnoreCase)
-                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        })
+        policy.SetIsOriginAllowed(origin => CorsPolicyHelper.IsOriginAllowed(origin, builder.Environment.IsDevelopment()))
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials();
@@ -103,6 +92,17 @@ if (string.IsNullOrWhiteSpace(connectionString))
 try
 {
     var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    if (!connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
+        csb.MaxPoolSize = 75;
+    if (!connectionString.Contains("MinPoolSize", StringComparison.OrdinalIgnoreCase))
+        csb.MinPoolSize = 10;
+    if (!connectionString.Contains("ConnectionLifetime", StringComparison.OrdinalIgnoreCase))
+        csb.ConnectionLifetime = 300;
+    if (!connectionString.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        csb.Timeout = 15;
+    if (!connectionString.Contains("CommandTimeout", StringComparison.OrdinalIgnoreCase))
+        csb.CommandTimeout = 30;
+    connectionString = csb.ConnectionString;
     Console.WriteLine($"[STARTUP] PostgreSQL Connection Configured -> Host: '{csb.Host}', Port: {csb.Port}, Database: '{csb.Database}', User: '{csb.Username}', SSL: {csb.SslMode}");
 }
 catch
@@ -110,8 +110,8 @@ catch
     Console.WriteLine("[STARTUP] PostgreSQL Connection Configured (Raw string provided)");
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddDbContextPool<AppDbContext>(options =>
+    options.UseNpgsql(connectionString), poolSize: 80);
 
 // Configure settings
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
@@ -199,6 +199,8 @@ builder.Services.AddHttpClient(DmsIntegrationService.HttpClientName, c =>
     c.Timeout = TimeSpan.FromSeconds(25);
 });
 builder.Services.AddScoped<IDmsIntegrationService, DmsIntegrationService>();
+builder.Services.AddSingleton<IDmsWebhookQueue, DmsWebhookQueue>();
+builder.Services.AddHostedService<DmsWebhookProcessorService>();
 
 builder.Services.Configure<FomsIntegrationSettings>(builder.Configuration.GetSection(FomsIntegrationSettings.SectionName));
 builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
@@ -208,6 +210,59 @@ builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
 builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
 
 builder.Services.AddMemoryCache();
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/json",
+        "text/plain",
+        "application/problem+json"
+    });
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponseDTO<object>.Failure("Too many authentication requests. Please try again in a few moments."),
+            cancellationToken: token);
+    };
+
+    options.AddPolicy("AuthRateLimit", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 6,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 10
+        });
+    });
+});
+
 builder.Services.Configure<GroqSettings>(builder.Configuration.GetSection(GroqSettings.SectionName));
 builder.Services.PostConfigure<GroqSettings>(settings =>
 {
@@ -298,8 +353,23 @@ app.MapGet("/", () => Results.Json(new
     timestamp = DateTime.UtcNow
 }));
 
-app.MapGet("/api/health", async (AppDbContext db) =>
+// Fast Liveness Probe for Azure App Service Health Check (Zero DB impact)
+app.MapGet("/api/health/live", () => Results.Json(new
 {
+    status = "healthy",
+    service = "STARS Backend API",
+    timestamp = DateTime.UtcNow
+}));
+
+// Readiness Probe with 10-second memory cache to shield DB pool during traffic surges
+app.MapGet("/api/health", async (AppDbContext db, Microsoft.Extensions.Caching.Memory.IMemoryCache cache) =>
+{
+    const string cacheKey = "SystemHealthProbeStatus";
+    if (cache.TryGetValue(cacheKey, out object? cachedResult) && cachedResult != null)
+    {
+        return (IResult)cachedResult;
+    }
+
     try
     {
         var canConnect = await db.Database.CanConnectAsync();
@@ -314,21 +384,25 @@ app.MapGet("/api/health", async (AppDbContext db) =>
             catch { /* not yet ready */ }
         }
 
-        return Results.Json(new
+        var result = Results.Json(new
         {
             status = canConnect ? "healthy" : "database_unreachable",
             database = canConnect ? "connected" : "cannot_connect",
             fomsIntegrationReady = fomsReady,
             timestamp = DateTime.UtcNow
         });
+
+        cache.Set(cacheKey, result, TimeSpan.FromSeconds(10));
+        return result;
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"[HEALTH ERROR] {ex.Message}");
         return Results.Json(new
         {
             status = "unhealthy",
-            database = "error",
-            error = ex.Message,
+            database = "unavailable",
+            message = "Service temporarily unavailable",
             timestamp = DateTime.UtcNow
         }, statusCode: 500);
     }
@@ -341,8 +415,12 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
+    app.UseHsts();
     app.UseHttpsRedirection();
 }
+
+app.UseSecurityHeaders();
+app.UseResponseCompression();
 
 app.UseExceptionHandler(errorApp =>
 {
@@ -361,6 +439,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuditLogAccessLogging();
 app.UseAuthorization();

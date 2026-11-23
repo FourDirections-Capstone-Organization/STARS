@@ -96,6 +96,10 @@ public class AnnouncementService : IAnnouncementService
             if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
                 return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Only PDF, JPG, and PNG files are allowed as attachments");
 
+            // SEC-10: Magic byte signature validation
+            if (!Backend.Modules.Utilities.FileSignatureValidator.HasValidMagicBytes(dto.Attachment))
+                return ApiResponseDTO<AnnouncementResponseDTO>.Failure("Invalid file signature. Uploaded file content does not match the declared extension.");
+
             try
             {
                 var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "announcements", announcementId.ToString());

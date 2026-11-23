@@ -690,7 +690,7 @@ body {
         background: var(--status-active);
     }
 
-.tc-header {
+.task-card .tc-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -698,7 +698,7 @@ body {
     flex: 1;
 }
 
-.tc-name {
+.task-card .tc-name {
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -706,7 +706,7 @@ body {
     line-height: 1.35;
 }
 
-.tc-desc {
+.task-card .tc-desc {
     font-size: 0.77rem;
     color: var(--text-secondary);
     line-height: 1.5;
@@ -716,13 +716,13 @@ body {
     overflow: hidden;
 }
 
-.tc-meta {
+.task-card .tc-meta {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.tc-deadline {
+.task-card .tc-deadline {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-secondary);

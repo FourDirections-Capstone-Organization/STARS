@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw, Truck } from 'lucide-react';
+import { Plus, Package, ClipboardList, Loader2, CheckCircle2, AlertCircle, Archive, Trash2, BarChart3, Lock, Eye, Pencil, Brain, LayoutList, Kanban, GripVertical, Search, Clock, RotateCcw, Truck, ShieldAlert } from 'lucide-react';
 import DataTable, { ActionsDropdown } from '../ui/DataTable';
 import StatusBadge from '../ui/StatusBadge';
 import { formatStatus } from '../../utils/statusUtils';
@@ -98,6 +98,11 @@ export const isSpecialTask = (c?: string | number): boolean => {
 export const isFollowUpTask = (name?: string): boolean => {
     if (!name) return false;
     return name.startsWith('Delivery Follow-up - ') || name.startsWith('[Delivery Follow-up]');
+};
+
+export const isCollectionTask = (name?: string): boolean => {
+    if (!name) return false;
+    return name.startsWith('[Collection Follow-up]') || name.includes('Collection Follow-up');
 };
 
 const PriorityBadge = ({ p }: { p: string }) => (
@@ -295,8 +300,30 @@ const TMKanbanBoard: React.FC<TMKanbanBoardProps> = ({ tasks, onView, onEdit, on
 
                                             <div className="tm-board-card-title">{t.name}</div>
 
-                                            {(t.classification || t.isConfidential || isFollowUpTask(t.name)) && (
+                                            {(t.classification || t.isConfidential || isFollowUpTask(t.name) || isCollectionTask(t.name)) && (
                                                 <div className="tm-board-card-badges">
+                                                    {isCollectionTask(t.name) && (
+                                                        <span
+                                                            className="tm-collection-badge"
+                                                            title="FOMS Delinquent Account Collection Follow-up Task"
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: 3,
+                                                                fontSize: 9,
+                                                                fontWeight: 700,
+                                                                padding: '1px 6px',
+                                                                borderRadius: 4,
+                                                                background: 'rgba(220, 38, 38, 0.1)',
+                                                                color: '#dc2626',
+                                                                border: '1px solid rgba(220, 38, 38, 0.25)',
+                                                                whiteSpace: 'nowrap',
+                                                                letterSpacing: '0.03em'
+                                                            }}
+                                                        >
+                                                            <ShieldAlert size={9} /> COLLECTION FOLLOW-UP
+                                                        </span>
+                                                    )}
                                                     {isFollowUpTask(t.name) && (
                                                         <span
                                                             className="tm-followup-badge"
@@ -993,6 +1020,28 @@ export default function TaskManager({
                                         {tab !== 'bin' && (
                                             <span title="AI Insights available — click to view" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--teal, #00A99D)', cursor: 'help' }}>
                                                 <Brain size={13} />
+                                            </span>
+                                        )}
+                                        {isCollectionTask(t.name) && tab !== 'bin' && (
+                                            <span
+                                                className="tm-collection-badge"
+                                                title="FOMS Delinquent Account Collection Follow-up Task"
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 3,
+                                                    fontSize: 9,
+                                                    fontWeight: 700,
+                                                    padding: '1px 6px',
+                                                    borderRadius: 4,
+                                                    background: 'rgba(220, 38, 38, 0.1)',
+                                                    color: '#dc2626',
+                                                    border: '1px solid rgba(220, 38, 38, 0.25)',
+                                                    whiteSpace: 'nowrap',
+                                                    letterSpacing: '0.03em'
+                                                }}
+                                            >
+                                                <ShieldAlert size={9} /> COLLECTION FOLLOW-UP
                                             </span>
                                         )}
                                         {isFollowUpTask(t.name) && tab !== 'bin' && (

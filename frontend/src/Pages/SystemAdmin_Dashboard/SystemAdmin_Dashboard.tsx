@@ -3742,6 +3742,11 @@ export default function Dashboard() {
         specialInstructions: string;
         dmsOrderId?: number;
         dmsWaybillNo?: string;
+        dmsStatus?: string;
+        taskType?: string;
+        packageType?: string;
+        weight?: string;
+        itemCount?: number;
     }>({
         recipientName: '',
         recipientContact: '',
@@ -3752,6 +3757,10 @@ export default function Dashboard() {
         courierEmployeeId: '',
         courierFullName: '',
         specialInstructions: '',
+        taskType: '',
+        packageType: '',
+        weight: '',
+        itemCount: undefined,
         dmsOrderId: undefined,
         dmsWaybillNo: undefined,
     });
@@ -4366,6 +4375,10 @@ export default function Dashboard() {
             dmsOrderId: order.orderId,
             dmsWaybillNo: order.waybillNo,
             dmsStatus: order.status,
+            taskType: order.taskType,
+            packageType: order.packageType,
+            weight: order.weight,
+            itemCount: order.itemCount,
         } as any);
         setNewEnableDelivery(true);
         setShowNewTask(true);
@@ -4499,6 +4512,10 @@ export default function Dashboard() {
                         dmsOrderId: (newDeliveryForm as any).dmsOrderId,
                         dmsWaybillNo: (newDeliveryForm as any).dmsWaybillNo || null,
                         dmsStatus: (newDeliveryForm as any).dmsStatus || null,
+                        taskType: (newDeliveryForm as any).taskType || null,
+                        packageType: (newDeliveryForm as any).packageType || null,
+                        weight: (newDeliveryForm as any).weight || null,
+                        itemCount: (newDeliveryForm as any).itemCount != null ? Number((newDeliveryForm as any).itemCount) : null,
                     });
                 } catch (delErr) {
                     console.error('Failed to attach DMS delivery details to task:', delErr);
@@ -5393,6 +5410,10 @@ export default function Dashboard() {
                             tasks={tmTasks}
                             initialTaskId={tmTrackerTaskId}
                             initialWaybill={tmTrackerWaybill}
+                            onClearInitialTarget={() => {
+                                setTmTrackerTaskId(undefined);
+                                setTmTrackerWaybill(undefined);
+                            }}
                             onViewTask={(taskId) => {
                                 const found = tmTasks.find(t => t.id === taskId);
                                 if (found) {
@@ -6344,6 +6365,54 @@ export default function Dashboard() {
                                             placeholder="e.g. Ricardo Bautista"
                                             style={{ fontSize: 12 }}
                                             data-testid="pre-delivery-courier-name-input"
+                                        />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Item Count</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).itemCount ?? ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, itemCount: e.target.value ? parseInt(e.target.value, 10) : undefined } as any))}
+                                            placeholder="e.g. 3"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="delivery-form-item-count"
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Weight</label>
+                                        <input
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).weight || ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, weight: e.target.value } as any))}
+                                            placeholder="e.g. 2.5 kg"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="delivery-form-weight"
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Package Type</label>
+                                        <input
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).packageType || ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, packageType: e.target.value } as any))}
+                                            placeholder="e.g. Box, Parcel"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="delivery-form-package-type"
+                                        />
+                                    </div>
+                                    <div className="fm-field" style={{ margin: 0 }}>
+                                        <label className="fm-label" style={{ fontSize: 11 }}>Task Type</label>
+                                        <input
+                                            className="fm-input"
+                                            value={(newDeliveryForm as any).taskType || ''}
+                                            onChange={e => setNewDeliveryForm(prev => ({ ...prev, taskType: e.target.value } as any))}
+                                            placeholder="e.g. Standard Delivery"
+                                            style={{ fontSize: 12 }}
+                                            data-testid="delivery-form-task-type"
                                         />
                                     </div>
                                 </div>

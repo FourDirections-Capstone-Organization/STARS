@@ -55,7 +55,7 @@ public class SessionTimeoutMiddleware
             return;
         }
 
-        // Check if the user is deactivated
+        // Check if user is deactivated
         if (user.IsDeactivated || !user.IsActive)
         {
             context.Response.StatusCode = 401;
@@ -63,9 +63,20 @@ public class SessionTimeoutMiddleware
             return;
         }
 
+        // SEC-08: If user has no active session timestamp (logged out or terminated), reject and do NOT resuscitate
+        if (!user.LastActivityAt.HasValue)
+        {
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "Session is terminated or logged out. Please log in again.",
+                code = "SESSION_TERMINATED"
+            });
+            return;
+        }
+
         // Check if session timed out due to inactivity
-        if (user.LastActivityAt.HasValue &&
-            (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes > _sessionSettings.InactivityTimeoutInMinutes)
+        if ((DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes > _sessionSettings.InactivityTimeoutInMinutes)
         {
             user.RefreshToken = null;
             user.RefreshTokenExpiry = null;
@@ -82,7 +93,7 @@ public class SessionTimeoutMiddleware
         }
 
         // Update last activity time (throttled to at most once per minute)
-        if (!user.LastActivityAt.HasValue || (DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes >= 1)
+        if ((DateTime.UtcNow - user.LastActivityAt.Value).TotalMinutes >= 1)
         {
             user.LastActivityAt = DateTime.UtcNow;
             await db.SaveChangesAsync();

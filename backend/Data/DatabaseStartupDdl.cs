@@ -350,6 +350,12 @@ public static class DatabaseStartupDdl
         CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_CreatedById"" ON ""DevelopmentPlanItems"" (""CreatedById"");
         CREATE INDEX IF NOT EXISTS ""IX_DevelopmentPlanItems_IsCompleted"" ON ""DevelopmentPlanItems"" (""IsCompleted"");
 
+        -- Performance Optimization Composite Indexes
+        CREATE INDEX IF NOT EXISTS ""IX_Tasks_Status_AssignedDepartmentId_Deadline"" ON ""Tasks"" (""Status"", ""AssignedDepartmentId"", ""Deadline"");
+        CREATE INDEX IF NOT EXISTS ""IX_Tasks_CreatedAt"" ON ""Tasks"" (""CreatedAt"");
+        CREATE INDEX IF NOT EXISTS ""IX_Tasks_CreatedById_Status"" ON ""Tasks"" (""CreatedById"", ""Status"");
+        CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskNumber"" ON ""Tasks"" (""TaskNumber"");
+        CREATE INDEX IF NOT EXISTS ""IX_TaskDeliveryDetails_DmsOrderId"" ON ""TaskDeliveryDetails"" (""DmsOrderId"");
 
         INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
         VALUES 

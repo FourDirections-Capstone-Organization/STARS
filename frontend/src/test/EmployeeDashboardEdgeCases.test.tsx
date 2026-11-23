@@ -143,9 +143,9 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
             expect(screen.getByText('No completion history recorded yet')).toBeInTheDocument();
         });
 
-        it('shows appropriate empty states and advisory note for staff on the created tasks tab', async () => {
+        it('ensures operational staff (Courier) does not have Tasks Created tab, while creator roles do', async () => {
             vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(baseEmployee);
-            vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue({
+            const emptyTasksResponse: PaginatedTasksResponse = {
                 items: [],
                 totalCount: 0,
                 pageNumber: 1,
@@ -153,34 +153,44 @@ describe('EmployeeDashboard Edge Cases & Access Guards (Step 9)', () => {
                 totalPages: 0,
                 hasPreviousPage: false,
                 hasNextPage: false,
-            });
-            vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue({
-                items: [],
-                totalCount: 0,
-                pageNumber: 1,
-                pageSize: 10,
-                totalPages: 0,
-                hasPreviousPage: false,
-                hasNextPage: false,
-            });
+            };
 
-            render(<EmployeeDashboard employeeId={baseEmployee.employeeId} />);
+            vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(emptyTasksResponse);
+            vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue(emptyTasksResponse);
+
+            // 1. Courier (Operational Staff) -> No "Tasks Created" tab
+            const { unmount } = render(<EmployeeDashboard employeeId={baseEmployee.employeeId} />);
 
             await waitFor(() => {
                 expect(screen.getByText('No tasks assigned to this employee')).toBeInTheDocument();
             });
 
-            // Switch to "Tasks Created by Them"
-            const createdTab = screen.getByRole('tab', { name: /tasks created by them/i });
+            expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+            expect(screen.queryByRole('tab', { name: /tasks created/i })).not.toBeInTheDocument();
+            expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
+
+            unmount();
+
+            // 2. Coordinator (Creator Role) -> "Tasks Created" tab exists and displays empty message
+            const coordinatorEmployee: EmployeeDashboardData = {
+                ...baseEmployee,
+                role: 'Coordinator',
+            };
+            vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(coordinatorEmployee);
+
+            render(<EmployeeDashboard employeeId={coordinatorEmployee.employeeId} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+            });
+
+            const createdTab = screen.getByRole('tab', { name: /tasks created/i });
+            expect(createdTab).toBeInTheDocument();
             fireEvent.click(createdTab);
 
-            // Verify staff advisory note
             await waitFor(() => {
-                expect(screen.getByTestId('staff-created-note')).toBeInTheDocument();
+                expect(screen.getByText('No tasks created by this employee')).toBeInTheDocument();
             });
-            expect(
-                screen.getByText(/staff members typically execute assigned tasks rather than create them/i)
-            ).toBeInTheDocument();
         });
     });
 

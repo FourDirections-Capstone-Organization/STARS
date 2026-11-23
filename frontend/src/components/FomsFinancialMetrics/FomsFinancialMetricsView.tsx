@@ -23,10 +23,22 @@ import {
     FileCheck,
     ChevronLeft,
     ChevronRight,
+    UserCheck,
+    AlertTriangle,
+    Users,
+    Receipt,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../api';
-import { FomsDashboardFinancialSummary, FomsClientFinancialSummaryItem, FomsFinancialMetricsViewProps } from './types';
+import ClientManagementView from '../ClientManagement/ClientManagementView';
+import LiquidationCorrectionsView from '../LiquidationCorrections/LiquidationCorrectionsView';
+import {
+
+    FomsDashboardFinancialSummary,
+    FomsClientFinancialSummaryItem,
+    FomsRecentInvoiceItem,
+    FomsFinancialMetricsViewProps,
+} from './types';
 import FomsGraphRoutingPanel from './FomsGraphRoutingPanel';
 import FomsEndorsementPanel from './FomsEndorsementPanel';
 import FormModal from '../FormModal/FormModal';
@@ -53,17 +65,25 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
     onViewClientTasks,
     onOpenTask,
     onCreateTaskForEndorsement,
+    initialClientAccountId,
 }) => {
-    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement'>(initialTab || 'balances');
+    const [activeHubTab, setActiveHubTab] = useState<'balances' | 'routing' | 'endorsement' | 'clients' | 'liquidation'>(initialTab || 'balances');
+
+    const [tableTab, setTableTab] = useState<'clients' | 'recent_invoices'>('clients');
     const [liveData, setLiveData] = useState<FomsDashboardFinancialSummary | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastSyncedTime, setLastSyncedTime] = useState<Date | null>(null);
 
+    // Current logged in role for Scoped Metrics Presentation (FR-011 / FR-012)
+    const currentUserRole = localStorage.getItem('userRole') || localStorage.getItem('role') || 'Manager';
+    const currentUserId = localStorage.getItem('userId') || localStorage.getItem('employeeId') || undefined;
+    const isCoordinator = currentUserRole.toLowerCase() === 'coordinator';
+
     // Filter and Sort states
     const [searchQuery, setSearchQuery] = useState<string>('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'with_balance' | 'paid' | 'pending'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'with_balance' | 'paid' | 'pending' | 'disputed' | 'due_soon'>('all');
     const [sortBy, setSortBy] = useState<'balance_desc' | 'balance_asc' | 'overdue_desc' | 'name_asc' | 'date_asc'>('balance_desc');
 
     // Pagination state
@@ -189,6 +209,15 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 if (statusFilter === 'pending') {
                     return clientStatus === 'sent' || clientStatus === 'approved' || clientStatus === 'draft' || clientStatus === 'pending';
                 }
+                if (statusFilter === 'disputed') {
+                    return clientStatus.includes('disput');
+                }
+                if (statusFilter === 'due_soon') {
+                    if (clientStatus.includes('due soon') || clientStatus.includes('duesoon')) return true;
+                    if (!client.nextDueDate) return false;
+                    const diffDays = Math.ceil((new Date(client.nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    return diffDays >= 0 && diffDays <= 7;
+                }
                 return true;
             })
             .sort((a, b) => {
@@ -205,6 +234,61 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 return 0;
             });
     }, [activeSummary, searchQuery, statusFilter, sortBy]);
+
+    // Computed counts for Disputed and Due Soon
+    const disputedCount = useMemo(() => {
+        if (typeof activeSummary.disputedInvoicesCount === 'number') return activeSummary.disputedInvoicesCount;
+        return (activeSummary.topOutstandingClients || []).filter(c => (c.latestStatus || '').toLowerCase().includes('disput')).length;
+    }, [activeSummary]);
+
+    const dueSoonCount = useMemo(() => {
+        if (typeof activeSummary.dueSoonInvoicesCount === 'number') return activeSummary.dueSoonInvoicesCount;
+        return (activeSummary.topOutstandingClients || []).filter(c => {
+            const s = (c.latestStatus || '').toLowerCase();
+            if (s.includes('due soon') || s.includes('duesoon')) return true;
+            if (!c.nextDueDate) return false;
+            const diffDays = Math.ceil((new Date(c.nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            return diffDays >= 0 && diffDays <= 7;
+        }).length;
+    }, [activeSummary]);
+
+    // Filtered Recent Invoices Stream (if available from API payload)
+    const filteredRecentInvoices = useMemo(() => {
+        const list = activeSummary.recentInvoices || [];
+        const query = searchQuery.trim().toLowerCase();
+        return list.filter(inv => {
+            if (!inv) return false;
+            if (query) {
+                const matchName = (inv.clientName || '').toLowerCase().includes(query);
+                const matchInv = (inv.invoiceNumber || '').toLowerCase().includes(query);
+                const matchAcc = (inv.clientAccountId || '').toLowerCase().includes(query);
+                if (!matchName && !matchInv && !matchAcc) return false;
+            }
+            const invStatus = (inv.invoiceStatus || '').toLowerCase();
+            const payStatus = (inv.paymentStatus || '').toLowerCase();
+            const dueStatus = (inv.dueStatus || '').toLowerCase();
+
+            if (statusFilter === 'overdue') {
+                return dueStatus === 'overdue' || invStatus === 'overdue';
+            }
+            if (statusFilter === 'with_balance') {
+                return (inv.outstandingBalance || 0) > 0;
+            }
+            if (statusFilter === 'paid') {
+                return payStatus === 'paid' || (inv.outstandingBalance || 0) <= 0;
+            }
+            if (statusFilter === 'pending') {
+                return payStatus !== 'paid' && dueStatus !== 'overdue';
+            }
+            if (statusFilter === 'disputed') {
+                return invStatus.includes('disput');
+            }
+            if (statusFilter === 'due_soon') {
+                return dueStatus === 'due soon' || dueStatus === 'duesoon';
+            }
+            return true;
+        });
+    }, [activeSummary.recentInvoices, searchQuery, statusFilter]);
 
     // Pagination calculations
     const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
@@ -274,13 +358,32 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 <div className="foms-header-bar">
                     <div className="foms-header-title-group">
                         <div className="foms-title-row">
-                            <h2 className="foms-title">FOMS Financial & Invoice Operations</h2>
+                            <h2 className="foms-title">FOMS Financial &amp; Invoice Operations</h2>
                             <span className="foms-badge-m2m">
                                 <Activity size={12} /> M2M Stream
                             </span>
+                            {isCoordinator ? (
+                                <span
+                                    className="foms-badge-scope foms-badge-scope-coordinator"
+                                    data-testid="foms-role-scope-badge"
+                                    title="Role Scoping (FR-011): Dashboard figures are automatically filtered to your assigned client accounts only"
+                                >
+                                    <UserCheck size={12} /> Assigned Clients Scope (Coordinator)
+                                </span>
+                            ) : (
+                                <span
+                                    className="foms-badge-scope foms-badge-scope-manager"
+                                    data-testid="foms-role-scope-badge"
+                                    title="Role Scoping (FR-012): Company-wide aggregate figures across all clients and invoices"
+                                >
+                                    <Building size={12} /> Company-Wide Financial Scope (Manager)
+                                </span>
+                            )}
                         </div>
                         <p className="foms-subtitle">
-                            Real-time client balance tracking & invoice settlement visibility from Finance Operations Management System
+                            {isCoordinator
+                                ? 'Real-time financial status, aging brackets, and payment settlement visibility scoped to your assigned clients (FR-011)'
+                                : 'Real-time client balance tracking & invoice settlement visibility from Finance Operations Management System (FR-012)'}
                         </p>
                     </div>
 
@@ -332,9 +435,44 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                     <span>Invoice Endorsement</span>
                     <span className="foms-tab-badge badge-endorsement">30-Day Term</span>
                 </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'clients' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('clients')}
+                    data-testid="hub-tab-clients"
+                >
+                    <Users size={14} />
+                    <span>Client Accounts</span>
+                    <span className="foms-tab-badge">FOMS Sync</span>
+                </button>
+                <button
+                    type="button"
+                    className={`foms-hub-tab ${activeHubTab === 'liquidation' ? 'active' : ''}`}
+                    onClick={() => setActiveHubTab('liquidation')}
+                    data-testid="hub-tab-liquidation"
+                >
+                    <Receipt size={14} />
+                    <span>Liquidation Corrections</span>
+                    <span className="foms-tab-badge badge-endorsement">M2M SLA</span>
+                </button>
             </div>
 
-            {activeHubTab === 'endorsement' ? (
+            {activeHubTab === 'liquidation' ? (
+                <LiquidationCorrectionsView
+                    showHeader={false}
+                    userRole={currentUserRole}
+                    currentUserId={currentUserId}
+                    onOpenTask={onOpenTask}
+                />
+            ) : activeHubTab === 'clients' ? (
+                <ClientManagementView
+                    showHeader={false}
+                    initialClientAccountId={initialClientAccountId}
+                    userRole={currentUserRole}
+                    onOpenTask={onOpenTask}
+                />
+            ) : activeHubTab === 'endorsement' ? (
+
                 <FomsEndorsementPanel
                     onOpenTask={onOpenTask}
                     onViewClientTasks={onViewClientTasks}
@@ -421,7 +559,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
 
                 {/* 5. Paid Invoices Count */}
-                <div className="foms-kpi-card variant-paid foms-kpi-card-expanded">
+                <div className="foms-kpi-card variant-paid">
                     <div className="foms-kpi-top">
                         <span className="foms-kpi-label">Settled / Paid</span>
                         <div className="foms-kpi-icon">
@@ -439,7 +577,7 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                 </div>
 
                 {/* 6. Pending Invoices Count */}
-                <div className="foms-kpi-card variant-pending foms-kpi-card-expanded">
+                <div className="foms-kpi-card variant-pending">
                     <div className="foms-kpi-top">
                         <span className="foms-kpi-label">In-Term / Pending</span>
                         <div className="foms-kpi-icon">
@@ -452,6 +590,42 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                         </div>
                         <div className="foms-kpi-subtext">
                             <span>Awaiting client payment</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 7. Disputed Invoices Count */}
+                <div className="foms-kpi-card variant-disputed" data-testid="kpi-disputed-invoices">
+                    <div className="foms-kpi-top">
+                        <span className="foms-kpi-label">Disputed Invoices</span>
+                        <div className="foms-kpi-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed' }}>
+                            <AlertTriangle size={18} strokeWidth={2.4} />
+                        </div>
+                    </div>
+                    <div>
+                        <div className="foms-kpi-value" style={{ color: '#7c3aed' }}>
+                            {disputedCount}
+                        </div>
+                        <div className="foms-kpi-subtext">
+                            <span style={{ color: '#7c3aed', fontWeight: 600 }}>Inquiry / dispute pending</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 8. Due Soon Invoices Count */}
+                <div className="foms-kpi-card variant-due-soon" data-testid="kpi-due-soon-invoices">
+                    <div className="foms-kpi-top">
+                        <span className="foms-kpi-label">Due Soon Invoices</span>
+                        <div className="foms-kpi-icon" style={{ background: 'rgba(217, 119, 6, 0.1)', color: '#d97706' }}>
+                            <Calendar size={18} strokeWidth={2.4} />
+                        </div>
+                    </div>
+                    <div>
+                        <div className="foms-kpi-value" style={{ color: '#d97706' }}>
+                            {dueSoonCount}
+                        </div>
+                        <div className="foms-kpi-subtext">
+                            <span style={{ color: '#d97706', fontWeight: 600 }}>Within 7-day payment window</span>
                         </div>
                     </div>
                 </div>
@@ -618,12 +792,47 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             <span>Client Financial Statuses &amp; Aging Monitor</span>
                         </h3>
                         <p style={{ fontSize: '0.78rem', color: 'var(--tt, #6B7280)', margin: '0.25rem 0 0' }}>
-                            Live account balances, payment status tags, and overdue alerts routed from FOMS
+                            {isCoordinator
+                                ? 'Scoped account balances, payment status tags, and overdue alerts for your managed clients (FR-011)'
+                                : 'Company-wide client balances, payment status tags, and aging brackets routed from FOMS (FR-012)'}
                         </p>
                     </div>
-                    <span className="table-card-results-info">
-                        {filteredClients.length} of {(activeSummary.topOutstandingClients || []).length} accounts
-                    </span>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        {activeSummary.recentInvoices && activeSummary.recentInvoices.length > 0 && (
+                            <div className="foms-table-tab-toggle" role="tablist">
+                                <button
+                                    type="button"
+                                    className={`foms-table-tab-btn ${tableTab === 'clients' ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setTableTab('clients');
+                                        setCurrentPage(1);
+                                    }}
+                                    data-testid="foms-tab-clients"
+                                >
+                                    <Building size={13} />
+                                    <span>Top Clients ({(activeSummary.topOutstandingClients || []).length})</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`foms-table-tab-btn ${tableTab === 'recent_invoices' ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setTableTab('recent_invoices');
+                                        setCurrentPage(1);
+                                    }}
+                                    data-testid="foms-tab-recent-invoices"
+                                >
+                                    <FileText size={13} />
+                                    <span>Recent Invoices ({activeSummary.recentInvoices.length})</span>
+                                </button>
+                            </div>
+                        )}
+                        <span className="table-card-results-info">
+                            {tableTab === 'recent_invoices'
+                                ? `${filteredRecentInvoices.length} invoices`
+                                : `${filteredClients.length} of ${(activeSummary.topOutstandingClients || []).length} accounts`}
+                        </span>
+                    </div>
                 </div>
 
                 {/* Toolbar using standard filter bar */}
@@ -687,6 +896,28 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
                             <span>Paid / Settled</span>
                             <span className="foms-filter-chip-count">{(activeSummary.topOutstandingClients || []).filter(c => (c.latestStatus || '').toLowerCase() === 'paid').length}</span>
                         </button>
+                        <button
+                            type="button"
+                            className={`foms-filter-chip ${statusFilter === 'disputed' ? 'active' : ''}`}
+                            onClick={() => {
+                                setStatusFilter('disputed');
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <span>Disputed</span>
+                            <span className="foms-filter-chip-count">{disputedCount}</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`foms-filter-chip ${statusFilter === 'due_soon' ? 'active' : ''}`}
+                            onClick={() => {
+                                setStatusFilter('due_soon');
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <span>Due Soon</span>
+                            <span className="foms-filter-chip-count">{dueSoonCount}</span>
+                        </button>
                     </div>
 
                     <select
@@ -708,141 +939,219 @@ export const FomsFinancialMetricsView: React.FC<FomsFinancialMetricsViewProps> =
 
                 {/* Table */}
                 <div className="table-card-wrap">
-                    <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 800 }}>
-                        <thead>
-                            <tr>
-                                <th>Client / Account</th>
-                                <th>Latest Payment Status</th>
-                                <th>Outstanding Balance</th>
-                                <th>Overdue Invoices</th>
-                                <th>Next Payment Due</th>
-                                <th style={{ textAlign: 'right' }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {paginatedClients.length === 0 ? (
+                    {tableTab === 'recent_invoices' ? (
+                        <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 800 }}>
+                            <thead>
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--tt, #6B7280)' }}>
-                                        {activeSummary.topOutstandingClients.length === 0 ? (
-                                            <>
-                                                <Building size={32} style={{ margin: '0 auto 0.75rem', display: 'block', opacity: 0.35 }} />
-                                                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--tp, #0F172A)' }}>No Client Financial Records Available</div>
-                                                <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>Real-time client balances and invoice payment statuses will appear here once synchronized from FOMS.</div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <AlertCircle size={24} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.5 }} />
-                                                No client accounts match the selected search or filter criteria.
-                                            </>
-                                        )}
-                                    </td>
+                                    <th>Invoice #</th>
+                                    <th>Client Enterprise</th>
+                                    <th>Invoice Status</th>
+                                    <th>Payment Status</th>
+                                    <th>Aging / Due Bucket</th>
+                                    <th>Outstanding Balance</th>
+                                    <th style={{ textAlign: 'right' }}>Due Date</th>
                                 </tr>
-                            ) : (
-                                paginatedClients.map(client => {
-                                    const statusLower = (client.latestStatus || '').toLowerCase();
-                                    const dueMeta = formatDueDateRelative(client.nextDueDate);
-                                    const hasOverdue = (client.overdueInvoicesCount || 0) > 0;
+                            </thead>
+                            <tbody>
+                                {filteredRecentInvoices.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--tt, #6B7280)' }}>
+                                            No recent invoice records match the selected filter criteria.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    filteredRecentInvoices.map(inv => {
+                                        const isPaid = (inv.paymentStatus || '').toLowerCase() === 'paid' || inv.outstandingBalance <= 0;
+                                        const isOverdue = (inv.dueStatus || '').toLowerCase() === 'overdue';
+                                        return (
+                                            <tr key={inv.invoiceNumber} data-testid="foms-recent-invoice-row">
+                                                <td>
+                                                    <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{inv.invoiceNumber}</span>
+                                                </td>
+                                                <td>
+                                                    <div className="foms-client-name-group">
+                                                        <span className="foms-client-title">{inv.clientName}</span>
+                                                        {inv.clientAccountId && (
+                                                            <span className="foms-account-id-row"><span>{inv.clientAccountId}</span></span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span className={`foms-status-pill status-${(inv.invoiceStatus || '').toLowerCase()}`}>
+                                                        {inv.invoiceStatus || 'Sent'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className={`foms-status-pill ${isPaid ? 'status-paid' : 'status-unpaid'}`}>
+                                                        {isPaid ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                                                        <span>{isPaid ? 'Paid' : 'Unpaid'}</span>
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className={`foms-overdue-chip ${isOverdue ? '' : 'foms-aging-normal'}`}>
+                                                        {inv.agingBucket || (isOverdue ? 'Overdue' : 'Current')}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className="foms-balance-amount" style={inv.outstandingBalance > 0 ? { color: '#0F172A' } : { color: '#6B7280' }}>
+                                                        {formatCurrency(inv.outstandingBalance)}
+                                                    </span>
+                                                </td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: isOverdue ? '#DC2626' : 'var(--tp)' }}>
+                                                        {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-US') : '—'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <table className="table-card-data-table foms-table" style={{ width: '100%', minWidth: 800 }}>
+                            <thead>
+                                <tr>
+                                    <th>Client / Account</th>
+                                    <th>Latest Payment Status</th>
+                                    <th>Outstanding Balance</th>
+                                    <th>Overdue Invoices</th>
+                                    <th>Next Payment Due</th>
+                                    <th style={{ textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedClients.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--tt, #6B7280)' }}>
+                                            {activeSummary.topOutstandingClients.length === 0 ? (
+                                                <>
+                                                    <Building size={32} style={{ margin: '0 auto 0.75rem', display: 'block', opacity: 0.35 }} />
+                                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--tp, #0F172A)' }}>No Client Financial Records Available</div>
+                                                    <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>Real-time client balances and invoice payment statuses will appear here once synchronized from FOMS.</div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <AlertCircle size={24} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.5 }} />
+                                                    No client accounts match the selected search or filter criteria.
+                                                </>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    paginatedClients.map(client => {
+                                        const statusLower = (client.latestStatus || '').toLowerCase();
+                                        const dueMeta = formatDueDateRelative(client.nextDueDate);
+                                        const hasOverdue = (client.overdueInvoicesCount || 0) > 0;
+                                        const isPaid = statusLower === 'paid' || client.outstandingBalance <= 0;
 
-                                    return (
-                                        <tr key={client.clientAccountId}>
-                                            {/* Client Name & Account ID */}
-                                            <td>
-                                                <div className="foms-client-name-group">
-                                                    <span className="foms-client-title">{client.clientName}</span>
-                                                    <span className="foms-account-id-row">
-                                                        <span>{client.clientAccountId}</span>
-                                                        <button
-                                                            type="button"
-                                                            className="foms-copy-btn"
-                                                            onClick={e => handleCopyAccountId(client.clientAccountId, e)}
-                                                            title="Copy Account ID"
+                                        return (
+                                            <tr key={client.clientAccountId}>
+                                                {/* Client Name & Account ID */}
+                                                <td>
+                                                    <div className="foms-client-name-group">
+                                                        <span className="foms-client-title">{client.clientName}</span>
+                                                        <span className="foms-account-id-row">
+                                                            <span>{client.clientAccountId}</span>
+                                                            <button
+                                                                type="button"
+                                                                className="foms-copy-btn"
+                                                                onClick={e => handleCopyAccountId(client.clientAccountId, e)}
+                                                                title="Copy Account ID"
+                                                            >
+                                                                {copiedId === client.clientAccountId ? (
+                                                                    <Check size={11} style={{ color: '#059669' }} />
+                                                                ) : (
+                                                                    <Copy size={11} />
+                                                                )}
+                                                            </button>
+                                                        </span>
+                                                    </div>
+                                                </td>
+
+                                                {/* Latest Status Pill - Strict Binary Payment Status (FR-039) */}
+                                                <td>
+                                                    {isPaid ? (
+                                                        <span className="foms-status-pill status-paid" data-testid="foms-payment-status-paid">
+                                                            <CheckCircle2 size={11} />
+                                                            <span>Paid</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span
+                                                            className={`foms-status-pill ${hasOverdue ? 'status-overdue' : 'status-unpaid'}`}
+                                                            data-testid="foms-payment-status-unpaid"
                                                         >
-                                                            {copiedId === client.clientAccountId ? (
-                                                                <Check size={11} style={{ color: '#059669' }} />
-                                                            ) : (
-                                                                <Copy size={11} />
-                                                            )}
-                                                        </button>
-                                                    </span>
-                                                </div>
-                                            </td>
+                                                            {hasOverdue ? <AlertCircle size={11} /> : <Clock size={11} />}
+                                                            <span>{hasOverdue ? 'Overdue' : (client.latestStatus || 'Unpaid')}</span>
+                                                        </span>
+                                                    )}
+                                                </td>
 
-                                            {/* Latest Status Pill */}
-                                            <td>
-                                                <span
-                                                    className={`foms-status-pill status-${statusLower}`}
-                                                >
-                                                    {statusLower === 'overdue' && <AlertCircle size={11} />}
-                                                    {statusLower === 'paid' && <CheckCircle2 size={11} />}
-                                                    {(statusLower === 'sent' || statusLower === 'approved') && <Clock size={11} />}
-                                                    <span>{client.latestStatus}</span>
-                                                </span>
-                                            </td>
-
-                                            {/* Outstanding Balance */}
-                                            <td>
-                                                <span className="foms-balance-amount" style={client.outstandingBalance > 0 ? { color: '#0F172A' } : { color: '#6B7280' }}>
-                                                    {formatCurrency(client.outstandingBalance)}
-                                                </span>
-                                            </td>
-
-                                            {/* Overdue Count */}
-                                            <td>
-                                                {hasOverdue ? (
-                                                    <span className="foms-overdue-chip">
-                                                        <AlertCircle size={13} />
-                                                        <span>{client.overdueInvoicesCount} overdue</span>
+                                                {/* Outstanding Balance */}
+                                                <td>
+                                                    <span className="foms-balance-amount" style={client.outstandingBalance > 0 ? { color: '#0F172A' } : { color: '#6B7280' }}>
+                                                        {formatCurrency(client.outstandingBalance)}
                                                     </span>
-                                                ) : (
-                                                    <span style={{ color: '#059669', fontSize: '0.78rem', fontWeight: 500 }}>
-                                                        0 overdue
-                                                    </span>
-                                                )}
-                                            </td>
+                                                </td>
 
-                                            {/* Next Due Date */}
-                                            <td>
-                                                <div className="foms-due-date-cell">
-                                                    <span className="foms-due-date-text">
-                                                        {client.nextDueDate
-                                                            ? new Date(client.nextDueDate).toLocaleDateString('en-US', {
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                                year: 'numeric',
-                                                            })
-                                                            : 'No pending dues'}
-                                                    </span>
-                                                    <span
-                                                        className={`foms-due-relative ${
-                                                            dueMeta.isOverdue
-                                                                ? 'is-overdue'
-                                                                : dueMeta.isUpcoming
-                                                                ? 'is-upcoming'
-                                                                : ''
-                                                        }`}
+                                                {/* Overdue Count */}
+                                                <td>
+                                                    {hasOverdue ? (
+                                                        <span className="foms-overdue-chip">
+                                                            <AlertCircle size={13} />
+                                                            <span>{client.overdueInvoicesCount} overdue</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ color: '#059669', fontSize: '0.78rem', fontWeight: 500 }}>
+                                                            0 overdue
+                                                        </span>
+                                                    )}
+                                                </td>
+
+                                                {/* Next Due Date */}
+                                                <td>
+                                                    <div className="foms-due-date-cell">
+                                                        <span className="foms-due-date-text">
+                                                            {client.nextDueDate
+                                                                ? new Date(client.nextDueDate).toLocaleDateString('en-US', {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                    year: 'numeric',
+                                                                })
+                                                                : 'No pending dues'}
+                                                        </span>
+                                                        <span
+                                                            className={`foms-due-relative ${
+                                                                dueMeta.isOverdue
+                                                                    ? 'is-overdue'
+                                                                    : dueMeta.isUpcoming
+                                                                    ? 'is-upcoming'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            {dueMeta.text}
+                                                        </span>
+                                                    </div>
+                                                </td>
+
+                                                {/* Quick Action Button */}
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="foms-btn-action"
+                                                        onClick={() => setSelectedClient(client)}
                                                     >
-                                                        {dueMeta.text}
-                                                    </span>
-                                                </div>
-                                            </td>
-
-                                            {/* Quick Action Button */}
-                                            <td style={{ textAlign: 'right' }}>
-                                                <button
-                                                    type="button"
-                                                    className="foms-btn-action"
-                                                    onClick={() => setSelectedClient(client)}
-                                                >
-                                                    <Eye size={12} />
-                                                    <span>Details</span>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
+                                                        <Eye size={12} />
+                                                        <span>Details</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
 
                 {/* Pagination Bar */}
