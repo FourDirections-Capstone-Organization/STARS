@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Scalar.AspNetCore;
 using Backend.Data;
 using Backend.Modules.OrganizationalStructure;
@@ -293,8 +294,23 @@ app.MapGet("/", () => Results.Json(new
     timestamp = DateTime.UtcNow
 }));
 
-app.MapGet("/api/health", async (AppDbContext db) =>
+// Fast Liveness Probe for Azure App Service Health Check (Zero DB impact)
+app.MapGet("/api/health/live", () => Results.Json(new
 {
+    status = "healthy",
+    service = "STARS Backend API",
+    timestamp = DateTime.UtcNow
+}));
+
+// Readiness Probe with 10-second memory cache to shield DB pool during traffic surges
+app.MapGet("/api/health", async (AppDbContext db, Microsoft.Extensions.Caching.Memory.IMemoryCache cache) =>
+{
+    const string cacheKey = "SystemHealthProbeStatus";
+    if (cache.TryGetValue(cacheKey, out object? cachedResult) && cachedResult != null)
+    {
+        return (IResult)cachedResult;
+    }
+
     try
     {
         var canConnect = await db.Database.CanConnectAsync();
@@ -309,13 +325,16 @@ app.MapGet("/api/health", async (AppDbContext db) =>
             catch { /* not yet ready */ }
         }
 
-        return Results.Json(new
+        var result = Results.Json(new
         {
             status = canConnect ? "healthy" : "database_unreachable",
             database = canConnect ? "connected" : "cannot_connect",
             fomsIntegrationReady = fomsReady,
             timestamp = DateTime.UtcNow
         });
+
+        cache.Set(cacheKey, result, TimeSpan.FromSeconds(10));
+        return result;
     }
     catch (Exception ex)
     {
