@@ -1,7 +1,9 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.TaskManagement;
 
 namespace Backend.Controllers;
@@ -18,17 +20,35 @@ public class TaskCommentController : ControllerBase
         _commentService = commentService;
     }
 
+    private (Guid? UserId, UserRole? Role) GetUserIdentity()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId) ||
+            string.IsNullOrEmpty(roleClaim) || !Enum.TryParse<UserRole>(roleClaim, true, out var userRole))
+        {
+            return (null, null);
+        }
+
+        return (userId, userRole);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(
         Guid taskId,
         [FromForm] string? content = null,
         [FromForm] List<IFormFile>? attachments = null)
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var authorId))
+        var (authorId, role) = GetUserIdentity();
+        if (!authorId.HasValue || !role.HasValue)
             return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
 
-        var result = await _commentService.CreateAsync(taskId, content, attachments, authorId);
+        var access = await _commentService.CanUserAccessTaskCommentsAsync(taskId, authorId.Value, role.Value);
+        if (!access.IsSuccess)
+            return StatusCode(403, ApiResponseDTO<object>.Failure(access.Message));
+
+        var result = await _commentService.CreateAsync(taskId, content, attachments, authorId.Value);
         if (!result.IsSuccess)
             return BadRequest(result);
 
@@ -38,6 +58,14 @@ public class TaskCommentController : ControllerBase
     [HttpGet("{commentId:guid}/attachments/{attachmentId:guid}/download")]
     public async Task<IActionResult> DownloadAttachment(Guid taskId, Guid commentId, Guid attachmentId)
     {
+        var (userId, role) = GetUserIdentity();
+        if (!userId.HasValue || !role.HasValue)
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var access = await _commentService.CanUserAccessTaskCommentsAsync(taskId, userId.Value, role.Value);
+        if (!access.IsSuccess)
+            return StatusCode(403, ApiResponseDTO<object>.Failure(access.Message));
+
         var result = await _commentService.GetAttachmentAsync(commentId, attachmentId);
         if (!result.IsSuccess)
             return NotFound(result);
@@ -54,6 +82,14 @@ public class TaskCommentController : ControllerBase
     [HttpGet("{commentId:guid}/attachment/download")]
     public async Task<IActionResult> DownloadLegacyAttachment(Guid taskId, Guid commentId)
     {
+        var (userId, role) = GetUserIdentity();
+        if (!userId.HasValue || !role.HasValue)
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var access = await _commentService.CanUserAccessTaskCommentsAsync(taskId, userId.Value, role.Value);
+        if (!access.IsSuccess)
+            return StatusCode(403, ApiResponseDTO<object>.Failure(access.Message));
+
         // Backward compatibility: comments created before multi-file attachments
         // store a single file directly on the comment row.
         var result = await _commentService.GetLegacyAttachmentAsync(commentId);
@@ -75,6 +111,14 @@ public class TaskCommentController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10)
     {
+        var (userId, role) = GetUserIdentity();
+        if (!userId.HasValue || !role.HasValue)
+            return Unauthorized(ApiResponseDTO<object>.Failure("Invalid user token"));
+
+        var access = await _commentService.CanUserAccessTaskCommentsAsync(taskId, userId.Value, role.Value);
+        if (!access.IsSuccess)
+            return StatusCode(403, ApiResponseDTO<object>.Failure(access.Message));
+
         var result = await _commentService.GetByTaskIdAsync(taskId, pageNumber, pageSize);
         if (!result.IsSuccess)
             return NotFound(result);

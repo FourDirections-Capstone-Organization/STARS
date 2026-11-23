@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Models.DTOs;
+using Backend.Models.Enums;
 using Backend.Modules.Notifications;
 using Microsoft.Extensions.Options;
 
@@ -235,6 +236,37 @@ public class TaskCommentService : ITaskCommentService
             return ApiResponseDTO<TaskComment>.Failure("Attachment not found");
 
         return ApiResponseDTO<TaskComment>.Success(comment);
+    }
+
+    public async Task<ApiResponseDTO<bool>> CanUserAccessTaskCommentsAsync(Guid taskId, Guid userId, UserRole userRole)
+    {
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .FirstOrDefaultAsync(t => t.Id == taskId);
+
+        if (task is null)
+            return ApiResponseDTO<bool>.Failure("Task not found");
+
+        // 1. Managers have universal access across tasks
+        if (userRole == UserRole.Manager)
+            return ApiResponseDTO<bool>.Success(true);
+
+        // 2. Creator of the task has access
+        if (task.CreatedById == userId)
+            return ApiResponseDTO<bool>.Success(true);
+
+        // 3. Assigned users have access
+        if (task.Assignments != null && task.Assignments.Any(a => a.AssignedUserId == userId))
+            return ApiResponseDTO<bool>.Success(true);
+
+        // 4. Department members have access if task is assigned to their department
+        var user = await _db.Users.FindAsync(userId);
+        if (user != null && user.DepartmentId.HasValue && task.AssignedDepartmentId.HasValue && user.DepartmentId == task.AssignedDepartmentId)
+        {
+            return ApiResponseDTO<bool>.Success(true);
+        }
+
+        return ApiResponseDTO<bool>.Failure("Access denied: You do not have permission to access comments or attachments for this task.");
     }
 
     private async Task<TaskCommentResponseDTO> MapToResponseDTOAsync(TaskComment comment)
