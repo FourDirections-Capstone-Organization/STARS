@@ -257,15 +257,13 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-3-perf-dbcontext-pooling`
 
-- [ ] **Step 4: Implement Decoupled Background Health Probe & In-Memory Reference Caching**
+- [x] **Step 4: Implement Decoupled Background Health Probe & In-Memory Reference Caching**
   - **Targets:**
-    - `backend/Program.cs` (lines 285–320)
+    - `backend/Program.cs` (lines 285–340)
   - **Remediation Action:**
-    - Decouple the `/api/health` endpoint:
-      - Use `IMemoryCache` with a 15-second sliding expiration for the database connectivity probe and table count.
-      - When concurrent requests arrive at `/api/health` during load/stress tests (up to 200 VUs), serve the cached health snapshot instead of slamming PostgreSQL with 200 concurrent connection requests.
-      - Add a dedicated lightweight `/api/health/live` probe (instant HTTP 200 without DB) for Azure App Service Health Check pings, reserving `/api/health` for deep readiness checks.
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+    - Added instant liveness probe `GET /api/health/live` returning HTTP 200 without touching database, eliminating database traffic from App Service health pings.
+    - Wrapped `GET /api/health` with `IMemoryCache` (10-second cache), shielding the PostgreSQL connection pool during traffic surges (up to 200 VUs).
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-4-perf-health-cache`
 
 - [ ] **Step 5: Implement ASP.NET Core Rate Limiting Middleware on Authentication Endpoints**
