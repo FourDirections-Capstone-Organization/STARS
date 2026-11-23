@@ -1,319 +1,364 @@
-# Plan: STARS Security Audit Remediation & Verification
+# Plan: STARS System Performance Optimization & Azure Cloud Hardening
 
-**Feature Branch:** `feature/security-audit-remediation` | **Base Branch:** `refactoring/bug-fix`  
+**Feature Branch:** `feature/performance-optimization` | **Base Branch:** `refactoring/bug-fix`  
 **Step Branches:** `step-N-<short-name>`  
-**Safety Guardrails:**  
-- **Do not code yet:** Await explicit approval before commencing implementation steps.
-- **Never push directly to `refactoring/bug-fix`:** Always commit to isolated step branches and merge into `feature/security-audit-remediation`.
+**Safety & Workflow Guardrails:**  
+- **Do not code yet:** Await explicit user approval before commencing implementation steps.
+- **Never push directly to `refactoring/bug-fix`:** Always commit to isolated step branches (`step-N-...`), test thoroughly, and merge into `feature/performance-optimization`.
 - **Local Git Only:** Do NOT push any branches or commits to GitHub remote.
-- **Strict Regression Testing:** Pre-commit and pre-merge verification using `dotnet test` (1070 baseline) and `npm test` (500 baseline).
-- **Post-Remediation Verification & Report Regeneration:** Execute `node scripts/generate-security-audit-pdf.mjs` to regenerate `docs/STARS_Security_Audit_Report.pdf` and `docs/security-audit-report.html` with identical formatting.
+- **Strict Regression Testing:** Pre-commit and pre-merge verification using `dotnet test` (1,110 baseline passing) and `npm test` (573 baseline passing).
+- **Benchmark Re-Execution & Report Regeneration:** Execute `node scripts/perf-test-runner.mjs` to re-run autocannon load, stress, and spike test suites, followed by `node scripts/generate-pdf-report.mjs` to regenerate `docs/STARS_Performance_Test_Report.pdf`, `docs/performance-test-report.html`, and `docs/performance-test-results.json` in the exact publication format.
 
 ---
 
-## 1. Executive Summary & Audit Baseline Analysis
+## 1. Executive Review of Performance Test Reports
 
-A comprehensive security audit documented in `docs/STARS_Security_Audit_Report.pdf` (and `docs/SECURITY_AUDIT_REPORT.md`) identified **14 total vulnerabilities**:
-- **1 Critical Risk:** Mass assignment privilege escalation in user profile updates (SEC-01).
-- **5 High Risk:** Missing security headers & HSTS (SEC-02), overly permissive CORS wildcard (SEC-03), host header/origin link poisoning (SEC-04), BOLA/IDOR on attachments (SEC-05), plaintext token storage at rest (SEC-06).
-- **6 Medium Risk:** Committed integration API keys (SEC-07), session resuscitation on logout (SEC-08), authentication error user enumeration (SEC-09), extension-only file upload validation (SEC-10), vulnerable frontend npm dependencies (SEC-11), health/verification information disclosure (SEC-12).
-- **2 Low / Informational Risk:** Docker production development flag (SEC-13), localStorage token persistence (SEC-14).
+A comprehensive review of `docs/STARS_Performance_Test_Report.pdf`, `docs/PERFORMANCE_TEST_REPORT.md`, and `docs/performance-test-results.json` was conducted. The benchmarks tested the live Azure production environment (`https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net`) running ASP.NET Core 9 (`net9.0`) connected to Azure Database for PostgreSQL Flexible Server in Southeast Asia.
 
-### Baseline Test Status (Pre-Remediation Gate)
-- **Backend (.NET 9):** 1,070 passed, 0 failed (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
-- **Frontend (Vitest / React 18):** 500 passed across 50 test files (`npm --prefix frontend test -- --run`).
-- **M2M Integration:** `api-integration-tests/test-stars-foms-e2e.mjs`.
+### 1.1 Empirical Performance Baseline & Breakdown
+
+| Workload Category | Concurrency / VUs | Throughput (RPS) | Median Latency (p50) | Tail Latency (p95) | Error Rate | Primary Breaking Constraint |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Normal Load (Root Ping)** | 20 VUs | 5.34 req/s | 1,962 ms | 9,481 ms | 0.0% | Cloud round-trip / App Service cold-thread latency. |
+| **Normal Load (Health Check)** | 15 VUs | 14.20 req/s | 765 ms | 5,577 ms | 0.0% | Synchronous `CanConnectAsync` + `CountAsync` query per request. |
+| **Normal Load (Auth Login)** | 10 VUs | 52.67 req/s | 160 ms | 500 ms | 0.0% | PBKDF2 hash verification runs smoothly within CPU quota. |
+| **Normal Load (Task Guard)** | 20 VUs | 122.87 req/s | 115 ms | 550 ms | 0.0% (401 expected) | JWT authorization filter pipeline has low memory overhead. |
+| **Stress (Health DB Check)** | 25 VUs | 3.17 req/s | 6,040 ms | 9,477 ms | 0.0% | Queuing saturation at PostgreSQL connection pool checkout. |
+| **Stress (Health DB Check)** | 50 VUs | 2.09 req/s | 7,868 ms | 9,820 ms | **50.0%** (25 timeouts) | PostgreSQL pool starvation; requests exceed Npgsql checkout timeout. |
+| **Stress (Health DB Check)** | 100 VUs | 3.17 req/s | 8,336 ms | 9,974 ms | **62.0%** (62 timeouts) | Severe connection pool starvation. |
+| **Stress (Health DB Check)** | 200 VUs | 0.00 req/s | — | — | **100.0%** (200 timeouts)| Total connection pool exhaustion; complete service denial. |
+| **Stress (Auth API PBKDF2)** | 25 VUs | 61.59 req/s | 315 ms | 2,224 ms | 0.0% | CPU thread queueing begins; p95 latency jumps 4.4x. |
+| **Stress (Auth API PBKDF2)** | 50 VUs | 22.25 req/s | 2,478 ms | 4,419 ms | **3.37%** (9 errors) | **CPU Starvation Inflection:** PBKDF2 100k iterations exhausts CPU cores. |
+| **Stress (Auth API PBKDF2)** | 100 VUs | 12.75 req/s | 3,656 ms | 9,584 ms | **26.8%** (26 errors, 15 timeouts) | System saturated; threadpool exhaustion and request timeouts. |
+| **Spike Surge (Auth 150 VUs)** | 150 VUs | 13.47 req/s | 2,035 ms | 9,629 ms | **25.2%** (51 errors, 85 timeouts) | Throughput drops 81.7%; severe queue overflow. |
+| **Spike Drain Recovery** | 5 VUs | 0.00 req/s | — | — | 5 timeouts | **10–15 second lag:** Sockets remain clogged draining backlog. |
 
 ---
 
-## 2. Remediation Architecture & Phased Roadmap
+## 2. Root Cause Analysis & Codebase Findings
 
 ```mermaid
 flowchart TD
-    subgraph Phase1["Phase 1: Critical & High Priority Hotfixes (Days 1-3)"]
-        S01["Step 1: SEC-01 Mass Assignment Whitelist"]
-        S02["Step 2: SEC-02 Security Headers & HSTS Middleware"]
-        S03["Step 3: SEC-03 Strict CORS Whitelist Lockdown"]
-        S04["Step 4: SEC-04 Host Header / Origin Whitelist"]
-        S05["Step 5: SEC-05 BOLA Attachment Access Check"]
+    subgraph RootBottlenecks["STARS Bottleneck Discovery"]
+        B1["1. PBKDF2 CPU Starvation<br/>(100,000 iterations per login)"] --> C1["Kestrel ThreadPool Starvation<br/>HTTP 500 on Auth Surge (>50 VUs)"]
+        B2["2. DB Connection Exhaustion<br/>(Synchronous CanConnect & Count)"] --> C2["Connection Pool Starvation<br/>100% Timeouts at 200 VUs"]
+        B3["3. N+1 Queries & Missing Indexes<br/>(128 SQL queries per GET /api/task page)"] --> C3["Massive DB Round-Trip Latency<br/>High I/O on Azure PostgreSQL"]
+        B4["4. Webhook Synchronous Processing<br/>(Inbound DMS/FOMS hold HTTP thread)"] --> C4["Socket Saturation under bursts"]
+        B5["5. Azure Cloud Misconfigurations<br/>(Missing PgBouncer, Single Instance, ARR Affinity)"] --> C5["Concurrency Bottleneck at 25-30 VUs"]
+    end
+```
+
+### 2.1 Bottleneck 1: PBKDF2 CPU Starvation (`POST /api/auth/login`)
+- **Root Cause:** `Microsoft.AspNetCore.Identity.PasswordHasher<User>` uses PBKDF2 with HMAC-SHA512 and 100,000 iterations. Under 50+ concurrent requests, multi-core CPU capacity is 100% saturated with cryptographic work.
+- **Consequence:** Async Kestrel threads waiting for CPU quanta time out; cancellation tokens trip, throwing unhandled exceptions resulting in HTTP 500 errors.
+- **Solution:** Add ASP.NET Core `Microsoft.AspNetCore.RateLimiting` middleware with a sliding-window algorithm on `/api/auth/*` (e.g. 30 requests/minute per IP) and concurrency limiter to prevent CPU starvation.
+
+### 2.2 Bottleneck 2: PostgreSQL Connection Starvation (`GET /api/health` & DbContext Lifecycle)
+- **Root Cause:** The `/api/health` endpoint synchronously calls `await db.Database.CanConnectAsync()` and `await db.FomsClientFinancialStatuses.CountAsync()`. Under 50–200 concurrent probes, every request attempts to check out an independent physical database connection.
+- **Consequence:** Exceeds Npgsql default pool size (`MaxPoolSize=100`) and exhausts Azure App Service outbound sockets. At 200 VUs, 100% of requests time out.
+- **Solution:** 
+  1. Decouple `/api/health` by maintaining an in-memory cached background health status updated every 15 seconds via `IMemoryCache` or a lightweight background probe.
+  2. Switch `builder.Services.AddDbContext<AppDbContext>` to `builder.Services.AddDbContextPool<AppDbContext>` to reuse DbContext instances and eliminate GC churn.
+  3. Tune Npgsql connection string parameters (`MaxPoolSize=150`, `MinPoolSize=10`, `ConnectionLifetime=300`, `Timeout=15`, `CommandTimeout=30`).
+
+### 2.3 Bottleneck 3: N+1 Database Cascades & Missing Indexes on `Tasks` (`GET /api/task`)
+- **Root Cause Identified in Code Review:**
+  - In `backend/Modules/TaskManagement/TaskService.cs`:
+    - `GetAllAsync` executes **7 distinct count queries** (`activeCount`, `inProgressCount`, `completedCount`, `overdueCount`, `cancelledCount`, `onHoldCount`, `totalCount`) sequentially on every request.
+    - Inside `MapToResponseDTOAsync` (lines 741–752), EF Core explicitly loads related entities **per task row**:
+      ```csharp
+      await _db.Entry(task).Reference(t => t.CreatedBy).LoadAsync();
+      await _db.Entry(task).Reference(t => t.AssignedDepartment).LoadAsync();
+      await _db.Entry(task).Reference(t => t.Team).LoadAsync();
+      await _db.Entry(task).Collection(t => t.Assignments).LoadAsync();
+      foreach (var assignment in task.Assignments) {
+          await _db.Entry(assignment).Reference(a => a.AssignedUser).LoadAsync();
+      }
+      ```
+    - For a page size of 20 tasks with 2 assignees each, **128 database round-trips** are executed for a single HTTP request! Over Azure Southeast Asia network latency (25ms), this alone consumes **3.2+ seconds**.
+  - In `backend/Data/AppDbContext.cs`: `Models.Task` has **zero** composite indexes configured. High-frequency filtering on `Status`, `AssignedDepartmentId`, `CreatedAt`, and `DueDate` results in full-table sequential scans.
+- **Solution:**
+  1. Replace explicit per-row loading in `MapToResponseDTOAsync` with eager loading (`.Include()` and `.ThenInclude()`) or direct EF Core `.Select()` DTO projection with `.AsNoTracking()`.
+  2. Consolidate the 6 badge count queries into a single aggregated SQL query (`GROUP BY Status` / conditional sums) or compute summary counts efficiently.
+  3. Add composite database indexes via EF Core migration:
+     - `(Status, AssignedDepartmentId, DueDate)`
+     - `CreatedAt`
+     - `(CreatedById, Status)`
+     - `TaskNumber` (for rapid uniqueness validation)
+
+### 2.4 Bottleneck 4: Webhook Synchronous Processing (`POST /api/integration/dms/status`)
+- **Root Cause:** Inbound DMS status webhook executes database updates and notifications synchronously in the HTTP request thread.
+- **Solution:** Introduce an in-memory `System.Threading.Channels.Channel<DmsStatusWebhookDTO>` background processing worker. The controller immediately responds `202 Accepted` after API key validation, while the background service drains the channel in batches, shielding Kestrel from sudden webhook delivery spikes.
+
+---
+
+## 3. Azure Cloud Configuration & Misconfiguration Prevention Guide
+
+To prevent cloud misconfigurations that degrade performance on Azure, the following configurations must be verified and applied:
+
+```mermaid
+flowchart LR
+    subgraph ClientLayer["Clients / Web App Frontend"]
+        Browser["React 18 SPA (Vercel / Azure)"]
     end
 
-    subgraph Phase2["Phase 2: Architectural & Cryptographic Hardening (Days 4-7)"]
-        S06["Step 6: SEC-06 SHA-256 Token Hashing at Rest"]
-        S07["Step 7: SEC-07 Key Externalization & Secrets Hygiene"]
-        S08["Step 8: SEC-08 Logout Revocation & Session Timeout Guard"]
-        S09["Step 9: SEC-09 Anti-Enumeration Auth Normalization"]
-        S10["Step 10: SEC-10 Magic Byte File Header Inspection"]
+    subgraph AzureAppService["Azure App Service (STARS Backend)"]
+        direction TB
+        AS1["Plan: P1v3 / B2 (64-bit Process)"]
+        AS2["Always On: Enabled (Zero Cold Starts)"]
+        AS3["ARR Affinity: Disabled (Stateless Load Balancing)"]
+        AS4["HTTP 2.0 / Multiplexing: Enabled"]
+        AS5["Auto-Scale: 1 to 3 instances on CPU > 70%"]
     end
 
-    subgraph Phase3["Phase 3: Infrastructure, Container & Dependency Hardening (Days 8-10)"]
-        S11["Step 11: SEC-11 Frontend NPM Audit & Package Patching"]
-        S12["Step 12: SEC-12 Exception Sanitization on Health Endpoints"]
-        S13["Step 13: SEC-13 Dockerfile Production Environment Flag"]
-        S14["Step 14: SEC-14 HttpOnly Cookie Architecture Specification"]
+    subgraph AzurePostgres["Azure Database for PostgreSQL Flexible Server"]
+        direction TB
+        PG1["Built-in PgBouncer: Enabled (Port 6432)"]
+        PG2["Tier: General Purpose (D-Series, not Burstable B-Series)"]
+        PG3["Max Connections: 500+"]
+        PG4["VNet Integration: Co-located in Southeast Asia"]
     end
 
-    subgraph Phase4["Phase 4: Full Regression & Audit Report Regeneration"]
-        S15["Step 15: Full Regression Testing (Backend, Frontend, M2M)"]
-        S16["Step 16: Audit PDF & HTML Regeneration via scripts/"]
-        S17["Step 17: Final Feature Branch Merge & Plan Archival"]
+    Browser -->|HTTP/2| AzureAppService
+    AzureAppService -->|Port 6432 PgBouncer| AzurePostgres
+```
+
+### 3.1 Azure App Service Settings (Avoid Common Cloud Traps)
+
+1. **Always On = `true` (Trap: Cold Start Latency)**
+   - *Problem:* By default on Basic/Standard/Premium tiers, idle apps unload after 20 minutes, causing 10–30s latency spikes on initial user requests.
+   - *Configuration:* `az webapp config set --resource-group <rg> --name <app> --always-on true`
+
+2. **Platform Bitness = `64-bit` (Trap: Memory & Thread Pool Caps)**
+   - *Problem:* Default 32-bit Kestrel processes on App Service are hard-limited to 1.4GB RAM and restricted threadpool quotas.
+   - *Configuration:* `az webapp config set --resource-group <rg> --name <app> --use-32bit-worker-process false`
+
+3. **ARR Affinity = `false` (Trap: Broken Horizontal Load Balancing)**
+   - *Problem:* When scaling to multiple instances, Application Request Routing (ARR) injects an `ARRAffinity` cookie that binds users to a single VM, concentrating traffic during spikes and defeating scale-out.
+   - *Configuration:* `az webapp update --resource-group <rg> --name <app> --client-affinity-enabled false`
+
+4. **HTTP Version = `2.0` (Trap: Head-of-Line Socket Blocking)**
+   - *Problem:* HTTP 1.1 opens separate TCP sockets for concurrent requests, triggering browser connection limits (6 connections) and Kestrel socket contention.
+   - *Configuration:* `az webapp config set --resource-group <rg> --name <app> --http20-enabled true`
+
+5. **Auto-Scale Rules (Trap: Static Single-Node Overload)**
+   - *Rule:* Scale out from 1 to 3 instances when CPU utilization exceeds 70% for > 2 minutes; scale in when CPU < 30% for > 5 minutes.
+   - *Effect:* Triples safe concurrency capacity from 25–30 VUs to **75–100 VUs**.
+
+6. **Outbound SNAT Port Exhaustion (Trap: Socket Drops on Outbound APIs)**
+   - *Problem:* High volumes of outbound HTTP requests (SMTP, Groq AI, DMS, FOMS) can exhaust the 128 default pre-allocated SNAT ports per instance.
+   - *Configuration:* Enable Virtual Network (VNet) Integration with a dedicated subnet and Azure NAT Gateway, or keep persistent HTTP clients (`IHttpClientFactory`) with proper socket reuse.
+
+### 3.2 Azure Database for PostgreSQL Flexible Server Settings
+
+1. **Enable Built-in PgBouncer on Port 6432 (Trap: Process-per-Connection Overhead)**
+   - *Problem:* Native PostgreSQL allocates a separate OS process (~10MB RAM) per connection. Concurrency > 50 causes connection spikes and lock contention.
+   - *Configuration:* In Azure Portal: *PostgreSQL Flexible Server -> Server parameters -> `pgbouncer.enabled` = `on`*. Update backend connection string port from `5432` to `6432`.
+
+2. **Compute Tier Selection (Trap: CPU Credit Exhaustion on Burstable Tier)**
+   - *Problem:* Burstable tiers (B1ms, B2s) accumulate CPU credits. During sustained stress tests (200 VUs), CPU credits drop to zero, throttling the CPU to 10-20% baseline and causing cascading 10s timeouts.
+   - *Configuration:* For production environments, utilize **General Purpose (e.g. D2ds_v5 / D4ds_v5)** tiers with dedicated vCPUs.
+
+3. **Regional Co-Location (Trap: Cross-Region Latency)**
+   - *Problem:* If App Service is in `Southeast Asia` and PostgreSQL is in `East Asia`, every database query incurs 30–60ms of cross-datacenter fiber latency.
+   - *Configuration:* Ensure both App Service and PostgreSQL Flexible Server reside in the identical Azure region (`southeastasia`).
+
+---
+
+## 4. Phased Implementation Steps
+
+```mermaid
+flowchart TD
+    subgraph Phase1["Phase 1: DB Indexing & Migration (Step 1)"]
+        S1["Step 1: EF Core Composite Indexes on Tasks & Assignments"]
+    end
+
+    subgraph Phase2["Phase 2: Eliminate N+1 Cascades & DbContext Pooling (Steps 2-3)"]
+        S2["Step 2: Rewrite TaskService.GetAllAsync to Eager / Projected Loading"]
+        S3["Step 3: Enable AddDbContextPool & Npgsql Pool Parameter Tuning"]
+    end
+
+    subgraph Phase3["Phase 3: Decoupled Health Checks & In-Memory Caching (Step 4)"]
+        S4["Step 4: Background Health Probe Cache & Static Reference Caching"]
+    end
+
+    subgraph Phase4["Phase 4: Cryptographic Shielding & Rate Limiting (Step 5)"]
+        S5["Step 5: ASP.NET Core RateLimiter Middleware on Auth Endpoints"]
+    end
+
+    subgraph Phase5["Phase 5: Asynchronous Webhook Processing Pipeline (Step 6)"]
+        S6["Step 6: System.Threading.Channels Queue for DMS Webhooks"]
+    end
+
+    subgraph Phase6["Phase 6: Response Compression & Optimization (Step 7)"]
+        S7["Step 7: AddResponseCompression (Brotli/Gzip) for Large JSON Payloads"]
+    end
+
+    subgraph Phase7["Phase 7: Full Regression, Benchmark Re-run & Report Regeneration (Steps 8-9)"]
+        S8["Step 8: Full Regression Suite (1,110 Backend + 573 Frontend Tests)"]
+        S9["Step 9: Re-execute Benchmark Runner & Regenerate PDF/HTML Reports"]
+    end
+
+    subgraph Phase8["Phase 8: Review & Promotion (Step 10)"]
+        S10["Step 10: Plan Archival & Gated Merge to refactoring/bug-fix"]
     end
 
     Phase1 --> Phase2
     Phase2 --> Phase3
     Phase3 --> Phase4
+    Phase4 --> Phase5
+    Phase5 --> Phase6
+    Phase6 --> Phase7
+    Phase7 --> Phase8
 ```
 
----
+### Detailed Implementation Steps
 
-## 3. Detailed Step-by-Step Implementation Steps
-
-### Phase 1: Critical & High Priority Hotfixes
-
-- [x] **Step 1: Fix Mass Assignment Privilege Escalation in Profile & User Updates (SEC-01)**
+- [x] **Step 1: Implement Database Composite Indexes on `Tasks` and High-Frequency Tables**
   - **Targets:**
-    - `backend/Modules/UserAccountManagement/UserService.cs` (lines 344–349, 439–446)
-    - `backend/Controllers/ProfileController.cs`
-    - `backend/Controllers/UserController.cs`
+    - `backend/Data/AppDbContext.cs`
+    - `backend/Data/DatabaseStartupDdl.cs` (idempotent DDL startup fallback)
   - **Remediation Action:**
-    - In `UserService.UpdateAsync`, inspect whether the requesting caller possesses the `Manager` role.
-    - If `requestUserId == id` (self-profile update) or caller is not a `Manager`, explicitly strip privilege-bearing fields: nullify `dto.Role`, `dto.DepartmentId`, `dto.JobPositionId`, and `dto.TargetSystems`.
-    - Prevent regular employees (Courier, Dispatcher, Encoder) from self-elevating to Manager or moving their department/systems.
-  - **Tests & Verification:**
-    - Add unit tests in `backend/Tests/UserAccountManagement/UserSecurityTests.cs`:
-      - Verify non-manager self-update ignores `Role` in payload and preserves existing role.
-      - Verify manager caller can successfully update role and department.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-1-sec01-mass-assignment`
+    - Add B-Tree composite indexes to `Models.Task`:
+      ```csharp
+      entity.HasIndex(e => new { e.Status, e.AssignedDepartmentId, e.Deadline });
+      entity.HasIndex(e => e.CreatedAt);
+      entity.HasIndex(e => new { e.CreatedById, e.Status });
+      entity.HasIndex(e => e.TaskNumber);
+      ```
+    - Add indexes to `TaskDeliveryDetail` for fast waybill and order lookups:
+      ```csharp
+      entity.HasIndex(e => e.DmsOrderId);
+      ```
+    - Verified startup DDL creates indexes idempotently without table locking.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
+  - **Branch:** `step-1-perf-db-indexes`
 
-- [x] **Step 2: Security Headers & HSTS Middleware Implementation (SEC-02)**
+- [ ] **Step 2: Eliminate N+1 Query Cascades and Consolidate Summary Counts in `TaskService`**
+  - **Targets:**
+    - `backend/Modules/TaskManagement/TaskService.cs` (lines 190–306, 741–752)
+  - **Remediation Action:**
+    - In `MapToResponseDTOAsync`, remove individual per-row `_db.Entry(...).LoadAsync()` calls.
+    - In `GetAllAsync`, apply eager loading:
+      ```csharp
+      query = query
+          .Include(t => t.CreatedBy)
+          .Include(t => t.AssignedDepartment)
+          .Include(t => t.Team)
+          .Include(t => t.Assignments)
+              .ThenInclude(a => a.AssignedUser)
+          .AsNoTracking();
+      ```
+    - Consolidate the 6 individual count queries (`activeCount`, `inProgressCount`, `completedCount`, `overdueCount`, `cancelledCount`, `onHoldCount`) into a single grouped query or conditional projection (`CountAsync` on aggregated filter).
+    - Map DTOs directly from the pre-loaded in-memory entity graph, reducing database round-trips from ~128 to **2 queries total per page**.
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (verify all task listing, RBAC, and pagination tests pass).
+  - **Branch:** `step-2-perf-n1-query-elimination`
+
+- [ ] **Step 3: Enable `AddDbContextPool` and Tune Npgsql Connection Parameters**
+  - **Targets:**
+    - `backend/Program.cs` (line 97)
+    - `backend/appsettings.json`
+  - **Remediation Action:**
+    - Replace `builder.Services.AddDbContext<AppDbContext>` with `builder.Services.AddDbContextPool<AppDbContext>(..., poolSize: 128)`.
+    - In connection string builder / environment configuration, configure optimized connection pool defaults:
+      ```
+      MaxPoolSize=150;MinPoolSize=10;ConnectionLifetime=300;Timeout=15;CommandTimeout=30;Pooling=true;
+      ```
+    - This eliminates DbContext instantiation overhead on high-concurrency requests and prevents premature pool exhaustion.
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+  - **Branch:** `step-3-perf-dbcontext-pooling`
+
+- [ ] **Step 4: Implement Decoupled Background Health Probe & In-Memory Reference Caching**
+  - **Targets:**
+    - `backend/Program.cs` (lines 285–320)
+  - **Remediation Action:**
+    - Decouple the `/api/health` endpoint:
+      - Use `IMemoryCache` with a 15-second sliding expiration for the database connectivity probe and table count.
+      - When concurrent requests arrive at `/api/health` during load/stress tests (up to 200 VUs), serve the cached health snapshot instead of slamming PostgreSQL with 200 concurrent connection requests.
+      - Add a dedicated lightweight `/api/health/live` probe (instant HTTP 200 without DB) for Azure App Service Health Check pings, reserving `/api/health` for deep readiness checks.
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+  - **Branch:** `step-4-perf-health-cache`
+
+- [ ] **Step 5: Implement ASP.NET Core Rate Limiting Middleware on Authentication Endpoints**
   - **Targets:**
     - `backend/Program.cs`
-    - `frontend/nginx.conf`
+    - `backend/Controllers/AuthController.cs`
   - **Remediation Action:**
-    - Add custom middleware in `Program.cs` injecting protective headers:
-      - `X-Frame-Options: SAMEORIGIN`
-      - `X-Content-Type-Options: nosniff`
-      - `Referrer-Policy: strict-origin-when-cross-origin`
-      - `Content-Security-Policy`: Restrict scripts, styles, frames, and connect endpoints to authorized sources.
-      - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
-    - Add `app.UseHsts()` when running outside Development (`!app.Environment.IsDevelopment()`).
-    - Mirror equivalent headers in `frontend/nginx.conf` for reverse proxy consistency.
-  - **Tests & Verification:**
-    - Add integration test verifying HTTP response headers on live endpoints.
-    - Verify all existing backend & frontend tests pass cleanly.
-  - **Branch:** `step-2-sec02-security-headers`
+    - Add `builder.Services.AddRateLimiter(...)` with a sliding-window rate limiter partitioned by Client IP:
+      - Permit 30 requests per minute per IP on `POST /api/auth/login`.
+      - Return `HTTP 429 Too Many Requests` with `Retry-After` header when limit exceeded.
+    - Add a concurrency limiter policy (e.g. max 20 concurrent PBKDF2 hashing operations across the server) with queue limit of 10.
+    - Apply `[EnableRateLimiting("AuthRateLimit")]` to `AuthController.Login`.
+    - This shields CPU cores from PBKDF2 exhaustion during high-concurrency stress attacks without degrading normal user logins.
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (ensure login unit tests remain compliant).
+  - **Branch:** `step-5-perf-auth-ratelimiting`
 
-- [x] **Step 3: Strict CORS Whitelist Lockdown (SEC-03)**
+- [ ] **Step 6: Implement Asynchronous Channel Queue for High-Volume Webhook Ingestion**
   - **Targets:**
-    - `backend/Program.cs` (lines 33–54)
+    - `backend/Controllers/DmsIntegrationController.cs`
+    - `backend/Modules/DmsIntegration/DmsWebhookQueueService.cs` (new background hosted service)
+    - `backend/Program.cs`
   - **Remediation Action:**
-    - Remove the wildcard `.EndsWith(".vercel.app")` suffix match which permitted arbitrary attacker-controlled Vercel domains with credentials.
-    - Replace with an exact canonical whitelist:
-      - `https://stars-two-chi.vercel.app`
-      - `https://speedex-system.vercel.app`
-      - `https://delivery-system-capstone-beige.vercel.app`
-      - `https://fomsfrontend.vercel.app`
-      - In Development only: `http://localhost:5173`, `http://localhost:3000`, `http://127.0.0.1:5173`, `http://127.0.0.1:3000`.
-  - **Tests & Verification:**
-    - Add unit tests testing the CORS origin evaluator with valid origins (accepted) and arbitrary `.vercel.app` origins (rejected).
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-3-sec03-cors-whitelist`
+    - Create a singleton `System.Threading.Channels.Channel<DmsStatusWebhookDTO>` bounded channel (capacity: 10,000 items).
+    - In `DmsIntegrationController.ReceiveStatusUpdate`, validate API key and immediately enqueue payload into the channel, returning `HTTP 202 Accepted` (< 5ms response time).
+    - Register a background `IHostedService` (`DmsWebhookQueueService`) that reads from the channel and processes status updates asynchronously using a scoped `AppDbContext`.
+    - Shields Kestrel worker threads and database locks from third-party webhook delivery surges.
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (verify webhook integration tests pass).
+  - **Branch:** `step-6-perf-webhook-channel`
 
-- [x] **Step 4: Host Header & Origin Link Sanitization in Email Verification (SEC-04)**
+- [ ] **Step 7: Add Response Compression Middleware for Large JSON Payloads**
   - **Targets:**
-    - `backend/Controllers/EmailVerificationController.cs` (lines 110–133)
+    - `backend/Program.cs`
   - **Remediation Action:**
-    - In `EmailVerificationController.GetClientBaseUrl()`, enforce domain validation against an approved origin host whitelist (matching `AllowedOriginHosts` pattern in `AuthController.cs`).
-    - Reject arbitrary spoofed `Origin` and `Referer` headers; fallback strictly to configured `_frontendUrl`.
-  - **Tests & Verification:**
-    - Add unit test sending `POST /api/email-verification/resend` with spoofed `Origin: https://evil.com`; verify generated email verification URL points strictly to canonical frontend.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-4-sec04-origin-sanitization`
+    - Enable `builder.Services.AddResponseCompression(...)` with Brotli and Gzip providers.
+    - Configure compression for `application/json` and `text/plain` payloads above 1KB.
+    - Drastically reduces outbound bandwidth and network transfer times for large endpoints (e.g., Task lists, Reports, Analytics).
+  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+  - **Branch:** `step-7-perf-response-compression`
 
-- [x] **Step 5: Broken Object-Level Authorization (BOLA/IDOR) on Task Attachments (SEC-05)**
+- [ ] **Step 8: Run Full Regression Testing Suite (Zero Broken Tests Gate)**
   - **Targets:**
-    - `backend/Controllers/AttachmentController.cs` (lines 52–67)
-    - `backend/Modules/TaskManagement/AttachmentService.cs`
+    - Backend: `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (must pass 1,110+ tests).
+    - Frontend: `npm --prefix frontend test -- --run` (must pass 573 tests across 57 files).
+    - Integration tests: `node api-integration-tests/test-stars-foms-e2e.mjs`.
+  - **Verification:** 100% green across all test runners before running performance benchmarks.
+  - **Branch:** `step-8-perf-regression-gate`
+
+- [ ] **Step 9: Re-execute Performance Benchmarks and Regenerate Publication Reports**
+  - **Targets:**
+    - `scripts/perf-test-runner.mjs`
+    - `scripts/generate-pdf-report.mjs`
+    - `docs/performance-test-results.json`
+    - `docs/PERFORMANCE_TEST_REPORT.md`
+    - `docs/STARS_Performance_Test_Report.pdf`
+    - `docs/performance-test-report.html`
   - **Remediation Action:**
-    - In `GET /api/attachments/{id:guid}/download`, extract authenticated user ID and role claims.
-    - Retrieve parent task metadata and verify the requesting user has legitimate access:
-      1. User is `Manager`, OR
-      2. User belongs to `task.AssignedDepartmentId`, OR
-      3. User is actively assigned to the task (`task.Assignments.Any(a => a.AssignedUserId == userId)`).
-    - If unauthorized, return `403 Forbidden`.
-  - **Tests & Verification:**
-    - Add unit tests in `backend/Tests/TaskManagement/AttachmentSecurityTests.cs`:
-      - Cross-department unauthorized employee downloading attachment returns 403 Forbidden.
-      - Assigned employee or Manager receives 200 OK with file content.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-5-sec05-attachment-bola`
+    - Execute `node scripts/perf-test-runner.mjs` to run the standardized load, stress, and spike test suite.
+    - Verify throughput improvements (target: > 150 req/s, 0 timeouts at 50 VUs, healthy recovery).
+    - Execute `node scripts/generate-pdf-report.mjs` via Microsoft Edge headless to compile the updated report with embedded SVG vector charts.
+  - **Branch:** `step-9-perf-report-regeneration`
+
+- [ ] **Step 10: Final Feature Branch Merge & Plan Archival**
+  - **Targets:**
+    - Merge `step-9-...` into `feature/performance-optimization`.
+    - Archive completed plan to `docs/archive/plans/performance-optimization.md`.
+    - Keep changes local (do NOT push to GitHub or `refactoring/bug-fix` without user authorization).
+  - **Branch:** `feature/performance-optimization`
 
 ---
 
-### Phase 2: Architectural & Cryptographic Hardening
+## 5. Verification Commands Reference
 
-- [x] **Step 6: Cryptographic Hashing of Tokens at Rest (SEC-06)**
-  - **Targets:**
-    - `backend/Models/User.cs` (`RefreshToken`, `PasswordResetToken`, `EmailVerificationToken`)
-    - `backend/Modules/AuthenticationAndCredentials/AuthService.cs`
-  - **Remediation Action:**
-    - Update `AuthService` token generation: produce raw cryptographically secure random tokens for client communication, but store only their `SHA256` hexadecimal hashes in the database.
-    - Update lookup queries (`RefreshTokenAsync`, `ResetPasswordAsync`, `VerifyEmailAsync`) to hash incoming client tokens prior to querying EF Core.
-    - Ensure existing user records remain compatible or are handled smoothly.
-  - **Tests & Verification:**
-    - Run authentication test suite (`backend/Tests/AuthenticationAndCredentials/`) to verify login, token rotation, and password reset flows pass with hashed persistence.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-6-sec06-token-hashing`
+```powershell
+# 1. Backend Unit & Integration Tests (Baseline: 1,110 tests)
+dotnet test backend/Tests/Backend.Tests.csproj --configuration Release
 
-- [x] **Step 7: Key Rotation & Integration Secrets Externalization (SEC-07)**
-  - **Targets:**
-    - `backend/appsettings.json` (lines 64–65)
-    - `docker-compose.yml`
-    - `.env.example`
-  - **Remediation Action:**
-    - Remove hardcoded 64-character hexadecimal API keys (`OutboundApiKey`, `InboundApiKey`) from `appsettings.json`.
-    - Configure keys to be loaded via standard environment variable bindings (`FomsIntegration__OutboundApiKey`, `FomsIntegration__InboundApiKey`).
-    - Replace default passwords in docker-compose templates with secure placeholder references (`change_in_production`).
-  - **Tests & Verification:**
-    - Run M2M integration script `node api-integration-tests/test-stars-foms-e2e.mjs` with environment variables to verify externalized credentials work seamlessly.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-7-sec07-secret-externalization`
+# 2. Frontend Vitest Suite (Baseline: 573 tests)
+npm --prefix frontend test -- --run
 
-- [x] **Step 8: Token Revocation on Logout & Session Resuscitation Guard (SEC-08)**
-  - **Targets:**
-    - `backend/Modules/AuthenticationAndCredentials/AuthService.cs` (line 364)
-    - `backend/Middleware/SessionTimeoutMiddleware.cs` (lines 66–90)
-    - `backend/Models/User.cs`
-  - **Remediation Action:**
-    - Add a `TokenVersion` integer counter to `User` entity or register revoked JWT `jti` in `IMemoryCache` with expiration matching token lifetime.
-    - In `SessionTimeoutMiddleware`, fix the resuscitation logic: if `!user.LastActivityAt.HasValue`, treat the session as explicitly terminated/logged out, return `401 Unauthorized`, and do NOT re-populate `LastActivityAt`.
-  - **Tests & Verification:**
-    - Add test making an authenticated call immediately after `/api/auth/logout`; verify `401 Unauthorized` is returned and `LastActivityAt` remains unset.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-8-sec08-session-revocation`
+# 3. Performance Benchmark Runner (Autocannon Load, Stress, Spike)
+node scripts/perf-test-runner.mjs
 
-- [x] **Step 9: User & Account State Enumeration Elimination (SEC-09)**
-  - **Targets:**
-    - `backend/Modules/AuthenticationAndCredentials/AuthService.cs` (lines 148–186)
-    - `backend/Controllers/AuthController.cs` (lines 134–143)
-  - **Remediation Action:**
-    - Normalize `ForgotPasswordAsync`: always return a generic success message: *"If an account matches the provided details, instructions to reset your password have been sent to your registered email address."* regardless of whether the employee number or email was found or active.
-    - Protect `GET /api/auth/onboarding-status/{employeeNumber}`: require authentication or rate-limit and sanitize responses to prevent automated employee number scanning.
-  - **Tests & Verification:**
-    - Unit tests validating identical response messages and HTTP status codes for existing vs non-existent employee accounts.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-9-sec09-anti-enumeration`
-
-- [x] **Step 10: File Upload Magic Byte Inspection (SEC-10)**
-  - **Targets:**
-    - `backend/Modules/TaskManagement/AttachmentService.cs` (lines 167–181)
-    - `backend/Modules/Notifications/AnnouncementService.cs` (lines 95–110)
-  - **Remediation Action:**
-    - Extend `ValidateFile()` to inspect the file stream's magic byte header before accepting the upload:
-      - PDF: `%PDF-` (`25 50 44 46`)
-      - PNG: `\x89PNG\r\n\x1a\n` (`89 50 4E 47 0D 0A 1A 0A`)
-      - JPEG: `\xFF\xD8\xFF`
-      - Office Open XML (.docx/.xlsx): `PK\x03\x04` (`50 4B 03 04`)
-    - Reject uploaded files whose file extension does not match the actual magic byte signature.
-  - **Tests & Verification:**
-    - Unit tests uploading executable/text files renamed with `.pdf` and `.png` extensions; verify HTTP 400 rejection.
-    - Unit tests uploading valid PDF/PNG byte streams; verify successful acceptance.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-10-sec10-magic-bytes`
-
----
-
-### Phase 3: Infrastructure, Container & Dependency Hardening
-
-- [x] **Step 11: Frontend Dependency Vulnerability Remediation (SEC-11)**
-  - **Targets:**
-    - `frontend/package.json`
-    - `frontend/package-lock.json`
-  - **Remediation Action:**
-    - Run `npm audit fix` and upgrade `axios`, `vite`, and `@xmldom/xmldom` to secure stable versions.
-    - Verify all dependencies are cleanly resolved without breaking Vite build pipelines or React 18 component rendering.
-  - **Tests & Verification:**
-    - Run `npm --prefix frontend test -- --run` (all 500 tests pass).
-    - Run `npm --prefix frontend run build` (production build succeeds with 0 errors).
-  - **Branch:** `step-11-sec11-frontend-deps`
-
-- [x] **Step 12: Information Disclosure Sanitization on Health & Error Endpoints (SEC-12)**
-  - **Targets:**
-    - `backend/Program.cs` (`/api/health`, line 331)
-    - `backend/Controllers/EmailVerificationController.cs` (lines 49, 87, 106)
-  - **Remediation Action:**
-    - In `/api/health` and email verification error handlers, log full exception details with `ILogger`.
-    - Return generic client error responses: `{ "status": "Degraded", "message": "Service temporarily unavailable" }` without leaking `ex.Message`, connection strings, or server file paths.
-  - **Tests & Verification:**
-    - Add tests verifying error response formatting when simulated database exceptions occur.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-12-sec12-error-sanitization`
-
-- [x] **Step 13: Dockerfile Production Environment Flag (SEC-13)**
-  - **Targets:**
-    - `backend/Dockerfile` (line 13)
-  - **Remediation Action:**
-    - Change `ENV ASPNETCORE_ENVIRONMENT=Development` to `ENV ASPNETCORE_ENVIRONMENT=Production`.
-    - Document development environment overrides via docker-compose configuration.
-  - **Tests & Verification:**
-    - Verify OpenAPI/Scalar documentation endpoints are disabled by default under production configuration.
-    - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
-  - **Branch:** `step-13-sec13-dockerfile-production`
-
-- [x] **Step 14: Token Storage Hardening Architectural Migration Plan (SEC-14)**
-  - **Targets:**
-    - `docs/rfc-cookie-based-authentication.md`
-  - **Remediation Action:**
-    - Author an Architectural RFC detailing migration of auth tokens from `localStorage` to `HttpOnly`, `Secure`, `SameSite=Strict` cookies.
-    - Outline backend Set-Cookie headers, CORS credential handling, and cross-portal silent token refresh protocol.
-  - **Tests & Verification:**
-    - Architectural review and documentation verification.
-  - **Branch:** `step-14-sec14-cookie-rfc`
-
----
-
-### Phase 4: Full Regression, Report Regeneration & Archival
-
-- [x] **Step 15: Full Regression Testing & Gate Checks**
-  - **Verification Checklist:**
-    - `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (all 1070+ passing).
-    - `npm --prefix frontend test -- --run` (all 500+ passing).
-    - `npm --prefix frontend run build` (clean production build).
-    - `node api-integration-tests/test-stars-foms-e2e.mjs` (M2M integration passing).
-  - **Branch:** `step-15-regression-gates`
-
-- [x] **Step 16: Security Audit Report & PDF Regeneration**
-  - **Targets:**
-    - `scripts/generate-security-audit-pdf.mjs`
-    - `docs/security-audit-report.html`
-    - `docs/STARS_Security_Audit_Report.pdf`
-    - `docs/SECURITY_AUDIT_REPORT.md`
-  - **Remediation Action:**
-    - Update audit findings status to `REMEDIATED` and sign-off statuses to `APPROVED`.
-    - Run `node scripts/generate-security-audit-pdf.mjs` to regenerate `docs/STARS_Security_Audit_Report.pdf` using Microsoft Edge headless with the identical format and styling.
-  - **Branch:** `step-16-audit-report-regeneration`
-
-- [x] **Step 17: Final Feature Branch Merge & Plan Archival**
-  - **Remediation Action:**
-    - Merge all step branches into `feature/security-audit-remediation`.
-    - Verify zero changes pushed to GitHub remote.
-    - Archive finalized plan into `docs/archive/plans/security-audit-remediation.md`.
-  - **Branch:** `feature/security-audit-remediation`
-
----
-
-## 4. Governance & Safety Rules Summary
-
-1. **NO CODE MODIFICATIONS YET:** No application source files are modified during this turn.
-2. **BRANCHING HIERARCHY:**
-   ```
-   refactoring/bug-fix (Base branch - NEVER direct push)
-     └── feature/security-audit-remediation (Feature umbrella branch)
-           ├── step-1-sec01-mass-assignment
-           ├── step-2-sec02-security-headers
-           ├── ...
-           └── step-16-audit-report-regeneration
-   ```
-3. **REGRESSION ZERO TOLERANCE:** Every step branch must maintain 100% test pass rate (1070 backend tests, 500 frontend tests).
-4. **LOCAL REPOSITORY ONLY:** Do not push to remote GitHub.
+# 4. Publication-Grade PDF & HTML Report Generator (Edge Headless)
+node scripts/generate-pdf-report.mjs
+```
