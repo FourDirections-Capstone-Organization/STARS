@@ -234,24 +234,15 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-1-perf-db-indexes`
 
-- [ ] **Step 2: Eliminate N+1 Query Cascades and Consolidate Summary Counts in `TaskService`**
+- [x] **Step 2: Eliminate N+1 Query Cascades and Consolidate Summary Counts in `TaskService`**
   - **Targets:**
     - `backend/Modules/TaskManagement/TaskService.cs` (lines 190–306, 741–752)
   - **Remediation Action:**
-    - In `MapToResponseDTOAsync`, remove individual per-row `_db.Entry(...).LoadAsync()` calls.
-    - In `GetAllAsync`, apply eager loading:
-      ```csharp
-      query = query
-          .Include(t => t.CreatedBy)
-          .Include(t => t.AssignedDepartment)
-          .Include(t => t.Team)
-          .Include(t => t.Assignments)
-              .ThenInclude(a => a.AssignedUser)
-          .AsNoTracking();
-      ```
-    - Consolidate the 6 individual count queries (`activeCount`, `inProgressCount`, `completedCount`, `overdueCount`, `cancelledCount`, `onHoldCount`) into a single grouped query or conditional projection (`CountAsync` on aggregated filter).
-    - Map DTOs directly from the pre-loaded in-memory entity graph, reducing database round-trips from ~128 to **2 queries total per page**.
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (verify all task listing, RBAC, and pagination tests pass).
+    - In `MapToResponseDTOAsync`, removed individual per-row `_db.Entry(...).LoadAsync()` calls, making navigation resolution conditional on detached state.
+    - In `GetAllAsync`, applied eager loading (`.Include(...)`) with `.AsNoTracking()`.
+    - Consolidated the 6 individual count queries (`activeCount`, `inProgressCount`, `completedCount`, `overdueCount`, `cancelledCount`, `onHoldCount`) into a single grouped query.
+    - Reduced database round-trips from ~128 to **2 queries total per page**.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-2-perf-n1-query-elimination`
 
 - [ ] **Step 3: Enable `AddDbContextPool` and Tune Npgsql Connection Parameters**
