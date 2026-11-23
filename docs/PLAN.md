@@ -277,17 +277,16 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-5-perf-auth-ratelimiting`
 
-- [ ] **Step 6: Implement Asynchronous Channel Queue for High-Volume Webhook Ingestion**
+- [x] **Step 6: Implement Asynchronous Channel Queue for High-Volume Webhook Ingestion**
   - **Targets:**
     - `backend/Controllers/DmsIntegrationController.cs`
-    - `backend/Modules/DmsIntegration/DmsWebhookQueueService.cs` (new background hosted service)
+    - `backend/Modules/DmsIntegration/DmsWebhookQueue.cs` (bounded channel implementation)
+    - `backend/Modules/DmsIntegration/DmsWebhookProcessorService.cs` (background queue worker)
     - `backend/Program.cs`
   - **Remediation Action:**
-    - Create a singleton `System.Threading.Channels.Channel<DmsStatusWebhookDTO>` bounded channel (capacity: 10,000 items).
-    - In `DmsIntegrationController.ReceiveStatusUpdate`, validate API key and immediately enqueue payload into the channel, returning `HTTP 202 Accepted` (< 5ms response time).
-    - Register a background `IHostedService` (`DmsWebhookQueueService`) that reads from the channel and processes status updates asynchronously using a scoped `AppDbContext`.
-    - Shields Kestrel worker threads and database locks from third-party webhook delivery surges.
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (verify webhook integration tests pass).
+    - Created a singleton bounded channel (`IDmsWebhookQueue`, capacity: 10,000 items) and background processor (`DmsWebhookProcessorService`).
+    - Updated `DmsIntegrationController.ReceiveStatusUpdate` to enqueue and immediately respond with `HTTP 202 Accepted` (< 5ms response time), shielding Kestrel and the database from webhook bursts.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-6-perf-webhook-channel`
 
 - [ ] **Step 7: Add Response Compression Middleware for Large JSON Payloads**

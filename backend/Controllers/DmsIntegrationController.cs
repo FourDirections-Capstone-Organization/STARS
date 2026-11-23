@@ -19,17 +19,20 @@ public class DmsIntegrationController : ControllerBase
     private readonly AppDbContext _db;
     private readonly DmsIntegrationSettings _settings;
     private readonly ILogger<DmsIntegrationController> _logger;
+    private readonly IDmsWebhookQueue? _queue;
 
     public DmsIntegrationController(
         IDmsIntegrationService dmsService,
         AppDbContext db,
         IOptions<DmsIntegrationSettings> settings,
-        ILogger<DmsIntegrationController> logger)
+        ILogger<DmsIntegrationController> logger,
+        IDmsWebhookQueue? queue = null)
     {
         _dmsService = dmsService;
         _db = db;
         _settings = settings.Value;
         _logger = logger;
+        _queue = queue;
     }
 
     private Guid? GetUserId()
@@ -187,6 +190,12 @@ public class DmsIntegrationController : ControllerBase
     {
         var authError = ValidateApiKey();
         if (authError != null) return authError;
+
+        if (_queue != null)
+        {
+            await _queue.EnqueueAsync(dto);
+            return Accepted(ApiResponseDTO<object>.Success(new { waybillNo = dto.WaybillNo }, "Delivery status update queued for asynchronous processing."));
+        }
 
         var result = await _dmsService.ProcessStatusUpdateAsync(dto);
         return result.IsSuccess ? Ok(result) : BadRequest(result);

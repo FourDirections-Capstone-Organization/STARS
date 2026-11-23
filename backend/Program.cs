@@ -197,6 +197,8 @@ builder.Services.AddHttpClient(DmsIntegrationService.HttpClientName, c =>
     c.Timeout = TimeSpan.FromSeconds(25);
 });
 builder.Services.AddScoped<IDmsIntegrationService, DmsIntegrationService>();
+builder.Services.AddSingleton<IDmsWebhookQueue, DmsWebhookQueue>();
+builder.Services.AddHostedService<DmsWebhookProcessorService>();
 
 builder.Services.Configure<FomsIntegrationSettings>(builder.Configuration.GetSection(FomsIntegrationSettings.SectionName));
 builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
