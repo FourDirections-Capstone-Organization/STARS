@@ -163,6 +163,19 @@ flowchart LR
    - *Problem:* If App Service is in `Southeast Asia` and PostgreSQL is in `East Asia`, every database query incurs 30–60ms of cross-datacenter fiber latency.
    - *Configuration:* Ensure both App Service and PostgreSQL Flexible Server reside in the identical Azure region (`southeastasia`).
 
+### 3.3 Applied Azure Cloud Hardening & Configuration (Completed)
+
+| Resource | Setting | Previous State | New Configured State | Impact |
+| :--- | :--- | :--- | :--- | :--- |
+| **App Service (`STARS`)** | `AlwaysOn` | `false` | `true` | Eliminates 20-min container cold-starts |
+| **App Service (`STARS`)** | `Use32BitWorkerProcess` | `true` (32-bit) | `false` (64-bit) | Unlocks full 64-bit JIT and memory address space |
+| **App Service (`STARS`)** | `Http20Enabled` | `false` (HTTP 1.1) | `true` (HTTP 2.0) | Enables multiplexing and concurrent asset/API streaming |
+| **App Service (`STARS`)** | `ClientAffinityEnabled` | `false` | `false` (Preserved) | Stateless round-robin load distribution across instances |
+| **App Service (`STARS`)** | `HealthCheckPath` | `null` | `/api/health` | Active health monitoring and auto-healing |
+| **App Service (`STARS`)** | `HttpsOnly` | `false` | `true` | Enforces TLS 1.2+ encryption for all inbound traffic |
+| **PostgreSQL Flexible (`stars-server`)** | `max_connections` | `50` | `100` | Doubled connection capacity; restarted to apply |
+| **PostgreSQL Flexible (`stars-server`)** | `pgbouncer.enabled` | N/A | Handled via Client Pool | Burstable tier (B1ms) does not support Azure PgBouncer sidecar; mitigated by EF Core DbContext pooling (`poolSize: 80`, `MaxPoolSize: 75`) |
+
 ---
 
 ## 4. Phased Implementation Steps
