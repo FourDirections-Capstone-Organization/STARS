@@ -308,11 +308,12 @@ app.MapGet("/api/health", async (AppDbContext db) =>
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"[HEALTH ERROR] {ex.Message}");
         return Results.Json(new
         {
             status = "unhealthy",
-            database = "error",
-            error = ex.Message,
+            database = "unavailable",
+            message = "Service temporarily unavailable",
             timestamp = DateTime.UtcNow
         }, statusCode: 500);
     }

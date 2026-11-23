@@ -238,7 +238,7 @@ flowchart TD
     - Run `npm --prefix frontend run build` (production build succeeds with 0 errors).
   - **Branch:** `step-11-sec11-frontend-deps`
 
-- [ ] **Step 12: Information Disclosure Sanitization on Health & Error Endpoints (SEC-12)**
+- [x] **Step 12: Information Disclosure Sanitization on Health & Error Endpoints (SEC-12)**
   - **Targets:**
     - `backend/Program.cs` (`/api/health`, line 331)
     - `backend/Controllers/EmailVerificationController.cs` (lines 49, 87, 106)
