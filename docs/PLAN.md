@@ -275,7 +275,7 @@ flowchart TD
 
 ### Phase 4: Full Regression, Report Regeneration & Archival
 
-- [ ] **Step 15: Full Regression Testing & Gate Checks**
+- [x] **Step 15: Full Regression Testing & Gate Checks**
   - **Verification Checklist:**
     - `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release` (all 1070+ passing).
     - `npm --prefix frontend test -- --run` (all 500+ passing).
