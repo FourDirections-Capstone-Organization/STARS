@@ -250,7 +250,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-12-sec12-error-sanitization`
 
-- [ ] **Step 13: Dockerfile Production Environment Flag (SEC-13)**
+- [x] **Step 13: Dockerfile Production Environment Flag (SEC-13)**
   - **Targets:**
     - `backend/Dockerfile` (line 13)
   - **Remediation Action:**
