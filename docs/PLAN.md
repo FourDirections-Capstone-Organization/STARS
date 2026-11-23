@@ -166,7 +166,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-6-sec06-token-hashing`
 
-- [ ] **Step 7: Key Rotation & Integration Secrets Externalization (SEC-07)**
+- [x] **Step 7: Key Rotation & Integration Secrets Externalization (SEC-07)**
   - **Targets:**
     - `backend/appsettings.json` (lines 64–65)
     - `docker-compose.yml`
