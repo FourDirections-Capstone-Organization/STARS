@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Scalar.AspNetCore;
@@ -204,6 +206,35 @@ builder.Services.AddHttpClient(FomsIntegrationService.HttpClientName, c =>
 builder.Services.AddScoped<IFomsIntegrationService, FomsIntegrationService>();
 
 builder.Services.AddMemoryCache();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponseDTO<object>.Failure("Too many authentication requests. Please try again in a few moments."),
+            cancellationToken: token);
+    };
+
+    options.AddPolicy("AuthRateLimit", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 6,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 10
+        });
+    });
+});
+
 builder.Services.Configure<GroqSettings>(builder.Configuration.GetSection(GroqSettings.SectionName));
 builder.Services.PostConfigure<GroqSettings>(settings =>
 {
@@ -379,6 +410,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuditLogAccessLogging();
 app.UseAuthorization();
