@@ -289,14 +289,14 @@ flowchart TD
   - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-6-perf-webhook-channel`
 
-- [ ] **Step 7: Add Response Compression Middleware for Large JSON Payloads**
+- [x] **Step 7: Add Response Compression Middleware for Large JSON Payloads**
   - **Targets:**
     - `backend/Program.cs`
   - **Remediation Action:**
-    - Enable `builder.Services.AddResponseCompression(...)` with Brotli and Gzip providers.
-    - Configure compression for `application/json` and `text/plain` payloads above 1KB.
-    - Drastically reduces outbound bandwidth and network transfer times for large endpoints (e.g., Task lists, Reports, Analytics).
-  - **Verification:** Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
+    - Enabled `builder.Services.AddResponseCompression(...)` with Brotli and Gzip providers set to `CompressionLevel.Fastest`.
+    - Configured compression for `application/json`, `text/plain`, and `application/problem+json` payloads.
+    - Drastically reduces payload transfer sizes and network egress latency for task listings, dashboards, and export payloads.
+  - **Verification:** Passed 1,110 backend tests (`dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`).
   - **Branch:** `step-7-perf-response-compression`
 
 - [ ] **Step 8: Run Full Regression Testing Suite (Zero Broken Tests Gate)**
