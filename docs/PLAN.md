@@ -205,7 +205,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-9-sec09-anti-enumeration`
 
-- [ ] **Step 10: File Upload Magic Byte Inspection (SEC-10)**
+- [x] **Step 10: File Upload Magic Byte Inspection (SEC-10)**
   - **Targets:**
     - `backend/Modules/TaskManagement/AttachmentService.cs` (lines 167–181)
     - `backend/Modules/Notifications/AnnouncementService.cs` (lines 95–110)
