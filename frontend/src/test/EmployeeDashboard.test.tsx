@@ -46,7 +46,7 @@ describe('EmployeeDashboard Master Component', () => {
         employeeNumber: 'EMP-00101',
         fullName: 'Jane Doe',
         email: 'jane.doe@speedex.com',
-        role: 'Dispatcher',
+        role: 'Manager',
         departmentName: 'Dispatch Logistics',
         jobPositionName: 'Senior Logistics Specialist',
         availabilityStatus: 'Available',
@@ -181,7 +181,7 @@ describe('EmployeeDashboard Master Component', () => {
         // 1. Employee Header assertions
         expect(screen.getByText('Jane Doe')).toBeInTheDocument();
         expect(screen.getByText('EMP-00101')).toBeInTheDocument();
-        expect(screen.getByText('Dispatcher')).toBeInTheDocument();
+        expect(screen.getByText('Manager')).toBeInTheDocument();
         expect(screen.getByText('Dispatch Logistics')).toBeInTheDocument();
         expect(screen.getByText('Senior Logistics Specialist')).toBeInTheDocument();
 
@@ -205,8 +205,8 @@ describe('EmployeeDashboard Master Component', () => {
 
         // 3. Task Registry Section & Initial Assigned Tab
         expect(screen.getByTestId('employee-dashboard-tasks-section')).toBeInTheDocument();
-        expect(screen.getByText('Tasks Assigned to Them')).toBeInTheDocument();
-        expect(screen.getByText('Tasks Created by Them')).toBeInTheDocument();
+        expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+        expect(screen.getByText('Tasks Created')).toBeInTheDocument();
 
         // Assigned task item appears in DataTable
         await waitFor(() => {
@@ -215,7 +215,7 @@ describe('EmployeeDashboard Master Component', () => {
     });
 
     // ── 3. Tab Switching Between Assigned and Created Tasks ────────────────────
-    it('supports tab switching between "Tasks Assigned to Them" and "Tasks Created by Them"', async () => {
+    it('supports tab switching between "Assigned Tasks" and "Tasks Created"', async () => {
         vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(mockDashboardData);
         vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
         vi.mocked(employeeDashboardService.getEmployeeCreatedTasks).mockResolvedValue(mockCreatedTasksResponse);
@@ -226,8 +226,8 @@ describe('EmployeeDashboard Master Component', () => {
             expect(screen.getByText('Cold Chain Delivery Route 4')).toBeInTheDocument();
         });
 
-        // Switch to "Tasks Created by Them"
-        const createdTabBtn = screen.getByRole('tab', { name: /tasks created by them/i });
+        // Switch to "Tasks Created"
+        const createdTabBtn = screen.getByRole('tab', { name: /tasks created/i });
         fireEvent.click(createdTabBtn);
 
         // Created task item should appear
@@ -241,6 +241,25 @@ describe('EmployeeDashboard Master Component', () => {
             '',
             'All'
         );
+    });
+
+    it('hides "Tasks Created" tab for operational employees (e.g. Encoder, Dispatcher, Courier)', async () => {
+        const operationalEmployee: EmployeeDashboardData = {
+            ...mockDashboardData,
+            role: 'Encoder',
+            totalCreatedTasks: 0,
+        };
+        vi.mocked(employeeDashboardService.getEmployeeDashboard).mockResolvedValue(operationalEmployee);
+        vi.mocked(employeeDashboardService.getEmployeeAssignedTasks).mockResolvedValue(mockAssignedTasksResponse);
+
+        render(<EmployeeDashboard employeeId="emp-101" />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Assigned Tasks')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByRole('tab', { name: /tasks created/i })).not.toBeInTheDocument();
+        expect(screen.queryByTestId('tab-created')).not.toBeInTheDocument();
     });
 
     // ── 4. Error State and Retry Flow ─────────────────────────────────────────

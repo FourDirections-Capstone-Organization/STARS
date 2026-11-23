@@ -26,12 +26,14 @@ import {
     FileCheck,
     AlertTriangle,
     Eye,
+    XCircle,
+    Info,
 } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../Toast/Toast';
 import StatusCard from '../StatusCard/StatusCard';
 import Pagination from '../ui/Pagination';
-import { formatStatus } from '../../utils/statusUtils';
+import { formatStatus, formatDeliveryStatus } from '../../utils/statusUtils';
 import DeliveryAnalyticsCharts from './DeliveryAnalyticsCharts';
 import {
     downloadDeliveryPdfReport,
@@ -94,6 +96,7 @@ interface DmsDeliveryTabProps {
     initialWaybillNo?: string;
     initialTaskId?: string;
     initialWaybill?: string;
+    onClearInitialTarget?: () => void;
 }
 
 const EMPTY_TASKS: any[] = [];
@@ -104,6 +107,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     initialWaybillNo,
     initialTaskId,
     initialWaybill,
+    onClearInitialTarget,
 }) => {
     const [deliveries, setDeliveries] = useState<DmsDeliveryItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -157,17 +161,39 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
 
     const targetWaybill = initialWaybill || initialWaybillNo;
+    const handledTargetRef = React.useRef<string | null>(null);
+    const targetKey = targetWaybill ? `wb:${targetWaybill.toLowerCase()}` : initialTaskId ? `task:${initialTaskId}` : null;
 
-    // Initial delivery selection from props or event
+    const handleCloseTracker = useCallback(() => {
+        setSelectedDelivery(null);
+        if (targetKey) {
+            handledTargetRef.current = targetKey;
+        }
+        onClearInitialTarget?.();
+    }, [targetKey, onClearInitialTarget]);
+
+    // Initial delivery selection from props or event - only consumes new target once
     useEffect(() => {
+        if (!targetKey) {
+            handledTargetRef.current = null;
+            return;
+        }
+        if (handledTargetRef.current === targetKey) return;
+
         if (targetWaybill) {
             const match = deliveries.find(d => d.dmsWaybillNo?.toLowerCase() === targetWaybill.toLowerCase());
-            if (match) setSelectedDelivery(match);
+            if (match) {
+                setSelectedDelivery(match);
+                handledTargetRef.current = targetKey;
+            }
         } else if (initialTaskId) {
             const match = deliveries.find(d => d.taskId === initialTaskId);
-            if (match) setSelectedDelivery(match);
+            if (match) {
+                setSelectedDelivery(match);
+                handledTargetRef.current = targetKey;
+            }
         }
-    }, [targetWaybill, initialTaskId, deliveries]);
+    }, [targetKey, targetWaybill, initialTaskId, deliveries]);
 
     useEffect(() => {
         const handleNav = (e: any) => {
@@ -186,33 +212,109 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         return () => window.removeEventListener('stars:navigate-dms-tracker' as any, handleNav);
     }, [deliveries]);
 
-    // Fetch POD data when a delivery is selected
+    // Fetch POD data & delivery details when a delivery is selected
     useEffect(() => {
         let active = true;
+        setPodImageError(false);
         if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') {
             setPodData(null);
             setPodPreviewUrl(null);
             return;
         }
 
-        const fetchPod = async () => {
+        const fetchPodAndDetail = async () => {
             setPodLoading(true);
             setPodError(null);
             try {
-                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`);
-                const json = res.data;
-                const d = json?.data ?? json;
-                if (active) {
+                const [podRes, ddRes, pendingRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
+                }
+
+                let ddData: any = null;
+                if (active && ddRes.status === 'fulfilled') {
+                    ddData = ddRes.value?.data?.data ?? ddRes.value?.data;
+                    if (ddData) {
+                        const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                            ? ddData.itemCount
+                            : (matchedPending?.itemCount ?? ddData.itemCount);
+                        const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                            ? ddData.taskType
+                            : (matchedPending?.taskType || ddData.taskType);
+                        const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                            ? ddData.packageType
+                            : (matchedPending?.packageType || ddData.packageType);
+                        const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                            ? ddData.weight
+                            : (matchedPending?.weight || ddData.weight);
+
+                        setSelectedDelivery(prev => {
+                            if (!prev || prev.taskId !== selectedDelivery.taskId) return prev;
+                            return {
+                                ...prev,
+                                ...ddData,
+                                itemCount: accurateItemCount ?? prev.itemCount,
+                                taskType: accurateTaskType || prev.taskType,
+                                packageType: accuratePackageType || prev.packageType,
+                                weight: accurateWeight || prev.weight,
+                                courierFullName: ddData.courierFullName || prev.courierFullName,
+                                courierEmployeeId: ddData.courierEmployeeId || prev.courierEmployeeId,
+                                courierIsActive: ddData.courierIsActive !== undefined ? ddData.courierIsActive : prev.courierIsActive,
+                                podUrl: ddData.podUrl || prev.podUrl,
+                                podFileName: ddData.podFileName || prev.podFileName,
+                                podUploadedAt: ddData.podUploadedAt || prev.podUploadedAt,
+                                podUploadedBy: ddData.podUploadedBy || prev.podUploadedBy,
+                            };
+                        });
+                    }
+                }
+
+                if (active && podRes.status === 'fulfilled') {
+                    const json = podRes.value?.data;
+                    const d = json?.data ?? json;
                     if (d && (d.hasPod || d.podUrl || d.downloadUrl)) {
                         setPodData(d);
+                    } else if (ddData?.podUrl || selectedDelivery?.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery?.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
                     } else {
                         setPodData(null);
                     }
-                }
-            } catch (err: any) {
-                if (active) {
+                } else if (active && podRes.status === 'rejected') {
+                    const err: any = podRes.reason;
                     if (err?.response?.status === 403) {
                         setPodError('Access denied: You do not have permission to view Proof of Delivery.');
+                    } else if (ddData?.podUrl || selectedDelivery?.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery?.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
                     } else if (err?.response?.status !== 404) {
                         setPodError('Unable to load Proof of Delivery details.');
                     } else {
@@ -224,7 +326,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             }
         };
 
-        fetchPod();
+        fetchPodAndDetail();
 
         return () => {
             active = false;
@@ -232,28 +334,35 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     }, [selectedDelivery?.taskId]);
 
     const effectivePod = useMemo(() => {
-        if (podData && (podData.hasPod || podData.podUrl || podData.downloadUrl)) {
-            return podData;
-        }
-        if (selectedDelivery?.podUrl) {
-            const fileName = selectedDelivery.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`;
-            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : '.jpg';
-            return {
-                taskId: selectedDelivery.taskId,
-                waybillNo: selectedDelivery.dmsWaybillNo,
-                podUrl: selectedDelivery.podUrl,
-                downloadUrl: selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
-                    ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
-                    : selectedDelivery.podUrl,
-                fileName,
-                fileType: ext,
-                fileSize: selectedDelivery.podFileSize ?? 245760,
-                uploadedAt: selectedDelivery.podUploadedAt,
-                uploadedByName: selectedDelivery.podUploadedBy || selectedDelivery.courierFullName || 'Field Courier',
-                hasPod: true,
-            };
-        }
-        return podData;
+        const rawPod = podData && (podData.hasPod || podData.podUrl || podData.downloadUrl) ? podData : null;
+        const itemPod = selectedDelivery?.podUrl ? selectedDelivery : null;
+        const base = rawPod || itemPod;
+        if (!base) return null;
+
+        const fileName = base.fileName || base.podFileName || (base.waybillNo || selectedDelivery?.dmsWaybillNo ? `POD_${base.waybillNo || selectedDelivery?.dmsWaybillNo}.jpg` : 'POD_Document.jpg');
+        const ext = (base.fileType || (fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg')).toLowerCase();
+        const contentType = base.contentType || (ext === '.pdf' ? 'application/pdf' : ext === '.png' ? 'image/png' : 'image/jpeg');
+        const podUrl = base.podUrl || base.fileUrl || (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+            ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download?inline=true`
+            : undefined);
+        const downloadUrl = base.downloadUrl || (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+            ? `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`
+            : podUrl);
+
+        return {
+            taskId: base.taskId || selectedDelivery?.taskId,
+            waybillNo: base.waybillNo || selectedDelivery?.dmsWaybillNo,
+            fileName,
+            fileType: ext,
+            contentType,
+            fileSize: base.fileSize ?? base.podFileSize ?? 245760,
+            uploadedAt: base.uploadedAt || base.podUploadedAt || selectedDelivery?.dmsLastSyncedAt,
+            uploadedByName: base.uploadedByName || base.podUploadedBy || selectedDelivery?.courierFullName || 'Field Courier',
+            podUrl,
+            downloadUrl,
+            fileUrl: podUrl || downloadUrl,
+            hasPod: true,
+        };
     }, [podData, selectedDelivery]);
 
     useEffect(() => {
@@ -261,7 +370,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         let createdUrl: string | null = null;
 
         const loadPreview = async () => {
-            const url = effectivePod?.podUrl || effectivePod?.downloadUrl;
+            const url = effectivePod?.podUrl || effectivePod?.downloadUrl || effectivePod?.fileUrl;
             if (!url) {
                 setPodPreviewUrl(null);
                 return;
@@ -298,7 +407,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 URL.revokeObjectURL(createdUrl);
             }
         };
-    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.hasPod]);
+    }, [effectivePod?.podUrl, effectivePod?.downloadUrl, effectivePod?.fileUrl, effectivePod?.hasPod]);
 
     const handleOpenPodPreview = () => {
         setShowPodModal(true);
@@ -336,16 +445,64 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     useEffect(() => {
         if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
         const s = (selectedDelivery.dmsStatus || selectedDelivery.dmsRawStatus || '').toLowerCase();
-        const isTerminal = s.includes('delivered') || s.includes('completed') || s.includes('cancel');
+        const isTerminal = !s.includes('pending') && (s.includes('delivered') || s.includes('completed') || s.includes('cancel'));
         if (isTerminal) return;
 
         const intervalId = setInterval(async () => {
             try {
-                const res = await api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-                const data = res?.data?.data ?? res?.data;
+                const [ddRes, podRes, pendingRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+                const data = ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null;
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
+                }
+
                 if (data) {
-                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
-                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...data } : d));
+                    const accurateItemCount = (data.itemCount != null && data.itemCount > 1)
+                        ? data.itemCount
+                        : (matchedPending?.itemCount ?? data.itemCount);
+                    const accurateTaskType = (data.taskType && data.taskType !== 'Standard Delivery')
+                        ? data.taskType
+                        : (matchedPending?.taskType || data.taskType);
+                    const accuratePackageType = (data.packageType && data.packageType !== 'Parcel')
+                        ? data.packageType
+                        : (matchedPending?.packageType || data.packageType);
+                    const accurateWeight = (data.weight && data.weight !== '—' && data.weight !== '1.0 kg')
+                        ? data.weight
+                        : (matchedPending?.weight || data.weight);
+
+                    const normStatus = (data.dmsStatus?.toLowerCase() === 'pending' || data.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (data.dmsStatus || 'Pending for Delivery');
+                    const updated = {
+                        ...data,
+                        itemCount: accurateItemCount ?? data.itemCount,
+                        taskType: accurateTaskType || data.taskType,
+                        packageType: accuratePackageType || data.packageType,
+                        weight: accurateWeight || data.weight,
+                        dmsStatus: normStatus,
+                        dmsRawStatus: data.dmsRawStatus || data.dmsStatus || normStatus,
+                    };
+                    setSelectedDelivery(prev => prev ? { ...prev, ...updated } : null);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updated } : d));
+                }
+
+                if (podRes.status === 'fulfilled') {
+                    const pJson = podRes.value?.data;
+                    const pData = pJson?.data ?? pJson;
+                    if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                        setPodData(pData);
+                    }
                 }
             } catch {
                 // Silently ignore polling errors
@@ -390,20 +547,80 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
             // 1. Fetch all deliveries directly from the dedicated deliveries endpoint
             try {
-                const res = await api.get('/api/dms-integration/deliveries');
-                const list = res?.data?.data ?? res?.data;
+                const [res, pendingRes] = await Promise.allSettled([
+                    api.get('/api/dms-integration/deliveries'),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+                const list = res.status === 'fulfilled' ? (res.value?.data?.data ?? res.value?.data) : null;
+                const pendingList = pendingRes.status === 'fulfilled' ? (pendingRes.value?.data?.data ?? pendingRes.value?.data) : null;
+
+                const pendingMapByWaybill = new Map<string, any>();
+                const pendingMapById = new Map<number, any>();
+                if (Array.isArray(pendingList)) {
+                    pendingList.forEach((p: any) => {
+                        if (p.waybillNo) pendingMapByWaybill.set(String(p.waybillNo).toLowerCase(), p);
+                        if (p.orderId) pendingMapById.set(Number(p.orderId), p);
+                    });
+                }
+
                 if (Array.isArray(list) && list.length > 0) {
                     list.forEach((item: DmsDeliveryItem) => {
+                        const matchedPending = (item.dmsWaybillNo ? pendingMapByWaybill.get(item.dmsWaybillNo.toLowerCase()) : null) ||
+                            (item.dmsOrderId ? pendingMapById.get(Number(item.dmsOrderId)) : null);
+                        if (matchedPending) {
+                            if (matchedPending.itemCount != null && (!item.itemCount || (item.itemCount <= 1 && matchedPending.itemCount > 1))) {
+                                item.itemCount = matchedPending.itemCount;
+                            }
+                            if (matchedPending.taskType && (!item.taskType || item.taskType === 'Standard Delivery')) {
+                                item.taskType = matchedPending.taskType;
+                            }
+                            if (matchedPending.packageType && (!item.packageType || item.packageType === 'Parcel')) {
+                                item.packageType = matchedPending.packageType;
+                            }
+                            if (matchedPending.weight && (!item.weight || item.weight === '—' || item.weight === '1.0 kg')) {
+                                item.weight = matchedPending.weight;
+                            }
+                            if (matchedPending.packageDescription && (!item.packageDescription || item.packageDescription === 'Delivery Task' || item.packageDescription === 'Parcel')) {
+                                item.packageDescription = matchedPending.packageDescription;
+                            }
+                            if (matchedPending.specialInstructions && !item.specialInstructions) {
+                                item.specialInstructions = matchedPending.specialInstructions;
+                            }
+                            if (matchedPending.recipientName && (!item.recipientName || item.recipientName === 'Operations Dispatch')) {
+                                item.recipientName = matchedPending.recipientName;
+                            }
+                            if (matchedPending.recipientContact && (!item.recipientContact || item.recipientContact === '—')) {
+                                item.recipientContact = matchedPending.recipientContact;
+                            }
+                            if (matchedPending.recipientAddress && (!item.deliveryAddress || item.deliveryAddress === 'Metro Manila')) {
+                                item.deliveryAddress = matchedPending.recipientAddress;
+                            }
+                            if (matchedPending.area && !item.area) {
+                                item.area = matchedPending.area;
+                            }
+                            if ((matchedPending.driverName || matchedPending.courierFullName) && (!item.courierFullName || item.courierFullName === 'Unassigned')) {
+                                item.courierFullName = matchedPending.driverName || matchedPending.courierFullName;
+                            }
+                            if (matchedPending.driverEmployeeId && !item.courierEmployeeId) {
+                                item.courierEmployeeId = matchedPending.driverEmployeeId;
+                            }
+                        }
+
                         const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                         const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
                         if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
-                            item.dmsStatus = 'Delivered';
-                            item.dmsRawStatus = 'Delivered';
+                            item.dmsStatus = 'Pending for Delivery';
+                            item.dmsRawStatus = 'Pending for Delivery';
+                        } else if (s === 'pending' || s === 'pending approval') {
+                            item.dmsStatus = 'Pending for Delivery';
+                            item.dmsRawStatus = 'Pending for Delivery';
                         }
                         const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                        if (curS.includes('delivered') || curS.includes('completed')) {
-                            const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                        const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                        if (!curS.includes('pending') && (curS.includes('delivered') || curS.includes('completed'))) {
                             if (key) deliveredOrdersRef.current.set(key, item);
+                        } else if (key) {
+                            deliveredOrdersRef.current.delete(key);
                         }
                     });
                     deliveredOrdersRef.current.forEach((savedDelivered) => {
@@ -417,6 +634,47 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         }
                     });
 
+                    // Merge unlinked pending orders from DMS
+                    if (Array.isArray(pendingList) && pendingList.length > 0) {
+                        const existingWaybills = new Set(list.map((d: any) => d.dmsWaybillNo?.toLowerCase()).filter(Boolean));
+                        const existingOrderIds = new Set(list.map((d: any) => d.dmsOrderId).filter((id: any) => id != null));
+                        const unlinkedPending = pendingList
+                            .filter((p: any) => {
+                                if (p.orderId && existingOrderIds.has(p.orderId)) return false;
+                                if (p.waybillNo && existingWaybills.has(String(p.waybillNo).toLowerCase())) return false;
+                                return true;
+                            })
+                            .map((p: any) => ({
+                                taskId: '',
+                                taskTitle: `[DMS Pre-Delivery] ${p.recipientName || 'Order'}`,
+                                taskNumber: undefined,
+                                taskReferenceNumber: undefined,
+                                recipientName: p.recipientName || 'Operations Dispatch',
+                                recipientContact: p.recipientContact || p.contactNumber || '—',
+                                deliveryAddress: p.recipientAddress || 'Metro Manila',
+                                area: p.area || '',
+                                packageDescription: p.packageDescription || '',
+                                senderAddress: p.senderAddress,
+                                specialInstructions: p.specialInstructions,
+                                courierEmployeeId: p.driverEmployeeId || p.driverId || '',
+                                courierFullName: p.courierFullName || p.driverName,
+                                courierIsActive: p.driverIsActive,
+                                dmsWaybillNo: p.waybillNo,
+                                taskType: p.taskType || 'Standard Delivery',
+                                packageType: p.packageType || 'Parcel',
+                                weight: p.weight || '1.0 kg',
+                                itemCount: p.itemCount != null ? p.itemCount : 1,
+                                dmsOrderId: p.orderId,
+                                dmsStatus: (p.status?.toLowerCase() === 'pending' || p.status?.toLowerCase() === 'pending approval') ? 'Pending for Delivery' : (p.status || 'Pending for Delivery'),
+                                dmsRawStatus: p.status || 'Pending',
+                                syncStatus: 'Synced',
+                                createdAt: p.orderDate || p.createdAt,
+                                expectedDelivery: p.expectedDelivery,
+                                expectedDeliveryDate: p.expectedDeliveryDate,
+                            } as DmsDeliveryItem));
+                        list.push(...unlinkedPending);
+                    }
+
                     const sorted = [...list].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -424,6 +682,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         return (b.dmsOrderId || 0) - (a.dmsOrderId || 0);
                     });
                     setDeliveries(sorted);
+                    setSelectedDelivery(prev => {
+                        if (!prev) return null;
+                        const match = sorted.find(d =>
+                            (prev.taskId && prev.taskId !== '00000000-0000-0000-0000-000000000000' && d.taskId === prev.taskId) ||
+                            (prev.dmsWaybillNo && d.dmsWaybillNo && d.dmsWaybillNo.toLowerCase() === prev.dmsWaybillNo.toLowerCase()) ||
+                            (prev.dmsOrderId && d.dmsOrderId === prev.dmsOrderId)
+                        );
+                        return match ? { ...prev, ...match } : prev;
+                    });
                     return;
                 }
             } catch {
@@ -553,13 +820,18 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 const s = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
                 const isTaskCompleted = Boolean(item.taskId && completedTaskIds.has(String(item.taskId)));
                 if (isTaskCompleted && (s.includes('pending') || !s || s.includes('approval') || s === 'awaiting')) {
-                    item.dmsStatus = 'Delivered';
-                    item.dmsRawStatus = 'Delivered';
+                    item.dmsStatus = 'Pending for Delivery';
+                    item.dmsRawStatus = 'Pending for Delivery';
+                } else if (s === 'pending' || s === 'pending approval') {
+                    item.dmsStatus = 'Pending for Delivery';
+                    item.dmsRawStatus = 'Pending for Delivery';
                 }
                 const curS = String(item.dmsStatus || item.dmsRawStatus || '').toLowerCase();
-                if (curS.includes('delivered') || curS.includes('completed')) {
-                    const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                const key = item.taskId || item.dmsWaybillNo || String(item.dmsOrderId);
+                if (!curS.includes('pending') && (curS.includes('delivered') || curS.includes('completed'))) {
                     if (key) deliveredOrdersRef.current.set(key, item);
+                } else if (key) {
+                    deliveredOrdersRef.current.delete(key);
                 }
             });
             deliveredOrdersRef.current.forEach((savedDelivered) => {
@@ -581,6 +853,15 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             });
 
             setDeliveries(fetchedDeliveries);
+            setSelectedDelivery(prev => {
+                if (!prev) return null;
+                const match = fetchedDeliveries.find(d =>
+                    (prev.taskId && prev.taskId !== '00000000-0000-0000-0000-000000000000' && d.taskId === prev.taskId) ||
+                    (prev.dmsWaybillNo && d.dmsWaybillNo && d.dmsWaybillNo.toLowerCase() === prev.dmsWaybillNo.toLowerCase()) ||
+                    (prev.dmsOrderId && d.dmsOrderId === prev.dmsOrderId)
+                );
+                return match ? { ...prev, ...match } : prev;
+            });
         } catch {
             // Silently handle
         } finally {
@@ -629,12 +910,32 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         }
         setSyncingId(taskId);
         try {
-            await api.post(`/api/dms-integration/tasks/${taskId}/sync`, {});
+            const syncRes = await api.post(`/api/dms-integration/tasks/${taskId}/sync`, {});
+            const syncData = syncRes?.data?.data ?? syncRes?.data;
+            if (syncData) {
+                const normSt = (syncData.dmsStatus?.toLowerCase() === 'pending' || syncData.dmsStatus?.toLowerCase() === 'pending approval')
+                    ? 'Pending for Delivery'
+                    : (syncData.dmsStatus || 'Pending for Delivery');
+                setDeliveries(prev => prev.map(d => d.taskId === taskId ? { ...d, ...syncData, dmsStatus: normSt, dmsRawStatus: syncData.dmsRawStatus || normSt } : d));
+                if (selectedDelivery?.taskId === taskId) {
+                    setSelectedDelivery(prev => prev ? { ...prev, ...syncData, dmsStatus: normSt, dmsRawStatus: syncData.dmsRawStatus || normSt } : null);
+                }
+            }
             toastSuccess('Re-synced with DMS successfully.');
             await fetchDeliveries();
         } catch (err: any) {
             try {
-                await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+                const resendRes = await api.post(`/api/dms-integration/tasks/${taskId}/resend`, {});
+                const resendData = resendRes?.data?.data ?? resendRes?.data;
+                if (resendData) {
+                    const normSt = (resendData.dmsStatus?.toLowerCase() === 'pending' || resendData.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (resendData.dmsStatus || 'Pending for Delivery');
+                    setDeliveries(prev => prev.map(d => d.taskId === taskId ? { ...d, ...resendData, dmsStatus: normSt, dmsRawStatus: resendData.dmsRawStatus || normSt } : d));
+                    if (selectedDelivery?.taskId === taskId) {
+                        setSelectedDelivery(prev => prev ? { ...prev, ...resendData, dmsStatus: normSt, dmsRawStatus: resendData.dmsRawStatus || normSt } : null);
+                    }
+                }
                 toastSuccess('Dispatched and re-synced with DMS.');
                 await fetchDeliveries();
             } catch (fallbackErr: any) {
@@ -650,22 +951,182 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         if (!selectedDelivery?.taskId) return;
         setSyncingId(selectedDelivery.taskId);
         try {
-            await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
-            const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-            const data = res?.data?.data ?? res?.data;
-            if (data) {
-                setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+            const syncRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
+            const syncData = syncRes?.data?.data ?? syncRes?.data;
+
+            const [podRes, ddRes, pendingRes] = await Promise.allSettled([
+                api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                api.get('/api/dms-integration/pending-orders'),
+            ]);
+
+            const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || syncData;
+            let matchedPending: any = null;
+            if (pendingRes.status === 'fulfilled') {
+                const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                if (Array.isArray(pList)) {
+                    matchedPending = pList.find((p: any) =>
+                        (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                        (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                    );
+                }
             }
+
+            if (ddData) {
+                const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
+                    ? 'Pending for Delivery'
+                    : (ddData.dmsStatus || 'Pending for Delivery');
+
+                const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                    ? ddData.itemCount
+                    : (matchedPending?.itemCount ?? ddData.itemCount ?? selectedDelivery.itemCount);
+                const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                    ? ddData.taskType
+                    : (matchedPending?.taskType || ddData.taskType || selectedDelivery.taskType);
+                const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                    ? ddData.packageType
+                    : (matchedPending?.packageType || ddData.packageType || selectedDelivery.packageType);
+                const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                    ? ddData.weight
+                    : (matchedPending?.weight || ddData.weight || selectedDelivery.weight);
+
+                const updatedItem: DmsDeliveryItem = {
+                    ...selectedDelivery,
+                    ...ddData,
+                    itemCount: accurateItemCount,
+                    taskType: accurateTaskType,
+                    packageType: accuratePackageType,
+                    weight: accurateWeight,
+                    dmsStatus: normalizedStatus,
+                    dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
+                };
+
+                setSelectedDelivery(updatedItem);
+                setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updatedItem } : d));
+            }
+
+            if (podRes.status === 'fulfilled') {
+                const pJson = podRes.value?.data;
+                const pData = pJson?.data ?? pJson;
+                if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                    setPodData(pData);
+                } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                    setPodData({
+                        taskId: selectedDelivery.taskId,
+                        waybillNo: selectedDelivery.dmsWaybillNo,
+                        hasPod: true,
+                        podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                        downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                        fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                        uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                        uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                    });
+                } else {
+                    setPodData(null);
+                }
+            } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                setPodData({
+                    taskId: selectedDelivery.taskId,
+                    waybillNo: selectedDelivery.dmsWaybillNo,
+                    hasPod: true,
+                    podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                    downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                    fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                    uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                    uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                });
+            }
+
             toastSuccess('Re-synced with DMS successfully.');
             await fetchDeliveries();
         } catch (err: any) {
             try {
-                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
-                const res = await api.get<any>(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`);
-                const data = res?.data?.data ?? res?.data;
-                if (data) {
-                    setSelectedDelivery(prev => prev ? { ...prev, ...data } : null);
+                const resendRes = await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/resend`, {});
+                const resendData = resendRes?.data?.data ?? resendRes?.data;
+
+                const [podRes, ddRes, pendingRes] = await Promise.allSettled([
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
+                    api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
+                    api.get('/api/dms-integration/pending-orders'),
+                ]);
+
+                const ddData = (ddRes.status === 'fulfilled' ? (ddRes.value?.data?.data ?? ddRes.value?.data) : null) || resendData;
+                let matchedPending: any = null;
+                if (pendingRes.status === 'fulfilled') {
+                    const pList = pendingRes.value?.data?.data ?? pendingRes.value?.data;
+                    if (Array.isArray(pList)) {
+                        matchedPending = pList.find((p: any) =>
+                            (selectedDelivery.dmsWaybillNo && p.waybillNo && String(p.waybillNo).toLowerCase() === String(selectedDelivery.dmsWaybillNo).toLowerCase()) ||
+                            (selectedDelivery.dmsOrderId && p.orderId && p.orderId === selectedDelivery.dmsOrderId)
+                        );
+                    }
                 }
+
+                if (ddData) {
+                    const normalizedStatus = (ddData.dmsStatus?.toLowerCase() === 'pending' || ddData.dmsStatus?.toLowerCase() === 'pending approval')
+                        ? 'Pending for Delivery'
+                        : (ddData.dmsStatus || 'Pending for Delivery');
+
+                    const accurateItemCount = (ddData.itemCount != null && ddData.itemCount > 1)
+                        ? ddData.itemCount
+                        : (matchedPending?.itemCount ?? ddData.itemCount ?? selectedDelivery.itemCount);
+                    const accurateTaskType = (ddData.taskType && ddData.taskType !== 'Standard Delivery')
+                        ? ddData.taskType
+                        : (matchedPending?.taskType || ddData.taskType || selectedDelivery.taskType);
+                    const accuratePackageType = (ddData.packageType && ddData.packageType !== 'Parcel')
+                        ? ddData.packageType
+                        : (matchedPending?.packageType || ddData.packageType || selectedDelivery.packageType);
+                    const accurateWeight = (ddData.weight && ddData.weight !== '—' && ddData.weight !== '1.0 kg')
+                        ? ddData.weight
+                        : (matchedPending?.weight || ddData.weight || selectedDelivery.weight);
+
+                    const updatedItem: DmsDeliveryItem = {
+                        ...selectedDelivery,
+                        ...ddData,
+                        itemCount: accurateItemCount,
+                        taskType: accurateTaskType,
+                        packageType: accuratePackageType,
+                        weight: accurateWeight,
+                        dmsStatus: normalizedStatus,
+                        dmsRawStatus: ddData.dmsRawStatus || ddData.dmsStatus || normalizedStatus,
+                    };
+
+                    setSelectedDelivery(updatedItem);
+                    setDeliveries(prev => prev.map(d => d.taskId === selectedDelivery.taskId ? { ...d, ...updatedItem } : d));
+                }
+
+                if (podRes.status === 'fulfilled') {
+                    const pJson = podRes.value?.data;
+                    const pData = pJson?.data ?? pJson;
+                    if (pData && (pData.hasPod || pData.podUrl || pData.downloadUrl)) {
+                        setPodData(pData);
+                    } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                        setPodData({
+                            taskId: selectedDelivery.taskId,
+                            waybillNo: selectedDelivery.dmsWaybillNo,
+                            hasPod: true,
+                            podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                            downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                            fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                            uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                            uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                        });
+                    } else {
+                        setPodData(null);
+                    }
+                } else if (ddData?.podUrl || selectedDelivery.podUrl) {
+                    setPodData({
+                        taskId: selectedDelivery.taskId,
+                        waybillNo: selectedDelivery.dmsWaybillNo,
+                        hasPod: true,
+                        podUrl: ddData?.podUrl || selectedDelivery.podUrl,
+                        downloadUrl: `/api/dms-integration/tasks/${selectedDelivery.taskId}/pod/download`,
+                        fileName: ddData?.podFileName || (selectedDelivery as any)?.podFileName || `POD_${selectedDelivery.dmsWaybillNo || 'delivery'}.jpg`,
+                        uploadedAt: ddData?.podUploadedAt || selectedDelivery?.podUploadedAt,
+                        uploadedByName: ddData?.podUploadedBy || (selectedDelivery as any)?.podUploadedBy || ddData?.courierFullName || selectedDelivery?.courierFullName,
+                    });
+                }
+
                 toastSuccess('Dispatched and re-synced with DMS.');
                 await fetchDeliveries();
             } catch (fallbackErr: any) {
@@ -675,6 +1136,17 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         } finally {
             setSyncingId(null);
         }
+    };
+
+    const handleRefreshAll = async () => {
+        if (selectedDelivery?.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000') {
+            try {
+                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {});
+            } catch {
+                // Best effort sync on refresh
+            }
+        }
+        await fetchDeliveries();
     };
 
     // Filter, search, and sort (most recent created record first)
@@ -757,32 +1229,55 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     const getStatusPill = (status: string, syncState?: string) => {
         const s = (status || '').toLowerCase();
-        if (s.includes('delivered') || s.includes('completed')) {
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) {
             return <span className="dms-status-pill dms-status-delivered"><CheckCircle2 size={11} /> Delivered (POD)</span>;
+        }
+        if (s.includes('cancel') || s.includes('void')) {
+            return <span className="dms-status-pill dms-status-cancelled"><XCircle size={11} /> Cancelled</span>;
+        }
+        if (s.includes('fail') || s.includes('undelivered') || syncState === 'Failed') {
+            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Failed</span>;
+        }
+        if (s.includes('issue')) {
+            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Issue</span>;
         }
         if (s.includes('out') || s.includes('transit') || s.includes('pickup')) {
             return <span className="dms-status-pill dms-status-transit"><Truck size={11} /> In Transit</span>;
         }
-        if (s.includes('fail') || s.includes('cancel') || syncState === 'Failed') {
-            return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Issue</span>;
-        }
-        return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Ready / Dispatched</span>;
+        return <span className="dms-status-pill dms-status-pending"><Clock size={11} /> Pending for Delivery</span>;
     };
 
     const getJourneyStepIndex = (status?: string, rawStatus?: string) => {
         const s = `${rawStatus || ''} ${status || ''}`.toLowerCase();
-        if (s.includes('delivered') || s.includes('completed')) return 6;
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) return 6;
         if (s.includes('out for delivery') || s.includes('doorstep')) return 5;
         if (s.includes('transit')) return 4;
         if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 3;
-        if (s.includes('assigned') || s.includes('for pickup')) return 2;
+        if (s.includes('assigned') || s.includes('for pickup') || s.includes('driver')) return 2;
         if (s.includes('processing') || s.includes('preparing')) return 1;
         return 0;
     };
 
     if (selectedDelivery) {
+        const selRaw = (selectedDelivery.dmsRawStatus || '').toLowerCase();
+        const selNorm = (selectedDelivery.dmsStatus || '').toLowerCase();
+        const selCombined = `${selNorm} ${selRaw}`;
+
+        const isCancelled = selCombined.includes('cancel') || selCombined.includes('void');
+        const isFailed = !isCancelled && (
+            selCombined.includes('fail') ||
+            selCombined.includes('undelivered') ||
+            selectedDelivery.syncStatus === 'Failed' ||
+            selCombined.includes('issue')
+        );
+        const isDelivered = !isCancelled && !isFailed && !selCombined.includes('pending') && (
+            selNorm === 'delivered' ||
+            selRaw === 'delivered' ||
+            selCombined.includes('completed') ||
+            (selCombined.includes('delivered') && !selCombined.includes('undelivered'))
+        );
+
         const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
-        const isDelivered = (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('delivered') || (selectedDelivery.dmsRawStatus || selectedDelivery.dmsStatus || '').toLowerCase().includes('completed');
         const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 6) / 6) * 100;
 
         const journeySteps = [
@@ -803,7 +1298,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         <button
                             type="button"
                             className="dms-detail-back-btn"
-                            onClick={() => setSelectedDelivery(null)}
+                            onClick={handleCloseTracker}
                         >
                             <ArrowLeft size={15} />
                             <span>Back to Deliveries</span>
@@ -901,69 +1396,365 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     </div>
 
                     <div className="dms-detail-hero-pulse-wrap">
-                        <span className="dms-detail-pulse-beacon" />
-                        <span className="dms-detail-pulse-text">Live DMS Dispatch Active</span>
+                        {isCancelled ? (
+                            <>
+                                <span className="dms-detail-pulse-beacon cancelled" />
+                                <span className="dms-detail-pulse-text cancelled">Delivery Cancelled</span>
+                            </>
+                        ) : isFailed ? (
+                            <>
+                                <span className="dms-detail-pulse-beacon failed" />
+                                <span className="dms-detail-pulse-text failed">Delivery Failed</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="dms-detail-pulse-beacon" />
+                                <span className="dms-detail-pulse-text">Live DMS Dispatch Active</span>
+                            </>
+                        )}
                     </div>
                 </div>
 
-                {/* ── 7-Stage Milestone Tracker (Full-Width, Single-Page, No-Scroll) ── */}
-                <div className="dms-detail-stepper-card">
-                    <div className="dms-detail-stepper-header">
-                        <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
-                        <span className="dms-detail-stepper-summary">
-                            Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
-                        </span>
-                    </div>
-
-                    <div className="dms-detail-stepper-track-wrap">
-                        <div className="dms-detail-stepper-inner">
-                        <div className="dms-detail-stepper-track">
-                            <div
-                                className="dms-detail-stepper-progress"
-                                style={{ width: `${progressPct}%` }}
-                            />
+                {/* ── Milestone Tracker / Terminal Status Card ── */}
+                {isCancelled ? (
+                    <div className="dms-detail-stepper-card dms-detail-terminal-card dms-detail-cancelled-card" data-testid="dms-terminal-cancelled-view">
+                        <div className="dms-detail-stepper-header">
+                            <div className="dms-detail-header-left">
+                                <h4 className="dms-detail-section-title">Delivery Status: Cancelled</h4>
+                                <span className="dms-detail-stepper-subtitle">Shipment was cancelled in DMS and delivery progression has been terminated.</span>
+                            </div>
+                            <span className="dms-detail-terminal-pill cancelled" data-testid="dms-detail-cancelled-pill">
+                                <XCircle size={13} strokeWidth={2.5} /> Cancelled in DMS
+                            </span>
                         </div>
 
-                        <div className="dms-detail-stepper">
-                            {journeySteps.map((step, idx) => {
-                                const isDone = isDelivered ? true : idx < activeIdx;
-                                const isCurrent = !isDelivered && idx === activeIdx;
-                                const isUpcoming = idx > activeIdx;
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        className={`dms-detail-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
-                                    >
-                                        <div className="dms-detail-step-dot">
-                                            {isDone ? (
-                                                <Check size={16} strokeWidth={2.8} />
-                                            ) : isCurrent ? (
-                                                <Clock size={16} strokeWidth={2.5} />
-                                            ) : (
-                                                <span>{idx + 1}</span>
-                                            )}
-                                        </div>
-                                        <div className="dms-detail-step-text">
-                                            <span className="dms-detail-step-title">{step.title}</span>
-                                            <span className="dms-detail-step-desc">{step.desc}</span>
-                                            {isCurrent && (
-                                                <span className="dms-detail-step-badge current">In Progress</span>
-                                            )}
-                                            {isDone && (
-                                                <span className="dms-detail-step-badge done">Completed</span>
-                                            )}
-                                        </div>
+                        {/* Prominent Cancellation Banner */}
+                        <div className="dms-terminal-hero-banner cancelled">
+                            <div className="dms-terminal-banner-icon-box cancelled">
+                                <XCircle size={28} strokeWidth={2.2} />
+                            </div>
+                            <div className="dms-terminal-banner-content">
+                                <div className="dms-terminal-banner-header">
+                                    <span className="dms-terminal-banner-title">Delivery Order Cancelled</span>
+                                    <span className="dms-terminal-banner-badge cancelled">Lifecycle Terminated</span>
+                                </div>
+                                <p className="dms-terminal-banner-text">
+                                    This logistical dispatch has been marked as cancelled. No further courier route progression, parcel movement, or delivery confirmation will take place.
+                                </p>
+                                {selectedDelivery.dmsFailureReason && (
+                                    <div className="dms-terminal-reason-callout cancelled" data-testid="dms-cancelled-reason">
+                                        <strong className="dms-terminal-reason-label">Cancellation Rationale:</strong>
+                                        <span className="dms-terminal-reason-text">{selectedDelivery.dmsFailureReason}</span>
                                     </div>
-                                );
-                            })}
+                                )}
+                            </div>
                         </div>
+
+                        {/* Milestone Lifecycle Termination Timeline */}
+                        <div className="dms-terminal-lifecycle-section">
+                            <div className="dms-terminal-lifecycle-header">
+                                <span className="dms-terminal-lifecycle-title">Lifecycle Milestone Termination Point</span>
+                                <span className="dms-terminal-lifecycle-desc">
+                                    Halted at <strong>{journeySteps[Math.min(activeIdx, 6)].title}</strong> — Subsequent stages voided
+                                </span>
+                            </div>
+                            <div className="dms-detail-stepper-track-wrap">
+                                <div className="dms-detail-stepper-inner">
+                                    <div className="dms-detail-stepper-track cancelled">
+                                        <div
+                                            className="dms-detail-stepper-progress cancelled"
+                                            style={{ width: `${(Math.max(0, activeIdx) / (journeySteps.length - 1)) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="dms-detail-stepper">
+                                        {journeySteps.map((step, idx) => {
+                                            const isPassed = idx < activeIdx;
+                                            const isHaltedAt = idx === activeIdx;
+                                            const isVoided = idx > activeIdx;
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`dms-detail-step terminal-step ${isPassed ? 'terminal-passed' : ''} ${isHaltedAt ? 'terminal-halted cancelled' : ''} ${isVoided ? 'terminal-voided' : ''}`}
+                                                >
+                                                    <div className="dms-detail-step-dot">
+                                                        {isPassed ? (
+                                                            <Check size={15} strokeWidth={2.8} />
+                                                        ) : isHaltedAt ? (
+                                                            <X size={16} strokeWidth={2.8} />
+                                                        ) : (
+                                                            <span>{idx + 1}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="dms-detail-step-text">
+                                                        <span className="dms-detail-step-title">{step.title}</span>
+                                                        <span className="dms-detail-step-desc">{isHaltedAt ? 'Cancelled Here' : isVoided ? 'Voided' : step.desc}</span>
+                                                        {isHaltedAt && (
+                                                            <span className="dms-detail-step-badge terminal-badge cancelled">Cancelled</span>
+                                                        )}
+                                                        {isVoided && (
+                                                            <span className="dms-detail-step-badge terminal-badge voided">Not Reached</span>
+                                                        )}
+                                                        {isPassed && (
+                                                            <span className="dms-detail-step-badge terminal-badge passed">Passed</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Comprehensive Operational Insights & Actions */}
+                        <div className="dms-terminal-meta-grid">
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Info size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Operational Task Status</h6>
+                                </div>
+                                <p className="dms-terminal-meta-body">
+                                    {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000'
+                                        ? 'The primary STARS operational task remains intact. Dispatchers and coordinators can update task assignments, re-issue waybills, or review audit remarks.'
+                                        : 'Unlinked DMS shipment cancelled prior to STARS task assignment. No operational task modification is required.'}
+                                </p>
+                                {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000' && (
+                                    <button
+                                        type="button"
+                                        className="dms-terminal-link-btn"
+                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                    >
+                                        <span>Open Associated Task in STARS</span>
+                                        <ArrowRight size={13} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Clock size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Telemetry & Sync Log</h6>
+                                </div>
+                                <div className="dms-terminal-meta-list">
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Waybill:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.dmsWaybillNo || 'Not Assigned'}</span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Last Logged Sync:</span>
+                                        <span className="dms-terminal-row-val">
+                                            {selectedDelivery.dmsLastSyncedAt
+                                                ? new Date(selectedDelivery.dmsLastSyncedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                                                : 'Recent'}
+                                        </span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Assigned Courier:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.courierFullName || 'Unassigned / Auto Pool'}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                ) : isFailed ? (
+                    <div className="dms-detail-stepper-card dms-detail-terminal-card dms-detail-failed-card" data-testid="dms-terminal-failed-view">
+                        <div className="dms-detail-stepper-header">
+                            <div className="dms-detail-header-left">
+                                <h4 className="dms-detail-section-title">Delivery Status: Failed</h4>
+                                <span className="dms-detail-stepper-subtitle">Courier was unable to fulfill delivery; exception reported in DMS.</span>
+                            </div>
+                            <span className="dms-detail-terminal-pill failed" data-testid="dms-detail-failed-pill">
+                                <AlertCircle size={13} strokeWidth={2.5} /> Delivery Failed
+                            </span>
+                        </div>
 
-                {/* ── Failure / Exception Alert if Any ── */}
-                {selectedDelivery.dmsFailureReason && (
+                        {/* Prominent Failure Banner */}
+                        <div className="dms-terminal-hero-banner failed">
+                            <div className="dms-terminal-banner-icon-box failed">
+                                <AlertCircle size={28} strokeWidth={2.2} />
+                            </div>
+                            <div className="dms-terminal-banner-content">
+                                <div className="dms-terminal-banner-header">
+                                    <span className="dms-terminal-banner-title">Delivery Attempt Failed</span>
+                                    <span className="dms-terminal-banner-badge failed">Exception Logged</span>
+                                </div>
+                                <p className="dms-terminal-banner-text">
+                                    The delivery attempt could not be completed. Check the reported failure rationale below and coordinate next steps with dispatch or the recipient.
+                                </p>
+                                <div className="dms-terminal-reason-callout failed" data-testid="dms-failed-reason">
+                                    <strong className="dms-terminal-reason-label">Failure / Exception Reason:</strong>
+                                    <span className="dms-terminal-reason-text">
+                                        {selectedDelivery.dmsFailureReason || 'Courier was unable to complete the delivery attempt (e.g. consignee unavailable, invalid destination address, or package rejected).'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Milestone Lifecycle Failure Timeline */}
+                        <div className="dms-terminal-lifecycle-section">
+                            <div className="dms-terminal-lifecycle-header">
+                                <span className="dms-terminal-lifecycle-title">Lifecycle Milestone Exception Point</span>
+                                <span className="dms-terminal-lifecycle-desc">
+                                    Interrupted at <strong>{journeySteps[Math.min(activeIdx, 6)].title}</strong> — Delivery unconfirmed
+                                </span>
+                            </div>
+                            <div className="dms-detail-stepper-track-wrap">
+                                <div className="dms-detail-stepper-inner">
+                                    <div className="dms-detail-stepper-track failed">
+                                        <div
+                                            className="dms-detail-stepper-progress failed"
+                                            style={{ width: `${(Math.max(0, activeIdx) / (journeySteps.length - 1)) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="dms-detail-stepper">
+                                        {journeySteps.map((step, idx) => {
+                                            const isPassed = idx < activeIdx;
+                                            const isFailedAt = idx === activeIdx;
+                                            const isUnreached = idx > activeIdx;
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`dms-detail-step terminal-step ${isPassed ? 'terminal-passed' : ''} ${isFailedAt ? 'terminal-halted failed' : ''} ${isUnreached ? 'terminal-voided' : ''}`}
+                                                >
+                                                    <div className="dms-detail-step-dot">
+                                                        {isPassed ? (
+                                                            <Check size={15} strokeWidth={2.8} />
+                                                        ) : isFailedAt ? (
+                                                            <AlertCircle size={16} strokeWidth={2.8} />
+                                                        ) : (
+                                                            <span>{idx + 1}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="dms-detail-step-text">
+                                                        <span className="dms-detail-step-title">{step.title}</span>
+                                                        <span className="dms-detail-step-desc">{isFailedAt ? 'Failed Here' : isUnreached ? 'Not Completed' : step.desc}</span>
+                                                        {isFailedAt && (
+                                                            <span className="dms-detail-step-badge terminal-badge failed">Failed</span>
+                                                        )}
+                                                        {isUnreached && (
+                                                            <span className="dms-detail-step-badge terminal-badge voided">Incomplete</span>
+                                                        )}
+                                                        {isPassed && (
+                                                            <span className="dms-detail-step-badge terminal-badge passed">Passed</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Comprehensive Operational Insights & Actions */}
+                        <div className="dms-terminal-meta-grid">
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <AlertTriangle size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Recommended Dispatch Actions</h6>
+                                </div>
+                                <p className="dms-terminal-meta-body">
+                                    Contact the recipient to confirm address and availability, or schedule a re-delivery attempt with the assigned driver.
+                                </p>
+                                {selectedDelivery.taskId && selectedDelivery.taskId !== '00000000-0000-0000-0000-000000000000' && (
+                                    <button
+                                        type="button"
+                                        className="dms-terminal-link-btn"
+                                        onClick={() => onViewTask(selectedDelivery.taskId)}
+                                    >
+                                        <span>Open Task & Update Notes in STARS</span>
+                                        <ArrowRight size={13} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="dms-terminal-meta-card">
+                                <div className="dms-terminal-meta-header">
+                                    <Clock size={14} className="dms-terminal-meta-icon" />
+                                    <h6>Exception Telemetry</h6>
+                                </div>
+                                <div className="dms-terminal-meta-list">
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Waybill:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.dmsWaybillNo || 'Not Assigned'}</span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Failure Logged At:</span>
+                                        <span className="dms-terminal-row-val">
+                                            {selectedDelivery.dmsLastSyncedAt
+                                                ? new Date(selectedDelivery.dmsLastSyncedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                                                : 'Recent'}
+                                        </span>
+                                    </div>
+                                    <div className="dms-terminal-meta-row">
+                                        <span className="dms-terminal-row-label">Assigned Courier:</span>
+                                        <span className="dms-terminal-row-val">{selectedDelivery.courierFullName || 'Unassigned / Auto Pool'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="dms-detail-stepper-card">
+                        <div className="dms-detail-stepper-header">
+                            <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
+                            <span className="dms-detail-stepper-summary">
+                                Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
+                            </span>
+                        </div>
+
+                        <div className="dms-detail-stepper-track-wrap">
+                            <div className="dms-detail-stepper-inner">
+                            <div className="dms-detail-stepper-track">
+                                <div
+                                    className="dms-detail-stepper-progress"
+                                    style={{ width: `${progressPct}%` }}
+                                />
+                            </div>
+
+                            <div className="dms-detail-stepper">
+                                {journeySteps.map((step, idx) => {
+                                    const isDone = isDelivered ? true : idx < activeIdx;
+                                    const isCurrent = !isDelivered && idx === activeIdx;
+                                    const isUpcoming = idx > activeIdx;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`dms-detail-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''} ${isUpcoming ? 'upcoming' : ''}`}
+                                        >
+                                            <div className="dms-detail-step-dot">
+                                                {isDone ? (
+                                                    <Check size={16} strokeWidth={2.8} />
+                                                ) : isCurrent ? (
+                                                    <Clock size={16} strokeWidth={2.5} />
+                                                ) : (
+                                                    <span>{idx + 1}</span>
+                                                )}
+                                            </div>
+                                            <div className="dms-detail-step-text">
+                                                <span className="dms-detail-step-title">{step.title}</span>
+                                                <span className="dms-detail-step-desc">{step.desc}</span>
+                                                {isCurrent && (
+                                                    <span className="dms-detail-step-badge current">In Progress</span>
+                                                )}
+                                                {isDone && (
+                                                    <span className="dms-detail-step-badge done">Completed</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Failure / Exception Alert if Any (non-terminal) ── */}
+                {!isCancelled && !isFailed && selectedDelivery.dmsFailureReason && (
                     <div className="dms-detail-alert-box">
                         <AlertCircle size={18} className="dms-detail-alert-icon" />
                         <div>
@@ -1026,9 +1817,21 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                 <span className="dms-detail-label">Assigned Courier</span>
                                 <span className="dms-detail-val">
                                     {(() => {
-                                        const driverInfo = formatDriverDisplay(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
-                                        const pairedInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
-                                        const nameOnlyInfo = formatDriverDisplayShared(selectedDelivery.courierFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'name-only' });
+                                        const resolvedFullName = (() => {
+                                            const rawName = selectedDelivery.courierFullName;
+                                            const empId = selectedDelivery.courierEmployeeId;
+                                            if (rawName && rawName.trim() && (!empId || rawName.trim().toLowerCase() !== empId.trim().toLowerCase()) && rawName.trim().toLowerCase() !== 'unassigned') {
+                                                return rawName;
+                                            }
+                                            const matched = deliveries.find(d =>
+                                                (empId && d.courierEmployeeId === empId && d.courierFullName && d.courierFullName !== d.courierEmployeeId) ||
+                                                (selectedDelivery.dmsWaybillNo && d.dmsWaybillNo === selectedDelivery.dmsWaybillNo && d.courierFullName)
+                                            );
+                                            return matched?.courierFullName || rawName;
+                                        })();
+                                        const driverInfo = formatDriverDisplay(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive);
+                                        const pairedInfo = formatDriverDisplayShared(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'id-first' });
+                                        const nameOnlyInfo = formatDriverDisplayShared(resolvedFullName, selectedDelivery.courierEmployeeId, selectedDelivery.courierIsActive, { layout: 'name-only' });
                                         if (driverInfo.displayText === 'Unassigned' && !selectedDelivery.courierEmployeeId) {
                                             return <span style={{ color: 'var(--text-muted)' }}>Auto-assigned by DMS pool</span>;
                                         }
@@ -1128,8 +1931,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                             <div className="dms-detail-row">
                                 <span className="dms-detail-label">Current Status</span>
                                 <span className="dms-detail-val">
-                                    <strong>{formatStatus(selectedDelivery.dmsStatus)}</strong>
-                                    {selectedDelivery.dmsRawStatus && selectedDelivery.dmsRawStatus !== selectedDelivery.dmsStatus && (
+                                    <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
+                                    {selectedDelivery.dmsRawStatus && formatDeliveryStatus(selectedDelivery.dmsRawStatus) !== formatDeliveryStatus(selectedDelivery.dmsStatus) && (
                                         <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 4 }}>
                                             ({selectedDelivery.dmsRawStatus})
                                         </span>
@@ -1192,58 +1995,72 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                             ) : effectivePod ? (
                                 <div className="dms-pod-content" data-testid="dms-pod-content">
                                     <div className="dms-pod-preview-wrapper">
-                                        {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) && !podImageError ? (
-                                            <div
-                                                className="dms-pod-thumbnail-wrapper"
-                                                onClick={handleOpenPodPreview}
-                                                title="Click to preview POD image"
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        handleOpenPodPreview();
-                                                    }
-                                                }}
-                                            >
-                                                <img
-                                                    src={effectivePod.fileUrl}
-                                                    alt="Proof of Delivery thumbnail"
-                                                    className="dms-pod-thumbnail-img"
-                                                    onError={() => setPodImageError(true)}
-                                                />
-                                                <div className="dms-pod-thumbnail-overlay">
-                                                    <Eye size={18} />
-                                                    <span>View Preview</span>
+                                        {(() => {
+                                            const isImage = isImageFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                            const isPdf = isPdfFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                            const podDisplayUrl = podPreviewUrl || effectivePod.fileUrl || effectivePod.podUrl || effectivePod.downloadUrl;
+
+                                            if (isImage && !podImageError) {
+                                                return (
+                                                    <div
+                                                        className="dms-pod-thumbnail-wrapper"
+                                                        onClick={handleOpenPodPreview}
+                                                        title="Click to preview POD image"
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleOpenPodPreview();
+                                                            }
+                                                        }}
+                                                    >
+                                                        <img
+                                                            src={podDisplayUrl}
+                                                            alt="Proof of Delivery thumbnail"
+                                                            className="dms-pod-thumbnail-img"
+                                                            onError={() => setPodImageError(true)}
+                                                        />
+                                                        <div className="dms-pod-thumbnail-overlay">
+                                                            <Eye size={18} />
+                                                            <span>View Preview</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (isPdf) {
+                                                return (
+                                                    <div
+                                                        className="dms-pod-pdf-preview"
+                                                        onClick={handleOpenPodPreview}
+                                                        title="Click to preview PDF document"
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleOpenPodPreview();
+                                                            }
+                                                        }}
+                                                    >
+                                                        <FileText size={36} color="var(--primary, #00A99D)" />
+                                                        <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
+                                                        <div className="dms-pod-thumbnail-overlay">
+                                                            <Eye size={18} />
+                                                            <span>View PDF</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div className="dms-pod-doc-icon-preview">
+                                                    <FileCheck size={36} color="var(--primary, #00A99D)" />
+                                                    <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
                                                 </div>
-                                            </div>
-                                        ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                            <div
-                                                className="dms-pod-pdf-preview"
-                                                onClick={handleOpenPodPreview}
-                                                title="Click to preview PDF document"
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        handleOpenPodPreview();
-                                                    }
-                                                }}
-                                            >
-                                                <FileText size={36} color="var(--primary, #00A99D)" />
-                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'POD Document.pdf'}</span>
-                                                <div className="dms-pod-thumbnail-overlay">
-                                                    <Eye size={18} />
-                                                    <span>View PDF</span>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="dms-pod-doc-icon-preview">
-                                                <FileCheck size={36} color="var(--primary, #00A99D)" />
-                                                <span className="dms-pod-pdf-filename">{effectivePod.fileName || 'Delivery Receipt'}</span>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
                                     </div>
 
                                     <div className="dms-pod-meta-grid">
@@ -1306,7 +2123,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                     <FileCheck size={28} className="dms-pod-empty-icon" />
                                     <p className="dms-pod-empty-title">No Proof of Delivery Attached</p>
                                     <p className="dms-pod-empty-sub">
-                                        The courier has not uploaded a digital POD signature or delivery photo yet.
+                                        The courier has not uploaded a digital POD signature or delivery photo yet. Once the courier completes delivery on DMS and uploads the POD, it will automatically reflect here.
                                     </p>
                                 </div>
                             )}
@@ -1341,37 +2158,51 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                                 </button>
                             </div>
                             <div className="dms-modal-body dms-pod-modal-body">
-                                {isImageFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                    <div className="dms-pod-modal-img-container">
-                                        <img
-                                            src={podPreviewUrl || effectivePod.fileUrl}
-                                            alt="Proof of Delivery Full Preview"
-                                            className="dms-pod-modal-full-img"
-                                        />
-                                    </div>
-                                ) : isPdfFile(effectivePod.contentType, effectivePod.fileName || effectivePod.fileUrl) ? (
-                                    <div className="dms-pod-modal-pdf-container">
-                                        <iframe
-                                            src={podPreviewUrl || effectivePod.fileUrl}
-                                            title="Proof of Delivery PDF Viewer"
-                                            className="dms-pod-modal-iframe"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="dms-pod-modal-fallback">
-                                        <FileCheck size={48} color="var(--primary, #00A99D)" />
-                                        <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
-                                        <button
-                                            type="button"
-                                            className="dms-btn-action dms-pod-download-btn"
-                                            onClick={handleDownloadPod}
-                                            disabled={podDownloading}
-                                        >
-                                            <Download size={13} />
-                                            <span>Download to view</span>
-                                        </button>
-                                    </div>
-                                )}
+                                {(() => {
+                                    const isImage = isImageFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                    const isPdf = isPdfFile(effectivePod.fileName, effectivePod.fileType || effectivePod.contentType);
+                                    const podDisplayUrl = podPreviewUrl || effectivePod.fileUrl || effectivePod.podUrl || effectivePod.downloadUrl;
+
+                                    if (isImage) {
+                                        return (
+                                            <div className="dms-pod-modal-img-container">
+                                                <img
+                                                    src={podDisplayUrl}
+                                                    alt="Proof of Delivery Full Preview"
+                                                    className="dms-pod-modal-full-img"
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    if (isPdf) {
+                                        return (
+                                            <div className="dms-pod-modal-pdf-container">
+                                                <iframe
+                                                    src={podDisplayUrl}
+                                                    title="Proof of Delivery PDF Viewer"
+                                                    className="dms-pod-modal-iframe"
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="dms-pod-modal-fallback">
+                                            <FileCheck size={48} color="var(--primary, #00A99D)" />
+                                            <p>Preview is not supported for this file format ({effectivePod.contentType || 'unknown'}).</p>
+                                            <button
+                                                type="button"
+                                                className="dms-btn-action dms-pod-download-btn"
+                                                onClick={handleDownloadPod}
+                                                disabled={podDownloading}
+                                            >
+                                                <Download size={13} />
+                                                <span>Download to view</span>
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div className="dms-modal-footer dms-pod-modal-footer">
                                 <div className="dms-pod-modal-meta">
@@ -1408,7 +2239,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     <button
                         type="button"
                         className="dms-detail-footer-btn-secondary"
-                        onClick={() => setSelectedDelivery(null)}
+                        onClick={handleCloseTracker}
                     >
                         <ArrowLeft size={14} />
                         <span>Return to Deliveries List</span>
@@ -1432,7 +2263,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         <button
                             type="button"
                             className="dms-detail-footer-btn-primary"
-                            onClick={() => setSelectedDelivery(null)}
+                            onClick={handleCloseTracker}
                         >
                             <span>Done</span>
                         </button>
@@ -1554,7 +2385,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                     <button
                         type="button"
                         className="dms-action-btn dms-refresh-btn"
-                        onClick={() => fetchDeliveries()}
+                        onClick={handleRefreshAll}
                         disabled={loading}
                     >
                         <RefreshCw size={13} className={loading ? 'spin' : ''} />

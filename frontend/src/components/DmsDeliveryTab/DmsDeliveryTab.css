@@ -368,6 +368,12 @@
     color: #ee5d50;
 }
 
+.dms-status-cancelled {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
 .dms-status-pending {
     background: #f1f5f9;
     color: #64748b;
@@ -697,16 +703,42 @@
     animation: dms-beacon-pulse 1.8s infinite;
 }
 
+.dms-detail-pulse-beacon.cancelled {
+    background: #94a3b8;
+    box-shadow: none;
+    animation: none;
+}
+
+.dms-detail-pulse-beacon.failed {
+    background: #dc2626;
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5);
+    animation: dms-beacon-pulse-red 1.8s infinite;
+}
+
 @keyframes dms-beacon-pulse {
     0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
     70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
 
+@keyframes dms-beacon-pulse-red {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
 .dms-detail-pulse-text {
     font-size: 12px;
     font-weight: 600;
     color: #15803d;
+}
+
+.dms-detail-pulse-text.cancelled {
+    color: #64748b;
+}
+
+.dms-detail-pulse-text.failed {
+    color: #b91c1c;
 }
 
 /* Stepper Card (Full-width, single-page, non-scrollable) */
@@ -719,6 +751,364 @@
     width: 100%;
     box-sizing: border-box;
     overflow: visible;
+}
+
+.dms-detail-terminal-card {
+    border-width: 1px;
+}
+
+.dms-detail-cancelled-card {
+    border-color: #fecaca;
+    background: #ffffff;
+}
+
+.dms-detail-failed-card {
+    border-color: #fed7aa;
+    background: #ffffff;
+}
+
+.dms-detail-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.dms-detail-stepper-subtitle {
+    font-size: 12px;
+    color: var(--sidebar-text);
+}
+
+.dms-detail-terminal-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.dms-detail-terminal-pill.cancelled {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.dms-detail-terminal-pill.failed {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #ffedd5;
+}
+
+/* Terminal Hero Banner */
+.dms-terminal-hero-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.dms-terminal-hero-banner.cancelled {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+}
+
+.dms-terminal-hero-banner.failed {
+    background: #fffaf0;
+    border: 1px solid #feebc8;
+}
+
+.dms-terminal-banner-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.dms-terminal-banner-icon-box.cancelled {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.dms-terminal-banner-icon-box.failed {
+    background: #ffedd5;
+    color: #ea580c;
+}
+
+.dms-terminal-banner-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.dms-terminal-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.dms-terminal-banner-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.dms-terminal-banner-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.dms-terminal-banner-badge.cancelled {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.dms-terminal-banner-badge.failed {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.dms-terminal-banner-text {
+    font-size: 13px;
+    color: #475569;
+    margin: 0 0 8px 0;
+    line-height: 1.45;
+}
+
+.dms-terminal-reason-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+.dms-terminal-reason-callout.cancelled {
+    background: #ffffff;
+    border: 1px dashed #fca5a5;
+    color: #7f1d1d;
+}
+
+.dms-terminal-reason-callout.failed {
+    background: #ffffff;
+    border: 1px dashed #fdba74;
+    color: #7c2d12;
+}
+
+.dms-terminal-reason-label {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.dms-terminal-reason-text {
+    font-style: italic;
+}
+
+/* Lifecycle Section */
+.dms-terminal-lifecycle-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 20px 14px;
+    margin-bottom: 20px;
+}
+
+.dms-terminal-lifecycle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: #475569;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dms-terminal-lifecycle-title {
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.dms-terminal-lifecycle-desc strong {
+    color: #0f172a;
+}
+
+.dms-detail-stepper-track.cancelled {
+    background: #e2e8f0;
+}
+
+.dms-detail-stepper-progress.cancelled {
+    background: #ef4444;
+}
+
+.dms-detail-stepper-progress.failed {
+    background: #f97316;
+}
+
+.terminal-step.terminal-passed .dms-detail-step-dot {
+    background: #059669;
+    border-color: #059669;
+    color: #ffffff;
+}
+
+.terminal-step.terminal-halted.cancelled .dms-detail-step-dot {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+}
+
+.terminal-step.terminal-halted.failed .dms-detail-step-dot {
+    background: #ea580c;
+    border-color: #ea580c;
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.2);
+}
+
+.terminal-step.terminal-voided .dms-detail-step-dot {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #94a3b8;
+    opacity: 0.65;
+}
+
+.terminal-step.terminal-voided .dms-detail-step-title {
+    color: #94a3b8;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.terminal-step.terminal-voided .dms-detail-step-desc {
+    color: #cbd5e1;
+}
+
+.terminal-badge.cancelled {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.terminal-badge.failed {
+    background: #ffedd5;
+    color: #ea580c;
+}
+
+.terminal-badge.voided {
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+.terminal-badge.passed {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+/* Terminal Meta Grid */
+.dms-terminal-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 768px) {
+    .dms-terminal-meta-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dms-terminal-meta-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.dms-terminal-meta-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.dms-terminal-meta-header h6 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+}
+
+.dms-terminal-meta-icon {
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.dms-terminal-meta-body {
+    font-size: 12.5px;
+    color: #475569;
+    line-height: 1.45;
+    margin: 0 0 10px 0;
+}
+
+.dms-terminal-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: var(--primary, #00A99D);
+    cursor: pointer;
+    align-self: flex-start;
+    transition: all 0.15s ease;
+    margin-top: auto;
+}
+
+.dms-terminal-link-btn:hover {
+    background: var(--primary, #00A99D);
+    border-color: var(--primary, #00A99D);
+    color: #ffffff;
+}
+
+.dms-terminal-meta-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dms-terminal-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+
+.dms-terminal-row-label {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.dms-terminal-row-val {
+    color: #1e293b;
+    font-weight: 600;
 }
 
 .dms-detail-stepper-header {

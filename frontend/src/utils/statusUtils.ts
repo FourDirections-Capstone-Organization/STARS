@@ -143,6 +143,7 @@ export const STATUS_BADGE_CLASSES: Record<string, string> = {
     Processing: 'badge badge-blue',
     Preparing: 'badge badge-blue',
     'Ready for Pickup': 'badge badge-purple',
+    'Pending for Delivery': 'badge badge-blue',
     'In Transit': 'badge badge-blue',
     'Out for Delivery': 'badge badge-blue',
     Delivered: 'badge badge-green',
@@ -212,6 +213,21 @@ export function formatStatus(status?: string | number | null): string {
     }
 
     return toTitleCase(str);
+}
+
+/**
+ * Canonical formatting for DMS delivery order statuses.
+ * Normalizes pending orders to 'Pending for Delivery' instead of ambiguous 'Pending' or premature 'Delivered'.
+ */
+export function formatDeliveryStatus(status?: string | number | null): string {
+    if (status === undefined || status === null) return 'Pending for Delivery';
+    const str = String(status).trim();
+    if (!str) return 'Pending for Delivery';
+    const s = str.toLowerCase();
+    if (s === 'pending' || s === 'pending approval' || s === 'pending for delivery') {
+        return 'Pending for Delivery';
+    }
+    return formatStatus(str);
 }
 
 /**

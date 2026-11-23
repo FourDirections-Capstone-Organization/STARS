@@ -48,7 +48,7 @@ jobs:
           if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open --label bug --json title --jq '.[].title' | grep -Fx "$TITLE"; then
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "$TITLE" \
-              --label "bug,ci" \
+              --label "bug" \
               --body "## CI Failure — Backend (.NET)
 
           **Event:** ${{ github.event_name }}
@@ -104,7 +104,7 @@ jobs:
           if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open --label bug --json title --jq '.[].title' | grep -Fx "$TITLE"; then
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "$TITLE" \
-              --label "bug,ci" \
+              --label "bug" \
               --body "## CI Failure — Frontend (React + Vite)
 
           **Event:** ${{ github.event_name }}
@@ -157,7 +157,7 @@ jobs:
           if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open --label bug --json title --jq '.[].title' | grep -Fx "$TITLE"; then
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "$TITLE" \
-              --label "bug,ci" \
+              --label "bug" \
               --body "## CI Failure — Docker Images
 
           **Event:** ${{ github.event_name }}
