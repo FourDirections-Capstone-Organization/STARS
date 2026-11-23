@@ -24,6 +24,8 @@ public class SecurityHeadersMiddleware
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
         context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+        context.Response.Headers["X-Permitted-Cross-Domain-Policies"] = "none";
+        context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
         context.Response.Headers["Content-Security-Policy"] = 
             "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://stars-two-chi.vercel.app https://speedex-system.vercel.app https://delivery-system-capstone-beige.vercel.app https://fomsfrontend.vercel.app https://fomsintegration-amfve2fdccbdgbgy.eastasia-01.azurewebsites.net https://dts-api-gab-byafd0h2aha6a9c9.japaneast-01.azurewebsites.net; frame-ancestors 'self';";
 
