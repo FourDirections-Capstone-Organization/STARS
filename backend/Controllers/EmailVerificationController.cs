@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Backend.Models;
@@ -10,6 +11,7 @@ namespace Backend.Controllers;
 
 [ApiController]
 [Route("api/email-verification")]
+[EnableRateLimiting("AuthRateLimit")]
 public class EmailVerificationController : ControllerBase
 {
     private readonly IEmailVerificationService _verificationService;
