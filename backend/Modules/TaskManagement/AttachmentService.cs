@@ -164,6 +164,45 @@ public class AttachmentService : IAttachmentService
         return ApiResponseDTO<TaskAttachment>.Success(attachment);
     }
 
+    public async Task<ApiResponseDTO<bool>> CanUserAccessAttachmentAsync(Guid attachmentId, Guid userId, UserRole userRole)
+    {
+        var attachment = await _db.TaskAttachments
+            .Include(a => a.Task)
+                .ThenInclude(t => t!.Assignments)
+            .FirstOrDefaultAsync(a => a.Id == attachmentId);
+
+        if (attachment is null)
+            return ApiResponseDTO<bool>.Failure("Attachment not found");
+
+        // Managers have universal read access across all attachments
+        if (userRole == UserRole.Manager)
+            return ApiResponseDTO<bool>.Success(true);
+
+        // Uploader has access
+        if (attachment.UploadedById == userId)
+            return ApiResponseDTO<bool>.Success(true);
+
+        if (attachment.Task == null)
+            return ApiResponseDTO<bool>.Failure("Associated task not found");
+
+        // Creator of the task has access
+        if (attachment.Task.CreatedById == userId)
+            return ApiResponseDTO<bool>.Success(true);
+
+        // Assigned users have access
+        if (attachment.Task.Assignments != null && attachment.Task.Assignments.Any(a => a.AssignedUserId == userId))
+            return ApiResponseDTO<bool>.Success(true);
+
+        // Department members have access if task is assigned to their department
+        var user = await _db.Users.FindAsync(userId);
+        if (user != null && user.DepartmentId.HasValue && attachment.Task.AssignedDepartmentId.HasValue && user.DepartmentId == attachment.Task.AssignedDepartmentId)
+        {
+            return ApiResponseDTO<bool>.Success(true);
+        }
+
+        return ApiResponseDTO<bool>.Failure("Access denied to task attachment");
+    }
+
     private (bool IsValid, string? ErrorMessage) ValidateFile(IFormFile file)
     {
         if (file is null || file.Length == 0)

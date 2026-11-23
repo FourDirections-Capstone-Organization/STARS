@@ -131,7 +131,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-4-sec04-origin-sanitization`
 
-- [ ] **Step 5: Broken Object-Level Authorization (BOLA/IDOR) on Task Attachments (SEC-05)**
+- [x] **Step 5: Broken Object-Level Authorization (BOLA/IDOR) on Task Attachments (SEC-05)**
   - **Targets:**
     - `backend/Controllers/AttachmentController.cs` (lines 52–67)
     - `backend/Modules/TaskManagement/AttachmentService.cs`
