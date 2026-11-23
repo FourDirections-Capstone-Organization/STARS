@@ -191,12 +191,6 @@ public class DmsIntegrationController : ControllerBase
         var authError = ValidateApiKey();
         if (authError != null) return authError;
 
-        if (_queue != null)
-        {
-            await _queue.EnqueueAsync(dto);
-            return Accepted(ApiResponseDTO<object>.Success(new { waybillNo = dto.WaybillNo }, "Delivery status update queued for asynchronous processing."));
-        }
-
         var result = await _dmsService.ProcessStatusUpdateAsync(dto);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
