@@ -93,7 +93,7 @@ try
 {
     var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
     if (!connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
-        csb.MaxPoolSize = 150;
+        csb.MaxPoolSize = 75;
     if (!connectionString.Contains("MinPoolSize", StringComparison.OrdinalIgnoreCase))
         csb.MinPoolSize = 10;
     if (!connectionString.Contains("ConnectionLifetime", StringComparison.OrdinalIgnoreCase))
@@ -111,7 +111,7 @@ catch
 }
 
 builder.Services.AddDbContextPool<AppDbContext>(options =>
-    options.UseNpgsql(connectionString), poolSize: 128);
+    options.UseNpgsql(connectionString), poolSize: 80);
 
 // Configure settings
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
