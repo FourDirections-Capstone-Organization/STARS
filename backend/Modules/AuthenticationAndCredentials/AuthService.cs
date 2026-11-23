@@ -209,6 +209,10 @@ public class AuthService : IAuthService
         user.PasswordResetToken = null;
         user.PasswordResetTokenExpiry = null;
         user.IsPasswordChanged = true;
+        // Invalidate all active sessions upon password reset (SEC-17)
+        user.RefreshToken = null;
+        user.RefreshTokenExpiry = null;
+        user.LastActivityAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -290,6 +294,10 @@ public class AuthService : IAuthService
         // Hash new password
         user.PasswordHash = _passwordHasher.HashPassword(user, dto.NewPassword);
         user.IsPasswordChanged = true;
+        // Invalidate all active sessions upon password change (SEC-17)
+        user.RefreshToken = null;
+        user.RefreshTokenExpiry = null;
+        user.LastActivityAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();

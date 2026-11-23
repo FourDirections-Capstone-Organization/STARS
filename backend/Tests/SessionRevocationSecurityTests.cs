@@ -5,10 +5,19 @@ using Task = System.Threading.Tasks.Task;
 using Backend.Data;
 using Backend.Middleware;
 using Backend.Models;
+using Backend.Models.DTOs;
 using Backend.Models.Enums;
+using Backend.Modules.AuthenticationAndCredentials;
 using Backend.Modules.AuthenticationAndCredentials.Jwt;
+using Backend.Modules.Email;
+using Backend.Modules.TaskManagement;
+using Backend.Modules.Utilities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
 
 namespace Backend.Tests;
@@ -141,5 +150,114 @@ public class SessionRevocationSecurityTests
         var dbUser = await db.Users.FindAsync(userId);
         Assert.NotNull(dbUser);
         Assert.Null(dbUser.LastActivityAt);
+    }
+
+    private AuthService CreateAuthService(AppDbContext db)
+    {
+        var jwtSettings = Options.Create(new JwtSettings
+        {
+            SecretKey = "SuperSecretKeyForTestingPurposes1234567890!MinimumLength",
+            Issuer = "STARS",
+            Audience = "STARS",
+            ExpirationInMinutes = 15,
+            RefreshTokenExpirationInDays = 7,
+            PasswordResetTokenExpirationInHours = 1
+        });
+        var mockEmail = new Mock<IEmailService>();
+        var mockAudit = new Mock<IAuditLogService>();
+        return new AuthService(
+            db,
+            jwtSettings,
+            mockEmail.Object,
+            mockAudit.Object,
+            NullLogger<AuthService>.Instance);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_RevokesActiveRefreshTokenAndLastActivity_SEC17()
+    {
+        var (db, _, _) = CreateContext();
+        var authService = CreateAuthService(db);
+        var passwordHasher = new PasswordHasher<User>();
+
+        var userId = Guid.NewGuid();
+        var user = new User
+        {
+            Id = userId,
+            EmployeeNumber = "EMP-SEC-17A",
+            Email = "change-pwd@speedex.com",
+            FirstName = "Test",
+            LastName = "User",
+            Role = UserRole.Encoder,
+            IsActive = true,
+            IsEmailVerified = true,
+            RefreshToken = "existing-active-refresh-token",
+            RefreshTokenExpiry = DateTime.UtcNow.AddDays(7),
+            LastActivityAt = DateTime.UtcNow
+        };
+        user.PasswordHash = passwordHasher.HashPassword(user, "OldPassword!2024abc");
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await authService.ChangePasswordAsync(userId, new ChangePasswordDTO
+        {
+            CurrentPassword = "OldPassword!2024abc",
+            NewPassword = "NewStrongPassword!2025xyz"
+        });
+
+        Assert.True(result.IsSuccess);
+
+        var updatedUser = await db.Users.FindAsync(userId);
+        Assert.NotNull(updatedUser);
+        Assert.Null(updatedUser.RefreshToken);
+        Assert.Null(updatedUser.RefreshTokenExpiry);
+        Assert.Null(updatedUser.LastActivityAt);
+        Assert.True(updatedUser.IsPasswordChanged);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_RevokesActiveRefreshTokenAndLastActivity_SEC17()
+    {
+        var (db, _, _) = CreateContext();
+        var authService = CreateAuthService(db);
+        var rawToken = "valid-reset-token-12345";
+
+        var userId = Guid.NewGuid();
+        var user = new User
+        {
+            Id = userId,
+            EmployeeNumber = "EMP-SEC-17B",
+            Email = "reset-pwd@speedex.com",
+            FirstName = "Reset",
+            LastName = "User",
+            Role = UserRole.Encoder,
+            IsActive = true,
+            IsEmailVerified = true,
+            PasswordResetToken = TokenHasher.HashToken(rawToken),
+            PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1),
+            RefreshToken = "stale-session-refresh-token",
+            RefreshTokenExpiry = DateTime.UtcNow.AddDays(7),
+            LastActivityAt = DateTime.UtcNow
+        };
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await authService.ResetPasswordAsync(new ResetPasswordDTO
+        {
+            Token = rawToken,
+            NewPassword = "NewResetPassword!2025xyz"
+        });
+
+        Assert.True(result.IsSuccess);
+
+        var updatedUser = await db.Users.FindAsync(userId);
+        Assert.NotNull(updatedUser);
+        Assert.Null(updatedUser.RefreshToken);
+        Assert.Null(updatedUser.RefreshTokenExpiry);
+        Assert.Null(updatedUser.LastActivityAt);
+        Assert.Null(updatedUser.PasswordResetToken);
+        Assert.Null(updatedUser.PasswordResetTokenExpiry);
     }
 }
