@@ -4,6 +4,7 @@ using Backend.Models;
 using Backend.Models.DTOs;
 using Backend.Modules.AuthenticationAndCredentials;
 using Backend.Modules.RoleBasedAccessControl;
+using Backend.Modules.Utilities;
 
 namespace Backend.Controllers;
 
@@ -107,20 +108,28 @@ public class EmailVerificationController : ControllerBase
         }
     }
 
-    private string GetClientBaseUrl()
+    internal string GetClientBaseUrl()
     {
         try
         {
             if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
             {
-                return origin.ToString().TrimEnd('/');
+                var originStr = origin.ToString().TrimEnd('/');
+                if (CorsPolicyHelper.IsOriginAllowed(originStr))
+                {
+                    return originStr;
+                }
             }
 
             if (Request.Headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
             {
                 if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
                 {
-                    return $"{uri.Scheme}://{uri.Authority}";
+                    var refererAuthority = $"{uri.Scheme}://{uri.Authority}";
+                    if (CorsPolicyHelper.IsOriginAllowed(refererAuthority))
+                    {
+                        return refererAuthority;
+                    }
                 }
             }
         }
