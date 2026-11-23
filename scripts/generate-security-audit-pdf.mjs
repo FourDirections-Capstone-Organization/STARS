@@ -15,7 +15,7 @@ const execAsync = promisify(exec);
 
 const HTML_PATH = path.resolve('docs/security-audit-report.html');
 const PDF_PATH = path.resolve('docs/STARS_Security_Audit_Report.pdf');
-const ARTIFACT_DIR = 'C:/Users/Khayl/.gemini/antigravity/brain/bd78f860-ed37-40e4-a417-fc7dae806a18';
+const ARTIFACT_DIR = 'C:/Users/Khayl/.gemini/antigravity/brain/1b61164a-6f3f-4e73-8780-591a3b0a9df7';
 const ARTIFACT_PDF_PATH = path.join(ARTIFACT_DIR, 'STARS_Security_Audit_Report.pdf');
 
 console.log('='.repeat(80));

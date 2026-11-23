@@ -32,7 +32,7 @@ public class GroqSettings
     /// <summary>
     /// Maximum tokens for the completion.
     /// </summary>
-    public int MaxTokens { get; set; } = 1024;
+    public int MaxTokens { get; set; } = 2048;
 
     /// <summary>
     /// Optional explicit path to a .env file. If null, standard directory search is used.
