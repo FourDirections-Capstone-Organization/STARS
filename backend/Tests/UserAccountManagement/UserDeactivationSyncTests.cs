@@ -190,4 +190,38 @@ public class UserDeactivationSyncTests
             It.IsAny<List<string>>(),
             It.IsAny<string>()), Times.Never);
     }
+
+    [Fact]
+    public async Task DeactivateAsync_RevokesActiveRefreshTokenAndLastActivity_SEC20()
+    {
+        var (db, userService, _, _) = CreateTestContext();
+        var targetUser = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "0099",
+            Email = "target@speedex.com",
+            FirstName = "Target",
+            LastName = "Employee",
+            Role = UserRole.Encoder,
+            AllowedSystems = "STARS",
+            IsActive = true,
+            IsDeactivated = false,
+            RefreshToken = "active-refresh-token",
+            RefreshTokenExpiry = DateTime.UtcNow.AddDays(7),
+            LastActivityAt = DateTime.UtcNow
+        };
+        db.Users.Add(targetUser);
+        await db.SaveChangesAsync();
+
+        var result = await userService.DeactivateAsync(targetUser.Id);
+
+        Assert.True(result.IsSuccess);
+        var updated = await db.Users.FindAsync(targetUser.Id);
+        Assert.NotNull(updated);
+        Assert.True(updated.IsDeactivated);
+        Assert.False(updated.IsActive);
+        Assert.Null(updated.RefreshToken);
+        Assert.Null(updated.RefreshTokenExpiry);
+        Assert.Null(updated.LastActivityAt);
+    }
 }
