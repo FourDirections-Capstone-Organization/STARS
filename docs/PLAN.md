@@ -294,7 +294,7 @@ flowchart TD
     - Run `node scripts/generate-security-audit-pdf.mjs` to regenerate `docs/STARS_Security_Audit_Report.pdf` using Microsoft Edge headless with the identical format and styling.
   - **Branch:** `step-16-audit-report-regeneration`
 
-- [ ] **Step 17: Final Feature Branch Merge & Plan Archival**
+- [x] **Step 17: Final Feature Branch Merge & Plan Archival**
   - **Remediation Action:**
     - Merge all step branches into `feature/security-audit-remediation`.
     - Verify zero changes pushed to GitHub remote.
