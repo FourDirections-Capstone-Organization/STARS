@@ -180,7 +180,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-7-sec07-secret-externalization`
 
-- [ ] **Step 8: Token Revocation on Logout & Session Resuscitation Guard (SEC-08)**
+- [x] **Step 8: Token Revocation on Logout & Session Resuscitation Guard (SEC-08)**
   - **Targets:**
     - `backend/Modules/AuthenticationAndCredentials/AuthService.cs` (line 364)
     - `backend/Middleware/SessionTimeoutMiddleware.cs` (lines 66–90)
