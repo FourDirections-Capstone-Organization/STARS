@@ -130,11 +130,10 @@ public class AuthService : IAuthService
 
     public async Task<ApiResponseDTO<bool>> ForgotPasswordAsync(ForgotPasswordDTO dto, string resetUrl)
     {
-        if (string.IsNullOrWhiteSpace(dto.Email))
-            return ApiResponseDTO<bool>.Failure("Email address is required.");
+        const string genericMessage = "If an account matches the provided details, instructions to reset your password have been sent to your registered email address.";
 
-        if (string.IsNullOrWhiteSpace(dto.EmployeeNumber))
-            return ApiResponseDTO<bool>.Failure("Employee number is required.");
+        if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.EmployeeNumber))
+            return ApiResponseDTO<bool>.Failure("Employee number and email address are required.");
 
         var cleanEmail = EmailHelper.AutoCorrectEmail(dto.Email.Trim()).ToLowerInvariant();
         var cleanEmpNum = dto.EmployeeNumber.Trim().ToLowerInvariant();
@@ -144,19 +143,11 @@ public class AuthService : IAuthService
                 u.EmployeeNumber.ToLower() == cleanEmpNum &&
                 u.Email.ToLower() == cleanEmail);
 
-        if (user is null)
+        // SEC-09: Anti-Enumeration - Return uniform success message whether the user exists, is deactivated, or unverified
+        if (user is null || user.IsDeactivated || !user.IsEmailVerified)
         {
-            return ApiResponseDTO<bool>.Failure("The provided employee number and email address do not match our records.");
-        }
-
-        if (user.IsDeactivated)
-        {
-            return ApiResponseDTO<bool>.Failure("This account is deactivated. Please contact your system administrator.");
-        }
-
-        if (!user.IsEmailVerified)
-        {
-            return ApiResponseDTO<bool>.Failure("This account's email has not been verified yet. Please verify your email before resetting your password.");
+            _logger.LogInformation("Password reset requested for non-matching or unverified credentials: {EmployeeNumber}", dto.EmployeeNumber);
+            return ApiResponseDTO<bool>.Success(true, genericMessage);
         }
 
         // Generate reset token
@@ -183,7 +174,7 @@ public class AuthService : IAuthService
             $"Password reset requested for {fullName} ({user.EmployeeNumber})",
             "Authentication");
 
-        return ApiResponseDTO<bool>.Success(true, "A password reset link has been sent to your registered email address.");
+        return ApiResponseDTO<bool>.Success(true, genericMessage);
     }
 
     public async Task<ApiResponseDTO<bool>> ResetPasswordAsync(ResetPasswordDTO dto)
