@@ -177,4 +177,85 @@ public class TaskCommentSecurityTests
 
         Assert.Equal(403, objectResult.StatusCode);
     }
+
+    [Fact]
+    public async Task CreateAsync_DisguisedExecutableFileWithPdfExtension_ReturnsFailure()
+    {
+        // SEC-16: Binary magic byte inspection prevents executable upload disguised as .pdf
+        var (db, service) = CreateContext();
+
+        var author = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-TEST",
+            Email = "author@speedex.com",
+            Role = UserRole.Courier
+        };
+
+        var task = new Backend.Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task with comment",
+            CreatedById = author.Id
+        };
+
+        db.Users.Add(author);
+        db.Tasks.Add(task);
+        await db.SaveChangesAsync();
+
+        // Disguised file: Windows MZ executable header with .pdf extension
+        var fakeExeBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var ms = new MemoryStream(fakeExeBytes);
+        var formFile = new FormFile(ms, 0, fakeExeBytes.Length, "file", "malicious_script.pdf")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/pdf"
+        };
+
+        var result = await service.CreateAsync(task.Id, "Here is the attachment", new List<IFormFile> { formFile }, author.Id);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("File signature mismatch", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ValidPdfMagicBytes_SuccessfullySavesAttachment()
+    {
+        // SEC-16: Valid PDF header (%PDF-) passes magic byte validation
+        var (db, service) = CreateContext();
+
+        var author = new User
+        {
+            Id = Guid.NewGuid(),
+            EmployeeNumber = "EMP-TEST2",
+            Email = "author2@speedex.com",
+            Role = UserRole.Courier
+        };
+
+        var task = new Backend.Models.Task
+        {
+            Id = Guid.NewGuid(),
+            Title = "Task with valid comment",
+            CreatedById = author.Id
+        };
+
+        db.Users.Add(author);
+        db.Tasks.Add(task);
+        await db.SaveChangesAsync();
+
+        // Valid PDF magic bytes: %PDF-1.4
+        var validPdfBytes = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34 };
+        var ms = new MemoryStream(validPdfBytes);
+        var formFile = new FormFile(ms, 0, validPdfBytes.Length, "file", "report.pdf")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/pdf"
+        };
+
+        var result = await service.CreateAsync(task.Id, "Valid PDF attachment", new List<IFormFile> { formFile }, author.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Data);
+        Assert.Single(result.Data.Attachments);
+    }
 }
