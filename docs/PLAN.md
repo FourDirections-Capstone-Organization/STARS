@@ -193,7 +193,7 @@ flowchart TD
     - Run `dotnet test backend/Tests/Backend.Tests.csproj --configuration Release`.
   - **Branch:** `step-8-sec08-session-revocation`
 
-- [ ] **Step 9: User & Account State Enumeration Elimination (SEC-09)**
+- [x] **Step 9: User & Account State Enumeration Elimination (SEC-09)**
   - **Targets:**
     - `backend/Modules/AuthenticationAndCredentials/AuthService.cs` (lines 148–186)
     - `backend/Controllers/AuthController.cs` (lines 134–143)
