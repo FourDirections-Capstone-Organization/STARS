@@ -2,17 +2,17 @@
 
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/)
 [![React 18](https://img.shields.io/badge/React-18.3-61dafb.svg)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178c6.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178c6.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8.0-646cff.svg)](https://vitejs.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org/)
-[![Neo4j](https://img.shields.io/badge/Neo4j-5.x-008cc1.svg)](https://neo4j.com/)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-2496ed.svg)](https://www.docker.com/)
 [![Azure](https://img.shields.io/badge/Azure-Cloud_Ready-0078d4.svg)](https://azure.microsoft.com/)
+[![OWASP](https://img.shields.io/badge/OWASP-Hardened-success.svg)](https://owasp.org/)
 [![Tests](https://img.shields.io/badge/Tests-1%2C683%20Passed-success.svg)](https://github.com/)
 
-**STARS (Speedex Task Allocation and Recommendation System)** is an enterprise-grade workload management, task orchestration, and operational dispatch platform engineered for logistics, supply chain, and cross-departmental coordination. 
+**STARS (Speedex Task Allocation and Recommendation System)** is an enterprise-grade workload management, task orchestration, and operational dispatch platform engineered for logistics, supply chain, and cross-departmental operations.
 
-The system pairs a high-performance **ASP.NET Core 9 Web API** with an interactive **React 18 / TypeScript SPA**, integrating real-time **Change Data Capture (CDC)** pipelines to populate a **Neo4j graph database** for AI-assisted employee suitability recommendations, automated **Delivery Management System (DMS)** courier operations, and **Financial Operations Management System (FOMS)** accounts receivable workflows.
+The platform pairs a high-performance **ASP.NET Core 9 Web API** with an interactive **React 18 / TypeScript SPA**, incorporating an **AI-assisted employee suitability engine** powered by **Groq API / LLaMA 3.3 70B Versatile**, automated **Delivery Management System (DMS)** courier operations, **Financial Operations Management System (FOMS)** accounts receivable workflows, and **Speedex Central Single Sign-On (SSO)** multi-system provisioning.
 
 ---
 
@@ -22,34 +22,37 @@ The system pairs a high-performance **ASP.NET Core 9 Web API** with an interacti
 2. [Technology Stack](#technology-stack)
 3. [Key Modules & Capabilities](#key-modules--capabilities)
    - [Task Lifecycle & Workload Management](#task-lifecycle--workload-management)
-   - [AI & Graph Suitability Engine (CDC + Neo4j + LLM)](#ai--graph-suitability-engine-cdc--neo4j--llm)
+   - [AI Suitability & Recommendation Engine (Groq LLM + Heuristics)](#ai-suitability--recommendation-engine-groq-llm--heuristics)
    - [Delivery Management System (DMS) Integration](#delivery-management-system-dms-integration)
    - [Financial Operations Management System (FOMS) Integration](#financial-operations-management-system-foms-integration)
    - [Performance Evaluations & 360 Scorecards](#performance-evaluations--360-scorecards)
+   - [Configurable KPI Calculation Engine](#configurable-kpi-calculation-engine)
    - [Organizational Structure & User Administration](#organizational-structure--user-administration)
+   - [Speedex Central Single Sign-On (SSO)](#speedex-central-single-sign-on-sso)
 4. [Enterprise Security & OWASP Hardening](#enterprise-security--owasp-hardening)
 5. [Cloud Infrastructure & Performance Optimizations](#cloud-infrastructure--performance-optimizations)
-6. [Change Data Capture (CDC) Architecture](#change-data-capture-cdc-architecture)
-7. [Getting Started & Local Setup](#getting-started--local-setup)
+6. [Getting Started & Local Setup](#getting-started--local-setup)
    - [Prerequisites](#prerequisites)
    - [Docker Compose Quickstart](#docker-compose-quickstart)
    - [Web Interfaces & Port Map](#web-interfaces--port-map)
    - [Default Accounts & Role Access](#default-accounts--role-access)
-8. [Automated Testing & Quality Assurance](#automated-testing--quality-assurance)
-9. [Project Team & Credits](#project-team--credits)
+7. [Automated Testing & Quality Assurance](#automated-testing--quality-assurance)
+8. [Project Team & Credits](#project-team--credits)
 
 ---
 
 ## Architectural Overview
 
-STARS is architected as an event-driven, decoupled system separating high-speed OLTP operational workflows from compute-intensive graph analytics:
+STARS is architected as an event-driven, secure, and decoupled enterprise system separating presentation, business logic, data persistence, and external machine-to-machine integrations:
 
 ```
                                     ┌────────────────────────────────────────────────────────┐
                                     │                     STARS FRONTEND                     │
                                     │     React 18 + TypeScript + Vite 8 SPA (Nginx)         │
+                                    │   - Tailwind CSS / Recharts     - React Router 7       │
+                                    │   - Token Interceptor & Refresh - Inactivity Watcher   │
                                     └───────────────────────────┬────────────────────────────┘
-                                                                │ HTTPS / WSS (SignalR)
+                                                                │ HTTPS (REST API)
                                                                 ▼
                                     ┌────────────────────────────────────────────────────────┐
                                     │                      STARS BACKEND                     │
@@ -57,28 +60,18 @@ STARS is architected as an event-driven, decoupled system separating high-speed 
                                     │   - Claims-based JWT RBAC      - RateLimiter Shield    │
                                     │   - SecurityHeaders Middleware - IMemoryCache Probes   │
                                     │   - DbContext Pooling (80)     - Response Compression  │
-                                    └──────────────┬────────────────────────────┬────────────┘
-                                                   │                            │
-                     ┌─────────────────────────────┼────────────────────────┐   │
-                     │ PostgreSQL (OLTP)           │ Neo4j Bolt             │   │ External M2M
-                     ▼                             ▼                        │   │ HTTPS
-         ┌───────────────────────┐    ┌───────────────────────────┐         │   ▼
-         │   PostgreSQL 16       │    │     Neo4j Graph Database  │         │ ┌─────────────────────────┐
-         │ (WAL Logical Logging) │    │  - Suitability Traversal  │         │ │ DMS API (Waybills, POD, │
-         └───────────┬───────────┘    │  - Workload & Rec. Scores │         │ │ Courier Status Webhook) │
-                     │                └─────────────▲─────────────┘         │ └─────────────────────────┘
-                     │ WAL                          │ Derived Insights      │
-                     ▼                              │                       │ ┌─────────────────────────┐
-         ┌───────────────────────┐    ┌─────────────┴─────────────┐         │ │ FOMS API (Accounts,     │
-         │   Debezium Connector  │───>│ .NET 9 CDC Worker Service │         └>│ Ledger Sync, Invoices)  │
-         │   (Logical Slot CDC)  │    │  (Consumes JSON Kafka)    │           └─────────────────────────┘
-         └───────────┬───────────┘    └─────────────▲─────────────┘
-                     │                              │
-                     │ Topic Streams                │ Subscriptions
-                     ▼                              │
-         ┌──────────────────────────────────────────┴─────────────┐
-         │                Apache Kafka (KRaft Mode)               │
-         └────────────────────────────────────────────────────────┘
+                                    │   - Session Timeout Guard      - Global Error Handler  │
+                                    └───────┬───────────────────┬───────────────────┬────────┘
+                                            │                   │                   │
+                        ┌───────────────────┘                   │                   └───────────────────┐
+                        │ EF Core 9 / Npgsql                    │ HTTPS API                             │ HTTPS / M2M
+                        ▼                                       ▼                                       ▼
+            ┌───────────────────────┐               ┌───────────────────────┐               ┌─────────────────────────┐
+            │     PostgreSQL 16     │               │   Groq AI Cloud API   │               │  External Integrations  │
+            │   (Relational OLTP)   │               │ (LLaMA 3.3 70B Model) │               │ - Speedex Central SSO   │
+            │  - Composite B-Trees  │               │ - Suitability Rationale│               │ - DMS API & Webhooks    │
+            │  - Pooled Connections │               │ - SLA Risk Prediction │               │ - FOMS AR & Ledger Sync │
+            └───────────────────────┘               └───────────────────────┘               └─────────────────────────┘
 ```
 
 ---
@@ -88,20 +81,19 @@ STARS is architected as an event-driven, decoupled system separating high-speed 
 | Layer | Component | Description |
 | :--- | :--- | :--- |
 | **Backend Framework** | ASP.NET Core 9 (`net9.0`) | High-throughput, cross-platform C# Web API |
-| **Frontend Framework** | React 18.3 & TypeScript 5.5 | Single Page Application bundled with Vite 8.0 |
-| **Operational Database** | PostgreSQL 16 | Relational storage with logical replication (`wal_level=logical`) |
-| **Graph Database** | Neo4j 5.x | Graph database for employee-task suitability analysis |
-| **Data Access / ORM** | EF Core 9 (Npgsql) | High-concurrency pooled DbContext (`AddDbContextPool`) |
-| **Real-Time Engine** | ASP.NET Core SignalR | Bidirectional WebSockets for notifications and live board sync |
-| **CDC Messaging** | Apache Kafka (KRaft) | Fault-tolerant event streaming buffer |
-| **CDC Connector** | Debezium 2.x | Real-time PostgreSQL WAL change capture |
-| **CDC Processor** | .NET 9 Worker Service | Background event consumer and Neo4j Cypher synchronizer |
-| **AI / LLM Integration** | Groq API / Llama 3 | Natural language suitability rationale and SLA risk prediction |
-| **UI & Styling** | Tailwind CSS & Tabler / Lucide | Modern design system, accessible modals, responsive dashboards |
-| **Data Visualization** | Recharts | Performance scorecards, KPI drilldowns, delivery charts |
-| **API Documentation** | OpenAPI 3.0 & Scalar | Interactive API exploration at `/scalar/v1` |
-| **Reverse Proxy** | Nginx Alpine | Static asset hosting and reverse proxying |
-| **Containerization** | Docker & Docker Compose | Multi-container local orchestration |
+| **Frontend Framework** | React 18.3 & TypeScript 5.6 | Single Page Application bundled with Vite 8.0 & React SWC |
+| **Operational Database** | PostgreSQL 16 | Relational storage with composite B-Tree indexes and pooling |
+| **Data Access / ORM** | EF Core 9 (Npgsql) | High-concurrency pooled DbContext (`AddDbContextPool`, size 80) |
+| **AI / LLM Integration** | Groq API (`llama-3.3-70b-versatile`) | Contextual suitability justification and SLA risk rationale |
+| **AI Fallback Engine** | Algorithmic Fallback Generator | Zero-downtime deterministic heuristic recommendation scoring |
+| **Document Engine** | QuestPDF | High-performance server-side PDF generation for reports |
+| **Client Export Engine** | jsPDF & html2canvas | In-browser client-side PDF and scorecard compilation |
+| **UI & Styling** | Tailwind CSS & Tabler / Lucide Icons | Responsive design system, accessible modals, and status badges |
+| **UI Components** | Emotion & Material-UI Pickers | Customized interactive date/time pickers and styled components |
+| **Data Visualization** | Recharts | Interactive KPI charts, SLA risk graphs, and rating distributions |
+| **API Documentation** | OpenAPI 3.0 & Scalar | Interactive API exploration and contract testing at `/scalar/v1` |
+| **Reverse Proxy** | Nginx Alpine | Production static asset hosting and reverse proxying |
+| **Containerization** | Docker & Docker Compose | Multi-container local orchestration (`docker compose up`) |
 | **Cloud Runtime** | Microsoft Azure | App Service (Linux 64-bit container) + PostgreSQL Flexible Server |
 
 ---
@@ -109,110 +101,106 @@ STARS is architected as an event-driven, decoupled system separating high-speed 
 ## Key Modules & Capabilities
 
 ### Task Lifecycle & Workload Management
-- **Finite State Machine (FSM):** Structured transitions: `Pending` &rarr; `In Progress` &rarr; `In Review` &rarr; `Completed` (or `Cancelled`).
-- **Interactive Views:** Kanban Board with drag-and-drop workflow lanes, tabular sortable List View, and Deadline Calendar.
-- **Priority Synchronization:** Automated task priority alignment across database rows and notification alerts.
-- **Rich Task Metadata:** Subtasks, custom attachments with binary validation, audit logs, comments with soft deletion, and reusable task templates.
+- **Finite State Machine (FSM):** Enforces strict state transitions:
+  $$\text{Pending} \longrightarrow \text{In Progress} \longrightarrow \text{In Review} \longrightarrow \text{Completed} \quad (\text{or } \text{Cancelled})$$
+- **Push-Back & Approval Workflow:** Coordinators and Managers can approve completed reviews or push back tasks with mandatory revision remarks.
+- **Interactive Multi-View Workspace:**
+  - **Kanban Board:** Drag-and-drop workflow lanes with real-time status card movement.
+  - **List View:** Sortable, multi-column filterable grid supporting search, status filters, and priority tags.
+  - **Deadline Calendar:** Visual task scheduling with date-only and time-sensitive milestones.
+- **Rich Task Metadata:** Subtask checklist tracking, binary magic-byte inspected attachments, threaded comments with author-protected soft deletion (`IsDeleted`), and comprehensive audit history.
+- **Task Templates & Duplicate Prevention:** Department-scoped task blueprints and Levenshtein token similarity detection (`IDuplicateDetectionService`) preventing redundant task creation.
 
-### AI & Graph Suitability Engine (CDC + Neo4j + LLM)
-- **Why Graph Database?** Traditional relational queries requiring 6-table joins (`Tasks`, `TaskAssignments`, `Users`, `Departments`, `Recommendations`) degrade as data scales. Neo4j stores connections as physical pointers, transforming slow multi-table scans into instantaneous pointer traversals.
-- **Weighted Suitability Formula:**
+### AI Suitability & Recommendation Engine (Groq LLM + Heuristics)
+- **Multi-Factor Suitability Scoring:** Evaluates candidate suitability across three core pillars:
   $$\text{Suitability Score} = (0.35 \times \text{Workload Factor}) + (0.25 \times \text{Experience Factor}) + (0.40 \times \text{Recommendation Score})$$
-- **Groq AI Rationale:** Pairs graph analytical scores with an LLM reasoning engine to output conversational justifications for employee task assignment.
-- **Biomarker & SLA Risk Forecasting:** Automated early-warning indicators identifying tasks at risk of breach before deadline expiration.
+  - **Workload Factor:** Inversely proportional to active assignments (`Pending`, `InProgress`, `InReview`).
+  - **Experience Factor:** Weighted historical completions matching task classification (Routine vs. Special).
+  - **Recommendation Score:** Normalized composite of historical evaluation ratings (Timeliness, Quality, Communication).
+- **Groq Cloud LLM Reasoning:** Integrates with Groq API utilizing LLaMA 3.3 70B Versatile to produce natural-language justifications explaining candidate rankings.
+- **Deterministic Algorithmic Fallback:** Guarantees 100% operational availability via `SuitabilityFallbackGenerator` if the external AI service is unconfigured, unreachable, or rate-limited.
+- **Biomarker Scan & SLA Risk Prediction:** Background service (`BiomarkerScanService`) continuously evaluates open tasks against configurable thresholds (`BiomarkerThresholds`), emitting automated early-warning alerts for tasks approaching SLA expiration.
 
 ### Delivery Management System (DMS) Integration
 - **Outbound Dispatch:** STARS initiates M2M outbound delivery orders to DMS over HTTPS, returning auto-generated waybills (`WB-YYYY-XXXXXX`).
-- **Live Courier Tracking Webhook:** Inbound M2M status webhook (`POST /api/integration/dms/status`) synchronously updates parcel coordinates, recipient verification details, driver pairing, and tracking milestones.
-- **Automated Failure Follow-up:** Failed delivery and failed pickup webhooks automatically spawn coordinator follow-up tasks in STARS with intelligent deduplication and remark appending.
-- **Order Cancellation Sync:** Cancellation triggers preserve task FSM integrity, append cancellation audit remarks, and alert department coordinators.
-- **Proof of Delivery (POD):** Secure byte-stream retrieval of scanned or photographed POD files.
+- **Live Status Webhook:** Inbound M2M status webhook (`POST /api/integration/dms/status`) processes courier status transitions, recipient sign-off details, driver assignments, and delivery timestamps with synchronous 200 OK contract compliance.
+- **Automated Failure Follow-up:** Delivery failures (`FailedDelivery`) and pickup failures (`FailedPickup`) automatically spawn dedicated coordinator follow-up tasks in STARS with intelligent deduplication.
+- **Order Cancellation Sync:** Cancellation webhooks preserve task FSM integrity, append cancellation audit remarks, and alert department coordinators.
+- **Proof of Delivery (POD):** Secure byte-stream retrieval and download of scanned or photographed POD files.
+- **Paired Driver Tracking:** Real-time visibility into paired delivery drivers, employee IDs, and delivery performance metrics.
 
 ### Financial Operations Management System (FOMS) Integration
-- **Accounts Receivable Ledger Sync:** Direct synchronization of client ledger records, invoice amounts, due dates, and billing states.
-- **Endorsement & Dispute Resolution:** Seamless escalation of disputed invoices into STARS collection tasks assigned to designated account coordinators.
-- **Liquidation Corrections:** In-app submission and tracking of liquidation adjustments with audit records.
-- **Live Financial Dashboards:** Aggregated overdue accounts, liquidation summaries, and collection performance metrics.
+- **Accounts Receivable Ledger Sync:** Direct synchronization of client ledger records, invoice amounts, billing dates, due dates, and payment states.
+- **Physical Invoice Endorsement:** Incoming physical invoice endorsements transition into STARS collection tasks assigned to designated account coordinators.
+- **Liquidation Corrections:** In-app submission, verification, and audit tracking for cash and voucher liquidation adjustments.
+- **Financial Dashboards & Aging Analytics:** Visual tracking of overdue accounts, collection performance, aging brackets (30/60/90+ days), and liquidation reconciliation.
 
 ### Performance Evaluations & 360 Scorecards
-- **Evaluation Cycles:** Formal review periods for departments, teams, or individual staff members.
-- **Customized Evaluation Templates:** Dynamic scoring criteria across Timeliness, Work Quality, and Communication.
-- **Interactive Scorecards & KPI Drilldowns:** Visual breakdown of employee metrics, rating distributions, and historical progression.
+- **Evaluation Cycles:** Structured review periods for departments, teams, or individual employees.
+- **Customizable Evaluation Templates:** Configurable evaluation criteria across Timeliness, Work Quality, and Communication with defined rating bands.
+- **AI-Powered Development Plans:** Automated generation of personalized employee growth plans and action items.
+- **Interactive Scorecards & PDF Export:** Visual scorecards, radar charts, rating distributions, and server-side PDF exports powered by QuestPDF.
+
+### Configurable KPI Calculation Engine
+- **Safe Mathematical Formula Parser:** `SafeFormulaParser` dynamically parses and evaluates mathematical expressions (e.g., `(TasksCompleted / TasksAssigned) * 100`) without code injection vulnerabilities.
+- **Predefined System Variables:** `KpiVariableRegistry` provides system metrics including completed tasks, overdue counts, average turnaround times, and rating averages.
+- **Department & Role Customization:** Tailored KPI metrics, custom weightings, and visual formula builder modals with live syntax validation.
 
 ### Organizational Structure & User Administration
-- **Multi-System User Onboarding:** Unified creation of accounts provisioned across STARS, DMS, and FOMS with system-scoped permissions.
-- **Hierarchical Department & Team Management:** Department trees, job position linkages, and coordinator oversight.
+- **Hierarchical Department Tree:** Interactive organizational hierarchy linking departments, job positions, and team rosters.
+- **Digital 201 File Management:** Comprehensive employee profiles, employment statuses, and cross-department transfer requests.
+- **Multi-System User Provisioning:** Unified account creation across STARS, DMS, and FOMS with granular system-scoped permissions (`AllowedSystems`).
 - **Account Archiving & Deactivation:** Safe account archiving preserving task history and audit trail integrity without hard deletions.
+
+### Speedex Central Single Sign-On (SSO)
+- **Centralized Identity Management:** Seamless integration with the Speedex Central Portal.
+- **Auth Bootstrap & Handshake:** Inbound authentication bootstrapping (`bootstrapIncomingAuth`) seamlessly exchanges SSO tokens on portal transitions.
+- **Session Revocation & Synchronization:** Cross-tab authentication synchronization (`AuthSyncWatcher`) and coordinated logout across systems.
 
 ---
 
 ## Enterprise Security & OWASP Hardening
 
-STARS is audited against the **OWASP Top 10 (2021/2025)** and **CWE** standards, maintaining a 100% remediation posture:
+STARS is rigorously hardened against the **OWASP Top 10 (2021/2025)** and **CWE** standards, maintaining an enterprise-grade defense posture:
 
 | Vulnerability Domain | CWE Reference | STARS Architectural Defense |
 | :--- | :--- | :--- |
-| **Mass Assignment Protection** | CWE-269, CWE-915 | `UserService.cs` strips administrative fields (`Role`, `DepartmentId`, `AllowedSystems`, etc.) when self-updating non-manager profiles. |
-| **HTTP Security Headers & HSTS** | CWE-693, CWE-1021 | Centralized `SecurityHeadersMiddleware.cs` enforces `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`, and production `Strict-Transport-Security`. |
-| **Strict CORS Lockdown** | CWE-942 | `CorsPolicyHelper.cs` replaces wildcards with an immutable canonical whitelist for trusted domains with credentials isolation. |
-| **Host Header Link Sanitization** | CWE-601, CWE-644 | `EmailVerificationController.cs` validates `Origin` and `Referer` headers against the approved CORS whitelist before building verification links. |
-| **BOLA / IDOR Attachment Guard** | CWE-639 | `AttachmentService.cs` verifies requester ownership, assignment, or department membership before streaming files. |
-| **Cryptographic Token Hashing** | CWE-312, CWE-916 | `TokenHasher.cs` hashes refresh tokens, password reset tokens, and email verification tokens with SHA-256 prior to PostgreSQL persistence. |
-| **Secrets Hygiene** | CWE-798 | All API keys and secrets in `appsettings.json` are blanked out in source control and bound at runtime via environment variables. |
-| **Session Invalidation & Timeout** | CWE-613 | `SessionTimeoutMiddleware.cs` enforces inactivity expiration and returns HTTP 401 `SESSION_TERMINATED` on logged-out sessions, preventing revival. |
-| **Anti-Enumeration Responses** | CWE-204, CWE-200 | Authentication and password recovery endpoints return standardized, uniform success responses to prevent account discovery. |
-| **Magic Byte File Inspection** | CWE-434 | `FileSignatureValidator.cs` inspects binary headers for PDF (`%PDF-`), PNG, JPEG, and Office Open XML formats. |
-| **Software Composition (SCA)** | CWE-1395 | Frontend `npm audit` reports **0 vulnerabilities**; backend NuGet dependencies pinned to secure patches (`System.Security.Cryptography.Pkcs 8.0.2`). |
+| **Mass Assignment Protection** | CWE-269, CWE-915 | `UserService.cs` explicitly strips administrative fields (`Role`, `DepartmentId`, `AllowedSystems`, etc.) when non-managers update profiles. |
+| **HTTP Security Headers & HSTS** | CWE-693, CWE-1021 | `SecurityHeadersMiddleware.cs` enforces `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`, and production `Strict-Transport-Security`. |
+| **Strict CORS Lockdown** | CWE-942 | `CorsPolicyHelper.cs` replaces wildcards with an immutable canonical whitelist for trusted localhost and Azure domains with credentials isolation. |
+| **Host Header Link Sanitization** | CWE-601, CWE-644 | `EmailVerificationController.cs` validates `Origin` and `Referer` headers against the approved CORS whitelist before constructing verification URLs. |
+| **BOLA / IDOR Attachment Guard** | CWE-639 | `AttachmentService.cs` verifies requester ownership, task assignment, or department coordinator membership before streaming files. |
+| **Cryptographic Token Hashing** | CWE-312, CWE-916 | `TokenHasher.cs` hashes refresh tokens, password reset tokens, and email verification tokens with SHA-256 prior to database persistence. |
+| **Secrets Hygiene & Externalization** | CWE-798 | All API keys, connection strings, and JWT secrets are blanked in source control and bound at runtime via environment variables. |
+| **Session Invalidation & Timeout** | CWE-613 | `SessionTimeoutMiddleware.cs` enforces inactivity expiration and returns HTTP 401 `SESSION_TERMINATED` on logged-out sessions, preventing token revival. |
+| **Anti-Enumeration Responses** | CWE-204, CWE-200 | Authentication and password recovery endpoints return standardized, uniform success responses to prevent user account discovery. |
+| **Magic Byte File Inspection** | CWE-434 | `FileSignatureValidator.cs` inspects binary headers for PDF (`%PDF-`), PNG, JPEG, and Office Open XML formats, rejecting disguised executables. |
+| **Software Composition (SCA)** | CWE-1395 | Frontend `npm audit` reports **0 vulnerabilities**; backend NuGet dependencies pinned to secure patches. |
 
 ---
 
 ## Cloud Infrastructure & Performance Optimizations
 
-STARS is optimized for **Microsoft Azure** cloud deployments (Azure App Service + Azure Database for PostgreSQL Flexible Server):
+STARS is optimized for high-concurrency cloud execution on **Microsoft Azure** (Azure App Service + Azure Database for PostgreSQL Flexible Server):
 
 - **AlwaysOn Enabled:** Prevents idle container recycling, eliminating cold-start latency spikes.
-- **64-bit Kestrel Runtime:** Expands CLR address space and unlocks full multi-core threadpools for heavy PBKDF2 cryptography.
+- **64-bit Kestrel Runtime:** Expands CLR address space and unlocks full multi-core threadpools for cryptography and data processing.
 - **HTTP/2.0 Multiplexing:** Enables concurrent bidirectional request streaming over single persistent TCP connections.
-- **Database Connection Pooling:** Implements `AddDbContextPool<AppDbContext>(poolSize: 80)` with tuned connection builder properties (`MaxPoolSize = 75`, `MinPoolSize = 10`, `ConnectionLifetime = 300`).
-- **PostgreSQL Capacity:** Configured `max_connections = 100` on PostgreSQL Flexible Server.
-- **Health Check Decoupling:** Employs `IMemoryCache` (10s TTL) on `/api/health` and provides a zero-DB probe at `/api/health/live`, eliminating pool starvation under Azure health probes.
-- **Authentication Shielding:** Sliding-window rate limiting on `POST /api/auth/login` (30 req/min per IP, queue limit 10) rejecting brute-force floods with fast `HTTP 429` responses.
-- **Query Optimization:** Eliminates N+1 queries in task listings via eager `.Include(...)`, `.AsNoTracking()`, and consolidated status count queries; composite B-tree indexes on `(Status, AssignedDepartmentId, Deadline)`, `CreatedAt`, and `DmsWaybillNo`.
-
----
-
-## Change Data Capture (CDC) Architecture
-
-The CDC pipeline continuously replicates operational data into Neo4j without adding query overhead or latency to the primary API:
-
-```
-PostgreSQL (Source OLTP)
-   │
-   │  1. Row-level transaction committed to Write-Ahead Log (WAL)
-   ▼
-Debezium Connector (Kafka Connect)
-   │
-   │  2. Reads logical replication slot ('stars_cdc_slot') via 'pgoutput'
-   │  3. Formats change events into JSON envelopes (before/after/source)
-   ▼
-Apache Kafka (Event Buffer)
-   │
-   │  4. Buffered in partition topics: 'stars.public.Users', 'stars.public.Tasks', etc.
-   ▼
-.NET 9 CDC Processor (Worker Service)
-   │
-   │  5. Background consumer polls topics and calculates derived aggregates:
-   │     - Workload = Active assignment count (Status: Pending / InProgress / InReview)
-   │     - Experience = Completed task count by classification
-   │     - Recommendation = Average timeliness, quality, communication scores
-   ▼
-Neo4j Graph Database
-   │
-   │  6. Executes idempotent Cypher MERGE queries to maintain live graph topology
-   ▼
-Suitability Service
-      7. Traverses direct graph pointers for instant top-5 candidate recommendations
-```
+- **Database Connection Pooling:** Implements `AddDbContextPool<AppDbContext>(poolSize: 80)` with tuned connection builder properties:
+  ```csharp
+  csb.MaxPoolSize = 75;
+  csb.MinPoolSize = 10;
+  csb.ConnectionLifetime = 300;
+  csb.Timeout = 15;
+  csb.CommandTimeout = 30;
+  ```
+- **PostgreSQL Capacity Tuning:** Tuned for Azure PostgreSQL Flexible Server with composite B-Tree indexes on `(Status, AssignedDepartmentId, Deadline)`, `CreatedAt`, and `DmsWaybillNo`.
+- **Health Check Decoupling:**
+  - `/api/health/live`: Fast, zero-DB probe for Azure liveness probes.
+  - `/api/health`: Readiness probe with `IMemoryCache` (10s TTL) shielding the database pool during traffic surges.
+- **Authentication Rate Limiting:** Sliding-window rate limiter on `POST /api/auth/login` (30 requests/minute per IP, queue limit 10) mitigating brute-force attacks with fast HTTP 429 responses.
+- **Response Compression:** Gzip and Brotli compression (`CompressionLevel.Fastest`) applied to all JSON, plain text, and problem-detail responses.
+- **Query Optimization:** Elimination of N+1 queries across task views via eager `.Include(...)`, `.AsNoTracking()`, and consolidated status count queries.
 
 ---
 
@@ -220,7 +208,7 @@ Suitability Service
 
 ### Prerequisites
 - **Docker Desktop** (Engine 24+, Compose v2+)
-- **System Memory:** 8 GB RAM minimum (16 GB recommended for full Kafka + Neo4j stack)
+- **System Memory:** 8 GB RAM minimum
 - *(Optional for bare-metal development)*: [.NET 9 SDK](https://dotnet.microsoft.com/download), [Node.js 20+ LTS](https://nodejs.org/)
 
 ### Docker Compose Quickstart
@@ -239,9 +227,10 @@ docker compose up -d
 docker compose ps
 ```
 
-To trigger an immediate synchronization in the CDC pipeline after modifying database records:
+To view application logs:
 ```powershell
-docker compose restart cdc-processor
+docker compose logs -f backend
+docker compose logs -f frontend
 ```
 
 ### Web Interfaces & Port Map
@@ -250,9 +239,8 @@ docker compose restart cdc-processor
 | :--- | :--- | :--- | :--- |
 | **STARS Web App** | `http://localhost` | — | React 18 SPA served via Nginx |
 | **STARS API (Scalar Docs)** | `http://localhost:5100/scalar/v1` | — | Interactive OpenAPI documentation |
-| **PostgreSQL (pgAdmin)** | `http://localhost:5050` | `stars@admin.com` / `starslab!` | Relational database administration |
-| **Neo4j Browser** | `http://localhost:7474` | `neo4j` / `starslab!` | Cypher query console and graph viewer |
-| **Kafka UI** | `http://localhost:8081` | — | Topic browser, consumer lag, and event inspector |
+| **PostgreSQL Database** | `localhost:5433` | `postgres` / `postgres` | Relational database (mapped from container 5432) |
+| **PostgreSQL (pgAdmin)** | `http://localhost:5050` | `stars@admin.com` / `change_in_production` | Relational database administration |
 
 ### Default Accounts & Role Access
 
@@ -273,7 +261,7 @@ Default accounts are seeded automatically for development and evaluation:
 
 ## Automated Testing & Quality Assurance
 
-STARS enforces strict pre-commit test validation across both backend and frontend layers:
+STARS enforces strict automated test suites across both backend and frontend layers:
 
 ### Running Backend Unit & Integration Tests
 ```powershell
@@ -302,7 +290,7 @@ $$\text{Total Test Suite} = 1,110\text{ (Backend)} + 573\text{ (Frontend)} = \ma
 | **Quality Assurance (QA)** | Kenneth Yulip | Test strategy, test case authoring, and verification validation |
 | **Frontend Developer** | Hermione Benitez | React SPA architecture, UI/UX implementation, component engineering |
 | **Backend Developer** | John Angelo Mikhail Reveche | ASP.NET Core API, EF Core data layer, security controls, and optimization |
-| **System Integrator** | Hermione Benitez & John Angelo Mikhail Reveche | Cross-system integration (DMS & FOMS), CDC pipelines, and deployments |
+| **System Integrator** | Hermione Benitez & John Angelo Mikhail Reveche | Cross-system integration (DMS & FOMS), cloud deployment, and infrastructure |
 
 ---
 
