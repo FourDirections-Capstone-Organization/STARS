@@ -87,7 +87,7 @@ public class AuthService : IAuthService
         var refreshToken = GenerateRefreshToken();
 
         // Adding Refresh Tokens
-        user.RefreshToken = refreshToken;
+        user.RefreshToken = TokenHasher.HashToken(refreshToken);
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationInDays);
 
         // Update last activity
@@ -161,7 +161,7 @@ public class AuthService : IAuthService
 
         // Generate reset token
         var resetToken = GenerateSecureToken();
-        user.PasswordResetToken = resetToken;
+        user.PasswordResetToken = TokenHasher.HashToken(resetToken);
         user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(
             _jwtSettings.PasswordResetTokenExpirationInHours > 0 ? _jwtSettings.PasswordResetTokenExpirationInHours : 1);
         user.UpdatedAt = DateTime.UtcNow;
@@ -192,12 +192,13 @@ public class AuthService : IAuthService
             return ApiResponseDTO<bool>.Failure("Reset token is required.");
 
         var cleanToken = dto.Token.Trim();
+        var tokenHash = TokenHasher.HashToken(cleanToken);
 
-        // Find user by reset token
+        // Find user by reset token (supports hashed token with legacy fallback)
         var user = await _db.Users
             .FirstOrDefaultAsync(u =>
                 u.PasswordResetToken != null &&
-                u.PasswordResetToken == cleanToken);
+                (u.PasswordResetToken == tokenHash || u.PasswordResetToken == cleanToken));
 
         if (user is null)
             return ApiResponseDTO<bool>.Failure("Invalid password reset token. Please request a new reset link.");
@@ -381,9 +382,10 @@ public class AuthService : IAuthService
 
     public async Task<ApiResponseDTO<AuthResponseDTO>> RefreshTokenAsync(string refreshToken)
     {
+        var tokenHash = TokenHasher.HashToken(refreshToken);
         var user = await _db.Users
             .Include(u => u.Department)
-            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+            .FirstOrDefaultAsync(u => u.RefreshToken == tokenHash || u.RefreshToken == refreshToken);
 
         if (user is null)
             return ApiResponseDTO<AuthResponseDTO>.Failure("Invalid refresh token");
@@ -399,7 +401,7 @@ public class AuthService : IAuthService
         var newRefreshToken = GenerateRefreshToken();
 
         // Store new refresh token
-        user.RefreshToken = newRefreshToken;
+        user.RefreshToken = TokenHasher.HashToken(newRefreshToken);
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationInDays);
         user.LastActivityAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();

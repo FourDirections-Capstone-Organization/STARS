@@ -153,7 +153,7 @@ flowchart TD
 
 ### Phase 2: Architectural & Cryptographic Hardening
 
-- [ ] **Step 6: Cryptographic Hashing of Tokens at Rest (SEC-06)**
+- [x] **Step 6: Cryptographic Hashing of Tokens at Rest (SEC-06)**
   - **Targets:**
     - `backend/Models/User.cs` (`RefreshToken`, `PasswordResetToken`, `EmailVerificationToken`)
     - `backend/Modules/AuthenticationAndCredentials/AuthService.cs`
