@@ -1,5 +1,5 @@
 {
-  "testRunTimestamp": "2026-11-23T10:44:00.851Z",
+  "testRunTimestamp": "2026-11-23T11:28:49.097Z",
   "targetHost": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net",
   "loadTests": [
     {
@@ -8,26 +8,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/",
       "connections": 20,
-      "duration": 15.19,
-      "totalRequests": 3859,
-      "reqPerSec": 257.27,
-      "throughputBytesPerSec": 275518,
+      "duration": 15.13,
+      "totalRequests": 4155,
+      "reqPerSec": 277,
+      "throughputBytesPerSec": 296674,
       "latency": {
-        "avg": 77.31,
+        "avg": 71.89,
         "min": 31,
-        "p50": 61,
-        "p90": 128,
-        "p95": 212,
-        "p99": 291,
-        "max": 530,
-        "stddev": 46.82
+        "p50": 60,
+        "p90": 114,
+        "p95": 173,
+        "p99": 245,
+        "max": 415,
+        "stddev": 40.86
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 3859
+          "count": 4155
         }
       }
     },
@@ -37,26 +37,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 15,
-      "duration": 15.21,
-      "totalRequests": 167,
-      "reqPerSec": 11.14,
-      "throughputBytesPerSec": 11857,
+      "duration": 15.14,
+      "totalRequests": 3391,
+      "reqPerSec": 226.07,
+      "throughputBytesPerSec": 240770,
       "latency": {
-        "avg": 1271.37,
-        "min": 581,
-        "p50": 1017,
-        "p90": 1655,
-        "p95": 3782,
-        "p99": 3789,
-        "max": 3789,
-        "stddev": 810.37
+        "avg": 65.96,
+        "min": 31,
+        "p50": 48,
+        "p90": 92,
+        "p95": 158,
+        "p99": 418,
+        "max": 1466,
+        "stddev": 102.79
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 167
+          "count": 3391
         }
       }
     },
@@ -66,26 +66,26 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 10,
-      "duration": 15.17,
-      "totalRequests": 875,
-      "reqPerSec": 58.34,
-      "throughputBytesPerSec": 59155,
+      "duration": 15.21,
+      "totalRequests": 30,
+      "reqPerSec": 2,
+      "throughputBytesPerSec": 2028,
       "latency": {
-        "avg": 171.65,
-        "min": 40,
-        "p50": 137,
-        "p90": 271,
-        "p95": 564,
-        "p99": 876,
-        "max": 914,
-        "stddev": 126.92
+        "avg": 235.6,
+        "min": 50,
+        "p50": 166,
+        "p90": 424,
+        "p95": 588,
+        "p99": 588,
+        "max": 588,
+        "stddev": 160.62
       },
-      "errors": 0,
-      "timeouts": 0,
+      "errors": 10,
+      "timeouts": 10,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 875
+          "count": 30
         }
       }
     },
@@ -120,26 +120,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/task?pageNumber=1&pageSize=10",
       "connections": 20,
-      "duration": 15.19,
-      "totalRequests": 2714,
-      "reqPerSec": 180.94,
-      "throughputBytesPerSec": 166473,
+      "duration": 15.18,
+      "totalRequests": 2073,
+      "reqPerSec": 138.2,
+      "throughputBytesPerSec": 127145,
       "latency": {
-        "avg": 110.78,
-        "min": 31,
-        "p50": 89,
-        "p90": 209,
-        "p95": 327,
-        "p99": 382,
-        "max": 562,
-        "stddev": 72.7
+        "avg": 144.91,
+        "min": 32,
+        "p50": 100,
+        "p90": 278,
+        "p95": 526,
+        "p99": 851,
+        "max": 1023,
+        "stddev": 129.8
       },
       "errors": 0,
       "timeouts": 0,
-      "non2xx": 2714,
+      "non2xx": 2073,
       "statusCodes": {
         "401": {
-          "count": 2714
+          "count": 2073
         }
       }
     }
@@ -151,26 +151,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 25,
-      "duration": 12.17,
-      "totalRequests": 170,
-      "reqPerSec": 14.17,
-      "throughputBytesPerSec": 15086,
+      "duration": 12.13,
+      "totalRequests": 2349,
+      "reqPerSec": 195.75,
+      "throughputBytesPerSec": 208474,
       "latency": {
-        "avg": 1617.22,
-        "min": 703,
-        "p50": 1632,
-        "p90": 1976,
-        "p95": 2217,
-        "p99": 2275,
-        "max": 2341,
-        "stddev": 307.39
+        "avg": 126.92,
+        "min": 31,
+        "p50": 70,
+        "p90": 159,
+        "p95": 332,
+        "p99": 1251,
+        "max": 4401,
+        "stddev": 362.96
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 170
+          "count": 2349
         }
       }
     },
@@ -180,26 +180,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 50,
-      "duration": 12.2,
-      "totalRequests": 128,
-      "reqPerSec": 10.67,
-      "throughputBytesPerSec": 11358,
+      "duration": 12.14,
+      "totalRequests": 4948,
+      "reqPerSec": 412.34,
+      "throughputBytesPerSec": 439053,
       "latency": {
-        "avg": 4123.75,
-        "min": 941,
-        "p50": 4683,
-        "p90": 5489,
-        "p95": 5750,
-        "p99": 5820,
-        "max": 5939,
-        "stddev": 1427.9
+        "avg": 120.95,
+        "min": 31,
+        "p50": 81,
+        "p90": 139,
+        "p95": 301,
+        "p99": 800,
+        "max": 4100,
+        "stddev": 303.07
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 128
+          "count": 4948
         }
       }
     },
@@ -209,26 +209,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 100,
-      "duration": 12.22,
-      "totalRequests": 116,
-      "reqPerSec": 9.67,
-      "throughputBytesPerSec": 10294,
+      "duration": 12.21,
+      "totalRequests": 3926,
+      "reqPerSec": 327.17,
+      "throughputBytesPerSec": 348439,
       "latency": {
-        "avg": 6680.85,
-        "min": 1031,
-        "p50": 7244,
-        "p90": 9730,
-        "p95": 9958,
-        "p99": 9996,
-        "max": 10000,
-        "stddev": 2717.2
+        "avg": 304.9,
+        "min": 34,
+        "p50": 149,
+        "p90": 393,
+        "p95": 1205,
+        "p99": 5968,
+        "max": 7323,
+        "stddev": 791.61
       },
-      "errors": 17,
-      "timeouts": 17,
+      "errors": 0,
+      "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 116
+          "count": 3926
         }
       }
     },
@@ -238,26 +238,26 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 200,
-      "duration": 12.27,
-      "totalRequests": 4,
-      "reqPerSec": 0.34,
-      "throughputBytesPerSec": 355,
+      "duration": 12.25,
+      "totalRequests": 2248,
+      "reqPerSec": 187.34,
+      "throughputBytesPerSec": 199486,
       "latency": {
-        "avg": 8417.5,
-        "min": 6685,
-        "p50": 8523,
-        "p90": 9459,
-        "p95": 9459,
-        "p99": 9459,
-        "max": 9459,
-        "stddev": 1053.6
+        "avg": 595.31,
+        "min": 59,
+        "p50": 325,
+        "p90": 974,
+        "p95": 4791,
+        "p99": 7830,
+        "max": 9284,
+        "stddev": 1144.87
       },
-      "errors": 196,
-      "timeouts": 196,
+      "errors": 0,
+      "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 4
+          "count": 2248
         }
       }
     },
@@ -267,26 +267,26 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 10,
-      "duration": 12.18,
-      "totalRequests": 446,
-      "reqPerSec": 37.17,
-      "throughputBytesPerSec": 37687,
+      "duration": 12.19,
+      "totalRequests": 30,
+      "reqPerSec": 2.5,
+      "throughputBytesPerSec": 2535,
       "latency": {
-        "avg": 270.4,
-        "min": 47,
-        "p50": 160,
-        "p90": 422,
-        "p95": 1666,
-        "p99": 2007,
-        "max": 2839,
-        "stddev": 393.88
+        "avg": 2583.17,
+        "min": 332,
+        "p50": 1149,
+        "p90": 5966,
+        "p95": 7996,
+        "p99": 7996,
+        "max": 7996,
+        "stddev": 2493.42
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
       "statusCodes": {
         "200": {
-          "count": 446
+          "count": 30
         }
       }
     },
@@ -296,26 +296,26 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 25,
-      "duration": 12.16,
-      "totalRequests": 1183,
-      "reqPerSec": 98.59,
-      "throughputBytesPerSec": 99963,
+      "duration": 12.14,
+      "totalRequests": 2869,
+      "reqPerSec": 239.09,
+      "throughputBytesPerSec": 257739,
       "latency": {
-        "avg": 250.68,
-        "min": 50,
-        "p50": 224,
-        "p90": 432,
-        "p95": 553,
-        "p99": 647,
-        "max": 892,
-        "stddev": 125.34
+        "avg": 62.54,
+        "min": 31,
+        "p50": 52,
+        "p90": 98,
+        "p95": 142,
+        "p99": 179,
+        "max": 267,
+        "stddev": 28.98
       },
-      "errors": 0,
-      "timeouts": 0,
-      "non2xx": 0,
+      "errors": 10,
+      "timeouts": 10,
+      "non2xx": 2869,
       "statusCodes": {
-        "200": {
-          "count": 1183
+        "429": {
+          "count": 2869
         }
       }
     },
@@ -325,26 +325,26 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 50,
-      "duration": 12.18,
-      "totalRequests": 1154,
-      "reqPerSec": 96.17,
-      "throughputBytesPerSec": 97509,
+      "duration": 12.15,
+      "totalRequests": 5678,
+      "reqPerSec": 473.17,
+      "throughputBytesPerSec": 510037,
       "latency": {
-        "avg": 502.44,
-        "min": 137,
-        "p50": 443,
-        "p90": 814,
-        "p95": 1124,
-        "p99": 1375,
-        "max": 3296,
-        "stddev": 259.12
+        "avg": 84.29,
+        "min": 31,
+        "p50": 75,
+        "p90": 126,
+        "p95": 181,
+        "p99": 230,
+        "max": 282,
+        "stddev": 36.01
       },
-      "errors": 0,
-      "timeouts": 0,
-      "non2xx": 0,
+      "errors": 10,
+      "timeouts": 10,
+      "non2xx": 5678,
       "statusCodes": {
-        "200": {
-          "count": 1154
+        "429": {
+          "count": 5678
         }
       }
     },
@@ -354,26 +354,26 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 100,
-      "duration": 12.22,
-      "totalRequests": 253,
-      "reqPerSec": 21.09,
-      "throughputBytesPerSec": 21379,
+      "duration": 12.18,
+      "totalRequests": 4690,
+      "reqPerSec": 390.84,
+      "throughputBytesPerSec": 421328,
       "latency": {
-        "avg": 2308.76,
-        "min": 370,
-        "p50": 1856,
-        "p90": 5106,
-        "p95": 6329,
-        "p99": 8350,
-        "max": 9076,
-        "stddev": 1735.73
+        "avg": 231.43,
+        "min": 41,
+        "p50": 220,
+        "p90": 351,
+        "p95": 436,
+        "p99": 472,
+        "max": 756,
+        "stddev": 90.37
       },
-      "errors": 43,
-      "timeouts": 43,
-      "non2xx": 0,
+      "errors": 10,
+      "timeouts": 10,
+      "non2xx": 4690,
       "statusCodes": {
-        "200": {
-          "count": 253
+        "429": {
+          "count": 4690
         }
       }
     },
@@ -383,7 +383,7 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/integration/dms/status",
       "connections": 10,
-      "duration": 12.18,
+      "duration": 12.2,
       "totalRequests": 0,
       "reqPerSec": 0,
       "throughputBytesPerSec": 0,
@@ -408,7 +408,7 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/integration/dms/status",
       "connections": 30,
-      "duration": 12.2,
+      "duration": 12.19,
       "totalRequests": 0,
       "reqPerSec": 0,
       "throughputBytesPerSec": 0,
@@ -434,27 +434,23 @@
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/integration/dms/status",
       "connections": 60,
       "duration": 12.21,
-      "totalRequests": 9,
-      "reqPerSec": 0.75,
-      "throughputBytesPerSec": 260,
+      "totalRequests": 0,
+      "reqPerSec": 0,
+      "throughputBytesPerSec": 0,
       "latency": {
-        "avg": 5249.23,
-        "min": 4483,
-        "p50": 5292,
-        "p90": 6138,
-        "p95": 6138,
-        "p99": 6138,
-        "max": 6138,
-        "stddev": 483.15
+        "avg": 0,
+        "min": 0,
+        "p50": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "stddev": 0
       },
-      "errors": 51,
-      "timeouts": 51,
-      "non2xx": 9,
-      "statusCodes": {
-        "500": {
-          "count": 9
-        }
-      }
+      "errors": 60,
+      "timeouts": 60,
+      "non2xx": 0,
+      "statusCodes": {}
     },
     {
       "name": "Webhook Ingestion Stress - 120 Concurrency",
@@ -462,7 +458,7 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/integration/dms/status",
       "connections": 120,
-      "duration": 12.26,
+      "duration": 12.22,
       "totalRequests": 0,
       "reqPerSec": 0,
       "throughputBytesPerSec": 0,
@@ -490,23 +486,27 @@
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 5,
       "duration": 8.14,
-      "totalRequests": 0,
-      "reqPerSec": 0,
-      "throughputBytesPerSec": 0,
+      "totalRequests": 5,
+      "reqPerSec": 0.63,
+      "throughputBytesPerSec": 666,
       "latency": {
-        "avg": 0,
-        "min": 0,
-        "p50": 0,
-        "p90": 0,
-        "p95": 0,
-        "p99": 0,
-        "max": 0,
-        "stddev": 0
+        "avg": 5439,
+        "min": 1711,
+        "p50": 5943,
+        "p90": 7206,
+        "p95": 7206,
+        "p99": 7206,
+        "max": 7206,
+        "stddev": 2009.6
       },
       "errors": 0,
       "timeouts": 0,
       "non2xx": 0,
-      "statusCodes": {}
+      "statusCodes": {
+        "200": {
+          "count": 5
+        }
+      }
     },
     {
       "name": "Sudden Traffic Surge (250 VUs Burst)",
@@ -514,24 +514,28 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 250,
-      "duration": 15.4,
-      "totalRequests": 0,
-      "reqPerSec": 0,
-      "throughputBytesPerSec": 0,
+      "duration": 15.34,
+      "totalRequests": 500,
+      "reqPerSec": 33.34,
+      "throughputBytesPerSec": 35499,
       "latency": {
-        "avg": 0,
-        "min": 0,
-        "p50": 0,
-        "p90": 0,
-        "p95": 0,
-        "p99": 0,
-        "max": 0,
-        "stddev": 0
+        "avg": 2598.01,
+        "min": 1751,
+        "p50": 2225,
+        "p90": 3422,
+        "p95": 3492,
+        "p99": 3522,
+        "max": 3713,
+        "stddev": 697.53
       },
-      "errors": 250,
-      "timeouts": 250,
+      "errors": 120,
+      "timeouts": 120,
       "non2xx": 0,
-      "statusCodes": {}
+      "statusCodes": {
+        "200": {
+          "count": 500
+        }
+      }
     },
     {
       "name": "Post-Spike Health Check Recovery (5 VUs)",
@@ -539,7 +543,7 @@
       "method": "GET",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/health",
       "connections": 5,
-      "duration": 10.16,
+      "duration": 10.17,
       "totalRequests": 0,
       "reqPerSec": 0,
       "throughputBytesPerSec": 0,
@@ -564,7 +568,68 @@
       "method": "POST",
       "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
       "connections": 5,
-      "duration": 8.13,
+      "duration": 8.14,
+      "totalRequests": 5,
+      "reqPerSec": 0.63,
+      "throughputBytesPerSec": 634,
+      "latency": {
+        "avg": 7147.6,
+        "min": 6839,
+        "p50": 7143,
+        "p90": 7403,
+        "p95": 7403,
+        "p99": 7403,
+        "max": 7403,
+        "stddev": 182.09
+      },
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "statusCodes": {
+        "200": {
+          "count": 5
+        }
+      }
+    },
+    {
+      "name": "Sudden Auth Surge (150 VUs Burst)",
+      "category": "Spike - Surge",
+      "method": "POST",
+      "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
+      "connections": 150,
+      "duration": 15.24,
+      "totalRequests": 2800,
+      "reqPerSec": 186.67,
+      "throughputBytesPerSec": 201137,
+      "latency": {
+        "avg": 729.42,
+        "min": 191,
+        "p50": 633,
+        "p90": 1151,
+        "p95": 1766,
+        "p99": 2174,
+        "max": 2228,
+        "stddev": 385.56
+      },
+      "errors": 10,
+      "timeouts": 10,
+      "non2xx": 2780,
+      "statusCodes": {
+        "200": {
+          "count": 20
+        },
+        "429": {
+          "count": 2780
+        }
+      }
+    },
+    {
+      "name": "Post-Spike Auth Recovery (5 VUs)",
+      "category": "Spike - Recovery",
+      "method": "POST",
+      "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
+      "connections": 5,
+      "duration": 10.18,
       "totalRequests": 0,
       "reqPerSec": 0,
       "throughputBytesPerSec": 0,
@@ -578,71 +643,10 @@
         "max": 0,
         "stddev": 0
       },
-      "errors": 0,
-      "timeouts": 0,
+      "errors": 5,
+      "timeouts": 5,
       "non2xx": 0,
       "statusCodes": {}
-    },
-    {
-      "name": "Sudden Auth Surge (150 VUs Burst)",
-      "category": "Spike - Surge",
-      "method": "POST",
-      "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
-      "connections": 150,
-      "duration": 15.26,
-      "totalRequests": 313,
-      "reqPerSec": 20.87,
-      "throughputBytesPerSec": 20983,
-      "latency": {
-        "avg": 3129.28,
-        "min": 660,
-        "p50": 2379,
-        "p90": 5292,
-        "p95": 8688,
-        "p99": 9708,
-        "max": 9992,
-        "stddev": 1916.11
-      },
-      "errors": 45,
-      "timeouts": 45,
-      "non2xx": 4,
-      "statusCodes": {
-        "200": {
-          "count": 309
-        },
-        "500": {
-          "count": 4
-        }
-      }
-    },
-    {
-      "name": "Post-Spike Auth Recovery (5 VUs)",
-      "category": "Spike - Recovery",
-      "method": "POST",
-      "url": "https://stars-h8bgfbhghzbdc9fd.southeastasia-01.azurewebsites.net/api/auth/login",
-      "connections": 5,
-      "duration": 10.13,
-      "totalRequests": 216,
-      "reqPerSec": 21.6,
-      "throughputBytesPerSec": 21900,
-      "latency": {
-        "avg": 231.99,
-        "min": 41,
-        "p50": 90,
-        "p90": 200,
-        "p95": 410,
-        "p99": 5663,
-        "max": 5955,
-        "stddev": 814.7
-      },
-      "errors": 0,
-      "timeouts": 0,
-      "non2xx": 0,
-      "statusCodes": {
-        "200": {
-          "count": 216
-        }
-      }
     }
   ]
 }
