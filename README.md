@@ -8,7 +8,8 @@
 [![Docker](https://img.shields.io/badge/Docker-Enabled-2496ed.svg)](https://www.docker.com/)
 [![Azure](https://img.shields.io/badge/Azure-Cloud_Ready-0078d4.svg)](https://azure.microsoft.com/)
 [![OWASP](https://img.shields.io/badge/OWASP-Hardened-success.svg)](https://owasp.org/)
-[![Tests](https://img.shields.io/badge/Tests-1%2C683%20Passed-success.svg)](https://github.com/)
+[![Security Audit](https://img.shields.io/badge/Security%20Audit-21%2F21%20Passed-success.svg)](docs/STARS_Security_Audit_Report.pdf)
+[![Tests](https://img.shields.io/badge/Tests-1%2C693%20Passed-success.svg)](https://github.com/)
 
 **STARS (Speedex Task Allocation and Recommendation System)** is an enterprise-grade workload management, task orchestration, and operational dispatch platform engineered for logistics, supply chain, and cross-departmental operations.
 
@@ -161,21 +162,31 @@ STARS is architected as an event-driven, secure, and decoupled enterprise system
 
 ## Enterprise Security & OWASP Hardening
 
-STARS is rigorously hardened against the **OWASP Top 10 (2021/2025)** and **CWE** standards, maintaining an enterprise-grade defense posture:
+STARS is rigorously hardened against the **OWASP Top 10 (2021/2025)**, **OWASP API Security Top 10 (2023)**, and **CWE** standards. The system has completed both automated scanning (SAST, SCA, OWASP ZAP) and manual API penetration testing across all 31 controllers and 12 modules, achieving **100% compliance across 21 evaluated security domains** (see [docs/STARS_Security_Audit_Report.pdf](file:///e:/Capstone%20Project/CAPSTONE-2/STARS/docs/STARS_Security_Audit_Report.pdf) and [docs/SECURITY_AUDIT_REPORT.md](file:///e:/Capstone%20Project/CAPSTONE-2/STARS/docs/SECURITY_AUDIT_REPORT.md)):
 
-| Vulnerability Domain | CWE Reference | STARS Architectural Defense |
-| :--- | :--- | :--- |
-| **Mass Assignment Protection** | CWE-269, CWE-915 | `UserService.cs` explicitly strips administrative fields (`Role`, `DepartmentId`, `AllowedSystems`, etc.) when non-managers update profiles. |
-| **HTTP Security Headers & HSTS** | CWE-693, CWE-1021 | `SecurityHeadersMiddleware.cs` enforces `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`, and production `Strict-Transport-Security`. |
-| **Strict CORS Lockdown** | CWE-942 | `CorsPolicyHelper.cs` replaces wildcards with an immutable canonical whitelist for trusted localhost and Azure domains with credentials isolation. |
-| **Host Header Link Sanitization** | CWE-601, CWE-644 | `EmailVerificationController.cs` validates `Origin` and `Referer` headers against the approved CORS whitelist before constructing verification URLs. |
-| **BOLA / IDOR Attachment Guard** | CWE-639 | `AttachmentService.cs` verifies requester ownership, task assignment, or department coordinator membership before streaming files. |
-| **Cryptographic Token Hashing** | CWE-312, CWE-916 | `TokenHasher.cs` hashes refresh tokens, password reset tokens, and email verification tokens with SHA-256 prior to database persistence. |
-| **Secrets Hygiene & Externalization** | CWE-798 | All API keys, connection strings, and JWT secrets are blanked in source control and bound at runtime via environment variables. |
-| **Session Invalidation & Timeout** | CWE-613 | `SessionTimeoutMiddleware.cs` enforces inactivity expiration and returns HTTP 401 `SESSION_TERMINATED` on logged-out sessions, preventing token revival. |
-| **Anti-Enumeration Responses** | CWE-204, CWE-200 | Authentication and password recovery endpoints return standardized, uniform success responses to prevent user account discovery. |
-| **Magic Byte File Inspection** | CWE-434 | `FileSignatureValidator.cs` inspects binary headers for PDF (`%PDF-`), PNG, JPEG, and Office Open XML formats, rejecting disguised executables. |
-| **Software Composition (SCA)** | CWE-1395 | Frontend `npm audit` reports **0 vulnerabilities**; backend NuGet dependencies pinned to secure patches. |
+| Vulnerability Domain | CWE Reference | STARS Architectural Defense | Status |
+| :--- | :--- | :--- | :---: |
+| **Mass Assignment Protection** | CWE-269, CWE-915 | `UserService.cs` explicitly strips administrative fields (`Role`, `DepartmentId`, `AllowedSystems`, etc.) when non-managers update profiles. | Verified |
+| **HTTP Security Headers & HSTS** | CWE-693, CWE-1021 | `SecurityHeadersMiddleware.cs` enforces `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`, and production `Strict-Transport-Security`. | Verified |
+| **Strict CORS Lockdown** | CWE-942 | `CorsPolicyHelper.cs` replaces wildcards with an immutable canonical whitelist for trusted localhost and Azure domains with credentials isolation. | Verified |
+| **Host Header Link Sanitization** | CWE-601, CWE-644 | `EmailVerificationController.cs` validates `Origin` and `Referer` headers against the approved CORS whitelist before constructing verification URLs. | Verified |
+| **BOLA / IDOR Attachment Guard** | CWE-639 | `AttachmentService.cs` verifies requester ownership, task assignment, or department coordinator membership before streaming files. | Verified |
+| **Cryptographic Token Hashing** | CWE-312, CWE-916 | `TokenHasher.cs` hashes refresh tokens, password reset tokens, and email verification tokens with SHA-256 prior to database persistence. | Verified |
+| **Secrets Hygiene & Externalization** | CWE-798 | All API keys, connection strings, and JWT secrets are blanked in source control and bound at runtime via environment variables. | Verified |
+| **Session Invalidation & Timeout** | CWE-613 | `SessionTimeoutMiddleware.cs` enforces inactivity expiration and returns HTTP 401 `SESSION_TERMINATED` on logged-out sessions, preventing token revival. | Verified |
+| **Anti-Enumeration Responses** | CWE-204, CWE-200 | Authentication and password recovery endpoints return standardized, uniform success responses to prevent user account discovery. | Verified |
+| **Magic Byte File Inspection** | CWE-434 | `FileSignatureValidator.cs` inspects binary headers for PDF (`%PDF-`), PNG, JPEG, and Office Open XML formats, rejecting disguised executables. | Verified |
+| **Software Composition (SCA)** | CWE-1395 | Frontend `npm audit` reports **0 vulnerabilities**; backend NuGet dependencies pinned to secure patches. | Verified |
+| **Information Disclosure Sanitization** | CWE-209 | Custom exception handler middleware masks stack traces and raw SQL exceptions in production mode. | Verified |
+| **Docker Production Runtime** | CWE-1188 | Production multi-stage `Dockerfile` drops root privileges to run as unprivileged `appuser`. | Verified |
+| **HttpOnly Cookie Architecture** | CWE-922 | Secure HttpOnly and SameSite cookie specification designed for browser token lifecycle isolation. | Verified |
+| **Comment Attachment BOLA Guard** | CWE-639, API1 | `TaskCommentController.cs` verifies user assignment, department membership, or manager role before streaming comment files. | Verified |
+| **Comment Magic Byte Validation** | CWE-434 | `TaskCommentService.cs` inspects binary stream magic bytes via `FileSignatureValidator`, rejecting disguised binaries (.exe renamed to .pdf). | Verified |
+| **Password Change/Reset Revocation** | CWE-613 | `AuthService.cs` immediately revokes active refresh tokens, expiry, and session timestamps upon password change or reset. | Verified |
+| **Temporary Password Log Redaction** | CWE-532 | `UserService.cs` sanitizes temporary credentials in structured log templates to `[REDACTED_TEMP_PASSWORD]`. | Verified |
+| **Email Verification Rate Limiting** | CWE-770, API4 | `EmailVerificationController.cs` decorated with `[EnableRateLimiting("AuthRateLimit")]` (30 req/min sliding window) to prevent SMTP flooding. | Verified |
+| **Deactivation Session Termination** | CWE-613 | `UserService.DeactivateAsync` clears active refresh tokens and session timestamps immediately upon account deactivation. | Verified |
+| **Modern Browser Isolation Headers** | CWE-693 | Injected `X-Permitted-Cross-Domain-Policies: none` and `Cross-Origin-Opener-Policy: same-origin` to isolate client execution contexts. | Verified |
 
 ---
 
@@ -267,7 +278,7 @@ STARS enforces strict automated test suites across both backend and frontend lay
 ```powershell
 dotnet test backend/Tests/Backend.Tests.csproj
 ```
-- **Backend Test Suite:** **1,110 tests passing (0 failures)** covering authentication, authorization, role stripping, task FSM, attachment security, DMS webhooks, and FOMS ledger syncing.
+- **Backend Test Suite:** **1,120 tests passing (0 failures)** covering authentication, authorization, role stripping, task FSM, attachment security, DMS webhooks, FOMS ledger syncing, and all 21 security hardening domains.
 
 ### Running Frontend Vitest Suite
 ```powershell
@@ -276,7 +287,7 @@ npm --prefix frontend test -- --run
 - **Frontend Test Suite:** **573 tests passing (0 failures)** across 57 test files covering components, modals, deep linking, role-based navigation, and analytics charts.
 
 ### Total Automated Test Coverage
-$$\text{Total Test Suite} = 1,110\text{ (Backend)} + 573\text{ (Frontend)} = \mathbf{1,683\text{ Tests Passing (100\% Pass Rate)}}$$
+$$\text{Total Test Suite} = 1,120\text{ (Backend)} + 573\text{ (Frontend)} = \mathbf{1,693\text{ Tests Passing (100\% Pass Rate)}}$$
 
 ---
 
