@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using Task = System.Threading.Tasks.Task;
+using System.Linq;
+using Microsoft.AspNetCore.RateLimiting;
 using Backend.Controllers;
 using Backend.Models;
 using Backend.Models.DTOs;
@@ -110,5 +112,16 @@ public class EmailVerificationOriginTests
         var okResult = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(passedVerificationUrl);
         Assert.StartsWith("https://speedex-system.vercel.app", passedVerificationUrl);
+    }
+
+    [Fact]
+    public void EmailVerificationController_HasAuthRateLimitingAttribute_SEC19()
+    {
+        var rateLimitAttr = typeof(EmailVerificationController)
+            .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
+            .FirstOrDefault() as EnableRateLimitingAttribute;
+
+        Assert.NotNull(rateLimitAttr);
+        Assert.Equal("AuthRateLimit", rateLimitAttr.PolicyName);
     }
 }

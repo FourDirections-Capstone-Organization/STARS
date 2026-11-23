@@ -609,6 +609,10 @@ public class UserService : IUserService
         // Soft deactivate
         user.IsDeactivated = true;
         user.IsActive = false;
+        // Invalidate active session and refresh token (SEC-20)
+        user.RefreshToken = null;
+        user.RefreshTokenExpiry = null;
+        user.LastActivityAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -904,7 +908,7 @@ public class UserService : IUserService
         _db.Users.Add(manager);
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("Default manager created: {Email} with temporary password: {Password}", managerEmail, tempPassword);
+        _logger.LogInformation("Default manager created: {Email} with temporary password: [REDACTED_TEMP_PASSWORD]", managerEmail);
     }
 
     public async System.Threading.Tasks.Task SeedTestAccountsAsync()
@@ -962,7 +966,7 @@ public class UserService : IUserService
             user.PasswordHash = passwordHasher.HashPassword(user, tempPassword);
             _db.Users.Add(user);
 
-            _logger.LogInformation("Test account created: {Email} ({Role}) with password: {Password}", account.Email, account.Role, tempPassword);
+            _logger.LogInformation("Test account created: {Email} ({Role}) with password: [REDACTED_TEMP_PASSWORD]", account.Email, account.Role);
         }
 
         await _db.SaveChangesAsync();

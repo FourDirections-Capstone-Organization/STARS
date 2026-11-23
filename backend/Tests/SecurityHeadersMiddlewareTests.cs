@@ -31,6 +31,12 @@ public class SecurityHeadersMiddlewareTests
         Assert.True(context.Response.Headers.ContainsKey("Permissions-Policy"));
         Assert.Contains("camera=()", context.Response.Headers["Permissions-Policy"].ToString());
 
+        Assert.True(context.Response.Headers.ContainsKey("X-Permitted-Cross-Domain-Policies"));
+        Assert.Equal("none", context.Response.Headers["X-Permitted-Cross-Domain-Policies"].ToString());
+
+        Assert.True(context.Response.Headers.ContainsKey("Cross-Origin-Opener-Policy"));
+        Assert.Equal("same-origin", context.Response.Headers["Cross-Origin-Opener-Policy"].ToString());
+
         Assert.True(context.Response.Headers.ContainsKey("Content-Security-Policy"));
         Assert.Contains("default-src 'self'", context.Response.Headers["Content-Security-Policy"].ToString());
     }
