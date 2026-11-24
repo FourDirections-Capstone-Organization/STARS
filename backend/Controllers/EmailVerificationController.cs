@@ -17,14 +17,17 @@ public class EmailVerificationController : ControllerBase
     private readonly IEmailVerificationService _verificationService;
     private readonly string _frontendUrl;
     private readonly ILogger<EmailVerificationController> _logger;
+    private readonly bool _isDevelopment;
 
     public EmailVerificationController(
         IEmailVerificationService verificationService,
         IConfiguration configuration,
-        ILogger<EmailVerificationController> logger)
+        ILogger<EmailVerificationController> logger,
+        IWebHostEnvironment? environment = null)
     {
         _verificationService = verificationService;
         _logger = logger;
+        _isDevelopment = environment?.IsDevelopment() ?? false;
         _frontendUrl = configuration["AppSettings:FrontendUrl"]
             ?? configuration["AppSettings__FrontendUrl"]
             ?? configuration["FrontendUrl"]
@@ -117,7 +120,7 @@ public class EmailVerificationController : ControllerBase
             if (Request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrWhiteSpace(origin))
             {
                 var originStr = origin.ToString().TrimEnd('/');
-                if (CorsPolicyHelper.IsOriginAllowed(originStr))
+                if (CorsPolicyHelper.IsOriginAllowed(originStr, _isDevelopment))
                 {
                     return originStr;
                 }
@@ -128,7 +131,7 @@ public class EmailVerificationController : ControllerBase
                 if (Uri.TryCreate(referer.ToString(), UriKind.Absolute, out var uri))
                 {
                     var refererAuthority = $"{uri.Scheme}://{uri.Authority}";
-                    if (CorsPolicyHelper.IsOriginAllowed(refererAuthority))
+                    if (CorsPolicyHelper.IsOriginAllowed(refererAuthority, _isDevelopment))
                     {
                         return refererAuthority;
                     }
