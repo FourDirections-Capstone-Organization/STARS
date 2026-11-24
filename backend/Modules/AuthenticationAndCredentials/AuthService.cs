@@ -650,6 +650,10 @@ public class AuthService : IAuthService
         // Update password and onboarding flag
         user.PasswordHash = _passwordHasher.HashPassword(user, dto.NewPassword);
         user.IsPasswordChanged = true;
+        // Invalidate active sessions upon forced password change (SEC-17 / CWE-613)
+        user.RefreshToken = null;
+        user.RefreshTokenExpiry = null;
+        user.LastActivityAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
