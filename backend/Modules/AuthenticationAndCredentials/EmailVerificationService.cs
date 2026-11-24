@@ -142,14 +142,10 @@ public class EmailVerificationService : IEmailVerificationService
                 }
             }
 
-            if (user is null)
-                return ApiResponseDTO<bool>.Failure("Employee not found.");
+            const string genericMessage = "If an account matches the provided details and requires verification, a verification email has been sent.";
 
-            if (user.IsEmailVerified)
-                return ApiResponseDTO<bool>.Failure("Account is already verified. You may log in.");
-
-            if (user.IsDeactivated)
-                return ApiResponseDTO<bool>.Failure("Account is deactivated. Please contact your administrator.");
+            if (user is null || user.IsEmailVerified || user.IsDeactivated)
+                return ApiResponseDTO<bool>.Success(true, genericMessage);
 
             // If user's email in DB has a typo (e.g. gmaill.com), auto-correct and persist the correction
             if (!string.IsNullOrWhiteSpace(user.Email))
@@ -162,7 +158,7 @@ public class EmailVerificationService : IEmailVerificationService
             }
 
             if (string.IsNullOrWhiteSpace(user.Email))
-                return ApiResponseDTO<bool>.Failure("Employee does not have a registered email address.");
+                return ApiResponseDTO<bool>.Success(true, genericMessage);
 
             // Check 60-second cooldown rate-limiting
             var now = DateTime.UtcNow;
@@ -202,7 +198,7 @@ public class EmailVerificationService : IEmailVerificationService
 
             _logger.LogInformation("Verification email resent to user {UserId} ({Email})", user.Id, user.Email);
 
-            return ApiResponseDTO<bool>.Success(true, "Verification email resent successfully. Please check your inbox.");
+            return ApiResponseDTO<bool>.Success(true, genericMessage);
         }
         catch (Exception ex)
         {
