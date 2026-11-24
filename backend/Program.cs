@@ -242,9 +242,32 @@ builder.Services.AddRateLimiter(options =>
     {
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsJsonAsync(
-            ApiResponseDTO<object>.Failure("Too many authentication requests. Please try again in a few moments."),
+            ApiResponseDTO<object>.Failure("Too many requests. Please try again in a few moments."),
             cancellationToken: token);
     };
+
+    // Global Baseline Rate Limiter: shields all endpoints against flooding while exempting health monitoring probes
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var path = httpContext.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase) || path == "/")
+        {
+            return RateLimitPartition.GetNoLimiter("unlimited");
+        }
+
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 150,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 6,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 15
+        });
+    });
 
     options.AddPolicy("AuthRateLimit", httpContext =>
     {

@@ -15,7 +15,7 @@ const execAsync = promisify(exec);
 
 const HTML_PATH = path.resolve('docs/security-audit-report.html');
 const PDF_PATH = path.resolve('docs/STARS_Security_Audit_Report.pdf');
-const ARTIFACT_DIR_CURRENT = 'C:/Users/Khayl/.gemini/antigravity/brain/51169d34-78ff-4488-b5e5-891a51995cda';
+const ARTIFACT_DIR_CURRENT = 'C:/Users/Khayl/.gemini/antigravity/brain/8b209fef-a028-4b1b-8a8e-0287b58a1fd1';
 const ARTIFACT_PDF_PATH_CURRENT = path.join(ARTIFACT_DIR_CURRENT, 'STARS_Security_Audit_Report.pdf');
 
 console.log('='.repeat(80));
@@ -90,7 +90,10 @@ await runCheck(
     if (!helper.includes('IsOriginAllowed')) {
       throw new Error('CorsPolicyHelper missing IsOriginAllowed whitelist validation.');
     }
-    return 'CORS wildcard removed; exact domain whitelist enforced with credentials isolation.';
+    if (!helper.includes('isDevelopment && (uri.Host == "localhost"')) {
+      throw new Error('CorsPolicyHelper does not isolate localhost to development environment.');
+    }
+    return 'CORS wildcard removed; exact domain whitelist enforced and localhost isolated to development.';
   }
 );
 
@@ -176,19 +179,25 @@ await runCheck(
   }
 );
 
-// Check 9: Anti-Enumeration Error Responses
+// Check 9: Anti-Enumeration Error Standardization on Auth Endpoints
 await runCheck(
   'SEC-09',
   'Anti-Enumeration Error Standardization on Auth Endpoints',
   'A07:2021 — Identification & Authentication Failures',
   'CWE-204, CWE-200',
-  'backend/Modules/AuthenticationAndCredentials/AuthService.cs',
+  'backend/Modules/AuthenticationAndCredentials/AuthService.cs & EmailVerificationService.cs',
   async () => {
     const auth = await fs.readFile('backend/Modules/AuthenticationAndCredentials/AuthService.cs', 'utf8');
+    const emailVer = await fs.readFile('backend/Modules/AuthenticationAndCredentials/EmailVerificationService.cs', 'utf8');
     if (!auth.includes('If an account matches the provided details, instructions to reset your password have been sent')) {
       throw new Error('ForgotPasswordAsync does not return uniform message on unknown identifier.');
     }
-    return 'Uniform responses returned regardless of account existence or status, neutralizing user enumeration.';
+    const resendIdx = emailVer.indexOf('ResendVerificationAsync');
+    const resendSnippet = resendIdx !== -1 ? emailVer.substring(resendIdx, emailVer.indexOf('GetVerificationStatusAsync', resendIdx)) : '';
+    if (resendSnippet.includes('Employee not found.') || resendSnippet.includes('Account is deactivated.') || resendSnippet.includes('Account is already verified.')) {
+      throw new Error('EmailVerificationService.ResendVerificationAsync leaks user and account existence.');
+    }
+    return 'Uniform responses returned regardless of account existence or status across password reset and email verification.';
   }
 );
 
@@ -321,7 +330,12 @@ await runCheck(
     if (!changePassSnippet.includes('user.RefreshToken = null')) {
       throw new Error('ChangePasswordAsync updates password hash but leaves active refresh tokens and session timestamps intact.');
     }
-    return 'Active refresh tokens and session timestamps are revoked on password change and reset.';
+    const onboardingIdx = auth.indexOf('CompleteOnboardingAsync');
+    const onboardingSnippet = onboardingIdx !== -1 ? auth.substring(onboardingIdx, onboardingIdx + 3000) : '';
+    if (!onboardingSnippet.includes('user.RefreshToken = null')) {
+      throw new Error('CompleteOnboardingAsync leaves active refresh tokens intact.');
+    }
+    return 'Active refresh tokens and session timestamps are revoked on password change, reset, and onboarding password change.';
   }
 );
 

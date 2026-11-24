@@ -25,7 +25,7 @@ public static class CorsPolicyHelper
         try
         {
             var uri = new Uri(origin);
-            if (uri.Host == "localhost" || uri.Host == "127.0.0.1")
+            if (isDevelopment && (uri.Host == "localhost" || uri.Host == "127.0.0.1"))
                 return true;
 
             return AllowedHosts.Contains(uri.Host);

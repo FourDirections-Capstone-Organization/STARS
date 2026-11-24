@@ -24,4 +24,14 @@ public class CorsPolicyHelperTests
         var result = CorsPolicyHelper.IsOriginAllowed(origin);
         Assert.Equal(expected, result);
     }
+
+    [Theory]
+    [InlineData("http://localhost:5173", false)]
+    [InlineData("http://127.0.0.1:5173", false)]
+    [InlineData("https://stars-two-chi.vercel.app", true)]
+    public void IsOriginAllowed_ProductionMode_BlocksLocalhost(string? origin, bool expected)
+    {
+        var result = CorsPolicyHelper.IsOriginAllowed(origin, isDevelopment: false);
+        Assert.Equal(expected, result);
+    }
 }
