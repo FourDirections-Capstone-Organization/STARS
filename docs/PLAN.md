@@ -206,3 +206,44 @@ flowchart TD
 | Plan Archival            | docs/archive/plans/capstone-security-penetration-remediation.md          |
 +--------------------------+-------------------------------------------------------------------------+
 ```
+
+---
+
+## 4. Residual Security Hardening & Penetration Gap Remediation
+**Execution Date:** November 24, 2026  
+**Feature Branch:** `feature/residual-security-hardening` | **Base Branch:** `refactoring/bug-fix`  
+**Outcome:** 1,123 Backend Tests Passing (100%), 573 Frontend Tests Passing (100%), 21/21 Security Domains Verified
+
+### Steps Implemented:
+1. **Step 1: Anti-Enumeration for Email Verification (CWE-204)**
+   - Target: `backend/Modules/AuthenticationAndCredentials/EmailVerificationService.cs`
+   - Resolved account state and user enumeration by returning uniform success message (`"If an account matches the provided details and requires verification, a verification email has been sent."`) across non-existent, already verified, and deactivated accounts.
+   - Branch: `step-1-sec-anti-enumeration`
+
+2. **Step 2: Session Invalidation on Forced Onboarding Password Change (CWE-613)**
+   - Target: `backend/Modules/AuthenticationAndCredentials/AuthService.cs`
+   - Implemented session revocation (`user.RefreshToken = null; user.RefreshTokenExpiry = null; user.LastActivityAt = null;`) in `CompleteOnboardingAsync`.
+   - Branch: `step-2-sec-force-pwd-revocation`
+
+3. **Step 3: Restrict Localhost in Production CORS & Origin Resolution (CWE-942)**
+   - Targets: `backend/Modules/Utilities/CorsPolicyHelper.cs`, `backend/Controllers/EmailVerificationController.cs`
+   - Enforced `isDevelopment` check before admitting `localhost` or `127.0.0.1` origins, isolating development origins from production.
+   - Added unit test coverage in `backend/Tests/CorsPolicyHelperTests.cs`.
+   - Branch: `step-3-sec-cors-localhost-restriction`
+
+4. **Step 4: Whitelist Pinning in AllowedHosts (CWE-601)**
+   - Target: `backend/appsettings.json`
+   - Replaced overbroad `*.vercel.app` wildcard with exact whitelisted canonical frontend origins.
+   - Branch: `step-4-sec-allowed-hosts-pinning`
+
+5. **Step 5: Global Baseline Rate Limiter with Health Exemption (CWE-770)**
+   - Target: `backend/Program.cs`
+   - Added `options.GlobalLimiter` (150 requests/min per IP sliding window) shielding all un-attributed API routes while exempting health monitoring probes (`/api/health`, `/`).
+   - Branch: `step-5-sec-global-rate-limiter`
+
+6. **Step 6: Full Regression Verification & Report Regeneration**
+   - Updated `scripts/generate-security-audit-pdf.mjs` to verify anti-enumeration and onboarding revocation.
+   - Recompiled `docs/STARS_Security_Audit_Report.pdf` and copied to brain artifacts directory.
+   - Full regression: 1,123 backend tests passed, 573 frontend tests passed.
+   - Branch: `step-6-sec-regression-and-docs`
+
