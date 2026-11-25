@@ -346,8 +346,8 @@ export const parseDmsFollowUp = (
     if (!isFollowUp) return null;
 
     let waybillNo = '';
-    const waybillTitleMatch = rawTitle.match(/Delivery Follow-up\s*-\s*([A-Za-z0-9-_]+)/i);
-    const waybillDescMatch = rawDesc.match(/Waybill\s+([A-Za-z0-9-_]+)/i);
+    const waybillTitleMatch = rawTitle.match(/Delivery Follow-up\s*-\s*\[?([A-Za-z0-9-_]+)\]?/i);
+    const waybillDescMatch = rawDesc.match(/Waybill\s+\[?([A-Za-z0-9-_]+)\]?/i);
     if (waybillTitleMatch) {
         waybillNo = waybillTitleMatch[1].trim();
     } else if (deliveryDetail?.dmsWaybillNo) {
@@ -381,9 +381,13 @@ export const parseDmsFollowUp = (
 
     let attemptCount = 1;
     const attemptMatch = rawDesc.match(/Attempt Count:\s*(\d+)/i)
-        || rawDesc.match(/Attempt\s*#?(\d+)/i);
+        || rawDesc.match(/Attempt\s*#?(\d+)/i)
+        || rawTitle.match(/Attempt\s*#?(\d+)/i);
     if (attemptMatch) {
         attemptCount = parseInt(attemptMatch[1], 10) || 1;
+    }
+    if (rawDesc.includes('[Return to Sender]') || rawTitle.includes('Return to Sender')) {
+        attemptCount = Math.max(attemptCount, 3);
     }
 
     let driverDisplay = '';
@@ -416,6 +420,25 @@ export const parseDmsFollowUp = (
         originalTaskId,
         actionRequired,
     };
+};
+
+export const isDateAfterToday = (dateStr: string): boolean => {
+    if (!dateStr) return false;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    const selected = new Date(y, m - 1, d);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return selected.getTime() > today.getTime();
+};
+
+export const getTomorrowDateStr = (): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
 };
 
 // ─── FOMS Endorsement Parser (Integration 1) ──────────────────────────────────
@@ -680,6 +703,228 @@ const TaskView: React.FC<TaskViewProps> = ({
             }));
         }
     }, [onNavigateToDmsTracker, onNavigateToDeliveryTracker, deliveryDetail?.dmsWaybillNo, dmsFollowUp?.waybillNo, task.taskId]);
+
+    // ─── DMS Follow-up Decision & Timeline (Integration 4) ──────────────────────
+    const [decisionOption, setDecisionOption] = useState<'Approved' | 'Rejected' | 'Return to Sender'>('Approved');
+    const [redeliveryDate, setRedeliveryDate] = useState<string>('');
+    const [decisionRemarks, setDecisionRemarks] = useState<string>('');
+    const [submittingDecision, setSubmittingDecision] = useState<boolean>(false);
+    const [decisionError, setDecisionError] = useState<string | null>(null);
+    const [decisionSuccess, setDecisionSuccess] = useState<string | null>(null);
+    const [followUpComments, setFollowUpComments] = useState<any[]>([]);
+    const [loadingFollowUpComments, setLoadingFollowUpComments] = useState<boolean>(false);
+
+    const fetchFollowUpComments = useCallback(async () => {
+        if (!task.taskId) return;
+        try {
+            setLoadingFollowUpComments(true);
+            const res = await api.get(`/api/tasks/${task.taskId}/comments`);
+            const items = res.data?.isSuccess && Array.isArray(res.data?.data?.items)
+                ? res.data.data.items
+                : Array.isArray(res.data?.data)
+                ? res.data.data
+                : [];
+            setFollowUpComments(items);
+        } catch {
+            // fallback gracefully
+        } finally {
+            setLoadingFollowUpComments(false);
+        }
+    }, [task.taskId]);
+
+    useEffect(() => {
+        if (dmsFollowUp) {
+            fetchFollowUpComments();
+        }
+    }, [dmsFollowUp, fetchFollowUpComments]);
+
+    const effectiveAttemptCount = useMemo(() => {
+        let count = dmsFollowUp?.attemptCount || 1;
+        for (const c of followUpComments) {
+            const text = c.content || c.message || '';
+            const m = text.match(/Attempt\s*#?(\d+)/i);
+            if (m) {
+                const parsed = parseInt(m[1], 10);
+                if (!isNaN(parsed) && parsed > count) count = parsed;
+            }
+            if (text.includes('[Return to Sender]')) {
+                if (count < 3) count = 3;
+            }
+        }
+        return count;
+    }, [dmsFollowUp?.attemptCount, followUpComments]);
+
+    useEffect(() => {
+        if (effectiveAttemptCount >= 3 && decisionOption === 'Approved') {
+            setDecisionOption('Return to Sender');
+        }
+    }, [effectiveAttemptCount, decisionOption]);
+
+    const handleResolveFollowUp = async () => {
+        if (!dmsFollowUp) return;
+        setDecisionError(null);
+        setDecisionSuccess(null);
+
+        if (decisionOption === 'Approved') {
+            if (effectiveAttemptCount >= 3) {
+                setDecisionError('Redelivery is strictly prohibited for orders with 3 or more failed attempts.');
+                return;
+            }
+            if (!redeliveryDate) {
+                setDecisionError('Please select a scheduled redelivery date.');
+                return;
+            }
+            if (!isDateAfterToday(redeliveryDate)) {
+                setDecisionError('The selected redelivery date must be strictly after today (future date). Today and past dates cannot be selected.');
+                return;
+            }
+        }
+
+        const approverName = localStorage.getItem('employeeName')
+            || localStorage.getItem('fullName')
+            || localStorage.getItem('username')
+            || 'Coordinator Juan Cruz';
+
+        const payload: {
+            waybillNo: string;
+            decision: string;
+            redeliveryDate?: string;
+            approver: string;
+            remarks?: string;
+        } = {
+            waybillNo: dmsFollowUp.waybillNo,
+            decision: decisionOption,
+            approver: approverName,
+            remarks: decisionRemarks.trim() || undefined,
+        };
+
+        if (decisionOption === 'Approved') {
+            payload.redeliveryDate = redeliveryDate;
+        }
+
+        setSubmittingDecision(true);
+        try {
+            const res = await api.post('/api/integration/dms/redelivery-decision', payload);
+            if (res.data?.isSuccess || res.status === 200) {
+                const msg = `Redelivery decision '${decisionOption}' processed and dispatched to DMS.`;
+                setDecisionSuccess(msg);
+                toastSuccess(msg);
+
+                if (decisionOption === 'Return to Sender' || decisionOption === 'Rejected') {
+                    if (onUpdate) {
+                        onUpdate({
+                            ...task,
+                            taskStatus: 'Completed',
+                        });
+                    }
+                }
+                fetchFollowUpComments();
+            } else {
+                const errMsg = res.data?.message || 'Failed to submit redelivery decision.';
+                setDecisionError(errMsg);
+                toastError(errMsg);
+            }
+        } catch (err: any) {
+            const errMsg = err?.response?.data?.message || err?.message || 'Failed to submit redelivery decision.';
+            setDecisionError(errMsg);
+            toastError(errMsg);
+        } finally {
+            setSubmittingDecision(false);
+        }
+    };
+
+    const timelineEvents = useMemo(() => {
+        if (!dmsFollowUp) return [];
+        const events: Array<{
+            id: string;
+            type: string;
+            title: string;
+            badge?: string;
+            badgeClass?: string;
+            timestamp?: string;
+            content: string;
+            meta?: string;
+        }> = [];
+
+        // 1. Initial Failure
+        events.push({
+            id: 'init-failure',
+            type: 'failure',
+            title: 'Initial Failure Follow-up Logged',
+            badge: 'Attempt #1',
+            badgeClass: 'badge-warning',
+            content: `Type: ${dmsFollowUp.failureType} | Reason: ${dmsFollowUp.failureReason}`,
+            meta: `Assigned Driver: ${dmsFollowUp.driverDisplay}`,
+        });
+
+        // 2. Events from comments
+        for (const c of followUpComments) {
+            const text = c.content || c.message || '';
+            const createdAtStr = c.createdAt ? new Date(c.createdAt).toLocaleString() : '';
+
+            if (text.startsWith('[Failure Follow-up Update]')) {
+                const attemptMatch = text.match(/Attempt\s*#?(\d+)/i);
+                const reasonMatch = text.match(/Reason:\s*([^|]+)/i);
+                events.push({
+                    id: c.id || Math.random().toString(),
+                    type: 'failure-update',
+                    title: 'Failure Follow-up Update',
+                    badge: attemptMatch ? `Attempt #${attemptMatch[1]}` : 'Update',
+                    badgeClass: 'badge-critical',
+                    timestamp: createdAtStr,
+                    content: reasonMatch ? reasonMatch[1].trim() : text,
+                });
+            } else if (text.includes('[Recipient Redelivery Request Received]')) {
+                const dateMatch = text.match(/Requested Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+                const remarksMatch = text.match(/Remarks:\s*(.+)$/i);
+                events.push({
+                    id: c.id || Math.random().toString(),
+                    type: 'recipient-request',
+                    title: 'Recipient Redelivery Request Received',
+                    badge: dateMatch ? `Requested: ${dateMatch[1]}` : 'Client Action',
+                    badgeClass: 'badge-info',
+                    timestamp: createdAtStr,
+                    content: remarksMatch ? `Remarks: ${remarksMatch[1].trim()}` : text,
+                });
+            } else if (text.includes('[Return to Sender]')) {
+                events.push({
+                    id: c.id || Math.random().toString(),
+                    type: 'rts',
+                    title: 'Terminal Return to Sender Enforced',
+                    badge: 'Max Attempts',
+                    badgeClass: 'badge-danger',
+                    timestamp: createdAtStr,
+                    content: text,
+                });
+            } else if (text.includes('[Coordinator Decision:')) {
+                const match = text.match(/\[Coordinator Decision:\s*([^\]]+)\]/i);
+                const dec = match ? match[1] : 'Recorded';
+                events.push({
+                    id: c.id || Math.random().toString(),
+                    type: 'decision',
+                    title: `Coordinator Decision: ${dec}`,
+                    badge: dec,
+                    badgeClass: dec.toLowerCase() === 'approved' ? 'badge-success' : 'badge-warning',
+                    timestamp: createdAtStr,
+                    content: text,
+                });
+            }
+        }
+
+        // 3. If effectiveAttemptCount >= 3 and not already in events, add terminal RTS event
+        if (effectiveAttemptCount >= 3 && !events.some(e => e.type === 'rts')) {
+            events.push({
+                id: 'rts-terminal-auto',
+                type: 'rts',
+                title: 'Terminal Return to Sender Enforced',
+                badge: `Attempt #${effectiveAttemptCount}`,
+                badgeClass: 'badge-danger',
+                content: `[Return to Sender] Attempt #${effectiveAttemptCount} reached maximum failure limit. Redelivery prohibited. Result set to Return to Sender in DMS.`,
+            });
+        }
+
+        return events;
+    }, [dmsFollowUp, followUpComments, effectiveAttemptCount]);
 
     // ─── FOMS Collection Follow-up (Integration 3) ──────────────────────────────
     const fomsCollection = parseFomsCollection(task.taskTitle, task.taskDescription);
@@ -1688,8 +1933,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                         <div className="tv-dms-followup-stat-group">
                                             <span className="tv-dms-followup-stat-label">ATTEMPT COUNT</span>
-                                            <span className={`tv-dms-followup-attempt-tag ${dmsFollowUp.attemptCount > 1 ? 'critical' : 'warning'}`}>
-                                                Attempt #{dmsFollowUp.attemptCount}
+                                            <span className={`tv-dms-followup-attempt-tag ${effectiveAttemptCount >= 3 ? 'danger' : effectiveAttemptCount > 1 ? 'critical' : 'warning'}`}>
+                                                Attempt #{effectiveAttemptCount}
                                             </span>
                                         </div>
                                         <div className="tv-dms-followup-stat-group">
@@ -1697,6 +1942,21 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <span className="tv-dms-followup-stat-val">2 Business Days</span>
                                         </div>
                                     </div>
+
+                                    {/* Maximum Failure Limit / Return to Sender Alert Banner (Section B) */}
+                                    {effectiveAttemptCount >= 3 && (
+                                        <div className="tv-dms-rts-alert-banner" data-testid="tv-dms-rts-alert">
+                                            <AlertOctagon size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+                                            <div className="tv-dms-rts-alert-body">
+                                                <span className="tv-dms-rts-alert-title">
+                                                    [Return to Sender] Attempt #{effectiveAttemptCount} reached maximum failure limit. Redelivery prohibited. Result set to Return to Sender in DMS.
+                                                </span>
+                                                <p className="tv-dms-rts-alert-desc">
+                                                    Operational policy strictly prohibits redelivery when maximum attempt threshold (3) is reached. Parcel set to Return to Sender.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Root Cause Failure Reason Banner */}
                                     <div className="tv-dms-followup-reason-banner">
@@ -1765,6 +2025,192 @@ const TaskView: React.FC<TaskViewProps> = ({
                                     <div className="tv-dms-followup-action-box">
                                         <div className="tv-dms-followup-action-label">COORDINATOR ACTION REQUIRED:</div>
                                         <div className="tv-dms-followup-action-text">{dmsFollowUp.actionRequired}</div>
+                                    </div>
+
+                                    {/* ── Failure & Redelivery Timeline (Section B) ── */}
+                                    <div className="tv-dms-timeline-section" data-testid="tv-dms-timeline">
+                                        <div className="tv-dms-timeline-header">
+                                            <div className="tv-dms-timeline-title">
+                                                <Clock size={15} />
+                                                <span>Failure &amp; Redelivery Timeline</span>
+                                            </div>
+                                            <span className="tv-dms-timeline-badge">Cycle: #{effectiveAttemptCount}</span>
+                                        </div>
+
+                                        <div className="tv-dms-timeline-list">
+                                            {timelineEvents.map(event => (
+                                                <div key={event.id} className={`tv-dms-timeline-item type-${event.type}`} data-testid="timeline-event-item">
+                                                    <div className="tv-dms-timeline-dot" />
+                                                    <div className="tv-dms-timeline-body">
+                                                        <div className="tv-dms-timeline-item-header">
+                                                            <span className="tv-dms-timeline-item-title">{event.title}</span>
+                                                            {event.badge && (
+                                                                <span className={`tv-dms-timeline-item-badge ${event.badgeClass || ''}`}>
+                                                                    {event.badge}
+                                                                </span>
+                                                            )}
+                                                            {event.timestamp && (
+                                                                <span className="tv-dms-timeline-item-time">{event.timestamp}</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="tv-dms-timeline-item-content">{event.content}</div>
+                                                        {event.meta && (
+                                                            <div className="tv-dms-timeline-item-meta">{event.meta}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── Resolve Follow-up Action Card (Section A) ── */}
+                                    <div className="tv-dms-resolve-card" data-testid="tv-dms-resolve-card">
+                                        <div className="tv-dms-resolve-header">
+                                            <div className="tv-dms-resolve-title">
+                                                <CheckCircle2 size={16} color="#0284c7" />
+                                                <span>Resolve Follow-up</span>
+                                            </div>
+                                            <span className="tv-dms-resolve-badge">Coordinator Decision</span>
+                                        </div>
+
+                                        {effectiveAttemptCount >= 3 && (
+                                            <div className="tv-dms-resolve-rts-notice" data-testid="resolve-rts-prohibited-notice">
+                                                <AlertTriangle size={13} color="#dc2626" />
+                                                <span>Redelivery prohibited (maximum failure limit reached: 3 attempts). Package must be Returned to Sender.</span>
+                                            </div>
+                                        )}
+
+                                        {/* Decision Option Buttons */}
+                                        <div className="tv-dms-resolve-options" role="radiogroup" aria-label="Resolve Follow-up Options">
+                                            <button
+                                                type="button"
+                                                className={`tv-dms-option-btn ${decisionOption === 'Approved' ? 'active-approve' : ''} ${effectiveAttemptCount >= 3 ? 'disabled' : ''}`}
+                                                disabled={effectiveAttemptCount >= 3}
+                                                onClick={() => {
+                                                    if (effectiveAttemptCount < 3) {
+                                                        setDecisionOption('Approved');
+                                                        setDecisionError(null);
+                                                    }
+                                                }}
+                                                data-testid="decision-option-approve"
+                                                title={effectiveAttemptCount >= 3 ? 'Redelivery prohibited after 3 failed attempts' : 'Approve Redelivery'}
+                                            >
+                                                <Calendar size={13} />
+                                                <span>Approve Redelivery</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                className={`tv-dms-option-btn ${decisionOption === 'Rejected' ? 'active-reject' : ''}`}
+                                                onClick={() => {
+                                                    setDecisionOption('Rejected');
+                                                    setDecisionError(null);
+                                                }}
+                                                data-testid="decision-option-reject"
+                                            >
+                                                <XCircle size={13} />
+                                                <span>Reject Redelivery</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                className={`tv-dms-option-btn ${decisionOption === 'Return to Sender' ? 'active-rts' : ''}`}
+                                                onClick={() => {
+                                                    setDecisionOption('Return to Sender');
+                                                    setDecisionError(null);
+                                                }}
+                                                data-testid="decision-option-rts"
+                                            >
+                                                <RotateCcw size={13} />
+                                                <span>Return to Sender</span>
+                                            </button>
+                                        </div>
+
+                                        {/* Conditional Fields based on Option */}
+                                        <div className="tv-dms-resolve-fields">
+                                            {decisionOption === 'Approved' && (
+                                                <div className="tv-dms-field-group">
+                                                    <label htmlFor="tv-redelivery-date" className="tv-dms-field-label">
+                                                        Scheduled Redelivery Date <span style={{ color: '#dc2626' }}>*</span>
+                                                        <span className="tv-dms-field-sub"> (strictly after today)</span>
+                                                    </label>
+                                                    <input
+                                                        id="tv-redelivery-date"
+                                                        type="date"
+                                                        className="tv-input tv-dms-date-picker"
+                                                        min={getTomorrowDateStr()}
+                                                        value={redeliveryDate}
+                                                        onChange={e => {
+                                                            setRedeliveryDate(e.target.value);
+                                                            setDecisionError(null);
+                                                        }}
+                                                        data-testid="redelivery-date-picker"
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="tv-dms-field-group">
+                                                <label htmlFor="tv-decision-remarks" className="tv-dms-field-label">
+                                                    Decision Remarks
+                                                </label>
+                                                <textarea
+                                                    id="tv-decision-remarks"
+                                                    className="tv-textarea tv-dms-remarks-input"
+                                                    rows={2}
+                                                    placeholder={
+                                                        decisionOption === 'Approved'
+                                                            ? 'Client confirmed available Friday afternoon'
+                                                            : decisionOption === 'Rejected'
+                                                            ? 'Client address out of reachable delivery coverage'
+                                                            : 'Customer requested package return'
+                                                    }
+                                                    value={decisionRemarks}
+                                                    onChange={e => setDecisionRemarks(e.target.value)}
+                                                    data-testid="decision-remarks-input"
+                                                />
+                                            </div>
+
+                                            {decisionError && (
+                                                <div className="tv-dms-resolve-error" data-testid="decision-error-message">
+                                                    <AlertCircle size={14} />
+                                                    <span>{decisionError}</span>
+                                                </div>
+                                            )}
+
+                                            {decisionSuccess && (
+                                                <div className="tv-dms-resolve-success" data-testid="decision-success-message">
+                                                    <CheckCircle2 size={14} />
+                                                    <span>{decisionSuccess}</span>
+                                                </div>
+                                            )}
+
+                                            <div className="tv-dms-resolve-submit-row">
+                                                <button
+                                                    type="button"
+                                                    className={`tv-btn tv-btn-sm ${
+                                                        decisionOption === 'Approved'
+                                                            ? 'tv-btn-primary'
+                                                            : decisionOption === 'Rejected'
+                                                            ? 'tv-btn-danger'
+                                                            : 'tv-btn-warning'
+                                                    }`}
+                                                    onClick={handleResolveFollowUp}
+                                                    disabled={submittingDecision || (decisionOption === 'Approved' && effectiveAttemptCount >= 3)}
+                                                    data-testid="submit-decision-btn"
+                                                >
+                                                    {submittingDecision ? (
+                                                        <>
+                                                            <Loader2 size={13} className="spin" />
+                                                            <span>Submitting to DMS...</span>
+                                                        </>
+                                                    ) : (
+                                                        <span>
+                                                            Confirm Decision: {decisionOption}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* Quick Action Navigation Buttons */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Send, X, Paperclip, Loader2, AlertCircle, CheckCircle2,
     Pencil, Trash2, FileText, Download, Truck, AlertTriangle, FileCheck, ShieldAlert,
+    Calendar, RotateCcw, PackageX, CheckCircle,
 } from 'lucide-react';
 import { useToast } from '../Toast/Toast';
 import EmptyState from '../ui/EmptyState';
@@ -113,6 +114,84 @@ export function parseFailureFollowUpComment(content: string): ParsedFailureComme
         reason: reasonMatch ? reasonMatch[1].trim() : 'Unspecified Exception',
         driver: driverMatch ? driverMatch[1].trim() : 'N/A',
         recorded: recordedMatch ? recordedMatch[1].trim() : '',
+        rawText: content,
+    };
+}
+
+export interface ParsedRecipientRequestComment {
+    isRecipientRequest: boolean;
+    requestedDate: string;
+    contact?: string;
+    remarks?: string;
+    rawText: string;
+}
+
+export function parseRecipientRedeliveryRequestComment(content: string): ParsedRecipientRequestComment | null {
+    if (!content) return null;
+    if (!content.includes('[Recipient Redelivery Request Received]')) return null;
+
+    const dateMatch = content.match(/Requested Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+    const contactMatch = content.match(/Contact:\s*([^.]+?)(?:\.|$)/i);
+    const remarksMatch = content.match(/Remarks:\s*(.+)$/i);
+
+    return {
+        isRecipientRequest: true,
+        requestedDate: dateMatch ? dateMatch[1].trim() : '',
+        contact: contactMatch ? contactMatch[1].trim() : undefined,
+        remarks: remarksMatch ? remarksMatch[1].trim() : undefined,
+        rawText: content,
+    };
+}
+
+export interface ParsedReturnToSenderComment {
+    isReturnToSender: boolean;
+    attemptCount: number;
+    reason?: string;
+    message: string;
+    rawText: string;
+}
+
+export function parseReturnToSenderComment(content: string): ParsedReturnToSenderComment | null {
+    if (!content) return null;
+    if (!content.includes('[Return to Sender]')) return null;
+
+    const attemptMatch = content.match(/Attempt\s*#?(\d+)/i);
+    const reasonMatch = content.match(/Reason:\s*([^.]+?)(?:\.|$)/i);
+
+    return {
+        isReturnToSender: true,
+        attemptCount: attemptMatch ? parseInt(attemptMatch[1], 10) : 3,
+        reason: reasonMatch ? reasonMatch[1].trim() : undefined,
+        message: content.replace(/^\[Return to Sender\]\s*/i, '').trim(),
+        rawText: content,
+    };
+}
+
+export interface ParsedCoordinatorDecisionComment {
+    isCoordinatorDecision: boolean;
+    decision: string;
+    approver: string;
+    scheduledDate?: string;
+    remarks?: string;
+    rawText: string;
+}
+
+export function parseCoordinatorDecisionComment(content: string): ParsedCoordinatorDecisionComment | null {
+    if (!content) return null;
+    const match = content.match(/\[Coordinator Decision:\s*([^\]]+)\]/i);
+    if (!match) return null;
+
+    const decision = match[1].trim();
+    const approverMatch = content.match(/Recorded by\s*([^.]+?)(?:\.|$)/i);
+    const dateMatch = content.match(/Scheduled Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+    const remarksMatch = content.match(/Remarks:\s*(.+)$/i);
+
+    return {
+        isCoordinatorDecision: true,
+        decision,
+        approver: approverMatch ? approverMatch[1].trim() : 'Coordinator',
+        scheduledDate: dateMatch ? dateMatch[1].trim() : undefined,
+        remarks: remarksMatch ? remarksMatch[1].trim() : undefined,
         rawText: content,
     };
 }
@@ -509,6 +588,199 @@ const TaskComments: React.FC<TaskCommentsProps> = ({
                                     <div className="tc-meta">
                                         <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
                                         <span className="tc-dms-system-note">Automated Closed-Loop Cancellation Entry</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const recipientRequestRemark = parseRecipientRedeliveryRequestComment(c.message);
+                    if (recipientRequestRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-recipient-request"
+                                data-testid="tc-recipient-request-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-dms recipient-request" title="Recipient Redelivery Request">
+                                    <Calendar size={14} color="#0284c7" />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-dms recipient-request">Recipient Action</span>
+                                        <span className="tc-dms-tag recipient-request">
+                                            Recipient Redelivery Request Received
+                                        </span>
+                                        {recipientRequestRemark.requestedDate && (
+                                            <span className="tc-date-badge recipient-request">
+                                                Requested: {recipientRequestRemark.requestedDate}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="tc-dms-card recipient-request">
+                                        <div className="tc-dms-card-top">
+                                            <div className="tc-dms-type-badge recipient-request">
+                                                <Calendar size={12} color="#0284c7" />
+                                                <span>Redelivery Rescheduling Request</span>
+                                            </div>
+                                            {recipientRequestRemark.requestedDate && (
+                                                <span className="tc-dms-recorded-time">
+                                                    Target Date: {recipientRequestRemark.requestedDate}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {recipientRequestRemark.remarks && (
+                                            <div className="tc-dms-reason-box recipient-request">
+                                                <span className="tc-dms-reason-label">Recipient Remarks:</span>
+                                                <span className="tc-dms-reason-text">{recipientRequestRemark.remarks}</span>
+                                            </div>
+                                        )}
+
+                                        {recipientRequestRemark.contact && (
+                                            <div className="tc-dms-footer-meta">
+                                                <span className="tc-dms-driver">
+                                                    <strong>Contact:</strong> {recipientRequestRemark.contact}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="tc-dms-raw-toggle">
+                                            <span className="tc-dms-raw-text">{c.message}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Recipient Inbound Redelivery Request</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const rtsRemark = parseReturnToSenderComment(c.message);
+                    if (rtsRemark) {
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className="tc-msg tc-msg-theirs tc-msg-automated tc-msg-critical"
+                                data-testid="tc-return-to-sender-remark"
+                            >
+                                <div className="tc-avatar tc-avatar-dms critical" title="Return to Sender">
+                                    <PackageX size={14} color="#dc2626" />
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className="tc-author tc-author-dms critical">DMS Operational Policy</span>
+                                        <span className="tc-dms-tag critical">
+                                            Return to Sender
+                                        </span>
+                                        <span className="tc-attempt-badge critical">
+                                            Attempt #{rtsRemark.attemptCount}
+                                        </span>
+                                    </div>
+
+                                    <div className="tc-dms-card critical">
+                                        <div className="tc-dms-card-top">
+                                            <div className="tc-dms-type-badge critical">
+                                                <AlertTriangle size={12} color="#dc2626" />
+                                                <span>Terminal Exception: Redelivery Prohibited</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="tc-dms-reason-box critical">
+                                            <span className="tc-dms-reason-label">Policy Enforcement:</span>
+                                            <span className="tc-dms-reason-text">
+                                                {c.message}
+                                            </span>
+                                        </div>
+
+                                        {rtsRemark.reason && (
+                                            <div className="tc-dms-footer-meta">
+                                                <span className="tc-dms-driver">
+                                                    <strong>Failure Reason:</strong> {rtsRemark.reason}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="tc-dms-raw-toggle">
+                                            <span className="tc-dms-raw-text">{c.message}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Automatic Terminal RTS Dispatched to DMS</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    const coordDecisionRemark = parseCoordinatorDecisionComment(c.message);
+                    if (coordDecisionRemark) {
+                        const isApproved = coordDecisionRemark.decision.toLowerCase() === 'approved';
+                        const isRts = coordDecisionRemark.decision.toLowerCase() === 'return to sender';
+                        const badgeClass = isApproved ? 'success' : isRts ? 'warning' : 'critical';
+
+                        return (
+                            <div
+                                key={c.taskCommentId}
+                                className={`tc-msg tc-msg-theirs tc-msg-automated tc-msg-coord-decision tc-msg-${badgeClass}`}
+                                data-testid="tc-coordinator-decision-remark"
+                            >
+                                <div className={`tc-avatar tc-avatar-dms ${badgeClass}`} title="Coordinator Redelivery Decision">
+                                    {isApproved ? <CheckCircle2 size={14} color="#059669" /> : isRts ? <RotateCcw size={14} color="#d97706" /> : <X size={14} color="#dc2626" />}
+                                </div>
+                                <div className="tc-body">
+                                    <div className="tc-automated-header">
+                                        <span className={`tc-author tc-author-dms ${badgeClass}`}>Coordinator Decision</span>
+                                        <span className={`tc-dms-tag ${badgeClass}`}>
+                                            Decision: {coordDecisionRemark.decision}
+                                        </span>
+                                        {coordDecisionRemark.scheduledDate && (
+                                            <span className="tc-date-badge success">
+                                                Scheduled: {coordDecisionRemark.scheduledDate}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className={`tc-dms-card ${badgeClass}`}>
+                                        <div className="tc-dms-card-top">
+                                            <div className={`tc-dms-type-badge ${badgeClass}`}>
+                                                <FileCheck size={12} />
+                                                <span>Coordinator Review Recorded: {coordDecisionRemark.decision}</span>
+                                            </div>
+                                            {coordDecisionRemark.scheduledDate && (
+                                                <span className="tc-dms-recorded-time">
+                                                    Date: {coordDecisionRemark.scheduledDate}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {coordDecisionRemark.remarks && (
+                                            <div className={`tc-dms-reason-box ${badgeClass}`}>
+                                                <span className="tc-dms-reason-label">Coordinator Remarks:</span>
+                                                <span className="tc-dms-reason-text">{coordDecisionRemark.remarks}</span>
+                                            </div>
+                                        )}
+
+                                        <div className="tc-dms-footer-meta">
+                                            <span className="tc-dms-driver">
+                                                <strong>Approver:</strong> {coordDecisionRemark.approver}
+                                            </span>
+                                        </div>
+
+                                        <div className="tc-dms-raw-toggle">
+                                            <span className="tc-dms-raw-text">{c.message}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="tc-meta">
+                                        <span className="tc-time">{fmtDateTime(c.createdAt)}</span>
+                                        <span className="tc-dms-system-note">Recorded &amp; Dispatched to DMS M2M</span>
                                     </div>
                                 </div>
                             </div>
