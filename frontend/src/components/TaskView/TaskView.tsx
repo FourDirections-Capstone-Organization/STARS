@@ -459,26 +459,26 @@ interface ParsedFomsEndorsementInfo {
 const parseFomsEndorsement = (title?: string, desc?: string): ParsedFomsEndorsementInfo | null => {
     const rawTitle = title || '';
     const rawDesc = desc || '';
-    const isEndorsement = rawTitle.includes('[FOMS Endorsement]') || rawDesc.includes('Deliver finalized invoice');
+    const isEndorsement = rawTitle.includes('[FOMS Endorsement]') || rawDesc.includes('Deliver finalized invoice') || rawTitle.includes('[FOMS-INVOICE]');
     if (!isEndorsement) return null;
 
-    const invoiceMatch = rawDesc.match(/Deliver finalized invoice\s+([A-Z0-9-]+)\s+to client/i) || rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i);
+    const invoiceMatch = rawDesc.match(/Deliver finalized invoice\s+([A-Za-z0-9-]+)\s+to client/i) || rawTitle.match(/Invoice\s+([A-Za-z0-9-]+)/i) || rawDesc.match(/(?:Invoice|invoice):\s*([A-Za-z0-9-]+)/i);
     const amountMatch = rawDesc.match(/Amount:\s*([^\n]+)/i);
-    const addressMatch = rawDesc.match(/Address:\s*([^\n]+)/i);
-    const contactMatch = rawDesc.match(/Contact:\s*([^\n]+)/i);
-    const emailMatch = rawDesc.match(/Email:\s*([^\n]+)/i);
+    const addressMatch = rawDesc.match(/(?:Address|Delivery Address|Physical Delivery Address):\s*([^\n]+)/i);
+    const contactMatch = rawDesc.match(/(?:Contact|Contact Person|Receiving Contact):\s*([^\n]+)/i);
+    const emailMatch = rawDesc.match(/(?:Email|Finance Email):\s*([^\n]+)/i);
     const docMatch = rawDesc.match(/Document:\s*([^\n]+)/i);
     const remarksMatch = rawDesc.match(/Remarks:\s*([^\n]+)/i);
 
-    const invoice = invoiceMatch ? invoiceMatch[1].trim() : (rawTitle.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-FOMS');
+    const invoice = invoiceMatch ? invoiceMatch[1].trim() : (rawTitle.match(/Invoice\s+([A-Za-z0-9-]+)/i)?.[1] || 'INV-FOMS');
 
     let clientName = '';
-    const titleHyphen = rawTitle.lastIndexOf('-');
-    if (titleHyphen !== -1) {
-        clientName = rawTitle.substring(titleHyphen + 1).trim();
+    const titleParts = rawTitle.split(/\s+-\s+/);
+    if (titleParts.length > 1) {
+        clientName = titleParts.slice(1).join(' - ').trim();
     }
     if (!clientName) {
-        const clientDescMatch = rawDesc.match(/to client\s+([^\.\n]+)/i);
+        const clientDescMatch = rawDesc.match(/to client\s+([^\.\n]+?)(?:\s+for official|\.|\n|$)/i) || rawDesc.match(/(?:Client|Client Enterprise|Client Name):\s*([^\n]+)/i);
         clientName = clientDescMatch ? clientDescMatch[1].trim() : 'Client Account';
     }
 
@@ -2592,24 +2592,28 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">INVOICE AMOUNT</span>
                                             <span className="tv-foms-stat-amount" style={{ color: 'var(--tp, #0F172A)' }}>
-                                                {fomsEndorsement.amount}
+                                                {endorsementDetail?.invoiceAmount != null
+                                                    ? (typeof endorsementDetail.invoiceAmount === 'number'
+                                                        ? '₱' + endorsementDetail.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                        : endorsementDetail.invoiceAmount)
+                                                    : fomsEndorsement.amount}
                                             </span>
                                         </div>
                                         <div className="tv-foms-stat-group">
                                             <span className="tv-foms-stat-label">INVOICE NUMBER</span>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <span className="tv-foms-invoice-num">{fomsEndorsement.invoiceNumber}</span>
+                                                <span className="tv-foms-invoice-num">{endorsementDetail?.invoiceNumber || fomsEndorsement.invoiceNumber}</span>
                                                 <button
                                                     type="button"
                                                     className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
-                                                    onClick={() => handleFomsCopy(fomsEndorsement.invoiceNumber, 'foms-end-inv')}
+                                                    onClick={() => handleFomsCopy(endorsementDetail?.invoiceNumber || fomsEndorsement.invoiceNumber, 'foms-end-inv')}
                                                     title="Copy invoice number"
                                                 >
                                                     {copiedFomsKey === 'foms-end-inv' ? <Check size={11} color="#00A99D" /> : <Copy size={11} />}
                                                 </button>
-                                                {fomsEndorsement.documentUrl && (
+                                                {(endorsementDetail?.invoiceDocumentUrl || fomsEndorsement.documentUrl) && (
                                                     <a
-                                                        href={fomsEndorsement.documentUrl}
+                                                        href={endorsementDetail?.invoiceDocumentUrl || fomsEndorsement.documentUrl}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="tv-btn tv-btn-outline-sm tv-foms-copy-btn"
@@ -2668,32 +2672,32 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <div className="tv-foms-grid-item">
                                             <span className="tv-foms-grid-label">Client Enterprise</span>
                                             <span className="tv-foms-grid-value" style={{ fontWeight: 700 }}>
-                                                {fomsEndorsement.clientName}
+                                                {endorsementDetail?.clientName || fomsEndorsement.clientName}
                                             </span>
                                         </div>
 
                                         <div className="tv-foms-grid-item">
                                             <span className="tv-foms-grid-label">Receiving Contact</span>
-                                            <span className="tv-foms-grid-value">{fomsEndorsement.contactPerson}</span>
-                                            {fomsEndorsement.contactPhone && (
+                                            <span className="tv-foms-grid-value">{endorsementDetail?.clientContactPerson || fomsEndorsement.contactPerson}</span>
+                                            {(endorsementDetail?.clientContactNumber || fomsEndorsement.contactPhone) && (
                                                 <a
-                                                    href={`tel:${fomsEndorsement.contactPhone}`}
+                                                    href={`tel:${endorsementDetail?.clientContactNumber || fomsEndorsement.contactPhone}`}
                                                     className="tv-foms-action-link"
                                                     title="Call contact number"
                                                 >
-                                                    <Phone size={11} /> {fomsEndorsement.contactPhone}
+                                                    <Phone size={11} /> {endorsementDetail?.clientContactNumber || fomsEndorsement.contactPhone}
                                                 </a>
                                             )}
                                         </div>
 
-                                        {fomsEndorsement.email && (
+                                        {(endorsementDetail?.clientEmail || fomsEndorsement.email) && (
                                             <div className="tv-foms-grid-item">
                                                 <span className="tv-foms-grid-label">Finance Email</span>
                                                 <a
-                                                    href={`mailto:${fomsEndorsement.email}?subject=Physical%20Invoice%20Endorsement:%20${fomsEndorsement.invoiceNumber}`}
+                                                    href={`mailto:${endorsementDetail?.clientEmail || fomsEndorsement.email}?subject=Physical%20Invoice%20Endorsement:%20${endorsementDetail?.invoiceNumber || fomsEndorsement.invoiceNumber}`}
                                                     className="tv-foms-action-link"
                                                 >
-                                                    <Mail size={11} /> {fomsEndorsement.email}
+                                                    <Mail size={11} /> {endorsementDetail?.clientEmail || fomsEndorsement.email}
                                                 </a>
                                             </div>
                                         )}
@@ -2717,18 +2721,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             )}
                                         </div>
 
-                                        {fomsEndorsement.address && (
+                                        {(endorsementDetail?.clientAddress || fomsEndorsement.address) && (
                                             <div className="tv-foms-grid-item tv-foms-grid-full">
                                                 <span className="tv-foms-grid-label">Physical Delivery Address</span>
                                                 <a
-                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fomsEndorsement.address)}`}
+                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endorsementDetail?.clientAddress || fomsEndorsement.address)}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="tv-foms-gps-link"
                                                     title="Open address in Google Maps"
                                                 >
                                                     <MapPin size={12} color="#4F46E5" />
-                                                    <span>{fomsEndorsement.address}</span>
+                                                    <span>{endorsementDetail?.clientAddress || fomsEndorsement.address}</span>
                                                     <ExternalLink size={10} />
                                                 </a>
                                             </div>

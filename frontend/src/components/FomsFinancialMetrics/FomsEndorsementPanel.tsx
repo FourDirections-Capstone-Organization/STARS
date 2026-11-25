@@ -207,20 +207,34 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
             if (items.length > 0) {
                 const mapped: FomsEndorsementItem[] = items.map((t: any) => {
                     const desc = t.description || '';
-                    const invoiceMatch = desc.match(/Deliver finalized invoice\s+([A-Z0-9-]+)\s+to client/i) || t.title.match(/Invoice\s+([A-Z0-9-]+)/i);
+                    const invoiceMatch = desc.match(/Deliver finalized invoice\s+([A-Za-z0-9-]+)\s+to client/i) || t.title.match(/Invoice\s+([A-Za-z0-9-]+)/i);
                     const amountMatch = desc.match(/Amount:\s*₱?([^\n]+)/i);
-                    const addressMatch = desc.match(/Address:\s*([^\n]+)/i);
-                    const contactMatch = desc.match(/Contact:\s*([^\n]+)/i);
+                    const addressMatch = desc.match(/(?:Address|Delivery Address):\s*([^\n]+)/i);
+                    const contactMatch = desc.match(/(?:Contact|Contact Person|Receiving Contact):\s*([^\n]+)/i);
+                    const emailMatch = desc.match(/(?:Email|Finance Email):\s*([^\n]+)/i);
                     const docMatch = desc.match(/Document:\s*([^\n]+)/i);
 
-                    const invoiceNo = invoiceMatch ? invoiceMatch[1].trim() : (t.title.match(/Invoice\s+([A-Z0-9-]+)/i)?.[1] || 'INV-2026-LIVE');
+                    let contactPerson: string | undefined;
+                    let contactPhone: string | undefined;
+                    if (contactMatch) {
+                        const fullContact = contactMatch[1].trim();
+                        const pMatch = fullContact.match(/\(([^)]+)\)/);
+                        if (pMatch) {
+                            contactPhone = pMatch[1].trim();
+                            contactPerson = fullContact.replace(/\([^)]+\)/, '').trim();
+                        } else {
+                            contactPerson = fullContact;
+                        }
+                    }
+
+                    const invoiceNo = invoiceMatch ? invoiceMatch[1].trim() : (t.title.match(/Invoice\s+([A-Za-z0-9-]+)/i)?.[1] || 'INV-2026-LIVE');
                     const cleanAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) || 89500 : 89500;
                     const assignee = t.assignees && t.assignees.length > 0 ? t.assignees[0].fullName : 'Optimal Coordinator';
 
                     const titleParts = (t.title || '').split(/\s+-\s+/);
                     const parsedClientName = titleParts.length > 1
                         ? titleParts.slice(1).join(' - ').trim()
-                        : t.title.replace(/^\[(FOMS|Invoice)\s+Endorsement\]\s*(Invoice\s+[A-Z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
+                        : t.title.replace(/^\[(FOMS|Invoice)\s+Endorsement\]\s*(Invoice\s+[A-Za-z0-9-]+\s*-\s*)?/i, '').trim() || 'Client Company';
 
                     const isDone = t.status === 3 || t.taskStatus === 'Completed';
                     const actualReceived = isDone ? (t.updatedAt ? t.updatedAt.substring(0, 10) : (t.createdAt ? t.createdAt.substring(0, 10) : new Date().toISOString().substring(0, 10))) : null;
@@ -232,8 +246,10 @@ export const FomsEndorsementPanel: React.FC<FomsEndorsementPanelProps> = ({
                         taskNumber: t.taskNumber || t.taskReferenceNumber || 'TK-LIVE',
                         invoiceNumber: invoiceNo,
                         clientName: parsedClientName,
-                        clientAddress: addressMatch ? addressMatch[1] : undefined,
-                        clientContactPerson: contactMatch ? contactMatch[1] : undefined,
+                        clientAddress: addressMatch ? addressMatch[1].trim() : undefined,
+                        clientContactPerson: contactPerson,
+                        clientContactNumber: contactPhone,
+                        clientEmail: emailMatch && emailMatch[1].trim() !== 'N/A' ? emailMatch[1].trim() : undefined,
                         invoiceAmount: cleanAmount,
                         billingDate: t.createdAt || new Date().toISOString(),
                         dueDate: t.deadline || new Date(Date.now() + 30 * 86400000).toISOString(),

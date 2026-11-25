@@ -544,4 +544,67 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             ).toBeInTheDocument();
         });
     });
+
+    describe('Defect 2: Backend Ground Truth for Invoice & Client Contact Details', () => {
+        it('prioritizes backend endorsement details for client enterprise, receiving contact, phone, email, and amount', async () => {
+            const taskWithHyphenatedTitle: TaskViewTask = {
+                taskId: 'task-foms-defect-2',
+                taskNumber: 'TK-FOMS-DEF2',
+                taskTitle: '[FOMS Endorsement] Invoice INV-2026-8821 - Megaworld Corporation - Global Tower',
+                taskDescription: 'Deliver finalized invoice INV-2026-8821 to client Generic Corp for official receiving endorsement.\nAmount: ₱10,000.00\nAddress: Old Address\nContact: Old Contact (09000000000)\nEmail: old@corp.com\nDocument: https://stars.blob.core.windows.net/invoices/INV-2026-8821.pdf',
+                taskStatus: 'InProgress',
+                taskCategory: 'Financial Operations',
+                priority: 'High',
+            };
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/endorsement-details')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'task-foms-defect-2',
+                                invoiceNumber: 'INV-2026-8821',
+                                clientName: 'Megaworld Corporation - Global Tower',
+                                clientContactPerson: 'Maria Santos',
+                                clientContactNumber: '+63 917 123 4567',
+                                clientEmail: 'msantos@megaworldcorp.com',
+                                clientAddress: '30th Floor, Alliance Global Tower, Uptown Bonifacio, Taguig City',
+                                invoiceAmount: 185000.00,
+                                invoiceDocumentUrl: 'https://stars.blob.core.windows.net/invoices/INV-2026-8821.pdf',
+                                endorsementStatus: 'PendingEndorsement',
+                                fomsSyncStatus: 'Pending',
+                            },
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(
+                <TaskView
+                    task={taskWithHyphenatedTitle}
+                    currentUserId="user-01"
+                    currentUserRole="OperationsManager"
+                    onClose={vi.fn()}
+                    onStatusChange={vi.fn()}
+                />
+            );
+
+            // Wait for endorsement detail to load and verify backend truth is displayed
+            await waitFor(() => {
+                expect(screen.getByText('Megaworld Corporation - Global Tower')).toBeInTheDocument();
+                expect(screen.getByText('Maria Santos')).toBeInTheDocument();
+                expect(screen.getByText('+63 917 123 4567')).toBeInTheDocument();
+                expect(screen.getByText('msantos@megaworldcorp.com')).toBeInTheDocument();
+                expect(screen.getByText('30th Floor, Alliance Global Tower, Uptown Bonifacio, Taguig City')).toBeInTheDocument();
+                expect(screen.getByText('₱185,000.00')).toBeInTheDocument();
+            });
+
+            // Ensure old fallback text is NOT displayed
+            expect(screen.queryByText('Generic Corp')).not.toBeInTheDocument();
+            expect(screen.queryByText('Old Contact')).not.toBeInTheDocument();
+            expect(screen.queryByText('old@corp.com')).not.toBeInTheDocument();
+        });
+    });
 });

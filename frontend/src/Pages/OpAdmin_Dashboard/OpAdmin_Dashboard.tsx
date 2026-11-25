@@ -10060,7 +10060,7 @@ export default function OpsAdminDashboard() {
         const amountStr = item.invoiceAmount ? `₱${item.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₱89,500.00';
         setInitialTaskData({
             taskTitle: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
-            taskDescription: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
+            taskDescription: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nEmail: ${item.clientEmail || 'N/A'}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
             taskCategory: 'Financial Operations',
             priority: 'High',
             dueAt: deadline,
