@@ -22,6 +22,7 @@ vi.mock('../api', () => ({
         get: vi.fn(),
         post: vi.fn(),
         put: vi.fn(),
+        patch: vi.fn(() => Promise.resolve({ data: { isSuccess: true } })),
     },
 }));
 
@@ -457,6 +458,49 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(mockToastSuccess).toHaveBeenCalledWith(
                 expect.stringContaining('Endorsement completion callback transmitted to FOMS')
             );
+        });
+
+        it('displays 30-Day Payment Clock Active when taskStatus is Completed instead of remaining pending sign-off', async () => {
+            render(
+                <TaskView
+                    task={{
+                        ...endorsementTask,
+                        taskStatus: 'Completed',
+                    }}
+                    onClose={vi.fn()}
+                />
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('30-Day Payment Clock Active')).toBeInTheDocument();
+                expect(screen.queryByText('Physical Delivery / Pending Sign-off')).not.toBeInTheDocument();
+            });
+        });
+
+        it('dispatches endorsement completion transmission to FOMS upon approving an endorsement task', async () => {
+            localStorage.setItem('userRole', 'Coordinator');
+            render(
+                <TaskView
+                    task={{
+                        ...endorsementTask,
+                        taskStatus: 'Done/Pending Review',
+                    }}
+                    onClose={vi.fn()}
+                />
+            );
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+            await waitFor(() => {
+                expect(api.post).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/foms-integration/tasks/c201a9e3-4f2b-42e1-884b-703c90e22001/resend'),
+                    {}
+                );
+            });
         });
     });
 

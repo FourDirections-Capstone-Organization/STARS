@@ -4230,6 +4230,9 @@ export default function Dashboard() {
                     await api.patch(`/api/Task/${id}/status`, { status: 3 });
                 }
                 syncDmsTaskCompleted(id).catch(() => {});
+                if (found && ((found.name || '').includes('[FOMS Endorsement]') || (found as any).title?.includes('[FOMS Endorsement]'))) {
+                    api.post(`/api/foms-integration/tasks/${id}/resend`, {}).catch(() => {});
+                }
                 window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId: id } }));
             } catch { /* ignore individual failures */ }
         }
@@ -4533,12 +4536,15 @@ export default function Dashboard() {
             // Link FOMS invoice endorsement if task was created from endorsement
             if (taskId && t.includes('[FOMS Endorsement]')) {
                 try {
-                    const invMatch = t.match(/\[FOMS Endorsement\]\s+Invoice\s+([^\s\-]+)/i);
+                    const invMatch = t.match(/\[FOMS Endorsement\]\s+Invoice\s+([A-Za-z0-9-]+)/i) || t.match(/Invoice\s+([A-Za-z0-9-]+)/i);
                     const invoiceNumber = invMatch ? invMatch[1] : '';
+                    const titleParts = t.split(/\s+-\s+/);
+                    const parsedClient = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : undefined;
                     if (invoiceNumber) {
                         await api.post('/api/foms-integration/tasks/link-endorsement', {
                             taskId,
-                            invoiceNumber
+                            invoiceNumber,
+                            clientName: parsedClient,
                         });
                     }
                 } catch (linkErr) {

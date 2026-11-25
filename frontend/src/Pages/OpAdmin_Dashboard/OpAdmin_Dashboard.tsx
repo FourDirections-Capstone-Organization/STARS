@@ -10809,12 +10809,15 @@ export default function OpsAdminDashboard() {
             // Link FOMS invoice endorsement if task was created from endorsement
             if (taskId && (data.title || '').includes('[FOMS Endorsement]')) {
                 try {
-                    const invMatch = (data.title || '').match(/\[FOMS Endorsement\]\s+Invoice\s+([^\s\-]+)/i);
+                    const invMatch = (data.title || '').match(/\[FOMS Endorsement\]\s+Invoice\s+([A-Za-z0-9-]+)/i) || (data.title || '').match(/Invoice\s+([A-Za-z0-9-]+)/i);
                     const invoiceNumber = invMatch ? invMatch[1] : '';
+                    const titleParts = (data.title || '').split(/\s+-\s+/);
+                    const parsedClient = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : undefined;
                     if (invoiceNumber) {
                         await api.post('/api/foms-integration/tasks/link-endorsement', {
                             taskId,
-                            invoiceNumber
+                            invoiceNumber,
+                            clientName: parsedClient,
                         });
                     }
                 } catch (linkErr) {
@@ -11103,6 +11106,9 @@ export default function OpsAdminDashboard() {
             if (newStatus === 'Completed') {
                 setTaskTab('completed');
                 syncDmsTaskCompleted(taskId).catch(() => {});
+                if ((task.taskTitle || '').includes('[FOMS Endorsement]') || (task as any).title?.includes('[FOMS Endorsement]')) {
+                    api.post(`/api/foms-integration/tasks/${taskId}/resend`, {}).catch(() => {});
+                }
                 window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
@@ -11124,6 +11130,10 @@ export default function OpsAdminDashboard() {
             if (adminDecision === 'Approve & Close') {
                 setTaskTab('completed');
                 syncDmsTaskCompleted(taskId).catch(() => {});
+                const rTask = tasks.find(t => t.taskId === taskId) || allTasks.find(t => t.taskId === taskId);
+                if (rTask && ((rTask.taskTitle || '').includes('[FOMS Endorsement]') || (rTask as any).title?.includes('[FOMS Endorsement]'))) {
+                    api.post(`/api/foms-integration/tasks/${taskId}/resend`, {}).catch(() => {});
+                }
                 window.dispatchEvent(new CustomEvent('stars:dms-task-updated', { detail: { taskId } }));
             }
             await fetchTasks();
