@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, Calendar, FileText, CheckCircle2, Loader2, Building2 } from 'lucide-react';
+import { AlertCircle, Calendar, FileText, CheckCircle2, Loader2, Building2, PlusCircle } from 'lucide-react';
 import api from '../../api';
 import { FomsClientAccount, TaskFormProps } from './types';
 import './ClientManagement.css';
@@ -104,7 +104,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     const isBusy = isSubmitting || localSubmitting;
 
     return (
-        <form onSubmit={handleSubmit} className="task-form-container" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} className="task-form-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {/* Inactive Account Error Banner */}
             {isClientInactive && (
                 <div className="client-inactive-error-banner" data-testid="client-inactive-error" role="alert">
@@ -120,11 +120,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 </div>
             )}
 
-            {/* Client Account Selector */}
-            <div className="form-group">
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                    Linked Client Account (FOMS Reference)
-                </label>
+            {/* Section 1: Linked Client Enterprise (DMS style) */}
+            <div style={{
+                background: '#f8fafc',
+                border: isClientInactive ? '1.5px solid #ef4444' : '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '1rem 1.25rem',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
+                    <Building2 size={16} color="#00A99D" />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Linked Client Account (FOMS Reference)
+                    </span>
+                </div>
+
                 <div style={{ position: 'relative' }}>
                     <select
                         className="client-select-input"
@@ -140,12 +149,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                         }}
                         style={{
                             width: '100%',
-                            padding: '0.6rem 0.8rem',
+                            padding: '0.65rem 0.85rem',
                             borderRadius: '8px',
                             border: isClientInactive ? '2px solid #ef4444' : '1px solid #cbd5e1',
                             fontSize: '0.85rem',
                             outline: 'none',
                             background: '#ffffff',
+                            color: '#0f172a',
                         }}
                     >
                         <option value="">-- None / General Operational Task --</option>
@@ -167,153 +177,193 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 </div>
 
                 {selectedClient && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: 6, fontSize: '0.75rem' }}>
-                        <span style={{ color: '#64748b' }}>Client Status:</span>
-                        <span className={`status-pill ${!isClientInactive ? 'active' : 'inactive'}`}>
-                            <span className="status-pill-dot" />
-                            {selectedClient.status}
-                        </span>
-                        {selectedClient.assignedCoordinatorName && (
-                            <span style={{ color: '#0284c7' }}>
-                                • Managing Coordinator: {selectedClient.assignedCoordinatorName}
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginTop: 10, fontSize: '0.78rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ color: '#64748b' }}>Status:</span>
+                            <span className={`status-pill ${!isClientInactive ? 'active' : 'inactive'}`}>
+                                <span className="status-pill-dot" />
+                                {selectedClient.status}
                             </span>
+                        </div>
+                        {selectedClient.assignedCoordinatorName && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7' }}>
+                                <span>Managing Coordinator:</span>
+                                <strong>{selectedClient.assignedCoordinatorName}</strong>
+                            </div>
+                        )}
+                        {selectedClient.contactPerson && (
+                            <div style={{ color: '#64748b' }}>
+                                Attn: {selectedClient.contactPerson} {selectedClient.contactNumber ? `(${selectedClient.contactNumber})` : ''}
+                            </div>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* Task Title */}
-            <div className="form-group">
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                    Task Title <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                    type="text"
-                    data-testid="task-title-input"
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder="e.g. Endorse invoice for client receiving"
-                    disabled={isBusy}
-                    required
-                    style={{
-                        width: '100%',
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.85rem',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                    }}
-                />
-            </div>
+            {/* Section 2: Task Information & Instructions */}
+            <div style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '1rem 1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.85rem',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FileText size={16} color="#00A99D" />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Task Information
+                    </span>
+                </div>
 
-            {/* Task Category & Priority */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                {/* Task Title */}
                 <div className="form-group">
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                        Category
+                        Task Title <span style={{ color: '#ef4444' }}>*</span>
                     </label>
-                    <select
-                        value={category}
-                        onChange={e => setCategory(e.target.value)}
+                    <input
+                        type="text"
+                        data-testid="task-title-input"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        placeholder="e.g. Endorse invoice for client receiving"
                         disabled={isBusy}
+                        required
                         style={{
                             width: '100%',
-                            padding: '0.6rem 0.8rem',
+                            padding: '0.65rem 0.85rem',
                             borderRadius: '8px',
                             border: '1px solid #cbd5e1',
                             fontSize: '0.85rem',
                             outline: 'none',
-                            background: '#ffffff',
+                            boxSizing: 'border-box',
                         }}
-                    >
-                        <option value="Invoice Endorsement">Invoice Endorsement</option>
-                        <option value="Delivery">Delivery & Logistics</option>
-                        <option value="Collection Follow-up">Collection Follow-up</option>
-                        <option value="Operations">Operations General</option>
-                    </select>
+                    />
                 </div>
 
+                {/* Description */}
                 <div className="form-group">
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                        Priority
+                        Operational Instructions / Description
                     </label>
-                    <select
-                        value={priority}
-                        onChange={e => setPriority(e.target.value)}
+                    <textarea
+                        rows={3}
+                        value={description}
+                        onChange={e => setDescription(e.target.value)}
+                        placeholder="Enter specific instructions, required documents, or routing notes..."
                         disabled={isBusy}
                         style={{
                             width: '100%',
-                            padding: '0.6rem 0.8rem',
+                            padding: '0.65rem 0.85rem',
                             borderRadius: '8px',
                             border: '1px solid #cbd5e1',
                             fontSize: '0.85rem',
                             outline: 'none',
-                            background: '#ffffff',
+                            boxSizing: 'border-box',
+                            resize: 'vertical',
                         }}
-                    >
-                        <option value="Low">Low</option>
-                        <option value="Medium">Medium</option>
-                        <option value="High">High</option>
-                        <option value="Urgent">Urgent</option>
-                    </select>
+                    />
                 </div>
             </div>
 
-            {/* Due Date */}
-            <div className="form-group">
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                    Target Completion / Due Date
-                </label>
-                <input
-                    type="datetime-local"
-                    value={dueAt}
-                    onChange={e => setDueAt(e.target.value)}
-                    disabled={isBusy}
-                    style={{
-                        width: '100%',
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.85rem',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                    }}
-                />
+            {/* Section 3: Classification & Schedule */}
+            <div style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '1rem 1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.85rem',
+            }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
+                            Category
+                        </label>
+                        <select
+                            value={category}
+                            onChange={e => setCategory(e.target.value)}
+                            disabled={isBusy}
+                            style={{
+                                width: '100%',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '8px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.85rem',
+                                outline: 'none',
+                                background: '#ffffff',
+                            }}
+                        >
+                            <option value="Invoice Endorsement">Invoice Endorsement</option>
+                            <option value="Delivery">Delivery & Logistics</option>
+                            <option value="Collection Follow-up">Collection Follow-up</option>
+                            <option value="Operations">Operations General</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
+                            Priority
+                        </label>
+                        <select
+                            value={priority}
+                            onChange={e => setPriority(e.target.value)}
+                            disabled={isBusy}
+                            style={{
+                                width: '100%',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '8px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.85rem',
+                                outline: 'none',
+                                background: '#ffffff',
+                            }}
+                        >
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Due Date */}
+                <div className="form-group">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                        <Calendar size={14} color="#00A99D" />
+                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>
+                            Target Completion / Due Date
+                        </label>
+                    </div>
+                    <input
+                        type="datetime-local"
+                        value={dueAt}
+                        onChange={e => setDueAt(e.target.value)}
+                        disabled={isBusy}
+                        style={{
+                            width: '100%',
+                            padding: '0.65rem 0.85rem',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.85rem',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                        }}
+                    />
+                </div>
             </div>
 
-            {/* Description */}
-            <div className="form-group">
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.35rem' }}>
-                    Task Instructions / Description
-                </label>
-                <textarea
-                    rows={3}
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="Enter specific instructions, required documents, or routing notes..."
-                    disabled={isBusy}
-                    style={{
-                        width: '100%',
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.85rem',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+            {/* Action Buttons (DMS style) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.85rem', marginTop: '0.25rem' }}>
                 {onCancel && (
                     <button
                         type="button"
                         className="btn-client-action"
                         onClick={onCancel}
                         disabled={isBusy}
+                        style={{ padding: '0.65rem 1.25rem' }}
                     >
                         Cancel
                     </button>
@@ -326,20 +376,26 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                     data-testid="task-form-submit-btn"
                     title={isClientInactive ? 'Client account is inactive in FOMS. Tasks cannot be created for inactive accounts.' : undefined}
                     style={{
-                        padding: '0.6rem 1.25rem',
+                        padding: '0.65rem 1.5rem',
                         fontSize: '0.85rem',
                         fontWeight: 700,
                         opacity: isClientInactive ? 0.45 : 1,
                         cursor: isClientInactive ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
                     }}
                 >
                     {isBusy ? (
                         <>
-                            <Loader2 size={14} className="spin" />
+                            <Loader2 size={15} className="spin" />
                             Creating Task...
                         </>
                     ) : (
-                        'Create Task'
+                        <>
+                            <PlusCircle size={15} />
+                            Create Task
+                        </>
                     )}
                 </button>
             </div>
