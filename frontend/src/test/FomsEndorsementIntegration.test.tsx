@@ -607,4 +607,66 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.queryByText('old@corp.com')).not.toBeInTheDocument();
         });
     });
+
+    describe('Defect 4: Remove Live Delivery Tracker button on Invoice Tasks', () => {
+        it('does not render Live Delivery Tracker button for invoice tasks even when delivery details exist', async () => {
+            const invoiceTask: TaskViewTask = {
+                taskId: 'task-foms-invoice-tracker-test',
+                taskNumber: 'TK-FOMS-INV01',
+                taskTitle: '[FOMS Endorsement] Invoice INV-2026-9901 - Enterprise Solutions',
+                taskDescription: 'Deliver finalized invoice INV-2026-9901 to client Enterprise Solutions for official receiving endorsement.',
+                taskStatus: 'InProgress',
+                taskCategory: 'Financial Operations',
+                priority: 'High',
+            };
+
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/delivery-details')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'task-foms-invoice-tracker-test',
+                                dmsOrderId: 'dms-ord-01',
+                                dmsWaybillNo: 'WB-FOMS-9901',
+                                recipientName: 'Enterprise Solutions',
+                                deliveryAddress: 'BGC, Taguig',
+                                syncStatus: 'Synced',
+                            },
+                        },
+                    });
+                }
+                if (url.includes('/endorsement-details')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                taskId: 'task-foms-invoice-tracker-test',
+                                invoiceNumber: 'INV-2026-9901',
+                                clientName: 'Enterprise Solutions',
+                                endorsementStatus: 'PendingEndorsement',
+                            },
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            render(
+                <TaskView
+                    task={invoiceTask}
+                    currentUserId="user-01"
+                    currentUserRole="OperationsManager"
+                    onClose={vi.fn()}
+                    onStatusChange={vi.fn()}
+                    onNavigateToDmsTracker={vi.fn()}
+                />
+            );
+
+            // Verify Live Delivery Tracker button is NOT present for invoice task
+            expect(screen.queryByTestId('tv-dms-tracker-btn')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('tv-dms-pending-tracker-btn')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Live Delivery Tracker/i })).not.toBeInTheDocument();
+        });
+    });
 });

@@ -953,6 +953,13 @@ const TaskView: React.FC<TaskViewProps> = ({
 
     // ─── FOMS Physical Invoice Delivery & Endorsement (Integration 1) ───────────
     const fomsEndorsement = useMemo(() => parseFomsEndorsement(task.taskTitle, task.taskDescription), [task.taskTitle, task.taskDescription]);
+    const isInvoiceTask = useMemo(() => {
+        if (fomsEndorsement) return true;
+        const cat = (task.taskCategory || '').toLowerCase();
+        const tit = (task.taskTitle || '').toLowerCase();
+        const desc = (task.taskDescription || '').toLowerCase();
+        return cat.includes('invoice') || cat.includes('endorsement') || tit.includes('invoice') || tit.includes('[foms endorsement]') || desc.includes('deliver finalized invoice');
+    }, [fomsEndorsement, task.taskCategory, task.taskTitle, task.taskDescription]);
     const [endorsementDetail, setEndorsementDetail] = useState<any | null>(null);
     const [endorsementLoading, setEndorsementLoading] = useState(false);
     const [showSignModal, setShowSignModal] = useState(false);
@@ -2302,14 +2309,16 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <MessageSquare size={12} />
                                             <span>View Failure Remarks &amp; Comments</span>
                                         </button>
-                                        <button
-                                            type="button"
-                                            className="tv-btn tv-btn-outline-sm"
-                                            onClick={handleNavigateToDmsTracker}
-                                        >
-                                            <Truck size={12} />
-                                            <span>Live Delivery Tracker</span>
-                                        </button>
+                                        {!isInvoiceTask && (
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm"
+                                                onClick={handleNavigateToDmsTracker}
+                                            >
+                                                <Truck size={12} />
+                                                <span>Live Delivery Tracker</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -3038,16 +3047,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <span className="tv-dms-waybill-val">{deliveryDetail.dmsWaybillNo}</span>
                                         </div>
                                         <div className="tv-dms-waybill-actions">
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-primary tv-btn-sm tv-dms-tracker-btn"
-                                                data-testid="tv-dms-tracker-btn"
-                                                onClick={handleNavigateToDmsTracker}
-                                                title="Open Live Delivery Tracker in DMS Tab"
-                                            >
-                                                <Truck size={12} />
-                                                <span>Live Delivery Tracker</span>
-                                            </button>
+                                            {!isInvoiceTask && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-primary tv-btn-sm tv-dms-tracker-btn"
+                                                    data-testid="tv-dms-tracker-btn"
+                                                    onClick={handleNavigateToDmsTracker}
+                                                    title="Open Live Delivery Tracker in DMS Tab"
+                                                >
+                                                    <Truck size={12} />
+                                                    <span>Live Delivery Tracker</span>
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 className="tv-btn tv-btn-outline-sm tv-dms-copy-btn"
@@ -3466,18 +3477,20 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                     {resendingDms ? 'Dispatching…' : 'Dispatch Order to DMS Now'}
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                className="tv-btn tv-btn-outline-sm tv-dms-tracker-btn"
-                                                data-testid="tv-dms-pending-tracker-btn"
-                                                onClick={handleNavigateToDmsTracker}
-                                                title="Open in Live Delivery Tracker"
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                                            >
-                                                <Truck size={11} />
-                                                <span>Live Delivery Tracker</span>
-                                                <ExternalLink size={10} />
-                                            </button>
+                                            {!isInvoiceTask && (
+                                                <button
+                                                    type="button"
+                                                    className="tv-btn tv-btn-outline-sm tv-dms-tracker-btn"
+                                                    data-testid="tv-dms-pending-tracker-btn"
+                                                    onClick={handleNavigateToDmsTracker}
+                                                    title="Open in Live Delivery Tracker"
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                                                >
+                                                    <Truck size={11} />
+                                                    <span>Live Delivery Tracker</span>
+                                                    <ExternalLink size={10} />
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
