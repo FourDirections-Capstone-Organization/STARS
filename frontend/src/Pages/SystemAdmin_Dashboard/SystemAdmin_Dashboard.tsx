@@ -4387,7 +4387,7 @@ export default function Dashboard() {
         setShowNewTask(true);
     };
 
-    const handleCreateTaskFromEndorsement = (item: FomsEndorsementItem) => {
+    const handleCreateTaskFromEndorsement = async (item: FomsEndorsementItem) => {
         let deadline = '';
         if (item.dueDate) {
             try {
@@ -4399,14 +4399,52 @@ export default function Dashboard() {
             } catch { }
         }
         const amountStr = item.invoiceAmount ? `₱${item.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₱89,500.00';
-        setNewTaskForm(prev => ({
-            ...prev,
-            title: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
-            description: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nEmail: ${item.clientEmail || 'N/A'}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
-            priority: 'High',
-            deadline: deadline,
-        }));
-        setShowNewTask(true);
+
+        try {
+            let coordinatorId: string | undefined;
+            try {
+                const res = await api.get('/api/Task/assignable-users?pageNumber=1&pageSize=100');
+                const list = res.data?.data?.items || res.data?.data || (Array.isArray(res.data) ? res.data : []);
+                const found = list.find((u: any) =>
+                    (u.fullName || '').toLowerCase().includes('test coordinator') ||
+                    (u.employeeNumber || '').toUpperCase() === 'CRD001' ||
+                    ((u.firstName || '').toLowerCase() === 'test' && (u.lastName || '').toLowerCase().includes('coordinator'))
+                ) || list.find((u: any) => (u.role || '').toLowerCase().includes('coordinator'));
+                if (found) {
+                    coordinatorId = found.userId || found.id;
+                }
+            } catch { }
+
+            const taskPayload: any = {
+                title: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
+                description: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nEmail: ${item.clientEmail || 'N/A'}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
+                category: 'Financial Operations',
+                classification: 0,
+                assignmentScope: 0,
+                priority: 'High',
+                priorityLevel: 2,
+                deadline: deadline ? new Date(deadline).toISOString() : new Date(Date.now() + 30 * 86400000).toISOString(),
+                assignedUserIds: coordinatorId ? [coordinatorId] : [],
+            };
+
+            const res = await api.post('/api/Task', taskPayload);
+            const created = res.data;
+            const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
+
+            if (taskId) {
+                await api.post('/api/foms-integration/tasks/link-endorsement', {
+                    taskId,
+                    invoiceNumber: item.invoiceNumber,
+                    clientName: item.clientName,
+                    invoiceAmount: item.invoiceAmount,
+                }).catch(() => {});
+            }
+
+            success(`Operational task for Invoice ${item.invoiceNumber} created at STARS and assigned to Test Coordinator.`);
+            fetchManagerTasks().catch(() => {});
+        } catch (err: any) {
+            error(err?.message || 'Failed to auto-create STARS task.');
+        }
     };
 
     // -- Delete a task attachment --

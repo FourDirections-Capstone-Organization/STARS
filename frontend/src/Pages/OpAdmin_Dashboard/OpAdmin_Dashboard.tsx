@@ -10046,7 +10046,7 @@ export default function OpsAdminDashboard() {
         setShowNew(true);
     };
 
-    const handleCreateTaskFromEndorsement = (item: FomsEndorsementItem) => {
+    const handleCreateTaskFromEndorsement = async (item: FomsEndorsementItem) => {
         let deadline = '';
         if (item.dueDate) {
             try {
@@ -10058,14 +10058,42 @@ export default function OpsAdminDashboard() {
             } catch { }
         }
         const amountStr = item.invoiceAmount ? `₱${item.invoiceAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₱89,500.00';
-        setInitialTaskData({
-            taskTitle: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
-            taskDescription: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nEmail: ${item.clientEmail || 'N/A'}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
-            taskCategory: 'Financial Operations',
-            priority: 'High',
-            dueAt: deadline,
-        });
-        setShowNew(true);
+
+        const testCoord = (teamMembers || []).find(tm =>
+            (tm.employeeName || '').toLowerCase().includes('test coordinator') ||
+            (tm as any).employeeNumber === 'CRD001' ||
+            (tm.role || '').toLowerCase().includes('coordinator')
+        );
+
+        try {
+            const taskPayload: any = {
+                title: `[FOMS Endorsement] Invoice ${item.invoiceNumber} - ${item.clientName}`,
+                description: `Deliver finalized invoice ${item.invoiceNumber} to client ${item.clientName} for official receiving endorsement and wet signature.\nAmount: ${amountStr}\nDue Date: 30 days upon receipt\nAddress: ${item.clientAddress || 'Client Office Address'}\nContact: ${item.clientContactPerson || 'Client Finance Representative'}${item.clientContactNumber ? ` (${item.clientContactNumber})` : ''}\nEmail: ${item.clientEmail || 'N/A'}\nDocument: ${item.invoiceDocumentUrl || 'Attached in FOMS'}`,
+                category: 'Financial Operations',
+                classification: 0,
+                assignmentScope: 0,
+                priority: 2,
+                priorityLevel: 2,
+                deadline: deadline ? new Date(deadline).toISOString() : new Date(Date.now() + 30 * 86400000).toISOString(),
+                assignedUserIds: testCoord?.accountId ? [testCoord.accountId] : [],
+            };
+
+            const res = await api.post('/api/Task', taskPayload);
+            const created = res.data;
+            const taskId = created?.data?.id ?? created?.id ?? created?.data?.Id;
+
+            if (taskId) {
+                await api.post('/api/foms-integration/tasks/link-endorsement', {
+                    taskId,
+                    invoiceNumber: item.invoiceNumber,
+                    clientName: item.clientName,
+                    invoiceAmount: item.invoiceAmount,
+                }).catch(() => {});
+            }
+
+            fetchTasks().catch(() => {});
+            doFetchDashboard().catch(() => {});
+        } catch { }
     };
     const [taskSubTab, setTaskSubTab] = useState<'list' | 'create'>('list');
     const [editingTask, setEditingTask] = useState<Task | null>(null);

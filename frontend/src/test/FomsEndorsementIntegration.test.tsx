@@ -172,11 +172,13 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             fireEvent.click(createTaskBtns[0]);
 
             // Callback triggered with endorsement details
-            expect(mockCreateTask).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    invoiceNumber: expect.stringMatching(/INV-2026-8811|INV-2026-8821/),
-                })
-            );
+            await waitFor(() => {
+                expect(mockCreateTask).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        invoiceNumber: expect.stringMatching(/INV-2026-8811|INV-2026-8821/),
+                    })
+                );
+            });
         });
 
         it('filters active endorsement items using status chips and search input', async () => {
@@ -667,6 +669,115 @@ describe('FOMS Physical Invoice Endorsement & 30-Day Payment Term (Integration 1
             expect(screen.queryByTestId('tv-dms-tracker-btn')).not.toBeInTheDocument();
             expect(screen.queryByTestId('tv-dms-pending-tracker-btn')).not.toBeInTheDocument();
             expect(screen.queryByRole('button', { name: /Live Delivery Tracker/i })).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Defect 5: Invoice Endorsement Automatically Creates STARS Task Assigned to Test Coordinator', () => {
+        it('automatically dispatches task creation assigned to Test Coordinator upon clicking Create STARS Task', async () => {
+            (api.get as any).mockImplementation((url: string) => {
+                if (url.includes('/assignable-users')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                items: [
+                                    {
+                                        userId: 'crd-test-001',
+                                        fullName: 'Test Coordinator',
+                                        employeeNumber: 'CRD001',
+                                        role: 'Coordinator',
+                                    },
+                                ],
+                            },
+                        },
+                    });
+                }
+                if (url.includes('/endorsements')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: [
+                                {
+                                    id: 'live-pending-8850',
+                                    taskId: '',
+                                    taskNumber: 'PENDING',
+                                    invoiceNumber: 'INV-2026-8850',
+                                    clientName: 'Megaworld Corp',
+                                    invoiceAmount: 75000,
+                                    endorsementStatus: 'PendingEndorsement',
+                                    fomsSyncStatus: 'Pending',
+                                    dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+                                },
+                            ],
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true, data: [] } });
+            });
+
+            (api.post as any).mockImplementation((url: string, payload: any) => {
+                if (url === '/api/Task') {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                            data: {
+                                id: 'new-stars-task-8850',
+                                title: payload.title,
+                            },
+                        },
+                    });
+                }
+                if (url.includes('/link-endorsement')) {
+                    return Promise.resolve({
+                        data: {
+                            isSuccess: true,
+                        },
+                    });
+                }
+                return Promise.resolve({ data: { isSuccess: true } });
+            });
+
+            render(<FomsEndorsementPanel initialSubTab="pending" />);
+
+            // Wait for pending item to appear
+            await waitFor(() => {
+                expect(screen.getByText('INV-2026-8850')).toBeInTheDocument();
+            });
+
+            const createBtn = screen.getByRole('button', { name: /create stars task/i });
+            expect(createBtn).toBeInTheDocument();
+
+            // Click Create STARS Task
+            fireEvent.click(createBtn);
+
+            // Verify task was automatically posted to /api/Task with Test Coordinator assigned
+            await waitFor(() => {
+                expect(api.post).toHaveBeenCalledWith(
+                    '/api/Task',
+                    expect.objectContaining({
+                        title: expect.stringContaining('INV-2026-8850'),
+                        assignedUserIds: ['crd-test-001'],
+                        category: 'Financial Operations',
+                        priority: 'High',
+                    })
+                );
+            });
+
+            // Verify endorsement was automatically linked
+            await waitFor(() => {
+                expect(api.post).toHaveBeenCalledWith(
+                    '/api/foms-integration/tasks/link-endorsement',
+                    expect.objectContaining({
+                        taskId: 'new-stars-task-8850',
+                        invoiceNumber: 'INV-2026-8850',
+                    })
+                );
+            });
+
+            // Success toast was emitted
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                expect.stringMatching(/assigned to Test Coordinator/i)
+            );
         });
     });
 });
