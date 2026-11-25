@@ -92,8 +92,29 @@ public interface IDmsIntegrationService
     /// <summary>
     /// Integration 4: Handles incoming failed delivery / failed pickup event from DMS.
     /// Idempotently creates a follow-up task or appends a remark to an existing open follow-up task.
+    /// If attemptCount >= 3, sets result to Return to Sender and sends to DMS.
     /// </summary>
     Task<ApiResponseDTO<DmsFailureFollowUpResponseDTO>> ProcessFailureFollowUpAsync(DmsFailureFollowUpDTO dto);
+
+    /// <summary>
+    /// Integration 4: Handles recipient redelivery requests.
+    /// </summary>
+    Task<ApiResponseDTO<StarsRedeliveryRequestResponseDTO>> ProcessRecipientRedeliveryRequestAsync(StarsRedeliveryRequestDTO dto);
+
+    /// <summary>
+    /// Integration 4: Evaluates and processes Coordinator redelivery decisions (Approved, Rejected, Return to Sender) and transmits to DMS.
+    /// </summary>
+    Task<ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>> ProcessCoordinatorDecisionAsync(StarsRedeliveryDecisionDTO dto, string? approverName = null);
+
+    /// <summary>
+    /// Integration 4: Evaluates open follow-up tasks past the 2-day window and marks parcels eligible for Return to Sender in DMS.
+    /// </summary>
+    Task<ApiResponseDTO<int>> CheckExpiredRedeliveryWindowsAsync();
+
+    /// <summary>
+    /// Integration 4: Outbound dispatch to DMS for redelivery decisions.
+    /// </summary>
+    Task<bool> SendRedeliveryDecisionToDmsAsync(string waybillNo, string decision, DateTime? redeliveryDate, string approver, string? remarks = null);
 
     /// <summary>
     /// Integration 5: Handles incoming delivery order cancellation notification from DMS.

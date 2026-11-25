@@ -2139,7 +2139,97 @@ public class DmsIntegrationService : IDmsIntegrationService
             .OrderByDescending(t => t.CreatedAt)
             .FirstOrDefaultAsync();
 
-        // 3. Existing Open Follow-up Branch: Deduplicate & append remark
+        // 3. Step 4 of LOGISTICS-1.pdf: STARS checks attempt count
+        // 3 failed attempts: redelivery is not allowed. STARS sets the result to Return to Sender and sends it to DMS (go to step 9).
+        if (dto.AttemptCount >= 3)
+        {
+            _logger.LogInformation("Waybill {WaybillNo} reached maximum attempts ({AttemptCount}). Prohibiting redelivery and triggering Return to Sender.", dto.WaybillNo, dto.AttemptCount);
+
+            Guid targetTaskId;
+            Guid? assignedCoordId = null;
+
+            if (openFollowUpTask != null)
+            {
+                targetTaskId = openFollowUpTask.Id;
+                assignedCoordId = openFollowUpTask.Assignments.FirstOrDefault()?.AssignedUserId;
+                openFollowUpTask.PriorityLevel = PriorityLevel.Urgent;
+                openFollowUpTask.Status = Backend.Models.Enums.TaskStatus.Completed;
+                openFollowUpTask.UpdatedAt = DateTime.UtcNow;
+
+                var rtsComment = new TaskComment
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = openFollowUpTask.Id,
+                    AuthorId = openFollowUpTask.CreatedById != Guid.Empty ? openFollowUpTask.CreatedById : (await _db.Users.Select(u => u.Id).FirstOrDefaultAsync()),
+                    Content = $"[Return to Sender] Attempt #{dto.AttemptCount} reached maximum failure limit. Reason: {dto.FailureReason}. Redelivery prohibited. Result set to Return to Sender in DMS.",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _db.TaskComments.Add(rtsComment);
+
+                var followUpDetail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == openFollowUpTask.Id);
+                if (followUpDetail != null)
+                {
+                    followUpDetail.DmsStatus = "Returned";
+                    followUpDetail.DmsFailureReason = dto.FailureReason;
+                    followUpDetail.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+            else
+            {
+                var defaultUser = await _db.Users.FirstOrDefaultAsync(u => u.IsActive && !u.IsDeactivated && u.Role == UserRole.Coordinator)
+                               ?? await _db.Users.FirstOrDefaultAsync(u => u.IsActive && !u.IsDeactivated);
+                var rtsTask = new Backend.Models.Task
+                {
+                    Id = Guid.NewGuid(),
+                    TaskNumber = TaskNumberGenerator.Generate(8),
+                    Title = $"Return to Sender - {dto.WaybillNo}",
+                    Description = $"Maximum failed attempts ({dto.AttemptCount}) reached for Waybill {dto.WaybillNo}.\nReason: {dto.FailureReason}.\nRedelivery is not allowed. Parcel set to Return to Sender.",
+                    PriorityLevel = PriorityLevel.Urgent,
+                    Classification = TaskClassification.SpecialTask,
+                    Status = Backend.Models.Enums.TaskStatus.Completed,
+                    Deadline = DateTime.UtcNow,
+                    CreatedById = defaultUser?.Id ?? Guid.Empty,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _db.Tasks.Add(rtsTask);
+                targetTaskId = rtsTask.Id;
+                assignedCoordId = defaultUser?.Id;
+
+                if (defaultUser != null)
+                {
+                    _db.TaskAssignments.Add(new TaskAssignment
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = rtsTask.Id,
+                        AssignedUserId = defaultUser.Id,
+                        CompletionPercentage = 100,
+                        AssignedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+
+            // Transmit "Return to Sender" to DMS
+            await SendRedeliveryDecisionToDmsAsync(
+                dto.WaybillNo,
+                "Return to Sender",
+                null,
+                "System (Auto - Max Attempts Reached)",
+                $"Max attempts ({dto.AttemptCount}) reached. Reason: {dto.FailureReason}");
+
+            return ApiResponseDTO<DmsFailureFollowUpResponseDTO>.Success(new DmsFailureFollowUpResponseDTO
+            {
+                FollowUpTaskId = targetTaskId,
+                ActionTaken = "ReturnToSender",
+                AssignedCoordinatorId = assignedCoordId,
+                WaybillNo = dto.WaybillNo,
+                Message = $"Maximum failed attempts ({dto.AttemptCount}) reached. Redelivery prohibited. Parcel set to Return to Sender."
+            }, "Maximum attempts reached. Parcel set to Return to Sender.");
+        }
+
+        // 4. Existing Open Follow-up Branch: Deduplicate & append remark
         if (openFollowUpTask != null)
         {
             var commentAuthorId = openFollowUpTask.CreatedById != Guid.Empty
@@ -2375,6 +2465,275 @@ public class DmsIntegrationService : IDmsIntegrationService
             WaybillNo = dto.WaybillNo,
             Message = $"Created follow-up task '{newTask.Title}' assigned to {selectedAssignee?.FirstName ?? "Coordinator"} {selectedAssignee?.LastName ?? ""}".Trim()
         }, "Delivery follow-up task created successfully.");
+    }
+
+    /// <summary>
+    /// Integration 4: Handles recipient redelivery requests.
+    /// </summary>
+    public async Task<ApiResponseDTO<StarsRedeliveryRequestResponseDTO>> ProcessRecipientRedeliveryRequestAsync(StarsRedeliveryRequestDTO dto)
+    {
+        if (dto == null)
+            return ApiResponseDTO<StarsRedeliveryRequestResponseDTO>.Failure("Payload cannot be null");
+
+        if (string.IsNullOrWhiteSpace(dto.WaybillNo))
+            return ApiResponseDTO<StarsRedeliveryRequestResponseDTO>.Failure("Waybill number is required");
+
+        dto.WaybillNo = dto.WaybillNo.Trim();
+
+        var openFollowUpTask = await _db.Tasks
+            .Include(t => t.Assignments)
+            .Where(t => t.Status != Backend.Models.Enums.TaskStatus.Completed && t.Status != Backend.Models.Enums.TaskStatus.Cancelled)
+            .Where(t => t.Title.StartsWith("Delivery Follow-up - " + dto.WaybillNo)
+                     || _db.TaskDeliveryDetails.Any(d => d.TaskId == t.Id && d.DmsWaybillNo == dto.WaybillNo))
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (openFollowUpTask != null)
+        {
+            var authorId = openFollowUpTask.CreatedById != Guid.Empty
+                ? openFollowUpTask.CreatedById
+                : (await _db.Users.Where(u => u.IsActive && !u.IsDeactivated).Select(u => u.Id).FirstOrDefaultAsync());
+
+            var comment = new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = openFollowUpTask.Id,
+                AuthorId = authorId,
+                Content = $"[Recipient Redelivery Request Received]"
+                    + (dto.RequestedDate.HasValue ? $" Requested Date: {dto.RequestedDate.Value:yyyy-MM-dd}." : "")
+                    + (!string.IsNullOrWhiteSpace(dto.RecipientContact) ? $" Contact: {dto.RecipientContact}." : "")
+                    + (!string.IsNullOrWhiteSpace(dto.Remarks) ? $" Remarks: {dto.Remarks}" : ""),
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.TaskComments.Add(comment);
+            openFollowUpTask.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return ApiResponseDTO<StarsRedeliveryRequestResponseDTO>.Success(new StarsRedeliveryRequestResponseDTO
+            {
+                WaybillNo = dto.WaybillNo,
+                FollowUpTaskId = openFollowUpTask.Id,
+                ActionTaken = "AppendedRequestToTask",
+                Message = $"Appended recipient request to existing follow-up task '{openFollowUpTask.Title}'."
+            }, "Recipient redelivery request logged on existing task.");
+        }
+
+        return ApiResponseDTO<StarsRedeliveryRequestResponseDTO>.Success(new StarsRedeliveryRequestResponseDTO
+        {
+            WaybillNo = dto.WaybillNo,
+            ActionTaken = "NoActiveFollowUp",
+            Message = "No active follow-up task found for waybill, request noted."
+        });
+    }
+
+    /// <summary>
+    /// Integration 4: Evaluates and processes Coordinator redelivery decisions (Approved, Rejected, Return to Sender) and transmits to DMS.
+    /// </summary>
+    public async Task<ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>> ProcessCoordinatorDecisionAsync(
+        StarsRedeliveryDecisionDTO dto,
+        string? approverName = null)
+    {
+        if (dto == null)
+            return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure("Payload cannot be null");
+
+        if (string.IsNullOrWhiteSpace(dto.WaybillNo))
+            return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure("Waybill number is required");
+
+        if (string.IsNullOrWhiteSpace(dto.Decision))
+            return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure("Decision is required (Approved, Rejected, or Return to Sender)");
+
+        dto.WaybillNo = dto.WaybillNo.Trim();
+        dto.Decision = dto.Decision.Trim();
+        var approver = !string.IsNullOrWhiteSpace(dto.Approver)
+            ? dto.Approver.Trim()
+            : (!string.IsNullOrWhiteSpace(approverName) ? approverName.Trim() : "Coordinator");
+
+        var validDecisions = new[] { "Approved", "Rejected", "Return to Sender" };
+        if (!validDecisions.Any(v => string.Equals(v, dto.Decision, StringComparison.OrdinalIgnoreCase)))
+        {
+            return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure(
+                $"Invalid decision '{dto.Decision}'. Must be one of: {string.Join(", ", validDecisions)}.");
+        }
+
+        // Rule 7 from LOGISTICS-1.pdf:
+        // "If approved, the Coordinator sets the redelivery date. It cannot be the same day as the approval."
+        if (string.Equals(dto.Decision, "Approved", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!dto.RedeliveryDate.HasValue)
+            {
+                return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure("Redelivery date is required when approving a redelivery request.");
+            }
+
+            if (dto.RedeliveryDate.Value.Date <= DateTime.UtcNow.Date)
+            {
+                return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Failure("Redelivery date cannot be the same day as approval. It must be scheduled for a future date.");
+            }
+        }
+
+        // Match follow-up task
+        var task = await _db.Tasks
+            .Include(t => t.Assignments)
+            .Where(t => t.Title.StartsWith("Delivery Follow-up - " + dto.WaybillNo)
+                     || _db.TaskDeliveryDetails.Any(d => d.TaskId == t.Id && d.DmsWaybillNo == dto.WaybillNo))
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (task != null)
+        {
+            var comment = new TaskComment
+            {
+                Id = Guid.NewGuid(),
+                TaskId = task.Id,
+                AuthorId = task.Assignments.FirstOrDefault()?.AssignedUserId ?? task.CreatedById,
+                Content = $"[Coordinator Decision: {dto.Decision}] Recorded by {approver}."
+                    + (dto.RedeliveryDate.HasValue ? $" Scheduled Date: {dto.RedeliveryDate.Value:yyyy-MM-dd}." : "")
+                    + (!string.IsNullOrWhiteSpace(dto.Remarks) ? $" Remarks: {dto.Remarks}" : ""),
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.TaskComments.Add(comment);
+
+            var detail = await _db.TaskDeliveryDetails.FirstOrDefaultAsync(d => d.TaskId == task.Id);
+            if (detail != null)
+            {
+                detail.DmsStatus = string.Equals(dto.Decision, "Approved", StringComparison.OrdinalIgnoreCase)
+                    ? "Pending"
+                    : (string.Equals(dto.Decision, "Return to Sender", StringComparison.OrdinalIgnoreCase) ? "Returned" : "Rejected");
+                detail.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (string.Equals(dto.Decision, "Return to Sender", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(dto.Decision, "Rejected", StringComparison.OrdinalIgnoreCase))
+            {
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+            }
+            task.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
+        // Step 9 of LOGISTICS-1.pdf: STARS sends result to DMS
+        var notified = await SendRedeliveryDecisionToDmsAsync(
+            dto.WaybillNo,
+            dto.Decision,
+            dto.RedeliveryDate,
+            approver,
+            dto.Remarks);
+
+        return ApiResponseDTO<StarsRedeliveryDecisionResponseDTO>.Success(new StarsRedeliveryDecisionResponseDTO
+        {
+            WaybillNo = dto.WaybillNo,
+            Decision = dto.Decision,
+            RedeliveryDate = dto.RedeliveryDate,
+            Approver = approver,
+            DmsNotified = notified,
+            Message = $"Decision '{dto.Decision}' processed and dispatched to DMS (Success: {notified})."
+        }, $"Decision '{dto.Decision}' processed successfully.");
+    }
+
+    /// <summary>
+    /// Integration 4: Evaluates open follow-up tasks past the 2-day window and marks parcels eligible for Return to Sender in DMS.
+    /// </summary>
+    public async Task<ApiResponseDTO<int>> CheckExpiredRedeliveryWindowsAsync()
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-2);
+        var expiredTasks = await _db.Tasks
+            .Where(t => t.Status != Backend.Models.Enums.TaskStatus.Completed && t.Status != Backend.Models.Enums.TaskStatus.Cancelled)
+            .Where(t => t.Title.StartsWith("Delivery Follow-up - ") && t.CreatedAt <= cutoff)
+            .ToListAsync();
+
+        int expiredCount = 0;
+        foreach (var task in expiredTasks)
+        {
+            var taskComments = await _db.TaskComments.Where(c => c.TaskId == task.Id).ToListAsync();
+            bool hasApproval = taskComments.Any(c => c.Content.Contains("[Coordinator Decision: Approved]"));
+            if (!hasApproval)
+            {
+                var waybillNo = task.Title.Replace("Delivery Follow-up - ", "").Trim();
+                await SendRedeliveryDecisionToDmsAsync(
+                    waybillNo,
+                    "Return to Sender",
+                    null,
+                    "System (2-Day Window Expired)",
+                    "No valid redelivery request was approved within the 2-day window. Parcel eligible for Return to Sender.");
+
+                var comment = new TaskComment
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = task.Id,
+                    AuthorId = task.CreatedById,
+                    Content = "[2-Day Window Expired] No redelivery request approved within 2-day window. Parcel marked eligible for Return to Sender and transmitted to DMS.",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _db.TaskComments.Add(comment);
+                task.Status = Backend.Models.Enums.TaskStatus.Completed;
+                task.UpdatedAt = DateTime.UtcNow;
+                expiredCount++;
+            }
+        }
+
+        if (expiredCount > 0)
+        {
+            await _db.SaveChangesAsync();
+        }
+
+        return ApiResponseDTO<int>.Success(expiredCount, $"Processed {expiredCount} expired redelivery windows.");
+    }
+
+    /// <summary>
+    /// Integration 4: Outbound dispatch to DMS for redelivery decisions.
+    /// </summary>
+    public async Task<bool> SendRedeliveryDecisionToDmsAsync(
+        string waybillNo,
+        string decision,
+        DateTime? redeliveryDate,
+        string approver,
+        string? remarks = null)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send redelivery decision for {WaybillNo} to DMS: DMS integration is not configured.", waybillNo);
+            return false;
+        }
+
+        var payload = new
+        {
+            waybillNo = waybillNo.Trim(),
+            decision = decision.Trim(),
+            redeliveryDate = redeliveryDate?.ToString("yyyy-MM-dd"),
+            approver = string.IsNullOrWhiteSpace(approver) ? "Coordinator" : approver.Trim(),
+            remarks = remarks?.Trim()
+        };
+
+        try
+        {
+            var client = _http.CreateClient(HttpClientName);
+            client.Timeout = TimeSpan.FromSeconds(15);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{_settings.BaseUrl.TrimEnd('/')}/api/integration/stars/redelivery-decision")
+            {
+                Content = JsonContent.Create(payload)
+            };
+            request.Headers.Add(ApiKeyHeaderName, _settings.OutboundApiKey);
+
+            var response = await client.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "DMS redelivery-decision returned {Status} for Waybill {WaybillNo}: {Body}",
+                    (int)response.StatusCode, waybillNo, Truncate(responseBody));
+                return false;
+            }
+
+            _logger.LogInformation("Successfully sent redelivery decision '{Decision}' for Waybill {WaybillNo} to DMS.", decision, waybillNo);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while sending redelivery decision for Waybill {WaybillNo} to DMS", waybillNo);
+            return false;
+        }
     }
 
     /// <summary>

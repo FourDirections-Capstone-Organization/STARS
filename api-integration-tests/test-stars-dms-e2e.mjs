@@ -391,6 +391,131 @@ async function main() {
     return `DMS relayed failure event to STARS successfully (${res.ms}ms)`;
   });
 
+  await test("STARS logs recipient redelivery request on active follow-up task", async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString();
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/redelivery-request`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        requestedDate: tomorrow,
+        remarks: "Customer requested afternoon delivery",
+        recipientContact: "09171234567"
+      }
+    });
+
+    expect(res.status === 200, `recipient request failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "AppendedRequestToTask", `expected action 'AppendedRequestToTask', got '${data?.actionTaken}'`);
+    return `Appended recipient request to task: ${data.followUpTaskId} (${res.ms}ms)`;
+  });
+
+  await test("STARS rejects redelivery approval when date is the same day as approval", async () => {
+    const today = new Date().toISOString();
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/redelivery-decision`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        decision: "Approved",
+        redeliveryDate: today,
+        approver: "Coordinator Roberto Cruz",
+        remarks: "Attempting same day approval"
+      }
+    });
+
+    expect(res.status === 400, `expected 400 Bad Request for same-day approval, got ${res.status}: ${res.text}`);
+    return `Correctly rejected same-day approval (Status: ${res.status})`;
+  });
+
+  await test("STARS approves redelivery with future date and transmits decision to DMS", async () => {
+    const futureDate = new Date(Date.now() + 2 * 86400000).toISOString();
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/redelivery-decision`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        decision: "Approved",
+        redeliveryDate: futureDate,
+        approver: "Coordinator Roberto Cruz",
+        remarks: "Client confirmed available on scheduled date"
+      }
+    });
+
+    expect(res.status === 200, `coordinator approval failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.decision === "Approved", `expected decision 'Approved', got '${data?.decision}'`);
+    return `Approved redelivery for Waybill ${data?.waybillNo}: DmsNotified=${data?.DmsNotified || data?.dmsNotified} (${res.ms}ms)`;
+  });
+
+  await test("DMS processes redelivery decision endpoint directly (Approved / Return to Sender)", async () => {
+    // 1. Send Approved decision to DMS
+    const futureDate = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    const resApprove = await call("POST", `${DMS_URL}/api/integration/stars/redelivery-decision`, {
+      headers: { "X-Api-Key": STARS_TO_DMS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        decision: "Approved",
+        redeliveryDate: futureDate,
+        approver: "STARS Coordinator Roberto Cruz",
+        remarks: "Direct API verification"
+      }
+    });
+    expect(resApprove.status === 200, `DMS direct decision failed: ${resApprove.status}: ${resApprove.text}`);
+    expect(resApprove.json?.decision === "Approved", `expected decision 'Approved'`);
+    expect(resApprove.json?.status === "Pending", `expected status 'Pending'`);
+    expect(resApprove.json?.redeliveryStatus === "Approved", `expected redeliveryStatus 'Approved'`);
+
+    // 2. Send Return to Sender decision to DMS
+    const resRts = await call("POST", `${DMS_URL}/api/integration/stars/redelivery-decision`, {
+      headers: { "X-Api-Key": STARS_TO_DMS_KEY },
+      body: {
+        waybillNo: generatedWaybill,
+        decision: "Return to Sender",
+        approver: "STARS System",
+        remarks: "Parcel returned to sender"
+      }
+    });
+    expect(resRts.status === 200, `DMS Return to Sender failed: ${resRts.status}: ${resRts.text}`);
+    expect(resRts.json?.decision === "Return to Sender", `expected decision 'Return to Sender'`);
+    expect(resRts.json?.status === "Returned", `expected status 'Returned'`);
+    expect(resRts.json?.redeliveryStatus === "Return to Sender", `expected redeliveryStatus 'Return to Sender'`);
+
+    return `DMS updated order to Pending/Approved then Returned/Return to Sender successfully (${resApprove.ms + resRts.ms}ms)`;
+  });
+
+  await test("STARS enforces 3-attempt limit: auto sets Return to Sender and notifies DMS", async () => {
+    const rtsWaybill = `WB-RTS-${Date.now().toString().slice(-6)}`;
+    const rtsTaskId = randomUuid();
+
+    const payloadAttempt3 = {
+      waybillNo: rtsWaybill,
+      starsTaskId: rtsTaskId,
+      failureType: "Failed Delivery",
+      failureReason: "Recipient Repeatedly Unreachable (3rd Failure)",
+      attemptCount: 3,
+      timestamp: new Date().toISOString(),
+      driverId: "DRV-001",
+      driverName: "Juan Dela Cruz"
+    };
+
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/failure-followup`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY },
+      body: payloadAttempt3
+    });
+
+    expect(res.status === 200, `3rd attempt follow-up failed with status ${res.status}: ${res.text}`);
+    const data = res.json?.data || res.json;
+    expect(data?.actionTaken === "ReturnToSender", `expected action 'ReturnToSender' on 3rd failure, got '${data?.actionTaken}'`);
+    return `Enforced 3-attempt limit: Action=${data.actionTaken}, Task=${data.followUpTaskId} (${res.ms}ms)`;
+  });
+
+  await test("STARS checks expired 2-day redelivery windows successfully", async () => {
+    const res = await call("POST", `${STARS_URL}/api/integration/dms/check-expired-windows`, {
+      headers: { "X-Api-Key": DMS_TO_STARS_KEY }
+    });
+
+    expect(res.status === 200, `check-expired-windows failed with status ${res.status}: ${res.text}`);
+    return `Checked expired windows successfully (${res.ms}ms)`;
+  });
+
   console.log("\n[6] Integration 5: Delivery Order Cancelled -> STARS Notification");
 
   await test("STARS rejects unauthorized order cancellation (no X-Api-Key)", async () => {

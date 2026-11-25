@@ -212,6 +212,7 @@ public class DmsIntegrationController : ControllerBase
     /// <summary>
     /// Integration 4: DMS pushes failed delivery / pickup events to STARS.
     /// Automatically creates a follow-up task or logs an attempt update remark on existing follow-up task.
+    /// If attemptCount >= 3, sets result to Return to Sender and sends to DMS.
     /// </summary>
     [HttpPost("api/integration/dms/failure-followup")]
     [AllowAnonymous]
@@ -221,6 +222,70 @@ public class DmsIntegrationController : ControllerBase
         if (authError != null) return authError;
 
         var result = await _dmsService.ProcessFailureFollowUpAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Receives recipient redelivery requests and appends to follow-up task.
+    /// </summary>
+    [HttpPost("api/integration/dms/redelivery-request")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ReceiveRedeliveryRequest([FromBody] StarsRedeliveryRequestDTO dto)
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _dmsService.ProcessRecipientRedeliveryRequestAsync(dto);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Coordinator submits redelivery decision (Approved / Rejected / Return to Sender).
+    /// Enforces date validation: Redelivery date cannot be the same day as approval.
+    /// Transmits result to DMS machine-to-machine.
+    /// </summary>
+    [HttpPost("api/integration/dms/redelivery-decision")]
+    [AllowAnonymous]
+    public async Task<IActionResult> SubmitRedeliveryDecision([FromBody] StarsRedeliveryDecisionDTO dto)
+    {
+        var apiKey = Request.Headers[DmsIntegrationService.ApiKeyHeaderName].FirstOrDefault();
+        bool hasApiKey = DmsIntegrationService.ValidateApiKey(apiKey, _settings.InboundApiKey);
+
+        string? approverName = null;
+        if (!hasApiKey)
+        {
+            var isAuth = User.Identity?.IsAuthenticated == true;
+            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value 
+                         ?? User.FindFirst("role")?.Value 
+                         ?? User.Claims.FirstOrDefault(c => c.Type.EndsWith("/role", StringComparison.OrdinalIgnoreCase))?.Value;
+
+            bool isAuthorizedRole = string.Equals(roleClaim, "Coordinator", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(roleClaim, "Manager", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(roleClaim, "SystemAdmin", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(roleClaim, "Admin", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAuth || !isAuthorizedRole)
+            {
+                return Unauthorized(new { message = "Unauthorized: A valid X-Api-Key or Coordinator/Manager session is required." });
+            }
+            approverName = User.Identity?.Name ?? roleClaim;
+        }
+
+        var result = await _dmsService.ProcessCoordinatorDecisionAsync(dto, approverName);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Integration 4: Evaluates open follow-up tasks past the 2-day window with no approved request and triggers Return to Sender.
+    /// </summary>
+    [HttpPost("api/integration/dms/check-expired-windows")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CheckExpiredWindows()
+    {
+        var authError = ValidateApiKey();
+        if (authError != null) return authError;
+
+        var result = await _dmsService.CheckExpiredRedeliveryWindowsAsync();
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 

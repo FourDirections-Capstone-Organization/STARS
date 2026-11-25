@@ -482,3 +482,48 @@ public class DmsOrderCancellationResponseDTO
     public string ActionTaken { get; set; } = "AddedCancellationRemark";
     public string Message { get; set; } = string.Empty;
 }
+
+public class StarsRedeliveryDecisionDTO
+{
+    [Required]
+    public string WaybillNo { get; set; } = string.Empty;
+
+    [Required]
+    public string Decision { get; set; } = string.Empty; // "Approved", "Rejected", "Return to Sender"
+
+    public DateTime? RedeliveryDate { get; set; }
+
+    public string? Approver { get; set; }
+
+    public string? Remarks { get; set; }
+}
+
+public class StarsRedeliveryDecisionResponseDTO
+{
+    public string WaybillNo { get; set; } = string.Empty;
+    public string Decision { get; set; } = string.Empty;
+    public DateTime? RedeliveryDate { get; set; }
+    public string Approver { get; set; } = string.Empty;
+    public bool DmsNotified { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class StarsRedeliveryRequestDTO
+{
+    [Required]
+    public string WaybillNo { get; set; } = string.Empty;
+
+    public DateTime? RequestedDate { get; set; }
+
+    public string? Remarks { get; set; }
+
+    public string? RecipientContact { get; set; }
+}
+
+public class StarsRedeliveryRequestResponseDTO
+{
+    public string WaybillNo { get; set; } = string.Empty;
+    public Guid? FollowUpTaskId { get; set; }
+    public string ActionTaken { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+}
