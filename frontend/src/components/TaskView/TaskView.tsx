@@ -530,8 +530,8 @@ const parseFomsLiquidation = (title?: string, desc?: string): ParsedFomsLiquidat
     const rawTitle = title || '';
     const rawDesc = desc || '';
     const isLiquidation = rawTitle.includes('[Liquidation Correction]') ||
-                          rawDesc.includes('Automated liquidation correction routed from FOMS') ||
-                          rawTitle.toLowerCase().includes('liquidation correction');
+        rawDesc.includes('Automated liquidation correction routed from FOMS') ||
+        rawTitle.toLowerCase().includes('liquidation correction');
     if (!isLiquidation) return null;
 
     const reqMatch = rawDesc.match(/Request ID:\s*([^\n]+)/i) || rawTitle.match(/\[Liquidation Correction\]\s*([^\s-]+)/i);
@@ -630,9 +630,9 @@ const TaskView: React.FC<TaskViewProps> = ({
     task,
     backLabel,
     breadcrumbRoot,
-    onEdit = () => {},
-    onReopen = () => {},
-    onClose = () => {},
+    onEdit = () => { },
+    onReopen = () => { },
+    onClose = () => { },
     onApprove,
     onReject,
     onDeleteAttachment,
@@ -722,8 +722,8 @@ const TaskView: React.FC<TaskViewProps> = ({
             const items = res.data?.isSuccess && Array.isArray(res.data?.data?.items)
                 ? res.data.data.items
                 : Array.isArray(res.data?.data)
-                ? res.data.data
-                : [];
+                    ? res.data.data
+                    : [];
             setFollowUpComments(items);
         } catch {
             // fallback gracefully
@@ -1000,7 +1000,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 taskId: task.taskId,
                                 invoiceNumber: fomsEndorsement.invoiceNumber,
                                 clientName: matched.clientName || fomsEndorsement.clientName,
-                            }).catch(() => {});
+                            }).catch(() => { });
                         }
                     }
                 } catch { }
@@ -1040,7 +1040,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                 invoiceNumber: fomsEndorsement.invoiceNumber,
                 clientName: endorsementDetail?.clientName || fomsEndorsement.clientName,
                 invoiceAmount: endorsementDetail?.invoiceAmount,
-            }).catch(() => {});
+            }).catch(() => { });
 
             try {
                 const res = await api.put(`/api/foms-integration/tasks/${task.taskId}/sign-endorsement`, {
@@ -1082,7 +1082,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                 invoiceNumber: fomsEndorsement.invoiceNumber,
                 clientName: endorsementDetail?.clientName || fomsEndorsement.clientName,
                 invoiceAmount: endorsementDetail?.invoiceAmount,
-            }).catch(() => {});
+            }).catch(() => { });
 
             await api.post(`/api/foms-integration/tasks/${task.taskId}/resend`, {});
             toastSuccess(`Endorsement completion callback transmitted to FOMS for invoice ${fomsEndorsement.invoiceNumber}.`);
@@ -1374,8 +1374,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                 const friendlyMsg = rawMsg.includes('504') || rawMsg.includes('Gateway Timeout')
                     ? 'DMS server response timed out. Status will update automatically via live sync.'
                     : rawMsg.includes('500')
-                    ? 'DMS service temporarily busy. Status sync will retry automatically.'
-                    : rawMsg;
+                        ? 'DMS service temporarily busy. Status sync will retry automatically.'
+                        : rawMsg;
                 toastError(friendlyMsg);
             }
         } finally {
@@ -1580,7 +1580,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                         invoiceNumber: fomsEndorsement.invoiceNumber,
                         clientName: endorsementDetail?.clientName || fomsEndorsement.clientName,
                         invoiceAmount: endorsementDetail?.invoiceAmount,
-                    }).catch(() => {});
+                    }).catch(() => { });
                     await api.post(`/api/foms-integration/tasks/${task.taskId}/resend`, {});
                 } catch {
                     try {
@@ -2244,8 +2244,8 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                         decisionOption === 'Approved'
                                                             ? 'Client confirmed available Friday afternoon'
                                                             : decisionOption === 'Rejected'
-                                                            ? 'Client address out of reachable delivery coverage'
-                                                            : 'Customer requested package return'
+                                                                ? 'Client address out of reachable delivery coverage'
+                                                                : 'Customer requested package return'
                                                     }
                                                     value={decisionRemarks}
                                                     onChange={e => setDecisionRemarks(e.target.value)}
@@ -2270,13 +2270,12 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             <div className="tv-dms-resolve-submit-row">
                                                 <button
                                                     type="button"
-                                                    className={`tv-btn tv-btn-sm ${
-                                                        decisionOption === 'Approved'
-                                                            ? 'tv-btn-primary'
-                                                            : decisionOption === 'Rejected'
+                                                    className={`tv-btn tv-btn-sm ${decisionOption === 'Approved'
+                                                        ? 'tv-btn-primary'
+                                                        : decisionOption === 'Rejected'
                                                             ? 'tv-btn-danger'
                                                             : 'tv-btn-warning'
-                                                    }`}
+                                                        }`}
                                                     onClick={handleResolveFollowUp}
                                                     disabled={submittingDecision || (decisionOption === 'Approved' && effectiveAttemptCount >= 3)}
                                                     data-testid="submit-decision-btn"
@@ -2825,8 +2824,8 @@ const TaskView: React.FC<TaskViewProps> = ({
 
                                         {/* Priority Badge */}
                                         {((liquidationDetail?.liquidationStatus || fomsLiquidation.liquidationStatus || '').toLowerCase().includes('reject') ||
-                                          (fomsLiquidation.dueDate && new Date(fomsLiquidation.dueDate).getTime() < Date.now()) ||
-                                          task.priority === 'Urgent') ? (
+                                            (fomsLiquidation.dueDate && new Date(fomsLiquidation.dueDate).getTime() < Date.now()) ||
+                                            task.priority === 'Urgent') ? (
                                             <span className="liq-badge liq-badge-urgent" data-testid="priority-badge">
                                                 Urgent
                                             </span>
@@ -3164,7 +3163,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         })()}
                                     </div>
 
-                                    {deliveryDetail.dmsFailureReason && (
+                                    {deliveryDetail.dmsFailureReason && !['delivered', 'completed'].includes((deliveryDetail.dmsStatus || '').toLowerCase()) && (
                                         <div
                                             className={`tv-dms-error-box ${deliveryDetail.dmsStatus?.toLowerCase() === 'cancelled' ? 'tv-dms-cancelled-box' : ''}`}
                                             style={{ margin: '4px 0' }}
@@ -3337,7 +3336,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                 </div>
                             ) : (
                                 <div className="tv-dms-card tv-dms-card-inactive">
-                                    {deliveryDetail?.syncStatus === 'Failed' && (
+                                    {deliveryDetail?.syncStatus === 'Failed' && !['delivered', 'completed'].includes((deliveryDetail?.dmsStatus || '').toLowerCase()) && (
                                         <div className="tv-dms-error-box">
                                             <AlertCircle size={14} className="tv-dms-error-icon" />
                                             <div>
@@ -3366,15 +3365,15 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                 </span>
                                             </div>
                                             {(deliveryDetail.expectedDelivery || deliveryDetail.expectedDeliveryDate) && (
-                                            <div className="tv-dms-grid-item" data-testid="tv-dms-pending-expected-delivery">
-                                                <span className="tv-dms-grid-label">Expected Delivery</span>
-                                                <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <Calendar size={12} color="var(--primary)" />
-                                                    {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {deliveryDetail.packageDescription && (
+                                                <div className="tv-dms-grid-item" data-testid="tv-dms-pending-expected-delivery">
+                                                    <span className="tv-dms-grid-label">Expected Delivery</span>
+                                                    <span className="tv-dms-grid-value" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                        <Calendar size={12} color="var(--primary)" />
+                                                        {formatDateOnly(deliveryDetail.expectedDeliveryDate || deliveryDetail.expectedDelivery)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {deliveryDetail.packageDescription && (
                                                 <div className="tv-dms-grid-item tv-dms-grid-full">
                                                     <span className="tv-dms-grid-label">Package Description</span>
                                                     <span className="tv-dms-grid-value">{deliveryDetail.packageDescription}</span>
@@ -3817,23 +3816,23 @@ const TaskView: React.FC<TaskViewProps> = ({
                         />
                         <div className="tv-modal-actions">
                             <button className="tv-btn tv-btn-outline" onClick={() => { setShowCancel(false); setCancelReason(''); }} disabled={cancelling}>Keep Task</button>
-                                                    <button className="tv-btn tv-btn-danger"
-                                                        onClick={async () => {
-                                                            if (!cancelReason.trim()) return;
-                                                            setCancelling(true);
-                                                            try {
-                                                                await api.patch(`/api/Task/${task.taskId}/cancel`, { cancellationReason: cancelReason.trim(), isConfirmed: true });
-                                                                setLocalStatus('Cancelled');
-                                                                setShowCancel(false);
-                                                                setCancelReason('');
-                                                                onUpdate?.({ ...task, taskStatus: 'Cancelled' });
-                                                            } catch (err: any) {
-                                                                const msg = err?.response?.data?.message || err?.response?.data?.Message || 'Failed to cancel task.';
-                                                                alert(msg);
-                                                            } finally { setCancelling(false); }
-                                                        }}
-                                                        disabled={!cancelReason.trim() || cancelling}>
-                                                        {cancelling ? <Loader2 size={13} className="spin" /> : <XCircle size={13} />} Cancel Task
+                            <button className="tv-btn tv-btn-danger"
+                                onClick={async () => {
+                                    if (!cancelReason.trim()) return;
+                                    setCancelling(true);
+                                    try {
+                                        await api.patch(`/api/Task/${task.taskId}/cancel`, { cancellationReason: cancelReason.trim(), isConfirmed: true });
+                                        setLocalStatus('Cancelled');
+                                        setShowCancel(false);
+                                        setCancelReason('');
+                                        onUpdate?.({ ...task, taskStatus: 'Cancelled' });
+                                    } catch (err: any) {
+                                        const msg = err?.response?.data?.message || err?.response?.data?.Message || 'Failed to cancel task.';
+                                        alert(msg);
+                                    } finally { setCancelling(false); }
+                                }}
+                                disabled={!cancelReason.trim() || cancelling}>
+                                {cancelling ? <Loader2 size={13} className="spin" /> : <XCircle size={13} />} Cancel Task
                             </button>
                         </div>
                     </div>
@@ -4117,11 +4116,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         <strong>Calculated 30-Day Payment Term Due Date: </strong>
                                         {signForm.actualReceivedDate
                                             ? new Date(new Date(signForm.actualReceivedDate).getTime() + 30 * 86400000).toLocaleDateString(undefined, {
-                                                  weekday: 'short',
-                                                  month: 'short',
-                                                  day: 'numeric',
-                                                  year: 'numeric',
-                                              })
+                                                weekday: 'short',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                year: 'numeric',
+                                            })
                                             : 'Select received date above'}
                                     </span>
                                 </div>

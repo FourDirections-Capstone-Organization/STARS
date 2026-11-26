@@ -1155,10 +1155,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
             // Status filter (case-insensitive with raw status fallback)
             const s = (d.dmsStatus || '').toLowerCase();
             const raw = (d.dmsRawStatus || '').toLowerCase();
-            const isDelivered = s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
-            const isTransit = s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
-            const isFailed = s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
-            const isPending = s.includes('pending') || !d.dmsWaybillNo || raw.includes('pending');
+            const isDelivered = (s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed')) && !s.includes('undelivered');
+            const isTransit = !isDelivered && (s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out'));
+            const isFailed = !isDelivered && !s.includes('cancel') && (s.includes('fail') || s.includes('undelivered') || raw.includes('fail') || raw.includes('undelivered'));
+            const isPending = !isDelivered && !isTransit && !isFailed && (s.includes('pending') || !d.dmsWaybillNo || raw.includes('pending'));
 
             if (statusFilter === 'transit' && !isTransit) return false;
             if (statusFilter === 'delivered' && !isDelivered) return false;
@@ -1208,26 +1208,30 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     // Computed Stats
     const stats = useMemo(() => {
         const total = deliveries.length;
-        const inTransit = deliveries.filter(d => {
-            const s = (d.dmsStatus || '').toLowerCase();
-            const raw = (d.dmsRawStatus || '').toLowerCase();
-            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
-        }).length;
         const delivered = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
             const raw = (d.dmsRawStatus || '').toLowerCase();
-            return s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed');
+            return (s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed')) && !s.includes('undelivered');
+        }).length;
+        const inTransit = deliveries.filter(d => {
+            const s = (d.dmsStatus || '').toLowerCase();
+            const raw = (d.dmsRawStatus || '').toLowerCase();
+            const isDeliv = (s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed')) && !s.includes('undelivered');
+            if (isDeliv) return false;
+            return s.includes('transit') || s.includes('pickup') || s.includes('route') || s.includes('out') || raw.includes('transit') || raw.includes('out');
         }).length;
         const failed = deliveries.filter(d => {
             const s = (d.dmsStatus || '').toLowerCase();
             const raw = (d.dmsRawStatus || '').toLowerCase();
-            return s.includes('fail') || s.includes('cancel') || d.syncStatus === 'Failed' || raw.includes('fail') || raw.includes('cancel');
+            const isDeliv = (s.includes('delivered') || s.includes('completed') || raw.includes('delivered') || raw.includes('completed')) && !s.includes('undelivered');
+            if (isDeliv) return false;
+            return !s.includes('cancel') && (s.includes('fail') || s.includes('undelivered') || raw.includes('fail') || raw.includes('undelivered'));
         }).length;
 
         return { total, inTransit, delivered, failed };
     }, [deliveries]);
 
-    const getStatusPill = (status: string, syncState?: string) => {
+    const getStatusPill = (status: string, _syncState?: string) => {
         const s = (status || '').toLowerCase();
         if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) {
             return <span className="dms-status-pill dms-status-delivered"><CheckCircle2 size={11} /> Delivered (POD)</span>;
@@ -1235,7 +1239,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         if (s.includes('cancel') || s.includes('void')) {
             return <span className="dms-status-pill dms-status-cancelled"><XCircle size={11} /> Cancelled</span>;
         }
-        if (s.includes('fail') || s.includes('undelivered') || syncState === 'Failed') {
+        if (s.includes('fail') || s.includes('undelivered')) {
             return <span className="dms-status-pill dms-status-failed"><AlertCircle size={11} /> Delivery Failed</span>;
         }
         if (s.includes('issue')) {
@@ -1264,17 +1268,20 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         const selCombined = `${selNorm} ${selRaw}`;
 
         const isCancelled = selCombined.includes('cancel') || selCombined.includes('void');
-        const isFailed = !isCancelled && (
-            selCombined.includes('fail') ||
-            selCombined.includes('undelivered') ||
-            selectedDelivery.syncStatus === 'Failed' ||
-            selCombined.includes('issue')
-        );
-        const isDelivered = !isCancelled && !isFailed && !selCombined.includes('pending') && (
+        const isDelivered = !isCancelled && !selCombined.includes('pending') && (
             selNorm === 'delivered' ||
             selRaw === 'delivered' ||
             selCombined.includes('completed') ||
             (selCombined.includes('delivered') && !selCombined.includes('undelivered'))
+        );
+        const isFailed = !isCancelled && !isDelivered && (
+            selNorm === 'failed' ||
+            selRaw === 'failed' ||
+            selNorm === 'undelivered' ||
+            selRaw === 'undelivered' ||
+            selCombined.includes('fail') ||
+            selCombined.includes('undelivered') ||
+            selCombined.includes('issue')
         );
 
         const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
@@ -1754,7 +1761,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                 )}
 
                 {/* ── Failure / Exception Alert if Any (non-terminal) ── */}
-                {!isCancelled && !isFailed && selectedDelivery.dmsFailureReason && (
+                {!isCancelled && !isFailed && !isDelivered && selectedDelivery.dmsFailureReason && (
                     <div className="dms-detail-alert-box">
                         <AlertCircle size={18} className="dms-detail-alert-icon" />
                         <div>
