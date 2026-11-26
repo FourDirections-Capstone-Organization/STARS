@@ -4,12 +4,6 @@ import TaskForm from './TaskForm';
 import { TaskCreateModalProps } from './types';
 import './ClientManagement.css';
 
-import React from 'react';
-import { X, PlusCircle } from 'lucide-react';
-import TaskForm from './TaskForm';
-import { TaskCreateModalProps } from './types';
-import './ClientManagement.css';
-
 export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
     isOpen,
     initialClient,
