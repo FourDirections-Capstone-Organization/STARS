@@ -22,7 +22,7 @@ vi.mock('../components/Toast/Toast', () => ({
     }),
 }));
 
-describe('TaskView - 7-Stage DMS Delivery Stepper', () => {
+describe('TaskView - 6-Stage DMS Delivery Stepper', () => {
     const baseTask: TaskViewTask = {
         taskId: 'task-delivery-01',
         taskTitle: 'Deliver Express Package',
@@ -40,7 +40,7 @@ describe('TaskView - 7-Stage DMS Delivery Stepper', () => {
         vi.clearAllMocks();
     });
 
-    it('renders all 7 DMS delivery stages when order is in Out for Delivery status', async () => {
+    it('renders all 6 DMS delivery stages when order is in Out for Delivery status', async () => {
         (api.get as any).mockImplementation((url: string) => {
             if (url.includes('/delivery-details')) {
                 return Promise.resolve({
@@ -71,9 +71,9 @@ describe('TaskView - 7-Stage DMS Delivery Stepper', () => {
             expect(screen.getByText('WB-2026-990011')).toBeInTheDocument();
         });
 
-        // Verify all 7 stages exist in the document
+        // Verify canonical 6 stages exist in the document (Processing removed)
         expect(screen.getByText('PENDING')).toBeInTheDocument();
-        expect(screen.getByText('PROCESSING')).toBeInTheDocument();
+        expect(screen.queryByText('PROCESSING')).not.toBeInTheDocument();
         expect(screen.getByText('ASSIGNED')).toBeInTheDocument();
         expect(screen.getByText('PICKED UP')).toBeInTheDocument();
         expect(screen.getByText('IN TRANSIT')).toBeInTheDocument();
@@ -111,8 +111,8 @@ describe('TaskView - 7-Stage DMS Delivery Stepper', () => {
             expect(screen.getByText('WB-2026-990022')).toBeInTheDocument();
         });
 
-        // All 7 steps should have the 'done' class
+        // All 6 steps should have the 'done' class
         const doneSteps = container.querySelectorAll('.tv-dms-step.done');
-        expect(doneSteps.length).toBe(7);
+        expect(doneSteps.length).toBe(6);
     });
 });

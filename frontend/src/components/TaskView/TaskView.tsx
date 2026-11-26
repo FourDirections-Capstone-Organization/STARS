@@ -3078,12 +3078,11 @@ const TaskView: React.FC<TaskViewProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* ── 7-Stage Delivery Stepper (Integration 2 - Consistent with DMS) ── */}
+                                    {/* ── 6-Stage Delivery Stepper (Consistent with DMS) ── */}
                                     <div className="tv-dms-stepper-wrap">
                                         {(() => {
                                             const stages = [
                                                 { key: 'pending', label: 'PENDING' },
-                                                { key: 'processing', label: 'PROCESSING' },
                                                 { key: 'assigned', label: 'ASSIGNED' },
                                                 { key: 'picked_up', label: 'PICKED UP' },
                                                 { key: 'in_transit', label: 'IN TRANSIT' },
@@ -3092,16 +3091,15 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             ];
                                             const s = `${deliveryDetail.dmsRawStatus || ''} ${deliveryDetail.dmsStatus || ''}`.toLowerCase();
                                             let activeIdx = 0;
-                                            if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) activeIdx = 6;
-                                            else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 5;
-                                            else if (s.includes('transit')) activeIdx = 4;
-                                            else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 3;
-                                            else if (s.includes('assigned') || s.includes('driver')) activeIdx = 2;
-                                            else if (s.includes('processing') || s.includes('preparing')) activeIdx = 1;
+                                            if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed'))) activeIdx = 5;
+                                            else if (s.includes('out for delivery') || s.includes('doorstep')) activeIdx = 4;
+                                            else if (s.includes('transit')) activeIdx = 3;
+                                            else if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) activeIdx = 2;
+                                            else if (s.includes('assigned') || s.includes('driver')) activeIdx = 1;
                                             else activeIdx = 0;
 
                                             const isCancelled = s.includes('cancelled') || s.includes('canceled');
-                                            const isAllDelivered = activeIdx === 6;
+                                            const isAllDelivered = activeIdx === 5;
                                             const progressPct = isCancelled ? 0 : (Math.max(0, activeIdx) / (stages.length - 1)) * 100;
                                             const formattedTime = deliveryDetail.dmsLastSyncedAt
                                                 ? new Date(deliveryDetail.dmsLastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -3143,7 +3141,7 @@ const TaskView: React.FC<TaskViewProps> = ({
                                                                                 <Check size={13} strokeWidth={2.8} />
                                                                             ) : isCurrent ? (
                                                                                 <Clock size={13} strokeWidth={2.5} />
-                                                                            ) : idx === 6 ? (
+                                                                            ) : idx === stages.length - 1 ? (
                                                                                 <MapPin size={12} />
                                                                             ) : (
                                                                                 <span>{idx + 1}</span>

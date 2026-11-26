@@ -1253,12 +1253,11 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
     const getJourneyStepIndex = (status?: string, rawStatus?: string) => {
         const s = `${rawStatus || ''} ${status || ''}`.toLowerCase();
-        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) return 6;
-        if (s.includes('out for delivery') || s.includes('doorstep')) return 5;
-        if (s.includes('transit')) return 4;
-        if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 3;
-        if (s.includes('assigned') || s.includes('for pickup') || s.includes('driver')) return 2;
-        if (s.includes('processing') || s.includes('preparing')) return 1;
+        if (!s.includes('pending') && (s.includes('delivered') || s.includes('completed')) && !s.includes('undelivered') && !s.includes('cancel')) return 5;
+        if (s.includes('out for delivery') || s.includes('doorstep')) return 4;
+        if (s.includes('transit')) return 3;
+        if (s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 2;
+        if (s.includes('assigned') || s.includes('for pickup') || s.includes('driver')) return 1;
         return 0;
     };
 
@@ -1285,11 +1284,10 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         );
 
         const activeIdx = getJourneyStepIndex(selectedDelivery.dmsStatus, selectedDelivery.dmsRawStatus);
-        const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 6) / 6) * 100;
+        const progressPct = isDelivered ? 100 : (Math.min(activeIdx, 5) / 5) * 100;
 
         const journeySteps = [
             { title: 'Pending', desc: 'Order Created' },
-            { title: 'Processing', desc: 'Preparing Dispatch' },
             { title: 'Assigned', desc: 'Driver Assigned' },
             { title: 'Picked Up', desc: 'Driver Collected' },
             { title: 'In Transit', desc: 'En Route to Hub' },
@@ -1708,7 +1706,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
                         <div className="dms-detail-stepper-header">
                             <h4 className="dms-detail-section-title">Delivery Journey & Milestone Progression</h4>
                             <span className="dms-detail-stepper-summary">
-                                Stage {isDelivered ? 7 : Math.min(activeIdx + 1, 7)} of 7: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
+                                Stage {isDelivered ? 6 : Math.min(activeIdx + 1, 6)} of 6: <strong>{formatDeliveryStatus(selectedDelivery.dmsStatus)}</strong>
                             </span>
                         </div>
 
