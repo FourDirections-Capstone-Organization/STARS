@@ -1255,6 +1255,18 @@ const TaskView: React.FC<TaskViewProps> = ({
                     itemCount,
                 };
                 setDeliveryDetail(enriched);
+
+                // Auto-sync: automatically update task state to Completed when delivery is Delivered
+                const dStatus = String(data.dmsStatus || data.dmsRawStatus || '').toLowerCase();
+                if (!dStatus.includes('pending') && (dStatus.includes('delivered') || dStatus.includes('completed'))) {
+                    setLocalStatus(prev => {
+                        if (prev !== 'Completed') {
+                            onUpdate?.({ ...task, taskStatus: 'Completed' });
+                            return 'Completed';
+                        }
+                        return prev;
+                    });
+                }
                 if (!silent) {
                     setEditingDelivery({
                         recipientName: data.recipientName || '',
@@ -1286,7 +1298,7 @@ const TaskView: React.FC<TaskViewProps> = ({
         fetchDeliveryDetail(false);
     }, [fetchDeliveryDetail]);
 
-    // Live Auto-Refresh polling while task modal is open and delivery is in progress (8s polling, halts on terminal status)
+    // Live Auto-Refresh polling while task modal is open and delivery is in progress (6s polling, halts on terminal status)
     useEffect(() => {
         if (!task?.taskId || !deliveryDetail?.dmsWaybillNo) return;
         const currentSt = (deliveryDetail?.dmsRawStatus || deliveryDetail?.dmsStatus || '').toLowerCase();
@@ -1294,9 +1306,13 @@ const TaskView: React.FC<TaskViewProps> = ({
             return;
         }
 
-        const interval = setInterval(() => {
+        const interval = setInterval(async () => {
+            try {
+                // Silently pull latest telemetry/milestones from DMS
+                await api.post(`/api/dms-integration/tasks/${task.taskId}/sync`, {}).catch(() => {});
+            } catch {}
             fetchDeliveryDetail(true);
-        }, 8000);
+        }, 6000);
 
         return () => clearInterval(interval);
     }, [task?.taskId, deliveryDetail?.dmsWaybillNo, deliveryDetail?.dmsStatus, deliveryDetail?.dmsRawStatus, fetchDeliveryDetail]);
@@ -3066,6 +3082,17 @@ const TaskView: React.FC<TaskViewProps> = ({
                                             >
                                                 {copiedWaybill ? <Check size={12} color="#059669" /> : <Copy size={12} />}
                                                 {copiedWaybill ? 'Copied!' : 'Copy Waybill'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="tv-btn tv-btn-outline-sm tv-dms-sync-btn"
+                                                data-testid="tv-dms-sync-btn"
+                                                disabled={resendingDms}
+                                                onClick={handleResendDms}
+                                                title="Re-sync Delivery Status with DMS"
+                                            >
+                                                <RefreshCw size={12} className={resendingDms ? 'spin' : ''} />
+                                                <span>{resendingDms ? 'Syncing…' : 'Re-sync'}</span>
                                             </button>
                                             {deliveryDetail.dmsStatus && (
                                                 <span

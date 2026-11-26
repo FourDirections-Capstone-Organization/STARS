@@ -441,7 +441,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         }
     };
 
-    // 8-second auto-polling for active in-flight delivery (halts on terminal status)
+    // 6-second auto-polling for active in-flight delivery (halts on terminal status)
     useEffect(() => {
         if (!selectedDelivery?.taskId || selectedDelivery.taskId === '00000000-0000-0000-0000-000000000000') return;
         const s = (selectedDelivery.dmsStatus || selectedDelivery.dmsRawStatus || '').toLowerCase();
@@ -450,6 +450,9 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
 
         const intervalId = setInterval(async () => {
             try {
+                // Active status sync from DMS so updated delivery milestone reflects immediately
+                await api.post(`/api/dms-integration/tasks/${selectedDelivery.taskId}/sync`, {}).catch(() => {});
+
                 const [ddRes, podRes, pendingRes] = await Promise.allSettled([
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/delivery-details`),
                     api.get(`/api/dms-integration/tasks/${selectedDelivery.taskId}/pod`),
@@ -531,8 +534,8 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
     }, []);
 
     // Load delivery details for all relevant tasks
-    const fetchDeliveries = useCallback(async () => {
-        setLoading(true);
+    const fetchDeliveries = useCallback(async (silent: boolean = false) => {
+        if (!silent) setLoading(true);
         try {
             await fetchPerformance();
 
@@ -865,7 +868,7 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         } catch {
             // Silently handle
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, [tasks, fetchPerformance]);
 
@@ -886,12 +889,12 @@ export const DmsDeliveryTab: React.FC<DmsDeliveryTabProps> = ({
         };
     }, [fetchDeliveries]);
 
-    // Live Auto-Refresh polling (every 20s if enabled)
+    // Live Auto-Refresh polling (runs silently every 8s if enabled to auto-reflect live status without full-page spinner)
     useEffect(() => {
         if (!autoSync) return;
         const interval = setInterval(() => {
-            fetchDeliveries();
-        }, 20000);
+            fetchDeliveries(true);
+        }, 8000);
         return () => clearInterval(interval);
     }, [autoSync, fetchDeliveries]);
 
